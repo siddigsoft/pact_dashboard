@@ -52,6 +52,7 @@ import {
   type CvFormatId,
 } from "@/utils/cvFormats";
 import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName } from "@/utils/employeeProfileFolder";
+import EmployeeBadgeDialog from "@/components/hr/EmployeeBadgeDialog";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -228,6 +229,7 @@ const UserDetail: FC = () => {
   const [cvExporting, setCvExporting] = useState(false);
   const [showCvMenu, setShowCvMenu] = useState(false);
   const cvMenuRef = useRef<HTMLDivElement>(null);
+  const [showBadgeDialog, setShowBadgeDialog] = useState(false);
   const [empSummary, setEmpSummary] = useState<string>("");
   const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
   const [folderSyncing, setFolderSyncing] = useState(false);
@@ -1266,6 +1268,19 @@ const UserDetail: FC = () => {
                     </>
                   )}
                 </div>
+
+                {/* Employee Badge */}
+                {user.employeeId && user.name && (
+                  <button
+                    onClick={() => setShowBadgeDialog(true)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/20 rounded-lg px-2 h-7 transition-all"
+                    data-testid="button-generate-badge"
+                    title="Generate Employee Badge"
+                  >
+                    <CreditCard className="h-3 w-3" />
+                    <span className="hidden md:inline">Badge</span>
+                  </button>
+                )}
 
                 {isAdmin && !editMode && !user.isApproved === false && (
                   <button onClick={() => navigate('/hr?tab=offboarding')} className="hidden md:flex items-center gap-1 text-[11px] font-semibold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20 rounded-lg px-2 h-7 transition-all">
@@ -2755,6 +2770,25 @@ ALTER TABLE public.profiles
           userId={user.id}
           userName={user.name}
           currentClassification={userClassification}
+        />
+      )}
+
+      {user && showBadgeDialog && (
+        <EmployeeBadgeDialog
+          open={showBadgeDialog}
+          onClose={() => setShowBadgeDialog(false)}
+          user={{
+            id:             user.id,
+            name:           user.name,
+            role:           user.role || "",
+            roleLabel:      toRoleLabel(user.role || "") || user.role || "",
+            email:          user.email || undefined,
+            phone:          user.phone || undefined,
+            avatar:         user.avatar || undefined,
+            employeeId:     user.employeeId || undefined,
+            hubName:        hubDisplayName || hubs.find(h => h.id === user.hubId)?.name || user.hubId || undefined,
+            departmentName: departments.find(d => d.id === empDepartmentId)?.name || undefined,
+          }}
         />
       )}
 
