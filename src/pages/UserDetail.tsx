@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type FC } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
 import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
@@ -204,7 +204,12 @@ const UserDetail: FC = () => {
       if (avatarInputRef.current) avatarInputRef.current.value = '';
     }
   };
-  const [activeSection, setActiveSection] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawSection = searchParams.get('tab') || 'overview';
+  const activeSection = TAB_GROUPS.flatMap(g => g.tabs).some(t => t.id === rawSection) ? rawSection : 'overview';
+  const setActiveSection = (section: string) => {
+    setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('tab', section); return p; }, { replace: true });
+  };
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const activeGroup = TAB_GROUPS.find(g => g.tabs.some(t => t.id === activeSection)) ?? TAB_GROUPS[0];
