@@ -30,6 +30,91 @@ export function getDocumentStoragePath(folderName: string, docType: string, file
   return `${HR_ROOT}/${folderName}/${docType}_${Date.now()}_${safeFile}`;
 }
 
+// ── Workspace Hub folder helpers ──────────────────────────────────────────────
+
+async function ensureWorkspaceFolder(
+  name: string,
+  parentId: string | null,
+  createdBy: string | null,
+): Promise<string> {
+  // Check if folder already exists under this parent
+  const query = supabase
+    .from('workspace_folders')
+    .select('id')
+    .eq('name', name)
+    .eq('archived', false);
+  const { data } = await (parentId
+    ? query.eq('parent_folder_id', parentId)
+    : query.is('parent_folder_id', null));
+
+  if (data && data.length > 0) return data[0].id;
+
+  // Create it
+  const { data: created, error } = await supabase
+    .from('workspace_folders')
+    .insert({
+      name,
+      parent_folder_id: parentId,
+      security_level: 'confidential',
+      created_by: createdBy,
+      is_system_folder: true,
+      archived: false,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return created.id;
+}
+
+async function upsertWorkspaceFile(
+  folderId: string,
+  fileName: string,
+  storagePath: string,
+  publicUrl: string | null,
+  fileSizeBytes: number,
+  createdBy: string | null,
+  description: string | null,
+): Promise<void> {
+  // Check for existing file with same storage path
+  const { data: existing } = await supabase
+    .from('workspace_files')
+    .select('id')
+    .eq('storage_path', storagePath)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await supabase
+      .from('workspace_files')
+      .update({
+        name: fileName,
+        folder_id: folderId,
+        public_url: publicUrl,
+        file_size: fileSizeBytes,
+        last_modified_by: createdBy,
+        updated_at: new Date().toISOString(),
+        description,
+      })
+      .eq('id', existing.id);
+  } else {
+    await supabase.from('workspace_files').insert({
+      folder_id: folderId,
+      name: fileName,
+      description,
+      storage_path: storagePath,
+      public_url: publicUrl,
+      file_size: fileSizeBytes,
+      mime_type: 'application/pdf',
+      extension: 'pdf',
+      security_level: 'confidential',
+      created_by: createdBy,
+      last_modified_by: createdBy,
+      tags: ['hr', 'profile', 'auto-generated'],
+      is_pinned: false,
+      archived: false,
+    });
+  }
+}
+
 export async function syncProfileFolder(
   user: any,
   ctx: CVContext,
@@ -45,13 +130,15 @@ export async function syncProfileFolder(
     const folderName   = computeFolderName(user);
     const folderPath   = getEmployeeFolderPath(folderName);
     const summaryPath  = getSummaryStoragePath(folderName);
+    // Workspace Hub uses its own bucket — same logical path, different bucket
+    const wsSummaryPath = summaryPath; // reuse the same path string in workspace-files bucket
 
     // 1. Generate PDF bytes (does NOT trigger a browser download)
     const result = await generateEmployeeCV(user, ctx, { returnBytes: true });
     if (!result) throw new Error('PDF generation returned empty');
     const pdfBytes = result as Uint8Array;
 
-    // 2. Upload / overwrite PROFILE_SUMMARY.pdf — upsert: true so it's always replaced
+    // 2. Upload / overwrite PROFILE_SUMMARY.pdf to staff-contracts (for profile page signed URL)
     const { error: upErr } = await supabase.storage
       .from(PROFILE_BUCKET)
       .upload(summaryPath, pdfBytes, {
@@ -61,7 +148,44 @@ export async function syncProfileFolder(
       });
     if (upErr) throw upErr;
 
-    // 3. Persist the folder path in hr_employee_personal so we can display it in UI
+    // 3. Also upload to workspace-files bucket so Workspace Hub can serve it
+    await supabase.storage
+      .from('workspace-files')
+      .upload(wsSummaryPath, pdfBytes, {
+        contentType:  'application/pdf',
+        upsert:       true,
+        cacheControl: '0',
+      });
+    // (non-fatal if workspace bucket upload fails — profile page still works)
+
+    const { data: urlData } = supabase.storage
+      .from('workspace-files')
+      .getPublicUrl(wsSummaryPath);
+    const publicUrl = urlData?.publicUrl ?? null;
+
+    // 4. Ensure Workspace Hub folder hierarchy: HR > Profiles > {folderName}
+    const hrFolderId       = await ensureWorkspaceFolder('HR',       null,         user.id).catch(() => null);
+    const profilesFolderId = hrFolderId
+      ? await ensureWorkspaceFolder('Profiles', hrFolderId,       user.id).catch(() => null)
+      : null;
+    const empFolderId      = profilesFolderId
+      ? await ensureWorkspaceFolder(folderName, profilesFolderId, user.id).catch(() => null)
+      : null;
+
+    // 5. Register / update file entry in workspace_files
+    if (empFolderId) {
+      await upsertWorkspaceFile(
+        empFolderId,
+        'PROFILE_SUMMARY.pdf',
+        wsSummaryPath,
+        publicUrl,
+        pdfBytes.byteLength,
+        user.id,
+        `Auto-generated profile summary for ${user.name || user.employeeId}`,
+      ).catch(e => console.warn('[profileFolder] workspace_files upsert failed:', e.message));
+    }
+
+    // 6. Persist the folder path in hr_employee_personal so we can display it in UI
     const { error: dbErr } = await supabase
       .from('hr_employee_personal')
       .update({ profile_folder_path: folderPath })
@@ -75,6 +199,25 @@ export async function syncProfileFolder(
   } catch (err: any) {
     console.error('[profileFolder] sync error:', err);
     return { folderPath: null, folderName: null, error: err.message ?? 'Unknown error' };
+  }
+}
+
+/**
+ * Lightweight: ensures the Workspace Hub folder hierarchy (HR > Profiles > {folderName})
+ * exists WITHOUT generating a PDF. Called on every profile page load so even employees
+ * whose profileFolderPath was already set before this feature existed get their folder.
+ */
+export async function ensureWorkspaceHubFolders(
+  user: { id: string; employeeId?: string | null; name?: string | null },
+): Promise<void> {
+  if (!user?.id || !user.employeeId) return;
+  try {
+    const folderName       = computeFolderName(user);
+    const hrFolderId       = await ensureWorkspaceFolder('HR',       null,         user.id);
+    const profilesFolderId = await ensureWorkspaceFolder('Profiles', hrFolderId,   user.id);
+    await ensureWorkspaceFolder(folderName, profilesFolderId, user.id);
+  } catch (e: any) {
+    console.warn('[profileFolder] ensureWorkspaceHubFolders failed:', e.message);
   }
 }
 

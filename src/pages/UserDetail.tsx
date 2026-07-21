@@ -51,7 +51,7 @@ import {
   CV_FORMAT_OPTIONS,
   type CvFormatId,
 } from "@/utils/cvFormats";
-import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName } from "@/utils/employeeProfileFolder";
+import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName, ensureWorkspaceHubFolders } from "@/utils/employeeProfileFolder";
 import EmployeeBadgeDialog from "@/components/hr/EmployeeBadgeDialog";
 
 // Use centralized visible role codes (excludes superAdmin)
@@ -547,6 +547,14 @@ const UserDetail: FC = () => {
     void triggerFolderSync(user);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.employeeId, profileFolderPath]);
+
+  // Lightweight: always ensure Workspace Hub folder hierarchy exists on page load,
+  // even for employees whose profileFolderPath was set before this feature.
+  useEffect(() => {
+    if (!user?.employeeId || !user?.id) return;
+    void ensureWorkspaceHubFolders(user);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.employeeId]);
 
   // Load last 4 completed review scores for sparkline trend
   useEffect(() => {
