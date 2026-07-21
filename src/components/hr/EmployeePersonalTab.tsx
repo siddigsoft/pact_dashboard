@@ -345,7 +345,7 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
               <Select value={form.tax_id_type || ''} onValueChange={f('tax_id_type')}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select type…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sudan_tin">Sudan TIN (Tax Identification Number)</SelectItem>
+                  <SelectItem value="sudan_tin">TIN (Tax Identification Number)</SelectItem>
                   <SelectItem value="personal_income_tax">Personal Income Tax File</SelectItem>
                   <SelectItem value="vat_reg">VAT Registration</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
@@ -375,7 +375,7 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
         ) : (
           <InfoGrid>
             <InfoField label="Tax ID Type" value={
-              form.tax_id_type === 'sudan_tin' ? 'Sudan TIN' :
+              form.tax_id_type === 'sudan_tin' ? 'TIN' :
               form.tax_id_type === 'personal_income_tax' ? 'Personal Income Tax' :
               form.tax_id_type === 'vat_reg' ? 'VAT Registration' :
               data.tax_id_type || undefined
