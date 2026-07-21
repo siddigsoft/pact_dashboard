@@ -299,6 +299,7 @@ export async function syncProfileFolder(
 /**
  * Lightweight: ensures the Workspace Hub folder hierarchy exists
  * WITHOUT generating a PDF. Called on every profile page load.
+ * Also auto-syncs any HR documents not yet in the workspace folder.
  */
 export async function ensureWorkspaceHubFolders(
   user: { id: string; employeeId?: string | null; name?: string | null },
@@ -308,7 +309,18 @@ export async function ensureWorkspaceHubFolders(
     const folderName       = computeFolderName(user);
     const hrFolderId       = await ensureWorkspaceFolder('HR',       null,         user.id);
     const profilesFolderId = await ensureWorkspaceFolder('Profiles', hrFolderId,   user.id);
-    await ensureWorkspaceFolder(folderName, profilesFolderId, user.id);
+    const empFolderId      = await ensureWorkspaceFolder(folderName, profilesFolderId, user.id);
+
+    // Auto-sync HR docs that aren't yet in the workspace folder
+    // Quick check: compare hr_employee_documents count vs workspace_files count
+    const [{ count: hrCount }, { count: wsCount }] = await Promise.all([
+      supabase.from('hr_employee_documents').select('id', { count: 'exact', head: true }).eq('profile_id', user.id),
+      supabase.from('workspace_files').select('id', { count: 'exact', head: true }).eq('folder_id', empFolderId),
+    ]);
+    // If workspace has fewer files than HR (ignoring the PROFILE_SUMMARY.pdf), sync them
+    if ((hrCount ?? 0) > 0 && (wsCount ?? 0) < (hrCount ?? 0) + 1) {
+      await syncHrDocsToWorkspace(user, empFolderId);
+    }
   } catch (e: any) {
     console.warn('[profileFolder] ensureWorkspaceHubFolders failed:', e.message);
   }

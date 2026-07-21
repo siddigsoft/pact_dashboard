@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
 import {
@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square,
+  SquareCheck, Square, ArrowLeft,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -1146,6 +1146,7 @@ interface TaskDocEntry {
 }
 
 export default function WorkspaceHub() {
+  const navigate = useNavigate();
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
@@ -2211,6 +2212,15 @@ export default function WorkspaceHub() {
         <div className="w-60 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 dark:bg-card overflow-y-auto">
           {/* Sidebar header — Notion style */}
           <div className="px-4 pt-5 pb-3">
+            {/* Back to main app */}
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-foreground mb-3 w-full px-1 py-1 rounded hover:bg-gray-200/60 dark:hover:bg-muted/60 transition-colors"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>Back to app</span>
+            </button>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-3.5 h-3.5 text-white" />

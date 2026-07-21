@@ -601,7 +601,7 @@ const AppRoutes = () => {
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
-        <Route path="/workspace" element={<WorkspaceHub />} />
+        {/* WorkspaceHub moved to its own full-screen route (see below) */}
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
         <Route path="/mmp/:mmpId/full-report" element={<MMPFullReport />} />
@@ -675,6 +675,9 @@ const AppRoutes = () => {
         <Route path="/attendance" element={<Navigate to="/hr?tab=attendance" replace />} />
         <Route path="/offboarding" element={<Navigate to="/hr?tab=offboarding" replace />} />
       </Route>
+
+      {/* WorkspaceHub — full-screen, no main sidebar */}
+      <Route path="/workspace" element={<AuthGuard><WorkspaceHub /></AuthGuard>} />
 
       {/* Redirects */}
       <Route path="/mmp/view/:id" element={<MmpViewRedirect />} />
