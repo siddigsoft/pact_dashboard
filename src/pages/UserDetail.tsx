@@ -160,6 +160,12 @@ const UserDetail: FC = () => {
   const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
   const canEditBankAccount = isAdminRole;
   const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
+
+  // Only Admin, SuperAdmin, and HR_Admin can edit profile data.
+  // ICT and other admin-tier roles are view-only on employee profiles.
+  const EDIT_ROLES = ['admin', 'super_admin', 'superadmin', 'hr_admin'];
+  const canEditProfile = EDIT_ROLES.includes(roleStr)
+    || (currentUser?.roles && currentUser.roles.some((r: any) => EDIT_ROLES.includes(String(r).toLowerCase())));
   
   // Debug logging
   console.log('[UserDetail] currentUser role:', currentUser?.role, 'roleStr:', roleStr, 'isAdminRole:', isAdminRole, 'isAdmin:', isAdmin);
@@ -1288,7 +1294,7 @@ const UserDetail: FC = () => {
                   </button>
                 )}
 
-                {isAdmin && !editMode && (
+                {canEditProfile && !editMode && (
                   <Button onClick={handleEdit} size="sm" className="bg-white text-[#0d1f3c] hover:bg-white/90 gap-1 h-7 text-[11px] px-2.5 font-semibold shadow" data-testid="button-edit-user">
                     <Edit className="h-3 w-3" />Edit
                   </Button>
@@ -1418,7 +1424,7 @@ const UserDetail: FC = () => {
                     <p className="text-[10px] text-muted-foreground mt-0.5">{activeGroup.label} section</p>
                   </div>
                 </div>
-                {(activeSection === 'overview' || activeSection === 'location') && isAdmin && !editMode && (
+                {(activeSection === 'overview' || activeSection === 'location') && canEditProfile && !editMode && (
                   <Button size="sm" variant="outline" onClick={handleEdit} className="gap-1.5 h-8 text-xs" data-testid="button-edit-section">
                     <Edit className="h-3 w-3" /> Edit
                   </Button>
@@ -1550,13 +1556,13 @@ const UserDetail: FC = () => {
                     <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
                       <FileText className="h-3.5 w-3.5" /> Professional Summary
                     </h3>
-                    {isAdmin && !editMode && (
+                    {canEditProfile && !editMode && (
                       <button onClick={() => setActiveSection('personal')} className="text-[10px] text-primary hover:underline">Edit →</button>
                     )}
                   </div>
                   <p className="text-sm leading-relaxed text-foreground/90">{empSummary}</p>
                 </div>
-              ) : isAdmin && !editMode && (
+              ) : canEditProfile && !editMode && (
                 <button
                   onClick={() => setActiveSection('personal')}
                   className="w-full flex items-center gap-2 p-3.5 rounded-xl border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm text-muted-foreground hover:text-primary group"
@@ -1980,7 +1986,7 @@ const UserDetail: FC = () => {
                             finally { setLocSaving(false); }
                           }}
                           onCancel={handleEditCancel}
-                          isAdmin={isAdmin}
+                          isAdmin={!!canEditProfile}
                         />
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2261,7 +2267,7 @@ const UserDetail: FC = () => {
             {activeSection === 'documents' && (<div className="p-5 sm:p-6 space-y-6">
               <EmployeeDocumentsTab
                 userId={user.id}
-                isAdmin={!!isAdmin}
+                isAdmin={!!canEditProfile}
                 currentUserId={currentUser?.id}
                 onVerificationChange={(allVerified, verified, total) =>
                   setDocsVerified({ allVerified, verified, total })
@@ -2423,27 +2429,27 @@ const UserDetail: FC = () => {
 
             {/* ── PERSONAL SECTION ─────────────────────────────────────────── */}
             {activeSection === 'personal' && (<div className="p-5 sm:p-6">
-              <EmployeePersonalTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeePersonalTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             {/* ── EDUCATION SECTION ────────────────────────────────────────── */}
             {activeSection === 'education' && (<div className="p-5 sm:p-6">
-              <EmployeeEducationTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeEducationTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             {/* ── SKILLS SECTION ───────────────────────────────────────────── */}
             {activeSection === 'skills' && (<div className="p-5 sm:p-6">
-              <EmployeeSkillsTab userId={user.id} isAdmin={!!isAdmin} empType={empType} />
+              <EmployeeSkillsTab userId={user.id} isAdmin={!!canEditProfile} empType={empType} />
             </div>)}
 
             {/* ── TRAINING & CERTIFICATIONS SECTION ────────────────────────── */}
             {activeSection === 'training' && (<div className="p-5 sm:p-6">
-              <EmployeeTrainingTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeTrainingTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             {/* ── DEPENDENTS SECTION ───────────────────────────────────────── */}
             {activeSection === 'dependents' && (<div className="p-5 sm:p-6">
-              <EmployeeDependentsTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeDependentsTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             {/* ── ACCESS & SECURITY SECTION ────────────────────────────────── */}
@@ -2731,7 +2737,7 @@ ALTER TABLE public.profiles
 
             {/* ── EQUIPMENT SECTION ────────────────────────────────────────── */}
             {activeSection === 'equipment' && (<div className="p-5 sm:p-6">
-              <EmployeeEquipmentTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeEquipmentTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             {/* ── POLICIES SECTION ──────────────────────────────────────────── */}
@@ -2741,7 +2747,7 @@ ALTER TABLE public.profiles
 
             {/* ── IT ACCOUNTS SECTION ──────────────────────────────────────── */}
             {activeSection === 'it-accounts' && (<div className="p-5 sm:p-6">
-              <EmployeeITAccountsTab userId={user.id} isAdmin={!!isAdmin} />
+              <EmployeeITAccountsTab userId={user.id} isAdmin={!!canEditProfile} />
             </div>)}
 
             </Card>
