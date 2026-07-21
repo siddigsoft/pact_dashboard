@@ -1506,6 +1506,55 @@ const UserDetail: FC = () => {
                 </button>
               )}
 
+              {/* ── Profile Photo ──────────────────────────────────────────── */}
+              {isAdmin && (
+                <div className="bg-muted/20 rounded-xl p-4 border border-border/40 hover:border-border/60 transition-colors">
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-3">Profile Photo</h3>
+                  <div className="flex items-center gap-4">
+                    {/* Avatar preview */}
+                    <div
+                      className="relative h-20 w-20 rounded-xl overflow-hidden shrink-0 ring-2 ring-border/40 cursor-pointer group"
+                      onClick={() => avatarInputRef.current?.click()}
+                      title="Click to change photo"
+                    >
+                      {avatarUploading ? (
+                        <div className="h-full w-full flex items-center justify-center bg-muted">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : user.avatar ? (
+                        <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-xl font-extrabold text-white" style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}>
+                          {user.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '??'}
+                        </div>
+                      )}
+                      {/* Hover overlay */}
+                      {!avatarUploading && (
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Camera className="h-5 w-5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                    {/* Info + button */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">{user.avatar ? 'Photo uploaded' : 'No photo yet'}</p>
+                      <p className="text-xs text-muted-foreground">JPG, PNG, or WebP · Max 5 MB</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        data-testid="button-change-photo"
+                      >
+                        {avatarUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+                        {avatarUploading ? 'Uploading…' : user.avatar ? 'Change Photo' : 'Upload Photo'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
