@@ -204,9 +204,6 @@ export default function ExcelUploadParser({ onItemsParsed }: ExcelUploadParserPr
         return;
       }
 
-      const headerRow = rows[0].map((h: any) => String(h).trim().toLowerCase());
-      const colMap: Record<string, number> = {};
-
       const fieldMappings: Record<string, string[]> = {
         category: [
           "category", "expense category", "expense_category", "type",
@@ -228,12 +225,37 @@ export default function ExcelUploadParser({ onItemsParsed }: ExcelUploadParserPr
         otherDetail: ["other category detail", "other detail", "other category", "specify", "other", "أخرى"],
       };
 
-      for (const [field, aliases] of Object.entries(fieldMappings)) {
-        const idx = headerRow.findIndex((h: string) => aliases.includes(h));
-        if (idx >= 0) colMap[field] = idx;
+      // Try rows 0, 1, 2 as the header row — some sheets have a title/merged row before the real headers
+      const buildColMap = (headerRow: string[]): Record<string, number> => {
+        const colMap: Record<string, number> = {};
+        for (const [field, aliases] of Object.entries(fieldMappings)) {
+          // 1) Exact alias match (fastest)
+          let idx = headerRow.findIndex((h: string) => aliases.includes(h));
+          // 2) Partial match: alias is a substring of the cell or vice versa
+          if (idx < 0) {
+            idx = headerRow.findIndex((h: string) =>
+              aliases.some(alias => h.includes(alias) || alias.includes(h))
+            );
+          }
+          if (idx >= 0) colMap[field] = idx;
+        }
+        return colMap;
+      };
+
+      let headerRowIndex = 0;
+      let colMap: Record<string, number> = {};
+      for (let r = 0; r < Math.min(3, rows.length - 1); r++) {
+        const candidate = rows[r].map((h: any) => String(h).trim().toLowerCase());
+        const map = buildColMap(candidate);
+        if (map.category !== undefined || map.title !== undefined) {
+          headerRowIndex = r;
+          colMap = map;
+          break;
+        }
       }
 
-      if (colMap.category === undefined && colMap.title === undefined) {
+      const headerRow = rows[headerRowIndex].map((h: any) => String(h).trim().toLowerCase());
+      if (!colMap || (colMap.category === undefined && colMap.title === undefined)) {
         const foundHeaders = headerRow.filter(Boolean).slice(0, 8).join(', ') || 'none detected';
         toast({
           title: "Unrecognized Format",
@@ -249,7 +271,7 @@ export default function ExcelUploadParser({ onItemsParsed }: ExcelUploadParserPr
       const errors: ValidationError[] = [];
       const items: ParsedItem[] = [];
 
-      for (let i = 1; i < rows.length; i++) {
+      for (let i = headerRowIndex + 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.every((cell: any) => !cell && cell !== 0)) continue;
 
