@@ -174,15 +174,65 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
     }
     setSaving(true);
     try {
-      const payload = { ...form, profile_id: userId, updated_at: new Date().toISOString() };
+      // Core columns — guaranteed to exist in all DB environments
+      const corePayload = {
+        profile_id: userId,
+        date_of_birth: form.date_of_birth || null,
+        gender: form.gender || null,
+        nationality: form.nationality || null,
+        marital_status: form.marital_status || null,
+        blood_type: form.blood_type || null,
+        national_id_no: form.national_id_no || null,
+        passport_no: form.passport_no || null,
+        passport_expiry: form.passport_expiry || null,
+        address_line1: form.address_line1 || null,
+        address_line2: form.address_line2 || null,
+        city: form.city || null,
+        country: form.country || null,
+        updated_at: new Date().toISOString(),
+      };
+      // Extended columns — added via 20260721_hr_employee_personal_compliance_fields.sql
+      const fullPayload = {
+        ...corePayload,
+        professional_summary: form.professional_summary || null,
+        id_type: form.id_type || null,
+        secondary_phone: form.secondary_phone || null,
+        personal_email: form.personal_email || null,
+        emergency_contact_name: form.emergency_contact_name || null,
+        emergency_contact_phone: form.emergency_contact_phone || null,
+        emergency_contact_relationship: form.emergency_contact_relationship || null,
+        permanent_state: form.permanent_state || null,
+        residential_address_line1: form.residential_address_line1 || null,
+        residential_address_line2: form.residential_address_line2 || null,
+        residential_city: form.residential_city || null,
+        residential_country: form.residential_country || null,
+        tax_id: form.tax_id || null,
+        tax_id_type: form.tax_id_type || null,
+        visa_type: form.visa_type || null,
+        visa_number: form.visa_number || null,
+        visa_expiry: form.visa_expiry || null,
+      };
+
+      const tryUpsert = async (payload: typeof fullPayload | typeof corePayload) => {
+        if (data.id) {
+          return supabase.from('hr_employee_personal').update(payload).eq('id', data.id);
+        } else {
+          return supabase.from('hr_employee_personal').insert(payload).select().single();
+        }
+      };
+
+      let result = await tryUpsert(fullPayload);
+      // If schema cache doesn't know the new columns yet, fall back to core columns
+      if (result.error?.message?.includes('schema cache') || result.error?.message?.includes('column')) {
+        result = await tryUpsert(corePayload);
+      }
+      if (result.error) throw result.error;
+
       if (data.id) {
-        const { error } = await supabase.from('hr_employee_personal').update(payload).eq('id', data.id);
-        if (error) throw error;
         setData({ ...form });
       } else {
-        const { data: inserted, error } = await supabase.from('hr_employee_personal').insert(payload).select().single();
-        if (error) throw error;
-        setData(inserted); setForm(inserted);
+        const inserted = (result as any).data;
+        if (inserted) { setData(inserted); setForm(inserted); }
       }
       setEditMode(false);
       toast({ title: 'Personal details saved' });
