@@ -61,9 +61,11 @@ function isExpiringSoon(expiry?: string | null) {
 }
 
 export default function EmployeeDocumentsTab({
-  userId, isAdmin, currentUserId, onVerificationChange, onDocumentUploaded, hrFolderName,
+  userId, isAdmin, currentUserId, employeeEmail, employeeName, employeeId,
+  onVerificationChange, onDocumentUploaded, hrFolderName,
 }: {
   userId: string; isAdmin: boolean; currentUserId?: string;
+  employeeEmail?: string; employeeName?: string; employeeId?: string;
   onVerificationChange?: (allVerified: boolean, verified: number, total: number) => void;
   onDocumentUploaded?: () => void;
   /** When set, new uploads go into HR/{hrFolderName}/ instead of the legacy {userId}/ path */
@@ -192,6 +194,62 @@ export default function EmployeeDocumentsTab({
     } finally { setDeletingId(null); }
   };
 
+  const sendDocNotification = async (doc: HrDoc, status: 'verified' | 'rejected', reason?: string) => {
+    if (!employeeId) return;
+    const recipientId = employeeId;
+    const docLabel = doc.doc_name;
+    const titleEn = status === 'verified'
+      ? `Document verified: ${docLabel}`
+      : `Document rejected: ${docLabel}`;
+    const msgEn = status === 'verified'
+      ? `Your document "${docLabel}" has been verified by HR.`
+      : `Your document "${docLabel}" was rejected by HR.${reason ? ` Reason: ${reason}` : ''}`;
+
+    // In-app notification
+    supabase.from('notifications').insert({
+      event_type: 'hr_document_verification',
+      entity_type: 'hr_employee_document',
+      entity_id: doc.id,
+      recipient_id: recipientId,
+      triggered_by: currentUserId || null,
+      title_en: titleEn,
+      title_ar: titleEn,
+      message_en: msgEn,
+      message_ar: msgEn,
+      priority: 'medium',
+      action_url: `/users/${recipientId}?tab=documents`,
+      read: false,
+    }).then(({ error }) => {
+      if (error) console.error('[EmployeeDocumentsTab] notification insert failed:', error.message);
+    });
+
+    // Email notification
+    if (employeeEmail) {
+      const subject = status === 'verified'
+        ? `HR Update — Your document has been verified`
+        : `HR Update — Action required on your document`;
+      const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <div style="background:#0F2041;padding:20px;border-radius:8px 8px 0 0">
+          <h1 style="color:#fff;margin:0;font-size:18px">PACT Command Center</h1>
+        </div>
+        <div style="background:#f9fafb;padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+          <h2 style="color:#1D3461">${status === 'verified' ? '✅ Document Verified' : '❌ Document Rejected'}</h2>
+          <p>Dear ${employeeName || 'Staff Member'},</p>
+          <p>${msgEn}</p>
+          ${status === 'rejected' ? `<p style="color:#dc2626;font-weight:600">Please re-upload a corrected version.</p>` : ''}
+          <a href="https://app.pactorg.com/users/${recipientId}?tab=documents"
+             style="display:inline-block;background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:12px">
+            View Profile
+          </a>
+        </div>
+      </div>`;
+      supabase.functions.invoke('send-email', { body: { to: employeeEmail, subject, html } })
+        .then(({ error }) => {
+          if (error) console.error('[EmployeeDocumentsTab] email send failed:', error.message);
+        });
+    }
+  };
+
   const handleVerify = async (doc: HrDoc) => {
     setVerifyingId(doc.id);
     try {
@@ -205,6 +263,7 @@ export default function EmployeeDocumentsTab({
         : d);
       setDocs(next); fireVerificationChange(next);
       toast({ title: 'Document verified' });
+      void sendDocNotification(doc, 'verified');
     } catch (e: any) {
       toast({ title: 'Verify failed', description: e.message, variant: 'destructive' });
     } finally { setVerifyingId(null); }
@@ -224,6 +283,7 @@ export default function EmployeeDocumentsTab({
       setExpandedReject(null);
       setRejectReason(p => { const n = { ...p }; delete n[doc.id]; return n; });
       toast({ title: 'Document rejected' });
+      void sendDocNotification(doc, 'rejected', reason);
     } catch (e: any) {
       toast({ title: 'Reject failed', description: e.message, variant: 'destructive' });
     } finally { setRejectingId(null); }

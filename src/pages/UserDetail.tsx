@@ -245,6 +245,8 @@ const UserDetail: FC = () => {
   const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
   const [folderSyncing, setFolderSyncing] = useState(false);
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
+  const [hasPersonalDetails, setHasPersonalDetails] = useState(false);
+  const [contractPreview, setContractPreview] = useState<{ url: string; name: string; mime: string | null } | null>(null);
   const [perfTrend, setPerfTrend] = useState<{ period: string; rating: number }[]>([]);
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
@@ -418,6 +420,16 @@ const UserDetail: FC = () => {
     }
   };
 
+  const handleContractView = async (contract: StaffContract) => {
+    try {
+      const { data, error } = await supabase.storage.from('staff-contracts').createSignedUrl(contract.file_path, 3600);
+      if (error) throw error;
+      setContractPreview({ url: data.signedUrl, name: contract.file_name, mime: contract.file_type });
+    } catch (e: any) {
+      toast({ title: 'Preview failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
   const handleContractDelete = async (contract: StaffContract) => {
     try {
       await supabase.storage.from('staff-contracts').remove([contract.file_path]);
@@ -502,12 +514,13 @@ const UserDetail: FC = () => {
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('hr_employee_personal')
-      .select('professional_summary, profile_folder_path')
+      .select('professional_summary, profile_folder_path, date_of_birth')
       .eq('profile_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.professional_summary) setEmpSummary(data.professional_summary);
         if (data?.profile_folder_path)  setProfileFolderPath(data.profile_folder_path);
+        setHasPersonalDetails(!!data?.date_of_birth);
       });
   }, [user?.id]);
 
@@ -1515,8 +1528,8 @@ const UserDetail: FC = () => {
                   { label: 'Employee ID',      done: !!user.employeeId,                         section: 'overview',     emoji: '🪪' },
                   { label: 'Department set',   done: !!empDepartmentId,                         section: 'employment',   emoji: '🏢' },
                   { label: 'Bank account',     done: !!user.bankAccount,                        section: 'compensation', emoji: '🏦' },
-                  { label: 'Personal details', done: !!(user as any).profile?.date_of_birth,    section: 'personal',     emoji: '👤' },
-                  { label: 'Documents',        done: !!(user as any).documentsCount,            section: 'documents',    emoji: '📁' },
+                  { label: 'Personal details', done: hasPersonalDetails,                         section: 'personal',     emoji: '👤' },
+                  { label: 'Documents',        done: docsVerified.total > 0,                    section: 'documents',    emoji: '📁' },
                 ];
                 const doneCnt = checks.filter(c => c.done).length;
                 const pct = Math.round(doneCnt / checks.length * 100);
@@ -2365,6 +2378,9 @@ const UserDetail: FC = () => {
                 userId={user.id}
                 isAdmin={!!canEditProfile}
                 currentUserId={currentUser?.id}
+                employeeEmail={user.email ?? undefined}
+                employeeName={user.name}
+                employeeId={user.id}
                 onVerificationChange={(allVerified, verified, total) =>
                   setDocsVerified({ allVerified, verified, total })
                 }
@@ -2487,9 +2503,19 @@ const UserDetail: FC = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => handleContractView(c)}
+                                className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                                title="View inline"
+                                data-testid={`button-view-contract-${c.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handleContractDownload(c)}
                                 className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50"
-                                title="Download / Preview"
+                                title="Download"
                                 data-testid={`button-download-contract-${c.id}`}
                               >
                                 <Download className="h-4 w-4" />
@@ -2522,6 +2548,39 @@ const UserDetail: FC = () => {
               </Card>
               </div>
             </div>)}
+
+            {/* ── Contract inline preview Dialog ─────────────────────────── */}
+            {contractPreview && (() => {
+              const { url, name, mime } = contractPreview;
+              const isPdf   = mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf');
+              const isImage = (mime?.startsWith('image/') ?? false) || /\.(png|jpe?g|gif|webp)$/i.test(name);
+              const canPreview = isPdf || isImage;
+              return (
+                <Dialog open onOpenChange={() => setContractPreview(null)}>
+                  <DialogContent className="max-w-5xl w-[95vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-semibold truncate">{name}</span>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => setContractPreview(null)}>✕</Button>
+                    </div>
+                    <div className="flex-1 overflow-auto">
+                      {canPreview
+                        ? isPdf
+                          ? <iframe src={url} className="w-full h-full border-none" title={name} />
+                          : <img src={url} alt={name} className="max-w-full max-h-full object-contain mx-auto p-4" />
+                        : <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
+                            <FileText className="h-12 w-12 opacity-30" />
+                            <p className="text-sm">Preview not available for this file type.</p>
+                            <Button variant="outline" size="sm" onClick={() => window.open(url, '_blank')}>Open in new tab</Button>
+                          </div>
+                      }
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              );
+            })()}
 
             {/* ── PERSONAL SECTION ─────────────────────────────────────────── */}
             {activeSection === 'personal' && (<div className="p-5 sm:p-6">
