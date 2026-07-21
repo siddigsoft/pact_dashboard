@@ -1642,31 +1642,34 @@ const UserDetail: FC = () => {
             </div>)}
 
             {/* ── EMPLOYMENT SECTION ──────────────────────────────────────── */}
-            {activeSection === 'employment' && (<div className="p-5 sm:p-6 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5" /> Department
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
+            {activeSection === 'employment' && (<div className="p-3 sm:p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Department */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    <Building2 className="h-3 w-3" /> Department
                   </h4>
                   {isAdmin ? (
                     <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
-                      <SelectTrigger className="h-11" data-testid="select-emp-department"><SelectValue placeholder="No department" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm" data-testid="select-emp-department"><SelectValue placeholder="No department" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No Department</SelectItem>
                         {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <p className="font-semibold text-base">{departments.find(d => d.id === empDepartmentId)?.name || "—"}</p>
+                    <p className="font-semibold text-sm">{departments.find(d => d.id === empDepartmentId)?.name || "—"}</p>
                   )}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">Employment Type <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span></h4>
+                {/* Employment Type */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Employment Type <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
+                  </h4>
                   {isAdmin ? (
                     <Select value={empType} onValueChange={setEmpType}>
-                      <SelectTrigger className="h-11" data-testid="select-emp-type"><SelectValue placeholder="Select contract type" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm" data-testid="select-emp-type"><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="full-time">Full-Time</SelectItem>
                         <SelectItem value="part-time">Part-Time</SelectItem>
@@ -1675,25 +1678,29 @@ const UserDetail: FC = () => {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <p className="font-semibold text-base capitalize">{empType || "—"}</p>
+                    <p className="font-semibold text-sm capitalize">{empType || "—"}</p>
                   )}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">Contract Start Date <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span></h4>
+                {/* Contract Start Date */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    Contract Start <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
+                  </h4>
                   {isAdmin ? (
-                    <Input type="date" value={empContractStart} onChange={e => setEmpContractStart(e.target.value)} className="h-11" data-testid="input-contract-start" />
+                    <Input type="date" value={empContractStart} onChange={e => setEmpContractStart(e.target.value)} className="h-8 text-sm" data-testid="input-contract-start" />
                   ) : (
-                    <p className="font-semibold text-base">{empContractStart || "—"}</p>
+                    <p className="font-semibold text-sm">{empContractStart || "—"}</p>
                   )}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract End Date</h4>
+                {/* Contract End Date */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Contract End</h4>
                   {isAdmin ? (
-                    <Input type="date" value={empContractEnd} onChange={e => setEmpContractEnd(e.target.value)} className="h-11" data-testid="input-contract-end" />
+                    <Input type="date" value={empContractEnd} onChange={e => setEmpContractEnd(e.target.value)} className="h-8 text-sm" data-testid="input-contract-end" />
                   ) : (
-                    <p className="font-semibold text-base">{empContractEnd || "—"}</p>
+                    <p className="font-semibold text-sm">{empContractEnd || "—"}</p>
                   )}
                   {empContractEnd && (() => {
                     const d = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
@@ -1703,39 +1710,40 @@ const UserDetail: FC = () => {
                   })()}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                {/* Probation Status */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Probation Status</h4>
+                    <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Probation</h4>
                     {empProbationConfirmed
-                      ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">✅ Confirmed</span>
+                      ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-0.5">✅ Confirmed</span>
                       : empProbationEnd
-                        ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">🕐 In Probation</span>
-                        : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted/30 border border-border/40 rounded-full px-2 py-0.5">— Not Set</span>
+                        ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-0.5">🕐 In Probation</span>
+                        : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted/30 border border-border/40 rounded-full px-1.5 py-0.5">— Not Set</span>
                     }
                   </div>
                   {isAdmin ? (
-                    <div className="space-y-2">
-                      <label className="text-[11px] text-muted-foreground">Probation End Date</label>
-                      <Input type="date" value={empProbationEnd} onChange={e => { setEmpProbationEnd(e.target.value); if (e.target.value) setEmpProbationConfirmed(false); }} className="h-11" data-testid="input-probation-end" />
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-muted-foreground">End Date</label>
+                      <Input type="date" value={empProbationEnd} onChange={e => { setEmpProbationEnd(e.target.value); if (e.target.value) setEmpProbationConfirmed(false); }} className="h-8 text-sm" data-testid="input-probation-end" />
                     </div>
                   ) : (
-                    <p className="font-semibold text-base">{empProbationEnd || "—"}</p>
+                    <p className="font-semibold text-sm">{empProbationEnd || "—"}</p>
                   )}
                   {empProbationEnd && !empProbationConfirmed && (() => {
                     const d = Math.ceil((new Date(empProbationEnd).getTime() - Date.now()) / 86400000);
                     return (
                       <div className="flex items-center justify-between gap-2">
                         <p className={`text-xs font-medium ${d <= 0 ? 'text-red-500' : d <= 14 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                          {d <= 0 ? `Ended ${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ago` : `Ends in ${d} day${d === 1 ? '' : 's'}`}
+                          {d <= 0 ? `Ended ${Math.abs(d)}d ago` : `Ends in ${d}d`}
                         </p>
                         {isAdmin && (
                           <button
                             type="button"
                             onClick={() => setShowConfirmEmploymentDialog(true)}
-                            className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg px-2.5 py-1 transition-all"
+                            className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded px-2 py-0.5 transition-all"
                             data-testid="btn-confirm-employment"
                           >
-                            ✓ Confirm Employment
+                            ✓ Confirm
                           </button>
                         )}
                       </div>
@@ -1743,11 +1751,12 @@ const UserDetail: FC = () => {
                   })()}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Working Pattern</h4>
+                {/* Working Pattern */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Working Pattern</h4>
                   {isAdmin ? (
                     <Select value={empWorkingPattern || "none"} onValueChange={v => setEmpWorkingPattern(v === "none" ? "" : v)}>
-                      <SelectTrigger className="h-11" data-testid="select-working-pattern"><SelectValue placeholder="Select pattern…" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm" data-testid="select-working-pattern"><SelectValue placeholder="Not specified" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Not Specified</SelectItem>
                         <SelectItem value="full-time">Full-Time</SelectItem>
@@ -1758,30 +1767,30 @@ const UserDetail: FC = () => {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <p className="font-semibold text-base capitalize">{empWorkingPattern || "—"}</p>
+                    <p className="font-semibold text-sm capitalize">{empWorkingPattern || "—"}</p>
                   )}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
+                {/* Employee ID */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
                   {user.employeeId ? (
-                    <p className="font-semibold text-base font-mono">{user.employeeId}</p>
+                    <p className="font-semibold text-sm font-mono">{user.employeeId}</p>
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      {empContractStart
-                        ? "Will be auto-assigned when you save"
-                        : "Set a contract start date to enable auto-assignment"}
+                    <p className="text-xs text-muted-foreground italic">
+                      {empContractStart ? "Auto-assigned on save" : "Set a start date to enable"}
                     </p>
                   )}
                 </div>
 
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 sm:col-span-2">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                    <UserCheck className="h-3.5 w-3.5" /> Reports To (Manager)
+                {/* Reports To */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    <UserCheck className="h-3 w-3" /> Reports To
                   </h4>
                   {isAdmin ? (
                     <Select value={empReportsTo || "none"} onValueChange={v => setEmpReportsTo(v === "none" ? "" : v)}>
-                      <SelectTrigger className="h-11" data-testid="select-reports-to"><SelectValue placeholder="No manager" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm" data-testid="select-reports-to"><SelectValue placeholder="No manager" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No Manager</SelectItem>
                         {allUsers.filter(u => u.id !== user.id).map(u => (
@@ -1790,32 +1799,32 @@ const UserDetail: FC = () => {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <p className="font-semibold text-base">{allUsers.find(u => u.id === empReportsTo)?.full_name || "—"}</p>
+                    <p className="font-semibold text-sm">{allUsers.find(u => u.id === empReportsTo)?.full_name || "—"}</p>
                   )}
                 </div>
               </div>
 
+              {/* Notification Preferences */}
               {isAdmin && (
-                <div className="bg-muted/20 rounded-xl p-4 border border-border/40 space-y-2">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Notification Preferences</h4>
-                  <label className="flex items-center gap-3 cursor-pointer select-none">
-                    <div className="relative">
+                <div className="bg-muted/20 rounded-lg p-3 border border-border/40">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <div className="relative flex-shrink-0">
                       <input type="checkbox" className="sr-only" checked={taskDigestOptOut} onChange={e => setTaskDigestOptOut(e.target.checked)} data-testid="toggle-task-digest-opt-out" />
-                      <div onClick={() => setTaskDigestOptOut(v => !v)} className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${taskDigestOptOut ? 'bg-destructive' : 'bg-muted'} border border-border/60`}>
-                        <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${taskDigestOptOut ? 'translate-x-5' : 'translate-x-0'}`} />
+                      <div onClick={() => setTaskDigestOptOut(v => !v)} className={`w-8 h-4 rounded-full transition-colors cursor-pointer ${taskDigestOptOut ? 'bg-destructive' : 'bg-muted'} border border-border/60`}>
+                        <div className={`absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${taskDigestOptOut ? 'translate-x-4' : 'translate-x-0'}`} />
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Opt out of Daily Task Digest email</p>
-                      <p className="text-xs text-muted-foreground">User will not receive the daily task summary email.</p>
+                      <p className="text-xs font-medium">Opt out of Daily Task Digest email</p>
+                      <p className="text-[11px] text-muted-foreground">User will not receive the daily task summary.</p>
                     </div>
                   </label>
                 </div>
               )}
 
               {isAdmin && (
-                <div className="flex justify-end pt-2">
-                  <Button onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
                     {empSaving ? "Saving…" : "Save Employment Record"}
                   </Button>
                 </div>
