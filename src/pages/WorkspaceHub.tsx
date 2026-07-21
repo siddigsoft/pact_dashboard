@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
 import {
-  Folder, FolderOpen, FolderPlus, Folders, FileText, Upload, Search, MoreVertical,
+  Folder, FolderOpen, FolderPlus, Folders, FileText, Upload, Search, MoreVertical, MoreHorizontal,
   Download, Trash2, Share2, Eye, MessageSquare, Clock, Shield, Lock, LockOpen,
   Users, ChevronRight, ChevronDown, X, Plus, Edit2, AlertTriangle,
   CheckCircle2, Star, StarOff, Grid, List, Filter, Tag, Link,
@@ -1754,8 +1754,8 @@ export default function WorkspaceHub() {
     return (
       <div>
         <div
-          className={cn('flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer group transition-all text-sm',
-            isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60',
+          className={cn('flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer group transition-all text-sm',
+            isSelected ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white' : 'text-gray-700 dark:text-foreground hover:bg-gray-200/60 dark:hover:bg-muted/60',
             isDragOver && !isSelected && 'ring-2 ring-offset-1 bg-blue-50')}
           style={{ paddingLeft: `${8 + depth * 14}px`, ringColor: folderColor }}
           onClick={() => openFolder(folder)}
@@ -1911,112 +1911,121 @@ export default function WorkspaceHub() {
   // ── File card / row renderers ──────────────────────────────────────────────
 
   function FileRow({ file }: { file: WFile }) {
-    const Icon = getFileIcon(file.mime_type);
     const isSelected = selectedFile?.id === file.id;
     const isBulkSelected = selectedFileIds.has(file.id);
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
     const isImage = file.mime_type?.startsWith('image/') && file.public_url;
-    const ext = (file.extension ?? file.name.split('.').pop() ?? '').toUpperCase().slice(0, 6);
+    const ext = (file.extension ?? file.name.split('.').pop() ?? '').toUpperCase().slice(0, 4);
+    const mime = file.mime_type ?? '';
+    const fext = (file.extension ?? '').toLowerCase();
+    const typeColor = mime.startsWith('image/') ? '#a855f7'
+      : (mime === 'application/pdf' || fext === 'pdf') ? '#ef4444'
+      : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(fext)) ? '#22c55e'
+      : (mime.includes('word') || mime.includes('document') || ['docx','doc'].includes(fext)) ? '#3b82f6'
+      : (mime.includes('zip') || mime.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(fext)) ? '#f59e0b'
+      : '#64748b';
+    const vl = (file.version_label ?? '').toLowerCase();
+    const statusLabel = vl.includes('final') ? 'Final'
+      : vl.includes('draft') ? 'Draft'
+      : vl.includes('review') ? 'Review'
+      : file.security_level === 'public' ? 'Active'
+      : file.security_level === 'internal' ? 'Internal'
+      : file.security_level === 'confidential' ? 'Confidential'
+      : 'Restricted';
+    const statusCls = statusLabel === 'Final' || statusLabel === 'Active'
+      ? 'bg-green-100 text-green-700'
+      : statusLabel === 'Draft'
+      ? 'bg-yellow-100 text-yellow-700'
+      : statusLabel === 'Review' || statusLabel === 'Internal'
+      ? 'bg-blue-100 text-blue-700'
+      : 'bg-orange-100 text-orange-700';
     return (
-      <div onClick={() => openFile(file)}
+      <tr onClick={() => openFile(file)}
         draggable
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
-        className={cn('flex items-center gap-2 px-3 py-2 border-b last:border-b-0 cursor-default hover:bg-muted/30 transition-colors group select-none',
-          isSelected && 'bg-[#1D3461]/5',
-          isBulkSelected && 'bg-[#1D3461]/8 ring-1 ring-inset ring-[#1D3461]/20',
+        className={cn('group cursor-pointer hover:bg-gray-50 dark:hover:bg-muted/30 transition-colors select-none',
+          isSelected && 'bg-blue-50/60 dark:bg-[#1D3461]/5',
+          isBulkSelected && 'bg-blue-50 dark:bg-[#1D3461]/8',
           dragFileId === file.id && 'opacity-40')}>
         {/* Checkbox */}
-        <button onClick={e => toggleFileSelection(file.id, e)} className="w-4 flex-shrink-0 text-muted-foreground hover:text-[#1D3461] transition-colors">
-          {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461]" /> : <Square className="h-4 w-4 opacity-0 group-hover:opacity-100" />}
-        </button>
-        {/* Thumbnail / icon */}
-        <div className="relative h-8 w-8 rounded-lg overflow-hidden flex-shrink-0">
-          {isImage ? (
-            <img src={file.public_url!} alt={file.name} className="h-8 w-8 object-cover rounded-lg" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          ) : (
-            <div className="h-8 w-8 rounded-lg bg-[#1D3461]/10 flex items-center justify-center">
-              <Icon className="h-4 w-4 text-[#1D3461]" />
+        <td className="py-3 pl-1 w-8">
+          <button onClick={e => toggleFileSelection(file.id, e)} className="text-gray-300 hover:text-[#1D3461] transition-colors p-1">
+            {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461]" /> : <Square className="h-4 w-4 opacity-0 group-hover:opacity-100" />}
+          </button>
+        </td>
+        {/* Name + type badge */}
+        <td className="py-3 pr-4">
+          <div className="flex items-center gap-3">
+            {isImage ? (
+              <img src={file.public_url!} alt={file.name} className="h-7 w-7 rounded-md object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            ) : (
+              <div className="h-7 w-7 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: typeColor }}>
+                {ext.slice(0, 3) || '?'}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-gray-800 dark:text-foreground truncate" title={file.name}>{file.name}</span>
+                {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
+                {!file.allow_download && <Ban className="h-3 w-3 text-orange-400 flex-shrink-0" title="Downloads disabled" />}
+              </div>
+              {file.tags.length > 0 && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  {file.tags.slice(0, 2).map(t => <span key={t} className="text-[9px] bg-gray-100 dark:bg-muted px-1.5 py-0 rounded-full text-gray-500">{t}</span>)}
+                </div>
+              )}
             </div>
-          )}
-          {isLocked && <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-2 w-2 text-white" /></span>}
-        </div>
-        {/* Name */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium truncate leading-tight" title={file.name}>{file.name}</p>
-            {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-            {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
-            {!file.allow_download && (
+          </div>
+        </td>
+        {/* Size */}
+        <td className="py-3 pr-4 hidden md:table-cell">
+          <span className="text-sm text-gray-500">{fmtSize(file.file_size)}</span>
+        </td>
+        {/* Modified */}
+        <td className="py-3 pr-4 hidden md:table-cell">
+          <span className="text-sm text-gray-500">{fmtRelative(file.updated_at)}</span>
+        </td>
+        {/* By */}
+        <td className="py-3 pr-4 hidden sm:table-cell">
+          <span className="text-sm text-gray-500 truncate">{file._uploaderName ?? '—'}</span>
+        </td>
+        {/* Status */}
+        <td className="py-3 hidden sm:table-cell">
+          <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-medium', statusCls)}>{statusLabel}</span>
+        </td>
+        {/* Actions */}
+        <td className="py-3 pr-4">
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+            {(file.allow_download || canManageFile(file)) && !file.password_hash && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1 py-0 rounded-full font-medium cursor-help flex-shrink-0">
-                    <Ban className="h-2 w-2" />DL off
-                  </span>
+                  <button onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}
+                    className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[200px] text-xs">Downloads are disabled for this file</TooltipContent>
+                <TooltipContent side="top" className="text-xs">Download</TooltipContent>
               </Tooltip>
             )}
-          </div>
-          {file.tags.length > 0 && (
-            <div className="flex items-center gap-1 mt-0.5">
-              {file.tags.slice(0, 3).map(t => <span key={t} className="text-[9px] bg-muted px-1.5 py-0 rounded-full text-muted-foreground">{t}</span>)}
-            </div>
-          )}
-        </div>
-        {/* Type */}
-        <span className="hidden md:block w-[58px] text-[10px] text-muted-foreground font-mono flex-shrink-0">{ext || '—'}</span>
-        {/* Security */}
-        <div className="hidden sm:block w-[88px] flex-shrink-0">
-          <SecBadge level={file.security_level} size="xs" />
-        </div>
-        {/* Modified */}
-        <div className="hidden md:flex w-[130px] flex-col flex-shrink-0">
-          <span className="text-xs text-muted-foreground leading-tight">{fmtRelative(file.updated_at)}</span>
-          <span className="text-[10px] text-muted-foreground/70 truncate leading-tight">{file._uploaderName}</span>
-        </div>
-        {/* Size */}
-        <span className="hidden sm:block w-16 text-xs text-muted-foreground text-right flex-shrink-0">{fmtSize(file.file_size)}</span>
-        {/* Quick hover actions */}
-        <div className="hidden sm:flex items-center gap-0.5 w-[88px] justify-end flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {(file.allow_download || canManageFile(file)) && !file.password_hash && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}
-                  className="p-1 rounded text-muted-foreground hover:text-green-600 hover:bg-green-50 transition-colors">
-                  <Download className="h-3.5 w-3.5" />
+                <button onClick={e => { e.stopPropagation(); togglePinFile(file); }}
+                  className={cn('p-1 rounded transition-colors', file.is_pinned ? 'text-amber-500' : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50')}>
+                  <Star className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">Download</TooltipContent>
+              <TooltipContent side="top" className="text-xs">{file.is_pinned ? 'Unpin' : 'Pin'}</TooltipContent>
             </Tooltip>
-          )}
-          {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(file.public_url!).then(() => toast({ title: 'Link copied', description: file.name })); }}
-                  className="p-1 rounded text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors">
-                  <Copy className="h-3.5 w-3.5" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                <button className="p-1 rounded text-gray-400 hover:text-gray-700 transition-colors">
+                  <MoreHorizontal className="h-4 w-4" />
                 </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={e => { e.stopPropagation(); togglePinFile(file); }}
-                className={cn('p-1 rounded transition-colors', file.is_pinned ? 'text-amber-500 hover:bg-amber-50' : 'text-muted-foreground hover:text-amber-500 hover:bg-amber-50')}>
-                <Star className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">{file.is_pinned ? 'Unpin' : 'Pin'}</TooltipContent>
-          </Tooltip>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-              <button className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
-                <MoreVertical className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="text-xs">
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs">
               <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
               {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
               {canManageFile(file) && <>
@@ -2048,7 +2057,8 @@ export default function WorkspaceHub() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
+        </td>
+      </tr>
     );
   }
 
@@ -2201,56 +2211,41 @@ export default function WorkspaceHub() {
   return (
     <WorkspaceAccessGate>
     <TooltipProvider>
-      <div className="flex h-screen bg-background overflow-hidden">
+      <div className="flex h-screen bg-white dark:bg-background overflow-hidden">
 
         {/* ══ Left Sidebar ════════════════════════════════════════════════ */}
-        <div className="w-64 flex-shrink-0 border-r flex flex-col bg-card overflow-y-auto">
-          {/* Sidebar header */}
-          <div className="p-4 border-b">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#0F2041] to-[#1D3461] flex items-center justify-center">
-                <Folder className="h-4 w-4 text-white" />
+        <div className="w-60 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 dark:bg-card overflow-y-auto">
+          {/* Sidebar header — Notion style */}
+          <div className="px-4 pt-5 pb-3 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-3.5 h-3.5 text-white" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-bold text-[#0F2041]">Workspace Hub</h2>
-                <p className="text-[10px] text-muted-foreground">{stats.total} files · {fmtSize(stats.totalSize)}</p>
-                {stats.totalSize > 0 && (
-                  <div className="mt-1 w-full">
-                    <div className="h-1 rounded-full bg-muted overflow-hidden w-full">
-                      <div className="h-full bg-gradient-to-r from-[#1D3461] to-[#0F2041] rounded-full transition-all"
-                        style={{ width: `${Math.min(100, (stats.totalSize / (1024 * 1024 * 1024)) * 100)}%` }} />
-                    </div>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">{fmtSize(stats.totalSize)} used</p>
-                  </div>
-                )}
-              </div>
+              <span className="text-sm font-semibold text-gray-800 dark:text-foreground truncate flex-1">PACT Workspace</span>
               {isSuperAdmin && (
                 <button
                   onClick={() => setAccessManagerOpen(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[#0F2041]/10 text-[#0F2041] border border-[#0F2041]/20 transition-colors text-[10px] font-medium"
+                  className="flex-shrink-0 p-1 rounded hover:bg-gray-200 text-gray-400 transition-colors"
                   data-testid="btn-workspace-access-manager"
+                  title="Manage Access"
                 >
-                  <Key className="h-3 w-3" />
-                  Access
+                  <Key className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
-            <Button size="sm" className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 font-medium" onClick={() => setUploadOpen(true)}>
-              <Upload className="h-3.5 w-3.5" />Upload Files
-            </Button>
+            <p className="text-[10px] text-gray-400 pl-8">{stats.total} files · {fmtSize(stats.totalSize)}</p>
           </div>
 
-          {/* Quick access */}
-          <div className="px-3 py-2">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 mb-1.5">Quick Access</p>
+          {/* Quick access — Notion style nav */}
+          <div className="px-3 pt-3 pb-1">
             {[
-              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
-              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
-              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false, iconBg: 'bg-sky-100', iconColor: 'text-sky-600' },
-              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
-              { id: '__trash__', label: 'Recycle Bin', icon: Trash2, count: 0, droppable: false, iconBg: 'bg-red-100', iconColor: 'text-red-500' },
+              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
+              { id: '__pinned__', label: 'Starred', icon: Star, count: stats.pinned, droppable: false },
+              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
+              { id: '__task_docs__', label: 'Task Docs', icon: CheckCircle2, count: totalTaskAttachments, droppable: false },
+              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false },
+              { id: null, label: 'Unfiled', icon: Folder, count: stats.root, droppable: true },
+              { id: '__trash__', label: 'Trash', icon: Trash2, count: 0, droppable: false },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
               const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
@@ -2259,17 +2254,13 @@ export default function WorkspaceHub() {
                   onDragOver={item.droppable ? e => { e.preventDefault(); setDragOverFolderId('__root__'); } : undefined}
                   onDragLeave={item.droppable ? () => setDragOverFolderId(null) : undefined}
                   onDrop={item.droppable ? e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, null); } : undefined}
-                  className={cn('w-full flex items-center gap-2.5 py-1.5 px-2 rounded-xl text-xs font-medium transition-all',
-                    isSelected ? 'bg-[#1D3461] text-white shadow-sm' : 'hover:bg-muted/70 text-foreground',
-                    isRootDragOver && 'ring-2 ring-blue-400 bg-blue-50')}>
-                  <div className={cn('h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
-                    isSelected ? 'bg-white/20' : item.iconBg)}>
-                    <item.icon className={cn('h-3.5 w-3.5', isSelected ? 'text-white' : item.iconColor)} />
-                  </div>
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {isRootDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Drop here</span>}
-                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center',
-                    isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{item.count}</span>
+                  className={cn('w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition-all',
+                    isSelected ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-muted-foreground hover:bg-gray-200/60 dark:hover:bg-muted/70',
+                    isRootDragOver && 'ring-2 ring-blue-400')}>
+                  <item.icon className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-gray-700 dark:text-white' : 'text-gray-400')} />
+                  <span className="flex-1 text-left truncate">{item.label}</span>
+                  {isRootDragOver && <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500 text-white font-semibold">Drop</span>}
+                  {item.count > 0 && <span className="text-[10px] text-gray-400 font-medium">{item.count}</span>}
                 </button>
               );
             })}
@@ -2277,49 +2268,30 @@ export default function WorkspaceHub() {
 
           {/* Folder tree */}
           <div className="p-2 flex-1">
-            <div className="flex items-center justify-between px-2 mb-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Folders</p>
-              {isAdmin && (
-                <button onClick={() => setNewFolderOpen(true)} className="text-muted-foreground hover:text-[#1D3461] transition-colors">
-                  <FolderPlus className="h-3.5 w-3.5" />
-                </button>
-              )}
+            <div className="flex items-center px-2 mb-1 mt-2">
+              <p className="text-[10px] font-semibold text-gray-400 dark:text-muted-foreground uppercase tracking-wider">Folders</p>
             </div>
             {rootFolders.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground text-center py-4 px-2">No folders yet</p>
+              <p className="text-[11px] text-gray-400 dark:text-muted-foreground text-center py-4 px-2">No folders yet</p>
             ) : (
               rootFolders.map(f => <FolderNode key={f.id} folder={f} depth={0} />)
             )}
           </div>
 
-          {/* Security level legend */}
-          <div className="p-3 border-t space-y-1">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Security Levels</p>
-            {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
-              const Icon = cfg.icon;
-              const count = stats.byLevel[level];
-              const isAboveClearance = CLEARANCE_ORDER[level] > CLEARANCE_ORDER[effectiveClearance];
-              return (
-                <div key={level} className={cn('flex items-center gap-1.5 text-[10px]', isAboveClearance && 'opacity-40')}>
-                  <Icon className={cn('h-3 w-3 flex-shrink-0', cfg.text)} />
-                  <span className="flex-1 text-muted-foreground">{cfg.label}</span>
-                  {isAboveClearance ? (
-                    <Lock className="h-2.5 w-2.5 text-muted-foreground" />
-                  ) : (
-                    <span className="font-medium">{count}</span>
-                  )}
-                </div>
-              );
-            })}
-            {/* User's clearance badge */}
+          {/* Bottom: new folder + clearance */}
+          <div className="mt-auto p-3 border-t border-gray-200 space-y-2">
+            {isAdmin && (
+              <button onClick={() => setNewFolderOpen(true)}
+                className="w-full flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-200/60 dark:hover:bg-muted transition-colors">
+                <Plus className="h-3.5 w-3.5" /> New folder
+              </button>
+            )}
             <div className={cn(
-              'mt-2 pt-2 border-t flex items-center gap-1.5 rounded-lg px-2 py-1',
+              'flex items-center gap-1.5 rounded-lg px-2 py-1',
               SEC_CFG[effectiveClearance].bg, SEC_CFG[effectiveClearance].border, 'border'
             )}>
               <Shield className={cn('h-3 w-3 shrink-0', SEC_CFG[effectiveClearance].text)} />
-              <span className={cn('text-[10px] font-semibold flex-1', SEC_CFG[effectiveClearance].text)}>
-                Your clearance
-              </span>
+              <span className={cn('text-[10px] flex-1', SEC_CFG[effectiveClearance].text)}>Clearance</span>
               <span className={cn('text-[10px] font-bold', SEC_CFG[effectiveClearance].text)}>
                 {SEC_CFG[effectiveClearance].label}
               </span>
@@ -2429,61 +2401,59 @@ export default function WorkspaceHub() {
             </div>
           )}
 
-          {/* Folder hero header */}
-          <div className="px-5 py-3 border-b bg-gradient-to-r from-[#0F2041]/5 to-transparent flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#1D3461] to-[#0F2041] flex items-center justify-center shadow-sm flex-shrink-0">
-                {selectedFolderId === '__recent__' ? <Clock className="h-4.5 w-4.5 text-white" /> :
-                 selectedFolderId === '__pinned__' ? <Star className="h-4.5 w-4.5 text-white" /> :
-                 selectedFolderId === '__trash__' ? <Trash2 className="h-4.5 w-4.5 text-white" /> :
-                 selectedFolderId === '__all__' ? <FolderOpen className="h-4.5 w-4.5 text-white" /> :
-                 selectedFolderId === '__mine__' ? <User className="h-4.5 w-4.5 text-white" /> :
-                 <Folder className="h-4.5 w-4.5 text-white" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-[#0F2041] truncate">{currentFolderName}</h3>
-                <p className="text-[11px] text-muted-foreground">
+          {/* Header — Notion style */}
+          <div className="px-8 pt-8 pb-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-start justify-between mb-1">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-foreground">{currentFolderName}</h1>
+                <p className="text-sm text-gray-400 mt-0.5">
                   {displayedFiles.length} file{displayedFiles.length !== 1 ? 's' : ''}
                   {displayedFiles.length > 0 && ` · ${fmtSize(displayedFiles.reduce((s, f) => s + f.file_size, 0))}`}
+                  {displayedFiles.length > 0 && ` · Last updated ${fmtRelative(displayedFiles[0]?.updated_at ?? '')}`}
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center gap-2 flex-shrink-0 ml-4 flex-wrap justify-end">
                 {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-[#1D3461]/30 text-[#1D3461] hover:bg-[#1D3461]/10 font-medium" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
-                    <Share2 className="h-3.5 w-3.5" />Share
-                  </Button>
+                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
+                    <Share2 className="h-3 w-3" /> Share
+                  </button>
                 )}
-                <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 font-medium shadow-sm" onClick={() => setUploadOpen(true)}>
-                  <Upload className="h-3.5 w-3.5" />Upload
-                </Button>
+                <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
+                  <SelectTrigger className="h-8 w-28 text-xs border-gray-200 text-gray-500 gap-1"><Filter className="h-3 w-3 flex-shrink-0" /><SelectValue placeholder="Filter" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Types</SelectItem>
+                    <SelectItem value="image" className="text-xs">🖼 Images</SelectItem>
+                    <SelectItem value="pdf" className="text-xs">📄 PDF</SelectItem>
+                    <SelectItem value="excel" className="text-xs">📊 Excel / CSV</SelectItem>
+                    <SelectItem value="word" className="text-xs">📝 Word</SelectItem>
+                    <SelectItem value="zip" className="text-xs">📦 Archives</SelectItem>
+                    <SelectItem value="other" className="text-xs">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={v => setSortBy(v as any)}>
+                  <SelectTrigger className="h-8 w-32 text-xs border-gray-200 text-gray-500 gap-1"><ArrowUpDown className="h-3 w-3 flex-shrink-0" /><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date" className="text-xs">Date Modified</SelectItem>
+                    <SelectItem value="name" className="text-xs">Name</SelectItem>
+                    <SelectItem value="size" className="text-xs">Size</SelectItem>
+                  </SelectContent>
+                </Select>
+                <button className="flex items-center gap-1.5 text-xs bg-gray-900 text-white rounded-md px-3 py-1.5 hover:bg-gray-700 transition-colors" onClick={() => setUploadOpen(true)}>
+                  <Upload className="h-3 w-3" /> Upload
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Top bar — search + filters */}
-          <div className="flex items-center gap-2 px-5 py-2 border-b bg-card flex-shrink-0 flex-wrap">
-            <div className="flex-1" />
-
-            <div className="relative w-48">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…" className="pl-8 h-8 text-xs" />
+          {/* Inline search + secondary controls */}
+          <div className="flex items-center gap-3 px-8 py-3 flex-shrink-0 border-b border-gray-100 flex-wrap">
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-muted rounded-lg px-4 py-2 flex-1 max-w-md">
+              <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…"
+                className="bg-transparent border-0 text-sm flex-1 placeholder:text-gray-400 h-auto p-0 focus-visible:ring-0 shadow-none" />
             </div>
-
-            <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
-              <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All Types</SelectItem>
-                <SelectItem value="image" className="text-xs">🖼 Images</SelectItem>
-                <SelectItem value="pdf" className="text-xs">📄 PDF</SelectItem>
-                <SelectItem value="excel" className="text-xs">📊 Excel / CSV</SelectItem>
-                <SelectItem value="word" className="text-xs">📝 Word</SelectItem>
-                <SelectItem value="zip" className="text-xs">📦 Archives</SelectItem>
-                <SelectItem value="other" className="text-xs">Other</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Select value={secFilter} onValueChange={v => setSecFilter(v as any)}>
-              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All Levels" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-xs border-gray-200"><SelectValue placeholder="All Levels" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all" className="text-xs">All Levels</SelectItem>
                 {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => (
@@ -2491,25 +2461,14 @@ export default function WorkspaceHub() {
                 ))}
               </SelectContent>
             </Select>
-
-            <Select value={sortBy} onValueChange={v => setSortBy(v as any)}>
-              <SelectTrigger className="h-8 w-28 text-xs gap-1"><ArrowUpDown className="h-3 w-3" /><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date" className="text-xs">Date Modified</SelectItem>
-                <SelectItem value="name" className="text-xs">Name</SelectItem>
-                <SelectItem value="size" className="text-xs">Size</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center border rounded-lg p-0.5">
-              <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors', viewMode === 'list' ? 'bg-[#1D3461] text-white' : 'text-muted-foreground hover:text-foreground')}>
+            <div className="flex items-center border border-gray-200 rounded-lg p-0.5">
+              <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors', viewMode === 'list' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700')}>
                 <List className="h-3.5 w-3.5" />
               </button>
-              <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors', viewMode === 'grid' ? 'bg-[#1D3461] text-white' : 'text-muted-foreground hover:text-foreground')}>
+              <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors', viewMode === 'grid' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700')}>
                 <Grid className="h-3.5 w-3.5" />
               </button>
             </div>
-
           </div>
 
           {/* File area */}
@@ -2798,18 +2757,23 @@ export default function WorkspaceHub() {
                     </div>
                   )}
                   {viewMode === 'list' ? (
-                    <div>
-                      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 border-b bg-muted/30 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
-                        <span className="w-4 flex-shrink-0" />
-                        <span className="w-8 flex-shrink-0" />
-                        <span className="flex-1">Name</span>
-                        <span className="w-[58px] hidden md:block">Type</span>
-                        <span className="w-[88px]">Security</span>
-                        <span className="w-[130px] hidden md:block">Modified</span>
-                        <span className="w-16 text-right">Size</span>
-                        <span className="w-[88px] flex-shrink-0" />
-                      </div>
-                      {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
+                    <div className="px-8 pt-2">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="pb-3 w-8" />
+                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
+                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Size</th>
+                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Modified</th>
+                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden sm:table-cell">By</th>
+                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 hidden sm:table-cell">Status</th>
+                            <th className="pb-3 w-24" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {displayedFiles.map(f => <FileRow key={f.id} file={f} />)}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
                     <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
