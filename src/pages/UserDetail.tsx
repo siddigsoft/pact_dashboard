@@ -576,7 +576,6 @@ const UserDetail: FC = () => {
     const missingEmp: string[] = [];
     if (!empType) missingEmp.push('Employment Type');
     if (!empContractStart) missingEmp.push('Contract Start Date');
-    if (!empDepartmentId) missingEmp.push('Department');
     if (missingEmp.length > 0) {
       toast({ title: 'Required fields missing', description: `Please fill in: ${missingEmp.join(', ')}`, variant: 'destructive' });
       return;
@@ -586,9 +585,6 @@ const UserDetail: FC = () => {
       // Use the ref (last successfully saved value) rather than the stale user object
       // so that consecutive saves in the same session compare against the right value.
       const prevDepartmentId = savedDepartmentIdRef.current;
-
-      // When employment record is saved, automatically mark as employee
-      const hasEmploymentData = !!(empType || empContractStart || empDepartmentId);
 
       // Auto-generate employee ID if not yet assigned and contract start date is set
       let autoEmployeeId: string | null = null;
@@ -611,7 +607,6 @@ const UserDetail: FC = () => {
         probation_end_date: empProbationEnd || null,
         probation_confirmed: empProbationConfirmed,
         working_pattern: empWorkingPattern || null,
-        is_employee: hasEmploymentData,
         updated_at: new Date().toISOString(),
       };
       if (autoEmployeeId) updatePayload.employee_id = autoEmployeeId;
@@ -663,8 +658,11 @@ const UserDetail: FC = () => {
       toast({ title: "Employment record updated" });
       void triggerFolderSync();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      const message = err instanceof Error
+        ? err.message
+        : (err as any)?.message || "An unexpected error occurred.";
+      console.error("[UserDetail] handleEmploymentSave error:", err);
+      toast({ title: "Error saving employment record", description: message, variant: "destructive" });
     } finally {
       setEmpSaving(false);
     }
