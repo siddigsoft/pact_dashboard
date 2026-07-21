@@ -1117,6 +1117,27 @@ const UserDetail: FC = () => {
     );
   }
 
+  // Access control: non-admin users can only view their own profile.
+  const isOwnProfile = currentUser?.id === user.id;
+  if (!isAdmin && !isOwnProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-4 max-w-sm px-6">
+          <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-bold">Access Restricted</h2>
+          <p className="text-muted-foreground text-sm">
+            You can only view your own profile. Contact HR or an administrator if you need assistance.
+          </p>
+          <Button variant="outline" onClick={() => navigate(`/users/${currentUser?.id}`)}>
+            <UserIcon className="mr-2 h-4 w-4" /> Go to My Profile
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
 
