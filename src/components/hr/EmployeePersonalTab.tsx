@@ -160,6 +160,18 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
   const f = (key: keyof PersonalData) => (v: string) => setForm(p => ({ ...p, [key]: v }));
 
   const handleSave = async () => {
+    // Required field validation
+    const missingPersonal: string[] = [];
+    if (!form.date_of_birth) missingPersonal.push('Date of Birth');
+    if (!form.gender) missingPersonal.push('Gender');
+    if (!form.nationality) missingPersonal.push('Nationality');
+    if (!form.national_id_no && !form.passport_no) missingPersonal.push('National ID or Passport Number');
+    if (!form.emergency_contact_name) missingPersonal.push('Emergency Contact Name');
+    if (!form.emergency_contact_phone) missingPersonal.push('Emergency Contact Phone');
+    if (missingPersonal.length > 0) {
+      toast({ title: 'Required fields missing', description: `Please fill in: ${missingPersonal.join(', ')}`, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form, profile_id: userId, updated_at: new Date().toISOString() };
@@ -257,7 +269,7 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
       </SectionCard>
 
       {/* ── 1. Personal Identity ─────────────────────────────────────────── */}
-      <SectionCard accent="border-l-blue-500" iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" icon={<User className="h-3.5 w-3.5" />} title="Personal Identity" action={editBtn}>
+      <SectionCard accent="border-l-blue-500" iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" icon={<User className="h-3.5 w-3.5" />} title="Personal Identity" action={<div className="flex items-center gap-2">{editMode ? null : <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">Required</span>}{editBtn}</div>}>
         {editMode ? (
           <FormGrid>
             <FormField label="Date of Birth"><Input type="date" value={form.date_of_birth || ''} onChange={e => f('date_of_birth')(e.target.value)} className="h-9" /></FormField>
@@ -300,7 +312,7 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
       </SectionCard>
 
       {/* ── 2. ID Documents ──────────────────────────────────────────────── */}
-      <SectionCard accent="border-l-indigo-500" iconBg="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400" icon={<CreditCard className="h-3.5 w-3.5" />} title="ID Documents">
+      <SectionCard accent="border-l-indigo-500" iconBg="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400" icon={<CreditCard className="h-3.5 w-3.5" />} title="ID Documents" action={editMode ? undefined : <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">Required</span>}>
         {editMode ? (
           <FormGrid>
             <FormField label="Primary ID Type">

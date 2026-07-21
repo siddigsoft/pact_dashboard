@@ -572,6 +572,15 @@ const UserDetail: FC = () => {
 
   const handleEmploymentSave = async () => {
     if (!user) return;
+    // Required field validation
+    const missingEmp: string[] = [];
+    if (!empType) missingEmp.push('Employment Type');
+    if (!empContractStart) missingEmp.push('Contract Start Date');
+    if (!empDepartmentId) missingEmp.push('Department');
+    if (missingEmp.length > 0) {
+      toast({ title: 'Required fields missing', description: `Please fill in: ${missingEmp.join(', ')}`, variant: 'destructive' });
+      return;
+    }
     setEmpSaving(true);
     try {
       // Use the ref (last successfully saved value) rather than the stale user object
@@ -821,6 +830,17 @@ const UserDetail: FC = () => {
 
   const handleEditSave = async () => {
     if (!updateUser || !user) return;
+
+    // Location & Work required field validation
+    if (activeSection === 'location') {
+      const FIELD_STAFF_ROLES = ['datacollector', 'coordinator', 'supervisor'];
+      const isFieldStaff = FIELD_STAFF_ROLES.includes((user.role || '').toLowerCase());
+      if (isFieldStaff && !editForm.hubId) {
+        toast({ title: 'Required field missing', description: 'Please select a Hub before saving.', variant: 'destructive' });
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
@@ -1574,8 +1594,9 @@ const UserDetail: FC = () => {
             {activeSection === 'employment' && (<div className="p-5 sm:p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
                     <Building2 className="h-3.5 w-3.5" /> Department
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
                   </h4>
                   {isAdmin ? (
                     <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
@@ -1591,7 +1612,7 @@ const UserDetail: FC = () => {
                 </div>
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employment Type</h4>
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">Employment Type <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span></h4>
                   {isAdmin ? (
                     <Select value={empType} onValueChange={setEmpType}>
                       <SelectTrigger className="h-11" data-testid="select-emp-type"><SelectValue placeholder="Select contract type" /></SelectTrigger>
@@ -1608,7 +1629,7 @@ const UserDetail: FC = () => {
                 </div>
 
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
-                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract Start Date</h4>
+                  <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">Contract Start Date <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span></h4>
                   {isAdmin ? (
                     <Input type="date" value={empContractStart} onChange={e => setEmpContractStart(e.target.value)} className="h-11" data-testid="input-contract-start" />
                   ) : (
@@ -1755,9 +1776,12 @@ const UserDetail: FC = () => {
               const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor'];
               const isFieldStaff = FIELD_STAFF.includes((user.role || '').toLowerCase());
 
-              const LocField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+              const LocField = ({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) => (
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">{label}</h3>
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                    {label}
+                    {required && <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>}
+                  </h3>
                   {children}
                 </div>
               );
@@ -1768,7 +1792,7 @@ const UserDetail: FC = () => {
                     /* ── Field Staff: Hub / State / Locality ── */
                     <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <LocField label="Hub">
+                        <LocField label="Hub" required>
                           {editMode ? (
                             <Select value={editForm.hubId || ""} onValueChange={v => handleEditChange("hubId", v)}>
                               <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select hub" /></SelectTrigger>

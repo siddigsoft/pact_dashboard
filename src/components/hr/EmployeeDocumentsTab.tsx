@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Upload, Download, Trash2, Loader2, FileText, Eye, Plus, X,
   CreditCard, User, FileImage, Briefcase, BookOpen, Globe, Shield,
-  CheckCircle2, XCircle, Clock, AlertTriangle, FolderOpen,
+  CheckCircle2, XCircle, Clock, AlertTriangle, FolderOpen, AlertCircle,
 } from "lucide-react";
 
 interface HrDoc {
@@ -239,6 +239,25 @@ export default function EmployeeDocumentsTab({
           </Button>
         )}
       </div>
+
+      {/* ── Missing required docs banner ─────────────────────────────────── */}
+      {(() => {
+        const requiredTypes = Object.entries(DOC_TYPE_META).filter(([, m]) => m.required).map(([k]) => k);
+        const uploadedTypes = new Set(docs.map(d => d.doc_type));
+        const missing = requiredTypes.filter(t => !uploadedTypes.has(t));
+        if (missing.length === 0) return null;
+        return (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-950/20 p-4 flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Required documents missing</p>
+              <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+                Please upload: {missing.map(t => DOC_TYPE_META[t]?.label || t).join(', ')}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Verification progress bar ─────────────────────────────────────── */}
       {docs.length > 0 && (

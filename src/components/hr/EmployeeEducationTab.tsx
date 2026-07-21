@@ -134,6 +134,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
   const saveEdu = async () => {
     if (!eduForm) return;
+    if (!eduForm.degree_level || !eduForm.institution.trim()) {
+      toast({ title: 'Required fields missing', description: 'Please fill in Degree Level and Institution Name', variant: 'destructive' });
+      return;
+    }
     setEduSaving(true);
     try {
       const yr = eduForm.graduation_year;
@@ -166,6 +170,14 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
   const saveExp = async () => {
     if (!expForm) return;
+    const missingExp: string[] = [];
+    if (!expForm.employer.trim()) missingExp.push('Employer / Organisation');
+    if (!expForm.job_title.trim()) missingExp.push('Job Title');
+    if (!expForm.start_date) missingExp.push('Start Date');
+    if (missingExp.length > 0) {
+      toast({ title: 'Required fields missing', description: `Please fill in: ${missingExp.join(', ')}`, variant: 'destructive' });
+      return;
+    }
     setExpSaving(true);
     try {
       const payload = { ...expForm, profile_id: userId, end_date: expForm.is_current ? null : expForm.end_date || null };
