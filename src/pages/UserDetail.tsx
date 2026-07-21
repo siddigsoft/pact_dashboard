@@ -7,7 +7,7 @@ import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info, Camera } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info, Camera, RefreshCw } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -1593,16 +1593,25 @@ const UserDetail: FC = () => {
                       </div>
                     </div>
                     {!folderSyncing && profileFolderPath && isAdmin && (
-                      <button
-                        onClick={async () => {
-                          const url = await getProfileSummarySignedUrl(profileFolderPath);
-                          if (url) window.open(url, '_blank');
-                          else toast({ title: 'Could not open file', description: 'The summary PDF may not have been generated yet.', variant: 'destructive' });
-                        }}
-                        className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-lg px-2.5 py-1.5 transition-all"
-                      >
-                        <FileText className="h-3.5 w-3.5" /> Open PROFILE_SUMMARY.pdf
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            const url = await getProfileSummarySignedUrl(profileFolderPath);
+                            if (url) window.open(url, '_blank');
+                            else toast({ title: 'Could not open file', description: 'The summary PDF may not have been generated yet.', variant: 'destructive' });
+                          }}
+                          className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-700 rounded-lg px-2.5 py-1.5 transition-all"
+                        >
+                          <FileText className="h-3.5 w-3.5" /> Open CV
+                        </button>
+                        <button
+                          onClick={() => void triggerFolderSync()}
+                          className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 transition-all"
+                          title="Sync all HR documents into the Workspace Hub folder"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" /> Sync Docs
+                        </button>
+                      </div>
                     )}
                   </div>
                   {!folderSyncing && (
@@ -1613,11 +1622,11 @@ const UserDetail: FC = () => {
                       </div>
                       <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-900 p-2 text-center">
                         <p className="font-bold text-emerald-700 dark:text-emerald-300">{docsVerified.total} document{docsVerified.total !== 1 ? 's' : ''}</p>
-                        <p className="text-muted-foreground">Uploaded to profile</p>
+                        <p className="text-muted-foreground">In HR profile</p>
                       </div>
-                      <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-emerald-100 dark:border-emerald-900 p-2 text-center">
-                        <p className="font-bold text-emerald-700 dark:text-emerald-300">Updated on save</p>
-                        <p className="text-muted-foreground">Never duplicated</p>
+                      <div className="rounded-lg bg-white/70 dark:bg-white/5 border border-blue-100 dark:border-blue-900 p-2 text-center">
+                        <p className="font-bold text-blue-700 dark:text-blue-300">Sync Docs</p>
+                        <p className="text-muted-foreground">Copies to workspace</p>
                       </div>
                     </div>
                   )}

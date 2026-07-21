@@ -37,7 +37,6 @@ async function ensureWorkspaceFolder(
   parentId: string | null,
   createdBy: string | null,
 ): Promise<string> {
-  // Check if folder already exists under this parent (separate queries to avoid ternary-await issues)
   let existingId: string | null = null;
   if (parentId) {
     const { data } = await supabase
@@ -60,7 +59,6 @@ async function ensureWorkspaceFolder(
   }
   if (existingId) return existingId;
 
-  // Create it — use 'internal' so all staff can see the HR folder hierarchy
   const { data: created, error } = await supabase
     .from('workspace_folders')
     .insert({
@@ -85,8 +83,9 @@ async function upsertWorkspaceFile(
   fileSizeBytes: number,
   createdBy: string | null,
   description: string | null,
+  mimeType?: string,
+  extraTags?: string[],
 ): Promise<void> {
-  // Check for existing file with same storage path
   const { data: existing } = await supabase
     .from('workspace_files')
     .select('id')
@@ -107,22 +106,104 @@ async function upsertWorkspaceFile(
       })
       .eq('id', existing.id);
   } else {
-    await supabase.from('workspace_files').insert({
+    const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+    const tags = ['hr', 'profile', ...(extraTags ?? [])];
+
+    const payload: Record<string, unknown> = {
       folder_id: folderId,
       name: fileName,
       description,
       storage_path: storagePath,
       public_url: publicUrl,
       file_size: fileSizeBytes,
-      mime_type: 'application/pdf',
-      extension: 'pdf',
-      security_level: 'confidential',
       created_by: createdBy,
       last_modified_by: createdBy,
-      tags: ['hr', 'profile', 'auto-generated'],
-      is_pinned: false,
+      tags,
+      // Required fields (proven by WorkspaceHub's own insert)
+      version: 1,
+      allow_download: false,
       archived: false,
-    });
+    };
+
+    // Optional schema-stable fields — add gracefully
+    if (mimeType) {
+      payload.mime_type  = mimeType;
+      payload.extension  = ext;
+    }
+
+    await supabase.from('workspace_files').insert(payload);
+  }
+}
+
+// ── HR document → Workspace sync ─────────────────────────────────────────────
+
+/**
+ * Copies all hr_employee_documents for a user into the workspace-files bucket
+ * and registers each in workspace_files so they appear in the Workspace Hub folder.
+ * Called from syncProfileFolder (and can be called independently after uploads).
+ */
+export async function syncHrDocsToWorkspace(
+  user: { id: string; employeeId?: string | null; name?: string | null },
+  empFolderId: string,
+): Promise<void> {
+  try {
+    const { data: hrDocs } = await supabase
+      .from('hr_employee_documents')
+      .select('id, doc_type, doc_name, file_path, file_size, file_mime')
+      .eq('profile_id', user.id);
+
+    if (!hrDocs || hrDocs.length === 0) return;
+
+    // Which paths are already registered?
+    const { data: existingFiles } = await supabase
+      .from('workspace_files')
+      .select('storage_path')
+      .eq('folder_id', empFolderId);
+    const registeredPaths = new Set((existingFiles || []).map((f: any) => f.storage_path));
+
+    for (const doc of hrDocs) {
+      const wsPath = doc.file_path; // same path key, different bucket
+
+      // Download from staff-contracts
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from('staff-contracts')
+        .download(doc.file_path);
+      if (dlErr || !blob) {
+        console.warn('[profileFolder] could not download HR doc:', doc.doc_name, dlErr?.message);
+        continue;
+      }
+
+      // Upload to workspace-files bucket (upsert so re-syncs are idempotent)
+      const { error: upErr } = await supabase.storage
+        .from('workspace-files')
+        .upload(wsPath, blob, {
+          contentType: doc.file_mime || 'application/octet-stream',
+          upsert: true,
+        });
+      if (upErr) {
+        console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
+        continue;
+      }
+
+      if (!registeredPaths.has(wsPath)) {
+        const docLabel = (doc.doc_type || 'other').replace(/_/g, ' ')
+          .replace(/\b\w/g, (c: string) => c.toUpperCase());
+        await upsertWorkspaceFile(
+          empFolderId,
+          doc.doc_name,
+          wsPath,
+          null,
+          doc.file_size ?? blob.size,
+          user.id,
+          `HR Document — ${docLabel}`,
+          doc.file_mime || undefined,
+          ['hr-document', doc.doc_type],
+        ).catch(e => console.warn('[profileFolder] HR doc register failed:', doc.doc_name, e.message));
+        registeredPaths.add(wsPath);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[profileFolder] syncHrDocsToWorkspace error:', e.message);
   }
 }
 
@@ -141,15 +222,14 @@ export async function syncProfileFolder(
     const folderName   = computeFolderName(user);
     const folderPath   = getEmployeeFolderPath(folderName);
     const summaryPath  = getSummaryStoragePath(folderName);
-    // Workspace Hub uses its own bucket — same logical path, different bucket
-    const wsSummaryPath = summaryPath; // reuse the same path string in workspace-files bucket
+    const wsSummaryPath = summaryPath;
 
-    // 1. Generate PDF bytes (does NOT trigger a browser download)
+    // 1. Generate PDF bytes
     const result = await generateEmployeeCV(user, ctx, { returnBytes: true });
     if (!result) throw new Error('PDF generation returned empty');
     const pdfBytes = result as Uint8Array;
 
-    // 2. Upload / overwrite PROFILE_SUMMARY.pdf to staff-contracts (for profile page signed URL)
+    // 2. Upload PROFILE_SUMMARY.pdf to staff-contracts (for signed URL on profile page)
     const { error: upErr } = await supabase.storage
       .from(PROFILE_BUCKET)
       .upload(summaryPath, pdfBytes, {
@@ -159,7 +239,7 @@ export async function syncProfileFolder(
       });
     if (upErr) throw upErr;
 
-    // 3. Also upload to workspace-files bucket so Workspace Hub can serve it
+    // 3. Upload to workspace-files bucket so Workspace Hub can serve it
     await supabase.storage
       .from('workspace-files')
       .upload(wsSummaryPath, pdfBytes, {
@@ -167,7 +247,6 @@ export async function syncProfileFolder(
         upsert:       true,
         cacheControl: '0',
       });
-    // (non-fatal if workspace bucket upload fails — profile page still works)
 
     const { data: urlData } = supabase.storage
       .from('workspace-files')
@@ -183,7 +262,7 @@ export async function syncProfileFolder(
       ? await ensureWorkspaceFolder(folderName, profilesFolderId, user.id).catch(() => null)
       : null;
 
-    // 5. Register / update file entry in workspace_files
+    // 5. Register PROFILE_SUMMARY.pdf in workspace_files
     if (empFolderId) {
       await upsertWorkspaceFile(
         empFolderId,
@@ -193,16 +272,20 @@ export async function syncProfileFolder(
         pdfBytes.byteLength,
         user.id,
         `Auto-generated profile summary for ${user.name || user.employeeId}`,
-      ).catch(e => console.warn('[profileFolder] workspace_files upsert failed:', e.message));
+        'application/pdf',
+        ['auto-generated'],
+      ).catch(e => console.warn('[profileFolder] PROFILE_SUMMARY register failed:', e.message));
+
+      // 6. Also sync all HR profile documents into workspace
+      await syncHrDocsToWorkspace(user, empFolderId);
     }
 
-    // 6. Persist the folder path in hr_employee_personal so we can display it in UI
+    // 7. Persist the folder path in hr_employee_personal
     const { error: dbErr } = await supabase
       .from('hr_employee_personal')
       .update({ profile_folder_path: folderPath })
       .eq('profile_id', user.id);
     if (dbErr) {
-      // Non-fatal — storage file was written, only the DB record is missing
       console.warn('[profileFolder] could not persist folder path:', dbErr.message);
     }
 
@@ -214,9 +297,8 @@ export async function syncProfileFolder(
 }
 
 /**
- * Lightweight: ensures the Workspace Hub folder hierarchy (HR > Profiles > {folderName})
- * exists WITHOUT generating a PDF. Called on every profile page load so even employees
- * whose profileFolderPath was already set before this feature existed get their folder.
+ * Lightweight: ensures the Workspace Hub folder hierarchy exists
+ * WITHOUT generating a PDF. Called on every profile page load.
  */
 export async function ensureWorkspaceHubFolders(
   user: { id: string; employeeId?: string | null; name?: string | null },
@@ -237,7 +319,7 @@ export async function getProfileSummarySignedUrl(folderPath: string): Promise<st
     const summaryPath = `${folderPath}/PROFILE_SUMMARY.pdf`;
     const { data, error } = await supabase.storage
       .from(PROFILE_BUCKET)
-      .createSignedUrl(summaryPath, 300); // 5-minute link
+      .createSignedUrl(summaryPath, 300);
     if (error || !data) return null;
     return data.signedUrl;
   } catch {
