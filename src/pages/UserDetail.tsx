@@ -1604,7 +1604,7 @@ const UserDetail: FC = () => {
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Full Name</h3>
                   {editMode ? (
-                    <Input value={editForm.name || ""} onChange={e => handleEditChange("name", e.target.value)} className="h-11 bg-background rounded-lg" />
+                    <Input value={editForm.fullName ?? editForm.name ?? ""} onChange={e => { handleEditChange("fullName", e.target.value); handleEditChange("name", e.target.value); }} className="h-11 bg-background rounded-lg" />
                   ) : (
                     <p className="font-semibold text-base">{user.name}</p>
                   )}
