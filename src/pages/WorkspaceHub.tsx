@@ -1772,7 +1772,7 @@ export default function WorkspaceHub() {
           {/* Folder icon — custom emoji or colored folder */}
           {isFolderLocked ? (
             <Lock className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-amber-300' : 'text-amber-500')} />
-          ) : folder.icon ? (
+          ) : folder.icon && /[^\u0000-\u007F]/.test(folder.icon) ? (
             <span className="text-sm flex-shrink-0 leading-none">{folder.icon}</span>
           ) : (
             <span className="h-3.5 w-3.5 rounded flex-shrink-0 flex items-center justify-center" style={{ color: isSelected ? '#fff' : folderColor }}>
@@ -2699,7 +2699,7 @@ export default function WorkspaceHub() {
                             : <span className="w-3 flex-shrink-0" />}
                           {isLocked
                             ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                            : sub.icon
+                            : sub.icon && /[^\u0000-\u007F]/.test(sub.icon)
                               ? <span className="text-sm leading-none flex-shrink-0">{sub.icon}</span>
                               : <Folder className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />}
                           <span className="flex-1 text-sm text-gray-700 dark:text-foreground truncate" title={sub.name.replace(/^folder\s+/i, '').trim()}>
