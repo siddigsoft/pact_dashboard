@@ -231,7 +231,7 @@ const UserDetail: FC = () => {
   const [empContractEnd, setEmpContractEnd] = useState<string>("");
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
   const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
-  const [empCountryCode, setEmpCountryCode] = useState<string>("SD");
+  const [empCountryCode, setEmpCountryCode] = useState<string>("");
   const [empProbationEnd, setEmpProbationEnd] = useState<string>("");
   const [empProbationConfirmed, setEmpProbationConfirmed] = useState<boolean>(false);
   const [showConfirmEmploymentDialog, setShowConfirmEmploymentDialog] = useState(false);
@@ -672,7 +672,7 @@ const UserDetail: FC = () => {
         contract_end_date: empContractEnd || null,
         reports_to: empReportsTo || null,
         task_digest_opt_out: taskDigestOptOut,
-        country_code: empCountryCode || 'SD',
+        country_code: empCountryCode || null,
         updated_at: new Date().toISOString(),
       };
       if (autoEmployeeId) corePayload.employee_id = autoEmployeeId;
@@ -1866,6 +1866,48 @@ const UserDetail: FC = () => {
                   )}
                 </div>
 
+                {/* Country Code */}
+                <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
+                  <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                    🌍 Country Code <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required for ID</span>
+                  </h4>
+                  {isAdmin ? (
+                    <Select value={empCountryCode || "none"} onValueChange={v => setEmpCountryCode(v === "none" ? "" : v)}>
+                      <SelectTrigger className="h-8 text-sm" data-testid="select-country-code"><SelectValue placeholder="Select country…" /></SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="none">— Not set —</SelectItem>
+                        <SelectItem value="SD">🇸🇩 SD — Sudan</SelectItem>
+                        <SelectItem value="SS">🇸🇸 SS — South Sudan</SelectItem>
+                        <SelectItem value="ET">🇪🇹 ET — Ethiopia</SelectItem>
+                        <SelectItem value="KE">🇰🇪 KE — Kenya</SelectItem>
+                        <SelectItem value="UG">🇺🇬 UG — Uganda</SelectItem>
+                        <SelectItem value="SO">🇸🇴 SO — Somalia</SelectItem>
+                        <SelectItem value="ER">🇪🇷 ER — Eritrea</SelectItem>
+                        <SelectItem value="DJ">🇩🇯 DJ — Djibouti</SelectItem>
+                        <SelectItem value="CD">🇨🇩 CD — DR Congo</SelectItem>
+                        <SelectItem value="CF">🇨🇫 CF — Central African Republic</SelectItem>
+                        <SelectItem value="TD">🇹🇩 TD — Chad</SelectItem>
+                        <SelectItem value="LY">🇱🇾 LY — Libya</SelectItem>
+                        <SelectItem value="EG">🇪🇬 EG — Egypt</SelectItem>
+                        <SelectItem value="NG">🇳🇬 NG — Nigeria</SelectItem>
+                        <SelectItem value="GH">🇬🇭 GH — Ghana</SelectItem>
+                        <SelectItem value="TZ">🇹🇿 TZ — Tanzania</SelectItem>
+                        <SelectItem value="RW">🇷🇼 RW — Rwanda</SelectItem>
+                        <SelectItem value="ZM">🇿🇲 ZM — Zambia</SelectItem>
+                        <SelectItem value="ZW">🇿🇼 ZW — Zimbabwe</SelectItem>
+                        <SelectItem value="GB">🇬🇧 GB — United Kingdom</SelectItem>
+                        <SelectItem value="US">🇺🇸 US — United States</SelectItem>
+                        <SelectItem value="OTHER">🌐 OTHER — Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-semibold text-sm font-mono">{empCountryCode || "—"}</p>
+                  )}
+                  {!empCountryCode && empContractStart && (
+                    <p className="text-[11px] text-amber-600">Set country to auto-generate Employee ID</p>
+                  )}
+                </div>
+
                 {/* Employee ID */}
                 <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
@@ -1873,7 +1915,7 @@ const UserDetail: FC = () => {
                     <p className="font-semibold text-sm font-mono">{user.employeeId}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground italic">
-                      {empContractStart ? "Auto-assigned on save" : "Set a start date to enable"}
+                      {empContractStart && empCountryCode ? "Auto-assigned on save" : "Set country + start date to enable"}
                     </p>
                   )}
                 </div>

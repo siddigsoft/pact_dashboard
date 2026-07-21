@@ -509,7 +509,6 @@ export default function EmployeeDocumentsTab({
           </div>
         );
       })}
-    </div>
 
     {/* ── Inline Document Preview Modal ─────────────────────────────────── */}
     {previewDoc && (() => {
