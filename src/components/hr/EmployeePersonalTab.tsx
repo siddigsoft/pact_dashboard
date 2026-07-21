@@ -203,8 +203,8 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
     return Math.round((filled / tracked.length) * 100);
   }, [data]);
 
-  const editBtn = isAdmin && (
-    !editMode
+  const editBtn = isAdmin
+    ? (!editMode
       ? <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => { setForm(data); setEditMode(true); }} data-testid="button-edit-personal">
           <Edit className="h-3 w-3" /> Edit
         </Button>
@@ -215,8 +215,8 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setForm(data); setEditMode(false); }} data-testid="button-cancel-personal">
             <X className="h-3.5 w-3.5" />
           </Button>
-        </div>
-  );
+        </div>)
+    : null;
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
@@ -244,8 +244,15 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
         )}
       </div>
 
+      {/* ── Global Edit / Save toolbar ───────────────────────────────────── */}
+      {isAdmin && (
+        <div className="flex justify-end">
+          {editBtn}
+        </div>
+      )}
+
       {/* ── 0. Professional Summary / Background ─────────────────────────── */}
-      <SectionCard accent="border-l-violet-500" iconBg="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400" icon={<FileText className="h-3.5 w-3.5" />} title="Professional Summary / Background" action={editBtn}>
+      <SectionCard accent="border-l-violet-500" iconBg="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400" icon={<FileText className="h-3.5 w-3.5" />} title="Professional Summary / Background">
         {editMode ? (
           <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground">Write a 2–4 sentence professional bio. This appears at the top of the exported CV (UN P11 / World Bank format).</p>
@@ -269,7 +276,7 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
       </SectionCard>
 
       {/* ── 1. Personal Identity ─────────────────────────────────────────── */}
-      <SectionCard accent="border-l-blue-500" iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" icon={<User className="h-3.5 w-3.5" />} title="Personal Identity" action={<div className="flex items-center gap-2">{editMode ? null : <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">Required</span>}{editBtn}</div>}>
+      <SectionCard accent="border-l-blue-500" iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" icon={<User className="h-3.5 w-3.5" />} title="Personal Identity" action={!editMode ? <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">Required</span> : undefined}>
         {editMode ? (
           <FormGrid>
             <FormField label="Date of Birth"><Input type="date" value={form.date_of_birth || ''} onChange={e => f('date_of_birth')(e.target.value)} className="h-9" /></FormField>
@@ -369,15 +376,19 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
                 </SelectContent>
               </Select>
             </FormField>
-            <FormField label="Visa / Permit Number"><Input value={form.visa_number || ''} onChange={e => f('visa_number')(e.target.value)} placeholder="Visa or permit number" className="h-9 font-mono" /></FormField>
-            <FormField label="Visa / Permit Expiry Date"><Input type="date" value={form.visa_expiry || ''} onChange={e => f('visa_expiry')(e.target.value)} className="h-9" /></FormField>
+            {form.visa_type !== 'none' && (
+              <FormField label="Visa / Permit Number"><Input value={form.visa_number || ''} onChange={e => f('visa_number')(e.target.value)} placeholder="Visa or permit number" className="h-9 font-mono" /></FormField>
+            )}
+            {form.visa_type !== 'none' && (
+              <FormField label="Visa / Permit Expiry Date"><Input type="date" value={form.visa_expiry || ''} onChange={e => f('visa_expiry')(e.target.value)} className="h-9" /></FormField>
+            )}
           </FormGrid>
         ) : (
           <InfoGrid>
             <InfoField label="Tax ID Type" value={
-              form.tax_id_type === 'sudan_tin' ? 'TIN' :
-              form.tax_id_type === 'personal_income_tax' ? 'Personal Income Tax' :
-              form.tax_id_type === 'vat_reg' ? 'VAT Registration' :
+              data.tax_id_type === 'sudan_tin' ? 'TIN' :
+              data.tax_id_type === 'personal_income_tax' ? 'Personal Income Tax' :
+              data.tax_id_type === 'vat_reg' ? 'VAT Registration' :
               data.tax_id_type || undefined
             } />
             <InfoField label="Tax ID / TIN Number" value={data.tax_id} mono />
@@ -390,17 +401,21 @@ export default function EmployeePersonalTab({ userId, isAdmin }: { userId: strin
               data.visa_type === 'humanitarian' ? 'Humanitarian' :
               data.visa_type ? data.visa_type : undefined
             } />
-            <InfoField label="Visa / Permit No." value={data.visa_number} mono />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Visa / Permit Expiry</p>
-              {data.visa_expiry ? (() => {
-                const d = Math.ceil((new Date(data.visa_expiry).getTime() - Date.now()) / 86400000);
-                const dateStr = new Date(data.visa_expiry).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
-                if (d < 0) return <span className="text-xs font-semibold text-destructive">Expired — {dateStr}</span>;
-                if (d <= 30) return <span className="text-xs font-semibold text-amber-600">⚠ {dateStr} ({d}d left)</span>;
-                return <span className="text-sm font-medium text-foreground">{dateStr}</span>;
-              })() : <p className="text-sm text-muted-foreground/50 italic">—</p>}
-            </div>
+            {data.visa_type !== 'none' && (
+              <InfoField label="Visa / Permit No." value={data.visa_number} mono />
+            )}
+            {data.visa_type !== 'none' && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Visa / Permit Expiry</p>
+                {data.visa_expiry ? (() => {
+                  const d = Math.ceil((new Date(data.visa_expiry).getTime() - Date.now()) / 86400000);
+                  const dateStr = new Date(data.visa_expiry).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+                  if (d < 0) return <span className="text-xs font-semibold text-destructive">Expired — {dateStr}</span>;
+                  if (d <= 30) return <span className="text-xs font-semibold text-amber-600">⚠ {dateStr} ({d}d left)</span>;
+                  return <span className="text-sm font-medium text-foreground">{dateStr}</span>;
+                })() : <p className="text-sm text-muted-foreground/50 italic">—</p>}
+              </div>
+            )}
           </InfoGrid>
         )}
       </SectionCard>
