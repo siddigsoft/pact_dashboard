@@ -941,6 +941,9 @@ const UserDetail: FC = () => {
           .eq("id", user.id)
           .single();
 
+        // finalUser holds whichever version of the user we end up with
+        let finalUser: User = updatedUser;
+
         if (error || !profile) {
           setUser(updatedUser);
           setEditForm(updatedUser);
@@ -972,6 +975,7 @@ const UserDetail: FC = () => {
           };
           setUser(mappedUser);
           setEditForm(mappedUser);
+          finalUser = mappedUser;
         }
 
         toast({
@@ -979,8 +983,8 @@ const UserDetail: FC = () => {
           description: "User information was successfully updated and will persist between sessions.",
           variant: "success"
         });
-        setEditMode(false); // <-- move this here so it only closes on success
-        void triggerFolderSync(mappedUser);
+        setEditMode(false);
+        void triggerFolderSync(finalUser);
       } else {
         toast({
           title: "Update failed",
