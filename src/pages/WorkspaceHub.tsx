@@ -1948,12 +1948,6 @@ export default function WorkspaceHub() {
           isSelected && 'bg-blue-50/60 dark:bg-[#1D3461]/5',
           isBulkSelected && 'bg-blue-50 dark:bg-[#1D3461]/8',
           dragFileId === file.id && 'opacity-40')}>
-        {/* Checkbox */}
-        <td className="py-3 pl-1 w-8">
-          <button onClick={e => toggleFileSelection(file.id, e)} className="text-gray-300 hover:text-[#1D3461] transition-colors p-1">
-            {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461]" /> : <Square className="h-4 w-4 opacity-0 group-hover:opacity-100" />}
-          </button>
-        </td>
         {/* Name + type badge */}
         <td className="py-3 pr-4">
           <div className="flex items-center gap-3">
@@ -2216,8 +2210,8 @@ export default function WorkspaceHub() {
         {/* ══ Left Sidebar ════════════════════════════════════════════════ */}
         <div className="w-60 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 dark:bg-card overflow-y-auto">
           {/* Sidebar header — Notion style */}
-          <div className="px-4 pt-5 pb-3 border-b border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="px-4 pt-5 pb-3">
+            <div className="flex items-center gap-2 mb-4">
               <div className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-3.5 h-3.5 text-white" />
               </div>
@@ -2233,37 +2227,25 @@ export default function WorkspaceHub() {
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-gray-400 pl-8">{stats.total} files · {fmtSize(stats.totalSize)}</p>
-          </div>
 
-          {/* Quick access — Notion style nav */}
-          <div className="px-3 pt-3 pb-1">
-            {[
-              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
-              { id: '__pinned__', label: 'Starred', icon: Star, count: stats.pinned, droppable: false },
-              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
-              { id: '__task_docs__', label: 'Task Docs', icon: CheckCircle2, count: totalTaskAttachments, droppable: false },
-              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false },
-              { id: null, label: 'Unfiled', icon: Folder, count: stats.root, droppable: true },
-              { id: '__trash__', label: 'Trash', icon: Trash2, count: 0, droppable: false },
-            ].map(item => {
-              const isSelected = selectedFolderId === item.id;
-              const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
-              return (
-                <button key={String(item.id)} onClick={() => setSelectedFolderId(item.id)}
-                  onDragOver={item.droppable ? e => { e.preventDefault(); setDragOverFolderId('__root__'); } : undefined}
-                  onDragLeave={item.droppable ? () => setDragOverFolderId(null) : undefined}
-                  onDrop={item.droppable ? e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, null); } : undefined}
-                  className={cn('w-full flex items-center gap-1.5 py-1 px-2 rounded text-xs transition-all',
-                    isSelected ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-muted-foreground hover:bg-gray-200/60 dark:hover:bg-muted/70',
-                    isRootDragOver && 'ring-2 ring-blue-400')}>
-                  <item.icon className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-gray-700 dark:text-white' : 'text-gray-400')} />
-                  <span className="flex-1 text-left truncate">{item.label}</span>
-                  {isRootDragOver && <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500 text-white font-semibold">Drop</span>}
-                  {item.count > 0 && <span className="text-[10px] text-gray-400 font-medium">{item.count}</span>}
-                </button>
-              );
-            })}
+            {/* Notion-style nav: Search / Recent / Starred */}
+            <button onClick={() => { setSelectedFolderId('__all__'); setTimeout(() => document.querySelector<HTMLInputElement>('[placeholder="Search files…"]')?.focus(), 100); }}
+              className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-0.5 transition-colors',
+                selectedFolderId === '__all__' && searchQuery ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white' : '')}>
+              <Search className="w-3.5 h-3.5 flex-shrink-0" /> Search
+            </button>
+            <button onClick={() => setSelectedFolderId('__recent__')}
+              className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-0.5 transition-colors',
+                selectedFolderId === '__recent__' ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : '')}>
+              <Clock className="w-3.5 h-3.5 flex-shrink-0" /> Recent
+              {Math.min(20, allFiles.length) > 0 && <span className="ml-auto text-[10px] text-gray-400">{Math.min(20, allFiles.length)}</span>}
+            </button>
+            <button onClick={() => setSelectedFolderId('__pinned__')}
+              className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-3 transition-colors',
+                selectedFolderId === '__pinned__' ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : '')}>
+              <Star className="w-3.5 h-3.5 flex-shrink-0" /> Starred
+              {stats.pinned > 0 && <span className="ml-auto text-[10px] text-gray-400">{stats.pinned}</span>}
+            </button>
           </div>
 
           {/* Folder tree */}
@@ -2446,7 +2428,7 @@ export default function WorkspaceHub() {
           </div>
 
           {/* Inline search + secondary controls */}
-          <div className="flex items-center gap-3 px-8 py-3 flex-shrink-0 border-b border-gray-100 flex-wrap">
+          <div className="flex items-center gap-3 px-8 py-3 flex-shrink-0 flex-wrap">
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-muted rounded-lg px-4 py-2 flex-1 max-w-md">
               <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
               <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…"
@@ -2761,13 +2743,12 @@ export default function WorkspaceHub() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
-                            <th className="pb-3 w-8" />
-                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
-                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Size</th>
-                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Modified</th>
-                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden sm:table-cell">By</th>
-                            <th className="text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide pb-3 hidden sm:table-cell">Status</th>
-                            <th className="pb-3 w-24" />
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Size</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Modified</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden sm:table-cell">By</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 hidden sm:table-cell">Status</th>
+                            <th className="pb-3" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
