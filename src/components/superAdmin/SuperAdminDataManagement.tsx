@@ -327,6 +327,11 @@ export function SuperAdminDataManagement() {
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
 
+  // Declared early — used in useEffect dependency array below (avoids TDZ in production build)
+  const [claimedNoCostFilter, setClaimedNoCostFilter] = useState(false);
+  // Claimed-sites pagination — declared early for same reason
+  const [claimedVisibleCount, setClaimedVisibleCount] = useState(CLAIMED_PAGE_SIZE);
+
   // Transaction-specific state
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
@@ -409,7 +414,6 @@ export function SuperAdminDataManagement() {
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
   const [resetTargetStatus, setResetTargetStatus] = useState<'new' | 'approved' | 'assigned' | 'dispatched'>('dispatched');
-  const [claimedNoCostFilter, setClaimedNoCostFilter] = useState(false);
   const [editingTransportFee, setEditingTransportFee] = useState<{ siteId: string; value: string; saving: boolean } | null>(null);
 
   // Quick HEAD-count queries — populate stats cards before full data is fetched
@@ -420,9 +424,6 @@ export function SuperAdminDataManagement() {
   const [txOffset, setTxOffset] = useState(0);
   const [txHasMore, setTxHasMore] = useState(false);
   const [txLoadingMore, setTxLoadingMore] = useState(false);
-
-  // Claimed-sites pagination — show CLAIMED_PAGE_SIZE rows at a time, "Show more" to expand
-  const [claimedVisibleCount, setClaimedVisibleCount] = useState(CLAIMED_PAGE_SIZE);
 
   // Status-correction dialog (Claimed Sites tab)
   const [showChangeStatusDialog, setShowChangeStatusDialog] = useState(false);
