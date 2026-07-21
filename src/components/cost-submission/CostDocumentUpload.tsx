@@ -1,25 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useAuditLog } from "@/hooks/use-audit-log";
 import { SupportingDocument } from "@/types/cost-submission";
 import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/context/user/UserContext";
 import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
 import { FilePreviewDialog } from "@/components/ui/FilePreviewDialog";
-import { 
-  Upload, 
-  File, 
-  X, 
-  Loader2, 
-  FileText, 
-  Image as ImageIcon, 
+import {
+  Upload,
+  File,
+  X,
+  Loader2,
+  FileText,
+  Image as ImageIcon,
   Receipt,
   CheckCircle,
-  Edit2 
+  Edit2,
+  FileSpreadsheet,
+  FileArchive,
+  Paperclip,
+  Eye,
+  Pencil,
+  Check,
 } from "lucide-react";
 
 interface ExtendedSupportingDocument extends SupportingDocument {
@@ -33,10 +38,75 @@ interface CostDocumentUploadProps {
   existingReceiptDetails?: TransferReceiptDetails[];
 }
 
-const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, existingReceiptDetails }: CostDocumentUploadProps) => {
+const ALLOWED_TYPES: Record<string, string> = {
+  "image/jpeg": "image",
+  "image/jpg": "image",
+  "image/png": "image",
+  "image/gif": "image",
+  "image/webp": "image",
+  "application/pdf": "pdf",
+  "application/msword": "word",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "word",
+  "application/vnd.ms-excel": "excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "excel",
+  "text/csv": "excel",
+  "text/plain": "text",
+  "application/zip": "archive",
+  "application/x-zip-compressed": "archive",
+};
+
+const ALLOWED_EXTENSIONS = [
+  ".jpg", ".jpeg", ".png", ".gif", ".webp",
+  ".pdf",
+  ".doc", ".docx",
+  ".xls", ".xlsx", ".csv",
+  ".txt",
+  ".zip",
+];
+
+const MAX_SIZE_MB = 20;
+
+function getFileKind(mimeType: string, filename: string): string {
+  if (ALLOWED_TYPES[mimeType]) return ALLOWED_TYPES[mimeType];
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image";
+  if (ext === "pdf") return "pdf";
+  if (["doc", "docx"].includes(ext)) return "word";
+  if (["xls", "xlsx", "csv"].includes(ext)) return "excel";
+  if (ext === "txt") return "text";
+  if (ext === "zip") return "archive";
+  return "other";
+}
+
+function getDocumentType(kind: string): SupportingDocument["type"] {
+  if (kind === "image") return "receipt_photo";
+  if (kind === "pdf") return "receipt_pdf";
+  return "other";
+}
+
+function FileKindIcon({ kind, className = "h-5 w-5" }: { kind: string; className?: string }) {
+  if (kind === "image") return <ImageIcon className={`${className} text-blue-500`} />;
+  if (kind === "pdf") return <FileText className={`${className} text-red-500`} />;
+  if (kind === "word") return <FileText className={`${className} text-indigo-500`} />;
+  if (kind === "excel") return <FileSpreadsheet className={`${className} text-green-600`} />;
+  if (kind === "archive") return <FileArchive className={`${className} text-orange-500`} />;
+  return <File className={`${className} text-muted-foreground`} />;
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+const CostDocumentUpload = ({
+  documents,
+  onChange,
+  onReceiptDetailsChange,
+  existingReceiptDetails,
+}: CostDocumentUploadProps) => {
   const { toast } = useToast();
-  const { currentUser } = useUser();
-  const { logEvent } = useAuditLog();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string } | null>(null);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
@@ -45,167 +115,103 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
     filename: string;
     index: number;
   } | null>(null);
-  const [localReceiptDetails, setLocalReceiptDetails] = useState<Map<string, TransferReceiptDetails>>(new Map());
   const [editingReceiptDetails, setEditingReceiptDetails] = useState<TransferReceiptDetails | undefined>(undefined);
+  const [localReceiptDetails, setLocalReceiptDetails] = useState<Map<string, TransferReceiptDetails>>(new Map());
+  const [editingLabelIdx, setEditingLabelIdx] = useState<number | null>(null);
+  const [labelDraft, setLabelDraft] = useState("");
 
   useEffect(() => {
-    if (existingReceiptDetails !== undefined) {
-      const detailsMap = new Map<string, TransferReceiptDetails>();
-      existingReceiptDetails.forEach(rd => {
-        if (rd.receiptImageUrl) {
-          detailsMap.set(rd.receiptImageUrl, rd);
-        }
-      });
-      setLocalReceiptDetails(detailsMap);
+    if (existingReceiptDetails) {
+      const m = new Map<string, TransferReceiptDetails>();
+      existingReceiptDetails.forEach((rd) => { if (rd.receiptImageUrl) m.set(rd.receiptImageUrl, rd); });
+      setLocalReceiptDetails(m);
     }
   }, [existingReceiptDetails]);
 
-  const extendedDocs: ExtendedSupportingDocument[] = documents.map(doc => ({
+  const extendedDocs: ExtendedSupportingDocument[] = documents.map((doc) => ({
     ...doc,
-    receiptDetails: localReceiptDetails.get(doc.url)
+    receiptDetails: localReceiptDetails.get(doc.url),
   }));
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
     if (!files || files.length === 0) return;
-
     setIsUploading(true);
-
     try {
-      const uploadedDocs: ExtendedSupportingDocument[] = [];
-      const maxFileSize = 10 * 1024 * 1024; // 10MB
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-
+      const uploaded: ExtendedSupportingDocument[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
-        // Quick validation
-        if (file.size > maxFileSize) {
-          throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+          throw new Error(`"${file.name}" is too large. Max size is ${MAX_SIZE_MB}MB.`);
         }
-        if (!allowedTypes.includes(file.type)) {
-          throw new Error(`File type "${file.type}" is not allowed.`);
+        const kind = getFileKind(file.type, file.name);
+        if (kind === "other" && !ALLOWED_TYPES[file.type]) {
+          const ext = "." + (file.name.split(".").pop()?.toLowerCase() || "");
+          if (!ALLOWED_EXTENSIONS.includes(ext)) {
+            throw new Error(`File type not allowed: "${file.name}". Accepted: PDF, Word, Excel, images, CSV, TXT, ZIP.`);
+          }
         }
-        
-        // Generate safe filename - remove special characters
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(2, 8);
-        const extension = file.name.split('.').pop()?.toLowerCase() || 'file';
-        const safeFileName = `${timestamp}_${random}.${extension}`;
-        const filePath = `cost-receipts/${safeFileName}`;
-
-        // Direct upload to mmp-files bucket (the main storage bucket)
-        const { data, error } = await supabase.storage
-          .from('mmp-files')
-          .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (error) {
-          console.error('Upload error:', error);
-          throw new Error(`Failed to upload ${file.name}: ${error.message}`);
-        }
-
-        const { data: publicUrlData } = supabase.storage
-          .from('mmp-files')
-          .getPublicUrl(filePath);
-
-        const isImage = file.type.startsWith('image/');
-        const isPDF = file.type === 'application/pdf';
-        const documentType = isImage ? 'receipt_photo' : isPDF ? 'receipt_pdf' : 'other';
-
-        const newDoc: ExtendedSupportingDocument = {
-          url: publicUrlData.publicUrl,
-          type: documentType,
+        const ts = Date.now();
+        const rand = Math.random().toString(36).substring(2, 8);
+        const ext = file.name.split(".").pop()?.toLowerCase() || "file";
+        const safeName = `${ts}_${rand}.${ext}`;
+        const filePath = `cost-receipts/${safeName}`;
+        const { error } = await supabase.storage.from("mmp-files").upload(filePath, file, { cacheControl: "3600", upsert: false });
+        if (error) throw new Error(`Failed to upload "${file.name}": ${error.message}`);
+        const { data: pub } = supabase.storage.from("mmp-files").getPublicUrl(filePath);
+        uploaded.push({
+          url: pub.publicUrl,
+          type: getDocumentType(kind),
           filename: file.name,
           uploadedAt: new Date().toISOString(),
           size: file.size,
-          description: ''
-        };
-
-        uploadedDocs.push(newDoc);
-      }
-
-      const baseDocs = uploadedDocs.map(({ receiptDetails, ...doc }) => doc);
-      const newDocs = [...documents, ...baseDocs];
-      onChange(newDocs);
-
-      if (uploadedDocs.length === 1 && 
-          (uploadedDocs[0].type === 'receipt_photo' || uploadedDocs[0].type === 'receipt_pdf')) {
-        const newIndex = newDocs.length - 1;
-        setPendingReceiptDoc({
-          url: uploadedDocs[0].url,
-          filename: uploadedDocs[0].filename,
-          index: newIndex
-        });
-        setShowReceiptDialog(true);
-      } else {
-        toast({
-          title: "Success",
-          description: `${uploadedDocs.length} document(s) uploaded successfully`
+          description: "",
         });
       }
-
-      event.target.value = '';
-    } catch (error: any) {
-      toast({
-        title: "Upload Failed",
-        description: error.message || "Failed to upload documents",
-        variant: "destructive"
-      });
+      const baseDocs = uploaded.map(({ receiptDetails: _, ...d }) => d);
+      onChange([...documents, ...baseDocs]);
+      toast({ title: `${uploaded.length} file${uploaded.length > 1 ? "s" : ""} attached`, description: "Supporting documents added to your request." });
+      e.target.value = "";
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message || "Could not upload file.", variant: "destructive" });
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleReceiptConfirm = (details: TransferReceiptDetails) => {
-    if (pendingReceiptDoc === null) return;
-
-    const newReceiptDetailsMap = new Map(localReceiptDetails);
-    newReceiptDetailsMap.set(pendingReceiptDoc.url, details);
-    setLocalReceiptDetails(newReceiptDetailsMap);
-
-    const docToUpdate = documents[pendingReceiptDoc.index];
-    if (docToUpdate) {
-      const updatedDoc = {
-        ...docToUpdate,
-        description: `Transfer: ${details.transactionNumber} - ${details.recipientAccountName} - ${details.transferAmount} ${details.currency}`
-      };
-      const newDocs = [...documents];
-      newDocs[pendingReceiptDoc.index] = updatedDoc;
-      onChange(newDocs);
-    }
-
+  const handleRemove = (idx: number) => {
+    const docToRemove = documents[idx];
+    const newMap = new Map(localReceiptDetails);
+    if (docToRemove) newMap.delete(docToRemove.url);
+    setLocalReceiptDetails(newMap);
+    const newDocs = documents.filter((_, i) => i !== idx);
+    onChange(newDocs);
     if (onReceiptDetailsChange) {
-      const allDetails = Array.from(newReceiptDetailsMap.values());
-      onReceiptDetailsChange(allDetails);
+      onReceiptDetailsChange(newDocs.map((d) => newMap.get(d.url)).filter((d): d is TransferReceiptDetails => !!d));
     }
+  };
 
-    toast({
-      title: "Receipt Details Saved",
-      description: `Transfer details for ${details.transactionNumber} have been recorded.`
-    });
+  const handleSaveLabel = (idx: number) => {
+    const newDocs = [...documents];
+    newDocs[idx] = { ...newDocs[idx], description: labelDraft };
+    onChange(newDocs);
+    setEditingLabelIdx(null);
+    setLabelDraft("");
+  };
 
-    logEvent({
-      module: 'financial',
-      action: 'verify',
-      entityType: 'receipt',
-      entityId: details.transactionNumber,
-      entityName: pendingReceiptDoc.filename,
-      description: `Receipt validated: ${details.transactionNumber} - ${details.recipientAccountName} - ${details.transferAmount} ${details.currency}`,
-      metadata: {
-        transactionNumber: details.transactionNumber,
-        recipientAccountName: details.recipientAccountName,
-        bankName: details.bankName,
-        transferAmount: details.transferAmount,
-        currency: details.currency,
-        transferDate: details.transferDate,
-        receiptImageUrl: details.receiptImageUrl,
-      },
-      tags: ['receipt', 'validation', 'transfer'],
-    });
-
+  const handleReceiptConfirm = (details: TransferReceiptDetails) => {
+    if (!pendingReceiptDoc) return;
+    const newMap = new Map(localReceiptDetails);
+    newMap.set(pendingReceiptDoc.url, details);
+    setLocalReceiptDetails(newMap);
+    const newDocs = [...documents];
+    newDocs[pendingReceiptDoc.index] = {
+      ...newDocs[pendingReceiptDoc.index],
+      description: `Transfer: ${details.transactionNumber} — ${details.recipientAccountName} — ${details.transferAmount} ${details.currency}`,
+    };
+    onChange(newDocs);
+    if (onReceiptDetailsChange) onReceiptDetailsChange(Array.from(newMap.values()));
+    toast({ title: "Receipt Details Saved", description: `Transfer ${details.transactionNumber} recorded.` });
     setPendingReceiptDoc(null);
     setEditingReceiptDetails(undefined);
     setShowReceiptDialog(false);
@@ -215,173 +221,168 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
     setPendingReceiptDoc(null);
     setEditingReceiptDetails(undefined);
     setShowReceiptDialog(false);
-    toast({
-      title: "Document Uploaded",
-      description: "Receipt uploaded without transfer details. You can add details later."
-    });
   };
 
-  const handleEditReceipt = (index: number) => {
-    const doc = extendedDocs[index];
-    if (doc) {
-      setPendingReceiptDoc({
-        url: doc.url,
-        filename: doc.filename,
-        index
-      });
-      setEditingReceiptDetails(doc.receiptDetails);
-      setShowReceiptDialog(true);
-    }
-  };
-
-  const handleRemoveDocument = (index: number) => {
-    const docToRemove = documents[index];
-    const newReceiptDetailsMap = new Map(localReceiptDetails);
-    
-    if (docToRemove) {
-      newReceiptDetailsMap.delete(docToRemove.url);
-      setLocalReceiptDetails(newReceiptDetailsMap);
-    }
-    
-    const newDocs = documents.filter((_, i) => i !== index);
-    onChange(newDocs);
-
-    if (onReceiptDetailsChange) {
-      const allDetails = newDocs
-        .map(doc => newReceiptDetailsMap.get(doc.url))
-        .filter((d): d is TransferReceiptDetails => d !== undefined);
-      onReceiptDetailsChange(allDetails);
-    }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const getFileIcon = (doc: ExtendedSupportingDocument) => {
-    if (doc.receiptDetails) return <Receipt className="h-5 w-5 text-green-600" />;
-    if (doc.type === 'receipt_photo') return <ImageIcon className="h-5 w-5 text-blue-600" />;
-    if (doc.type === 'receipt_pdf') return <FileText className="h-5 w-5 text-red-600" />;
-    return <File className="h-5 w-5 text-gray-600" />;
+  const openReceiptDialog = (idx: number) => {
+    const doc = extendedDocs[idx];
+    if (!doc) return;
+    setPendingReceiptDoc({ url: doc.url, filename: doc.filename, index: idx });
+    setEditingReceiptDetails(doc.receiptDetails);
+    setShowReceiptDialog(true);
   };
 
   return (
     <div className="space-y-4">
-      <div>
-        <input
-          id="document-upload"
-          type="file"
-          multiple
-          accept="image/*,application/pdf"
-          onChange={handleFileSelect}
-          className="hidden"
-          disabled={isUploading}
-          data-testid="input-file-upload"
-        />
-        <label htmlFor="document-upload">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={isUploading}
-            asChild
-            data-testid="button-upload-document"
-          >
-            <span className="cursor-pointer">
-              {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Transfer Receipt
-                </>
-              )}
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={ALLOWED_EXTENSIONS.join(",")}
+        onChange={handleFileSelect}
+        className="hidden"
+        disabled={isUploading}
+        data-testid="input-file-upload"
+      />
+
+      <button
+        type="button"
+        disabled={isUploading}
+        onClick={() => inputRef.current?.click()}
+        data-testid="button-upload-document"
+        className="w-full flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/20 hover:bg-muted/40 hover:border-muted-foreground/50 transition-colors px-4 py-6 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Uploading…</span>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-center gap-2">
+              <Paperclip className="h-5 w-5 text-muted-foreground" />
+              <Upload className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <span className="text-sm font-medium">Attach Supporting Documents</span>
+            <span className="text-xs text-muted-foreground text-center">
+              PDF, Word, Excel, images, CSV, TXT, ZIP — up to {MAX_SIZE_MB}MB each. Multiple files allowed.
             </span>
-          </Button>
-        </label>
-        <p className="text-xs text-muted-foreground mt-2">
-          Upload your bank transfer receipt. The system will prompt you to enter the transfer details for validation.
-        </p>
-      </div>
+          </>
+        )}
+      </button>
 
       {extendedDocs.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Uploaded Documents ({extendedDocs.length})</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {extendedDocs.length} attached file{extendedDocs.length !== 1 ? "s" : ""}
+          </p>
           <div className="space-y-2">
-            {extendedDocs.map((doc, index) => (
-              <Card key={index} data-testid={`document-${index}`}>
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {getFileIcon(doc)}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.filename}</p>
-                        <div className="flex items-center flex-wrap gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {doc.type.replace('_', ' ')}
-                          </Badge>
+            {extendedDocs.map((doc, idx) => {
+              const kind = getFileKind(doc.type === "receipt_photo" ? "image/jpeg" : doc.type === "receipt_pdf" ? "application/pdf" : "application/octet-stream", doc.filename);
+              const isEditingLabel = editingLabelIdx === idx;
+              return (
+                <Card key={idx} data-testid={`document-${idx}`} className="border border-border/60">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 shrink-0">
+                        {doc.receiptDetails
+                          ? <Receipt className="h-5 w-5 text-green-600" />
+                          : <FileKindIcon kind={kind} />}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-sm font-medium truncate" title={doc.filename}>{doc.filename}</p>
+                        <div className="flex items-center flex-wrap gap-1.5">
                           {doc.size && (
-                            <span className="text-xs text-muted-foreground">
-                              {formatFileSize(doc.size)}
-                            </span>
+                            <span className="text-xs text-muted-foreground">{formatSize(doc.size)}</span>
                           )}
                           {doc.receiptDetails && (
-                            <Badge variant="secondary" className="text-xs">
-                              <CheckCircle className="h-3 w-3 mr-1" />
+                            <Badge variant="secondary" className="text-[10px] gap-1">
+                              <CheckCircle className="h-2.5 w-2.5" />
                               Validated
                             </Badge>
                           )}
                         </div>
+                        {isEditingLabel ? (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Input
+                              autoFocus
+                              value={labelDraft}
+                              onChange={(e) => setLabelDraft(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") handleSaveLabel(idx); if (e.key === "Escape") setEditingLabelIdx(null); }}
+                              placeholder="e.g. Invoice from supplier, Budget breakdown…"
+                              className="h-7 text-xs"
+                              data-testid={`input-label-${idx}`}
+                            />
+                            <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => handleSaveLabel(idx)} data-testid={`button-save-label-${idx}`}>
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            </Button>
+                            <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => setEditingLabelIdx(null)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          doc.description ? (
+                            <p className="text-xs text-muted-foreground italic truncate">{doc.description}</p>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => { setEditingLabelIdx(idx); setLabelDraft(doc.description || ""); }}
+                              className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors flex items-center gap-1"
+                              data-testid={`button-add-label-${idx}`}
+                            >
+                              <Pencil className="h-2.5 w-2.5" />
+                              Add a label…
+                            </button>
+                          )
+                        )}
                         {doc.receiptDetails && (
-                          <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                          <div className="text-xs text-muted-foreground space-y-0.5 pt-0.5">
                             <p>TXN: {doc.receiptDetails.transactionNumber}</p>
-                            <p>To: {doc.receiptDetails.recipientAccountName}</p>
-                            <p>Amount: {doc.receiptDetails.transferAmount} {doc.receiptDetails.currency}</p>
+                            <p>To: {doc.receiptDetails.recipientAccountName} — {doc.receiptDetails.transferAmount} {doc.receiptDetails.currency}</p>
                           </div>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(doc.type === 'receipt_photo' || doc.type === 'receipt_pdf') && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {(doc.type === "receipt_photo" || doc.type === "receipt_pdf") && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => openReceiptDialog(idx)}
+                            title={doc.receiptDetails ? "Edit transfer details" : "Add transfer details"}
+                            data-testid={`button-edit-${idx}`}
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleEditReceipt(index)}
-                          title={doc.receiptDetails ? "Edit details" : "Add details"}
-                          data-testid={`button-edit-${index}`}
+                          className="h-7 w-7"
+                          onClick={() => setPreviewFile({ url: doc.url, filename: doc.filename })}
+                          title="Preview"
+                          data-testid={`button-view-${idx}`}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Eye className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPreviewFile({ url: doc.url, filename: doc.filename })}
-                        data-testid={`button-view-${index}`}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveDocument(index)}
-                        data-testid={`button-remove-${index}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => handleRemove(idx)}
+                          title="Remove"
+                          data-testid={`button-remove-${idx}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
@@ -394,7 +395,7 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
           filename={pendingReceiptDoc.filename}
           onConfirm={handleReceiptConfirm}
           onCancel={handleReceiptCancel}
-          userId={currentUser?.id || 'unknown'}
+          userId={""}
           initialData={editingReceiptDetails}
         />
       )}
@@ -402,7 +403,7 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
       <FilePreviewDialog
         open={!!previewFile}
         onOpenChange={(o) => { if (!o) setPreviewFile(null); }}
-        url={previewFile?.url ?? ''}
+        url={previewFile?.url ?? ""}
         filename={previewFile?.filename}
       />
     </div>
