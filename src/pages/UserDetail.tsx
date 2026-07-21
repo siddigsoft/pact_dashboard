@@ -1117,9 +1117,14 @@ const UserDetail: FC = () => {
     );
   }
 
-  // Access control: non-admin users can only view their own profile.
+  // Roles that can view ANY profile (read-only, no edit)
+  const VIEW_ALL_ROLES = ['countryDirector', 'country_director', 'fom', 'fieldOpManager', 'seniorOperationsLead', 'senior_operations_lead', 'financialAdmin', 'financial_admin', 'projectManager', 'project_manager'];
+  const canViewAllProfiles = VIEW_ALL_ROLES.includes(roleStr)
+    || (currentUser?.roles && currentUser.roles.some((r: any) => VIEW_ALL_ROLES.includes(String(r).toLowerCase())));
+
+  // Access control: non-admin, non-viewer users can only see their own profile.
   const isOwnProfile = currentUser?.id === user.id;
-  if (!isAdmin && !isOwnProfile) {
+  if (!isAdmin && !canViewAllProfiles && !isOwnProfile) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-4 max-w-sm px-6">
