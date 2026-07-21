@@ -1446,15 +1446,18 @@ const CostSubmission = () => {
         .select('id');
 
       if (error) {
-        console.error('Approval error:', error);
+        console.error('[CostApproval] DB error:', error);
         toast({
           title: "Action Failed / فشل الإجراء",
           description: error.message || "Could not process the approval action. Please try again. / تعذرت معالجة إجراء الموافقة. يرجى المحاولة مرة أخرى.",
           variant: "destructive",
           duration: 8000,
         });
-      } else if (!updatedRows || updatedRows.length === 0) {
-        console.error('[CostApproval] Update matched 0 rows. This is likely a database security policy (RLS) issue.', {
+        return; // exit — do not run post-success code
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        console.error('[CostApproval] Update matched 0 rows — likely RLS.', {
           submissionId: submission.id,
           userRole: currentUser.role,
           tier,
@@ -1467,12 +1470,22 @@ const CostSubmission = () => {
           duration: 12000,
         });
         fetchOperationalCosts();
-      } else {
+        return; // exit — do not run post-success code
+      }
+
+      // ── DB update confirmed successful ──────────────────────────────────────
+      // Run all post-success side-effects in a separate try/catch so that any
+      // unexpected error here does NOT show a misleading "Action Failed" toast
+      // (the approval is already committed to the database).
+      try {
         const tierArMap: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة', 4: 'الرابعة' };
         const tierAr = tierArMap[tier] || '';
         const submitterName = users.find(u => u.id === submission.submitted_by)?.name || 'the submitter';
         const refNum = submission.reference_number || submission.id.substring(0, 8).toUpperCase();
-        const amountStr = `${submission.currency} ${(submission.amount_cents / 100).toLocaleString()}`;
+        const amountCentsNum = typeof submission.amount_cents === 'string'
+          ? parseInt(submission.amount_cents, 10)
+          : (submission.amount_cents as number);
+        const amountStr = `${submission.currency} ${(amountCentsNum / 100).toLocaleString()}`;
         const isFinal = isFinalTier(submission, tier);
 
         if (action === 'reject') {
@@ -1540,23 +1553,18 @@ const CostSubmission = () => {
         }
 
         // 2️⃣ When a tier is approved and more remain, notify the next-tier approvers
-        //    so they know the submission is waiting for them.
         if (action === 'approve' && !isFinal) {
-          // Determine which roles should review the next tier
           let nextRoles: string[] = [];
           const nextTierNum = tier + 1;
 
           if (hasFourTiers(submission)) {
-            // Coordinator: T1=Supervisor→T2=FOM→T3=CountryDirector→T4=Admin
             if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
             if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
             if (tier === 3) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else if (hasThreeTiers(submission)) {
-            // Supervisor: T1=FOM→T2=CountryDirector→T3=Admin
             if (tier === 1) nextRoles = ['fom', 'Field Operation Manager (FOM)'];
             if (tier === 2) nextRoles = ['countryDirector', 'CountryDirector', 'country_director'];
           } else if (isFomSubmission(submission)) {
-            // FOM: T1=CountryDirector→T2=Admin
             if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
           } else {
             if (tier === 1) nextRoles = ['Admin', 'admin', 'SuperAdmin', 'super_admin'];
@@ -1590,15 +1598,20 @@ const CostSubmission = () => {
           }
         }
 
-        // Optimistically update local state — no full re-fetch needed
+        // Optimistically update local state
         setOperationalCosts(prev =>
           prev.map(oc =>
             oc.id === submission.id ? { ...oc, ...updates } : oc
           )
         );
+      } catch (sideEffectErr) {
+        // The DB update succeeded — do NOT show "Action Failed".
+        // Log silently and refresh to sync the latest state from the DB.
+        console.error('[CostApproval] Post-success side-effect error (approval already saved):', sideEffectErr);
+        fetchOperationalCosts();
       }
     } catch (err) {
-      console.error('Approval error:', err);
+      console.error('[CostApproval] Unexpected error:', err);
       toast({
         title: "Action Failed / فشل الإجراء",
         description: "An unexpected error occurred. Please try again. / حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
