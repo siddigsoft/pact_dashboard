@@ -1780,7 +1780,7 @@ export default function WorkspaceHub() {
             </span>
           )}
 
-          <span className="flex-1 text-xs font-medium truncate">{folder.name}</span>
+          <span className="flex-1 text-xs font-medium truncate">{folder.name.replace(/^folder\s+/i, '').trim()}</span>
           {isDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">Drop</span>}
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
@@ -2673,12 +2673,8 @@ export default function WorkspaceHub() {
               <div>
                 {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
                 {currentSubFolders.length > 0 && (
-                  <div className="border-b">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
-                      <Folder className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Folders</span>
-                      <span className="text-[10px] text-muted-foreground ml-0.5">({currentSubFolders.length})</span>
-                    </div>
+                  <div className="px-8 pt-4 pb-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-2">Folders</p>
                     {currentSubFolders.map(sub => {
                       const subFileCount = fileCounts[sub.id] ?? 0;
                       const subChildCount = (childMap[sub.id] ?? []).length;
@@ -2693,36 +2689,28 @@ export default function WorkspaceHub() {
                           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
                           onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
                           className={cn(
-                            'group w-full flex items-center gap-3 px-4 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors text-left',
-                            dragOverFolderId === sub.id && 'bg-[#1D3461]/5 border-l-2 border-l-[#1D3461]'
+                            'group w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-muted/50 transition-colors text-left',
+                            dragOverFolderId === sub.id && 'bg-gray-100 dark:bg-muted/50'
                           )}
                           data-testid={`subfolder-btn-${sub.id}`}
                         >
-                          <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                            style={{ backgroundColor: folderColor + '20' }}>
-                            {isLocked
-                              ? <Lock className="h-4 w-4 text-amber-500" />
-                              : sub.icon
-                                ? <span className="text-base leading-none">{sub.icon}</span>
-                                : <Folder className="h-4 w-4" style={{ color: folderColor }} />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate group-hover:text-[#1D3461] transition-colors" title={sub.name}>
-                              {sub.name}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {subFileCount} {subFileCount === 1 ? 'file' : 'files'}
-                              {subChildCount > 0 && ` · ${subChildCount} ${subChildCount === 1 ? 'folder' : 'folders'}`}
-                              {sub.description && ` · ${sub.description}`}
-                            </p>
-                          </div>
-                          <div className={cn('hidden sm:flex text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0', secCfg.bg, secCfg.text)}>
-                            {secCfg.label}
-                          </div>
+                          {subChildCount > 0
+                            ? <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                            : <span className="w-3 flex-shrink-0" />}
+                          {isLocked
+                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                            : sub.icon
+                              ? <span className="text-sm leading-none flex-shrink-0">{sub.icon}</span>
+                              : <Folder className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />}
+                          <span className="flex-1 text-sm text-gray-700 dark:text-foreground truncate" title={sub.name.replace(/^folder\s+/i, '').trim()}>
+                            {sub.name.replace(/^folder\s+/i, '').trim()}
+                          </span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">
+                            {subFileCount > 0 && subFileCount}
+                          </span>
                           {dragOverFolderId === sub.id && (
-                            <span className="text-[10px] text-[#1D3461] font-semibold flex-shrink-0">Drop here</span>
+                            <span className="text-[10px] text-[#1D3461] font-semibold flex-shrink-0">Drop</span>
                           )}
-                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-[#1D3461] flex-shrink-0 transition-colors" />
                         </button>
                       );
                     })}
@@ -2732,10 +2720,8 @@ export default function WorkspaceHub() {
                 {/* ── Files ────────────────────────────────────────────────── */}
                 {displayedFiles.length > 0 && (<>
                   {currentSubFolders.length > 0 && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
-                      <File className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Files</span>
-                      <span className="text-[10px] text-muted-foreground ml-0.5">({displayedFiles.length})</span>
+                    <div className="px-10 pt-2 pb-1">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Files</p>
                     </div>
                   )}
                   {viewMode === 'list' ? (
