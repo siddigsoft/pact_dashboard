@@ -596,7 +596,8 @@ const UserDetail: FC = () => {
         if (!genErr && genId) autoEmployeeId = genId as string;
       }
 
-      const updatePayload: Record<string, unknown> = {
+      // Core fields — always exist in the profiles table
+      const corePayload: Record<string, unknown> = {
         department_id: empDepartmentId || null,
         employment_type: empType || null,
         contract_start_date: empContractStart || null,
@@ -604,15 +605,34 @@ const UserDetail: FC = () => {
         reports_to: empReportsTo || null,
         task_digest_opt_out: taskDigestOptOut,
         country_code: empCountryCode || 'SD',
+        updated_at: new Date().toISOString(),
+      };
+      if (autoEmployeeId) corePayload.employee_id = autoEmployeeId;
+
+      // Optional columns added by migration 20250715_hr_task81_compliance_fields
+      // They may not exist in older DB instances — include them in the full attempt,
+      // but fall back to corePayload silently if a schema-cache error is returned.
+      const fullPayload: Record<string, unknown> = {
+        ...corePayload,
         probation_end_date: empProbationEnd || null,
         probation_confirmed: empProbationConfirmed,
         working_pattern: empWorkingPattern || null,
-        updated_at: new Date().toISOString(),
       };
-      if (autoEmployeeId) updatePayload.employee_id = autoEmployeeId;
 
-      const { error } = await supabase.from("profiles").update(updatePayload).eq("id", user.id);
-      if (error) throw error;
+      const { error: fullError } = await supabase.from("profiles").update(fullPayload).eq("id", user.id);
+      if (fullError) {
+        const isSchemaErr = fullError.message?.toLowerCase().includes('schema cache') ||
+                            fullError.message?.toLowerCase().includes('column') ||
+                            (fullError as any)?.code === '42703';
+        if (isSchemaErr) {
+          // Optional columns missing in this DB — save core fields only
+          console.warn("[UserDetail] Optional employment columns missing, saving core only:", fullError.message);
+          const { error: coreError } = await supabase.from("profiles").update(corePayload).eq("id", user.id);
+          if (coreError) throw coreError;
+        } else {
+          throw fullError;
+        }
+      }
 
       if (autoEmployeeId) {
         toast({ title: `Employee ID assigned: ${autoEmployeeId}`, description: "Generated from country code + contract date." });
