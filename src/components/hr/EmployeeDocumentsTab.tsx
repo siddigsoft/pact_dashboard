@@ -3,11 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Upload, Download, Trash2, Loader2, FileText, Eye, Plus, X,
   CreditCard, User, FileImage, Briefcase, BookOpen, Globe, Shield,
   CheckCircle2, XCircle, Clock, AlertTriangle, FolderOpen, AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 
 interface HrDoc {
@@ -81,12 +83,28 @@ export default function EmployeeDocumentsTab({
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({});
   const [expandedReject, setExpandedReject] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Pre-cached signed URLs so preview opens instantly (no spinner on click)
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [previewDoc, setPreviewDoc] = useState<HrDoc | null>(null);
 
   const fireVerificationChange = (list: HrDoc[]) => {
     if (!onVerificationChange) return;
     const total = list.length;
     const verified = list.filter(d => d.verification_status === 'verified').length;
     onVerificationChange(total > 0 && verified === total, verified, total);
+  };
+
+  // Fetch signed URLs for all docs in parallel (1-hour TTL so they stay valid while browsing)
+  const prefetchUrls = async (list: HrDoc[]) => {
+    const entries = await Promise.all(
+      list.map(async (doc) => {
+        try {
+          const { data } = await supabase.storage.from('staff-contracts').createSignedUrl(doc.file_path, 3600);
+          return [doc.id, data?.signedUrl ?? ''] as [string, string];
+        } catch { return [doc.id, ''] as [string, string]; }
+      })
+    );
+    setSignedUrls(Object.fromEntries(entries.filter(([, url]) => url)));
   };
 
   const load = async () => {
@@ -96,6 +114,8 @@ export default function EmployeeDocumentsTab({
     setDocs(list);
     setLoading(false);
     fireVerificationChange(list);
+    // Pre-fetch in background — doesn't block rendering
+    prefetchUrls(list);
   };
 
   useEffect(() => { load(); }, [userId]);
@@ -106,7 +126,6 @@ export default function EmployeeDocumentsTab({
     setUploading(true);
     try {
       const safeFile = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      // If the employee has a named HR folder, place new docs there; otherwise use legacy userId path
       const path = hrFolderName
         ? `HR/${hrFolderName}/${uploadType}_${Date.now()}_${safeFile}`
         : `${userId}/${Date.now()}_${safeFile}`;
@@ -129,14 +148,34 @@ export default function EmployeeDocumentsTab({
     } finally { setUploading(false); }
   };
 
+  // Opens doc in the inline preview modal — uses pre-cached URL (instant)
+  // Falls back to fetching a fresh URL only if cache miss
   const handleView = async (doc: HrDoc) => {
+    if (signedUrls[doc.id]) { setPreviewDoc(doc); return; }
     try {
-      const { data, error } = await supabase.storage.from('staff-contracts').createSignedUrl(doc.file_path, 120);
+      const { data, error } = await supabase.storage.from('staff-contracts').createSignedUrl(doc.file_path, 3600);
       if (error) throw error;
-      window.open(data.signedUrl, '_blank');
+      setSignedUrls(prev => ({ ...prev, [doc.id]: data.signedUrl }));
+      setPreviewDoc(doc);
     } catch (e: any) {
       toast({ title: 'Cannot open file', description: e.message, variant: 'destructive' });
     }
+  };
+
+  // Downloads the file directly using an anchor tag
+  const handleDownload = async (doc: HrDoc) => {
+    const url = signedUrls[doc.id] || (() => {
+      // Fallback: open signed URL fetch then trigger download
+      supabase.storage.from('staff-contracts').createSignedUrl(doc.file_path, 300).then(({ data }) => {
+        if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = doc.doc_name; a.click(); }
+      });
+      return null;
+    })();
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.doc_name;
+    a.click();
   };
 
   const handleDelete = async (doc: HrDoc) => {
@@ -400,8 +439,10 @@ export default function EmployeeDocumentsTab({
                       </div>
                       {/* Action buttons */}
                       <div className="flex items-center gap-1 shrink-0">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary hover:bg-primary/10" onClick={() => handleView(doc)} title="View" data-testid={`button-view-doc-${doc.id}`}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary hover:bg-primary/10" onClick={() => handleView(doc)} title="Download" data-testid={`button-download-doc-${doc.id}`}><Download className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary hover:bg-primary/10" onClick={() => handleView(doc)} title="Preview in page" data-testid={`button-view-doc-${doc.id}`}>
+                          {signedUrls[doc.id] ? <Eye className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin opacity-40" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary hover:bg-primary/10" onClick={() => handleDownload(doc)} title="Download" data-testid={`button-download-doc-${doc.id}`}><Download className="h-3.5 w-3.5" /></Button>
                         {isAdmin && (
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" disabled={isDeleting} onClick={() => handleDelete(doc)} title="Delete" data-testid={`button-delete-doc-${doc.id}`}>
                             {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -469,5 +510,86 @@ export default function EmployeeDocumentsTab({
         );
       })}
     </div>
+
+    {/* ── Inline Document Preview Modal ─────────────────────────────────── */}
+    {previewDoc && (() => {
+      const url = signedUrls[previewDoc.id] ?? '';
+      const mime = previewDoc.file_mime || '';
+      const name = previewDoc.doc_name;
+      const isPdf   = mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf');
+      const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name);
+      const canPreview = isPdf || isImage;
+
+      return (
+        <Dialog open onOpenChange={() => setPreviewDoc(null)}>
+          <DialogContent className="max-w-5xl w-[95vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="font-semibold text-sm truncate">{name}</span>
+                {(() => { const m = DOC_TYPE_META[previewDoc.doc_type]; return m ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.color}`}>{m.label}</span> : null; })()}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleDownload(previewDoc)}
+                  data-testid="button-preview-download"
+                >
+                  <Download className="h-3 w-3" /> Download
+                </Button>
+                <a
+                  href={url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 h-7 px-2 text-xs text-muted-foreground hover:text-foreground border rounded-md border-border hover:border-foreground/30 transition-colors"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPreviewDoc(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Viewer */}
+            <div className="flex-1 overflow-hidden bg-muted/20">
+              {!url ? (
+                <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading…</span>
+                </div>
+              ) : isPdf ? (
+                <iframe
+                  src={`${url}#toolbar=1&navpanes=0&scrollbar=1`}
+                  className="w-full h-full border-0"
+                  title={name}
+                />
+              ) : isImage ? (
+                <div className="flex items-center justify-center h-full p-6 overflow-auto">
+                  <img
+                    src={url} alt={name}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
+                  <FileText className="h-16 w-16 text-muted-foreground/40" />
+                  <div>
+                    <p className="font-semibold text-foreground">{name}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      This file type ({mime || 'unknown'}) cannot be previewed in the browser.
+                    </p>
+                  </div>
+                  <Button onClick={() => handleDownload(previewDoc)} className="gap-2">
+                    <Download className="h-4 w-4" /> Download to view
+                  </Button>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      );
+    })()}
+  </div>
   );
 }
