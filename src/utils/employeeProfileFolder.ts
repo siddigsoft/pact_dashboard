@@ -37,33 +37,44 @@ async function ensureWorkspaceFolder(
   parentId: string | null,
   createdBy: string | null,
 ): Promise<string> {
-  // Check if folder already exists under this parent
-  const query = supabase
-    .from('workspace_folders')
-    .select('id')
-    .eq('name', name)
-    .eq('archived', false);
-  const { data } = await (parentId
-    ? query.eq('parent_folder_id', parentId)
-    : query.is('parent_folder_id', null));
+  // Check if folder already exists under this parent (separate queries to avoid ternary-await issues)
+  let existingId: string | null = null;
+  if (parentId) {
+    const { data } = await supabase
+      .from('workspace_folders')
+      .select('id')
+      .eq('name', name)
+      .eq('parent_folder_id', parentId)
+      .eq('archived', false)
+      .limit(1);
+    existingId = data?.[0]?.id ?? null;
+  } else {
+    const { data } = await supabase
+      .from('workspace_folders')
+      .select('id')
+      .eq('name', name)
+      .is('parent_folder_id', null)
+      .eq('archived', false)
+      .limit(1);
+    existingId = data?.[0]?.id ?? null;
+  }
+  if (existingId) return existingId;
 
-  if (data && data.length > 0) return data[0].id;
-
-  // Create it
+  // Create it — use 'internal' so all staff can see the HR folder hierarchy
   const { data: created, error } = await supabase
     .from('workspace_folders')
     .insert({
       name,
       parent_folder_id: parentId,
-      security_level: 'confidential',
+      security_level: 'internal',
       created_by: createdBy,
-      is_system_folder: true,
+      is_system_folder: false,
       archived: false,
     })
     .select('id')
     .single();
   if (error) throw error;
-  return created.id;
+  return (created as any).id;
 }
 
 async function upsertWorkspaceFile(
