@@ -334,18 +334,14 @@
     const isICT = hasRole('ict');
     const isFinancialAdmin = hasRole('financialAdmin');
     const isAuditor = hasRole('auditor');
+    const isDataCollector = hasRole('dataCollector');
+    const isCoordinator = hasRole('coordinator');
     const isFOM = hasRole('fom');
     const isSupervisor = hasRole('supervisor');
     const isDataTeam = hasRole('dataTeam');
     const isProjectManager = hasRole('projectManager');
     const isCountryDirector = hasRole('countryDirector');
     const isEmployee = hasRole('employee');
-    // Management roles win: if a user has both a management role AND a field-staff
-    // role in their combined role pool (stale user_roles entries are the common cause),
-    // treat them as management so navigation labels and visibility are correct.
-    const _hasMgmt = isSuperAdmin || isAdmin || isICT || isFOM || isFinancialAdmin || isAuditor;
-    const isDataCollector = hasRole('dataCollector') && !_hasMgmt;
-    const isCoordinator   = hasRole('coordinator')   && !_hasMgmt;
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -366,7 +362,7 @@
     if (!isHidden('/my-team')) {
       workspaceItems.push({ id: 'my-team', title: "My Team", url: "/my-team", icon: Users, priority: 3, isPinned: isPinned('/my-team') });
     }
-    if (!(isDataCollector && !isSuperAdmin && !isAdmin && !isICT && !isFOM && !isCountryDirector) && !isHidden('/calendar')) {
+    if (!isDataCollector && !isHidden('/calendar')) {
       workspaceItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
     }
     if (!isHidden('/notifications')) {
@@ -391,9 +387,7 @@
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager)) {
-      // Management/admin roles always get "MMP Management"; only pure field-staff see "My Sites Management"
-      const isManagement = isSuperAdmin || isAdmin || isICT || isFOM || isCountryDirector || isProjectManager || isDataTeam;
-      const mmpTitle = (!isManagement && (isDataCollector || isCoordinator || isSupervisor)) ? "My Sites Management" : "MMP Management";
+      const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector;
@@ -649,14 +643,10 @@
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
-    // Management roles always override field-staff flags — a user with both
-    // admin AND dataCollector in their roles (stale entry) is treated as admin.
-    const _isRawDataCollector = roles?.includes('DataCollector' as AppRole) || 
+    const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
                             roles?.includes('dataCollector' as AppRole) || 
                             currentUser?.role?.toLowerCase() === 'datacollector' ||
                             currentUser?.role?.toLowerCase() === 'data collector';
-    const _isAnyManagement = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'FOM', 'countryDirector', 'financialAdmin', 'dataTeam', 'projectManager']);
-    const isDataCollector = _isRawDataCollector && !_isAnyManagement;
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
     // (the hasAnyRole function reference changes every render â€” never put it in deps)

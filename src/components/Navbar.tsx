@@ -13,8 +13,6 @@ import { MoonIcon, SunIcon, Settings, LogOut, UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/context/user/UserContext';
-import { useAppContext } from '@/context/AppContext';
-import { toDisplayLabel } from '@/utils/roleMapping';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -55,29 +53,8 @@ const Navbar = () => {
         const { setTheme, theme } = useTheme();
         const navigate = useNavigate();
         const { currentUser, logout } = useUser();
-        const { isSuperAdmin, roles } = useAppContext();
         const [globalSearch, setGlobalSearch] = useState('');
         const [showDropdown, setShowDropdown] = useState(false);
-
-        const getEffectiveRoleLabel = (): string => {
-          if (!currentUser) return '';
-          if (isSuperAdmin) return 'Super Admin';
-          const norm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
-          if (norm === 'superadmin') return 'Super Admin';
-          if (roles && roles.length > 0) {
-            const roleMap: Record<string, string> = {
-              admin: 'Admin', ict: 'ICT', fom: 'Field Ops Manager',
-              financialAdmin: 'Financial Admin', auditor: 'Auditor',
-              supervisor: 'Supervisor', coordinator: 'Coordinator',
-              dataCollector: 'Data Collector', projectManager: 'Project Manager',
-              countryDirector: 'Country Director', reviewer: 'Reviewer',
-              seniorOperationsLead: 'Senior Operations Lead', dataTeam: 'Data Team',
-            };
-            if (roles.includes('admin' as any)) return 'Admin';
-            return roleMap[roles[0] as string] || toDisplayLabel(String(roles[0]));
-          }
-          return toDisplayLabel(currentUser.role || '');
-        };
 
         // Auto-reconnect when window regains focus
         useFocusReconnect();
@@ -168,11 +145,8 @@ const Navbar = () => {
                                                         </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-56">
-                                                        <DropdownMenuLabel>
-                                                          <div className="flex flex-col space-y-0.5">
-                                                            <p className="text-sm font-medium leading-none">{currentUser?.name || 'User'}</p>
-                                                            <p className="text-xs text-muted-foreground mt-0.5">{getEffectiveRoleLabel() || 'My Account'}</p>
-                                                          </div>
+                                                        <DropdownMenuLabel className="text-xs text-gray-500">
+                                                                {currentUser?.role || 'My Account'}
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem onClick={() => navigate(`/users/${currentUser?.id}`)}>

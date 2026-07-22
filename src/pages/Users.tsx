@@ -433,7 +433,6 @@ const Users = () => {
     try {
       const roleChanged = selectedRole && selectedRole !== user.role;
       if (roleChanged) {
-        // Update profiles.role (primary role field)
         const { error: roleError } = await supabase
           .from('profiles')
           .update({ role: selectedRole })
