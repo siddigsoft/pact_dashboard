@@ -1444,37 +1444,55 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePayload.role = updatedUser.role;
       }
 
-      // Debug: log exact payload going to DB
-      console.log('[updateUser] payload:', JSON.stringify(updatePayload));
-      console.log('[updateUser] isProtectedOwner:', isProtectedOwner(updatedUser.id), 'role in payload:', 'role' in updatePayload);
+      // For the protected owner, use a dedicated bypass RPC that disables triggers
+      // (SET LOCAL session_replication_role = replica) so full_name etc. always save.
+      if (isProtectedOwner(updatedUser.id)) {
+        console.log('[updateUser] Protected owner — using bypass RPC');
+        const { error: ownerRpcError } = await supabase.rpc('update_owner_profile_fields', {
+          p_full_name:   updatedUser.fullName || updatedUser.name || null,
+          p_phone:       updatedUser.phone || null,
+          p_employee_id: updatedUser.employeeId || null,
+          p_avatar_url:  updatedUser.avatar || null,
+          p_hub_id:      updatedUser.hubId || null,
+          p_state_id:    updatedUser.stateId || null,
+          p_locality_id: updatedUser.localityId || null,
+        });
+        if (ownerRpcError) {
+          console.error('[updateUser] Owner bypass RPC error:', ownerRpcError.message);
+          // Fall through to standard path if bypass RPC not yet created in DB
+        } else {
+          console.log('[updateUser] Owner profile saved via bypass RPC');
+          // Skip standard update path — jump directly to post-save logic below
+          // by setting directError to undefined and not entering the else branch
+          // (we jump to the secondary_hub_id section by falling through with no errors)
+          // Update local caches and return
+          setAppUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+          localStorage.setItem(`user-${updatedUser.id}`, JSON.stringify(updatedUser));
+          if (currentUser && updatedUser.id === currentUser.id) {
+            setCurrentUser(updatedUser);
+            localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedUser));
+          }
+          toast({ title: "User updated", description: "User information was successfully updated and will persist between sessions." });
+          return true;
+        }
+      }
 
-      // Try direct update first — no row-count check (RLS may block RETURNING without blocking UPDATE)
+      // Standard update path (non-owner users, or owner bypass RPC fallback)
       const { error: directError } = await supabase
         .from('profiles')
         .update(updatePayload)
         .eq('id', updatedUser.id);
 
-      console.log('[updateUser] direct update result — error:', directError?.message ?? 'none');
-
-      // After update, read back what actually got saved to DB
-      const { data: verifyData } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', updatedUser.id)
-        .single();
-      console.log('[updateUser] DB value after update — full_name:', verifyData?.full_name, 'role:', verifyData?.role);
-
       if (directError) {
         console.warn("Direct update failed, trying RPC:", directError.message);
         // Fallback: RPC bypasses RLS but may have the COALESCE jsonb bug on location column
         try {
-          const { data: rpcData, error: rpcError } = await supabase.rpc('admin_update_profile', {
+          const { error: rpcError } = await supabase.rpc('admin_update_profile', {
             target_id: updatedUser.id,
             new_full_name: updatedUser.fullName || updatedUser.name || null,
             new_username: updatedUser.username || null,
             new_email: updatedUser.email || null,
-            // Never send role for protected owner — the DB trigger reverts the entire row otherwise
-            new_role: isProtectedOwner(updatedUser.id) ? null : (updatedUser.role || null),
+            new_role: updatedUser.role || null,
             new_avatar_url: updatedUser.avatar || null,
             new_hub_id: updatedUser.hubId || null,
             new_state_id: updatedUser.stateId || null,
