@@ -274,6 +274,7 @@ const UserDetail: FC = () => {
   const [editingReview, setEditingReview] = useState<any | null>(null);
   const [savingReview, setSavingReview] = useState(false);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [viewingReview, setViewingReview] = useState<any | null>(null);
   const [reviewForm, setReviewForm] = useState({
     review_period: '', review_type: 'annual', overall_rating: 0,
     strengths: '', development_areas: '', manager_comments: '', next_goals: '',
@@ -2581,25 +2582,36 @@ const UserDetail: FC = () => {
                           </div>
                           {rev.strengths && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-1"><span className="font-medium text-foreground">Strengths:</span> {rev.strengths}</p>}
                           {rev.development_areas && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1"><span className="font-medium text-foreground">Development:</span> {rev.development_areas}</p>}
+                          <button
+                            className="mt-2 text-[11px] text-primary font-semibold hover:underline flex items-center gap-1"
+                            onClick={() => setViewingReview(rev)}
+                          >
+                            <Eye className="h-3 w-3" /> View full notes
+                          </button>
                         </div>
-                        {isAdmin && (
-                          <div className="flex gap-1 flex-shrink-0">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditReview(rev)} title="Edit review">
-                              <Edit className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost" size="icon"
-                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                              onClick={() => handleDeleteReview(rev.id)}
-                              disabled={deletingReviewId === rev.id}
-                              title="Delete review"
-                            >
-                              {deletingReviewId === rev.id
-                                ? <span className="animate-spin h-3 w-3 border-2 border-destructive/30 border-t-destructive rounded-full" />
-                                : <Trash2 className="h-3.5 w-3.5" />}
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex gap-1 flex-shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setViewingReview(rev)} title="View full details">
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          {isAdmin && (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditReview(rev)} title="Edit review">
+                                <Edit className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                onClick={() => handleDeleteReview(rev.id)}
+                                disabled={deletingReviewId === rev.id}
+                                title="Delete review"
+                              >
+                                {deletingReviewId === rev.id
+                                  ? <span className="animate-spin h-3 w-3 border-2 border-destructive/30 border-t-destructive rounded-full" />
+                                  : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -3390,6 +3402,84 @@ ALTER TABLE public.profiles
             </Card>
         </div>
       </div>
+
+      {/* ── Review Detail View Dialog ────────────────────────────── */}
+      <Dialog open={!!viewingReview} onOpenChange={open => { if (!open) setViewingReview(null); }}>
+        <DialogContent className="sm:max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+          {viewingReview && (() => {
+            const rev = viewingReview;
+            const statusColors: Record<string, string> = {
+              completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+              submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+              draft:     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+            };
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-amber-500" />
+                    {rev.review_period || 'Performance Review'}
+                  </DialogTitle>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-xs font-semibold uppercase text-muted-foreground">{rev.review_type}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[rev.status] || 'bg-muted text-muted-foreground'}`}>{rev.status}</span>
+                    {rev.reviewed_at && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(rev.reviewed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-4 pt-2">
+                  {/* Rating */}
+                  {rev.overall_rating != null && (
+                    <div className="flex items-center gap-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 p-4">
+                      <div className="text-2xl text-amber-400 leading-none font-bold tracking-tighter">
+                        {'★'.repeat(Math.round(rev.overall_rating))}{'☆'.repeat(5 - Math.round(rev.overall_rating))}
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 leading-none">{Number(rev.overall_rating).toFixed(1)}<span className="text-sm font-normal text-muted-foreground ml-1">/5</span></p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Overall Rating</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes sections */}
+                  {[
+                    { label: 'Strengths', value: rev.strengths, icon: '💪', color: 'emerald' },
+                    { label: 'Development Areas', value: rev.development_areas, icon: '📈', color: 'blue' },
+                    { label: 'Manager Comments', value: rev.manager_comments, icon: '💬', color: 'purple' },
+                    { label: 'Next Goals', value: rev.next_goals, icon: '🎯', color: 'amber' },
+                  ].filter(s => s.value).map(section => (
+                    <div key={section.label} className="space-y-1.5">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                        <span>{section.icon}</span>{section.label}
+                      </p>
+                      <div className="rounded-lg bg-muted/30 border border-border/40 px-4 py-3">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{section.value}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {!rev.strengths && !rev.development_areas && !rev.manager_comments && !rev.next_goals && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No notes recorded for this review.</p>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <Button variant="outline" className="flex-1" onClick={() => setViewingReview(null)}>Close</Button>
+                    {isAdmin && (
+                      <Button className="flex-1 gap-2" onClick={() => { setViewingReview(null); openEditReview(rev); }}>
+                        <Edit className="h-4 w-4" />Edit Review
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add / Edit Performance Review Dialog ─────────────────── */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
