@@ -30,7 +30,7 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
-import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel } from "@/utils/roleMapping";
+import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel, getRoleHint } from "@/utils/roleMapping";
 import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
 import EmployeePersonalTab from "@/components/hr/EmployeePersonalTab";
 import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
@@ -1907,18 +1907,30 @@ const UserDetail: FC = () => {
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
                   <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Role</h3>
                   {editMode ? (
-                    <select
-                      className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
-                      value={editForm.role || ""}
-                      onChange={e => handleEditChange("role", e.target.value)}
-                      disabled={isProtectedOwner(user?.id)}
-                      title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
-                    >
-                      <option value="" disabled>Select role</option>
-                      {availableRoles.map(role => (
-                        <option key={role} value={role}>{toRoleLabel(role) || role}</option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        className="border rounded-lg px-3 py-2 w-full h-11 text-sm bg-background disabled:opacity-60 disabled:cursor-not-allowed"
+                        value={editForm.role || ""}
+                        onChange={e => handleEditChange("role", e.target.value)}
+                        disabled={isProtectedOwner(user?.id)}
+                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
+                      >
+                        <option value="" disabled>Select role</option>
+                        {availableRoles.map(role => (
+                          <option key={role} value={role}>{toRoleLabel(role) || role}</option>
+                        ))}
+                      </select>
+                      {editForm.role && (() => {
+                        const hint = getRoleHint(editForm.role);
+                        if (!hint) return null;
+                        return (
+                          <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3 space-y-1 text-xs">
+                            <p className="text-blue-800 dark:text-blue-200 leading-relaxed">{hint.description}</p>
+                            <p className="text-blue-600 dark:text-blue-400"><span className="font-semibold">Pages affected: </span>{hint.affects}</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     <div className="flex gap-2 items-center flex-wrap">
                       <RoleBadge role={user.role} size="sm" />
@@ -2845,6 +2857,16 @@ const UserDetail: FC = () => {
                             <option key={role} value={role}>{toRoleLabel(role) || role}</option>
                           ))}
                         </select>
+                        {editForm.role && (() => {
+                          const hint = getRoleHint(editForm.role);
+                          if (!hint) return null;
+                          return (
+                            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3 space-y-1 text-xs">
+                              <p className="text-blue-800 dark:text-blue-200 leading-relaxed">{hint.description}</p>
+                              <p className="text-blue-600 dark:text-blue-400"><span className="font-semibold">Pages affected: </span>{hint.affects}</p>
+                            </div>
+                          );
+                        })()}
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
                             {isSaving ? 'Saving…' : 'Save Role'}

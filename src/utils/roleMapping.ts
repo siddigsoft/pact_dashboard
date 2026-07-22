@@ -49,6 +49,8 @@ type RoleConfig = {
   label: RoleLabel;
   legacy: string[];
   hidden?: boolean; // If true, hide from role selection dropdowns
+  description: string; // Short explanation shown as a hint in role dropdowns
+  affects: string;     // Which areas of the app this role controls
 };
 
 // Comprehensive role mapping
@@ -57,87 +59,116 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'superAdmin',
     label: 'Super Admin',
     legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin'],
+    description: 'Full platform ownership. Bypasses all permission checks. Can appoint/remove other Super Admins and change any user\'s role including Admin.',
+    affects: 'All pages — unrestricted access to every feature, setting, and financial record.',
   },
   admin: {
     code: 'admin',
     label: 'Admin',
-    legacy: ['Admin', 'admin']
+    legacy: ['Admin', 'admin'],
+    description: 'Senior management role with broad operational and financial access. Cannot change Super Admin accounts or platform settings.',
+    affects: 'Admin Hub, User Management, Finance approvals, Down-Payments (Tier 2), HR Hub, MMP Management, Reports.',
   },
   countryDirector: {
     code: 'countryDirector',
     label: 'Country Director',
-    legacy: ['CountryDirector', 'countryDirector', 'country_director', 'Country Director']
+    legacy: ['CountryDirector', 'countryDirector', 'country_director', 'Country Director'],
+    description: 'Senior leadership with full read access across all hubs and high-level approval authority.',
+    affects: 'Portfolio Dashboard, Finance approvals, Monitoring, MMP Management, all operational reports.',
   },
   ict: {
     code: 'ict',
     label: 'ICT',
-    legacy: ['ICT', 'ict']
+    legacy: ['ICT', 'ict'],
+    description: 'IT management role. Manages system settings, integrations, and user technical accounts.',
+    affects: 'System settings, Integration configs, User Management, Audit logs.',
   },
   fom: {
     code: 'fom',
     label: 'Field Operation Manager (FOM)',
-    legacy: ['Field Operation Manager (FOM)', 'fom', 'fieldOpManager']
+    legacy: ['Field Operation Manager (FOM)', 'fom', 'fieldOpManager'],
+    description: 'Oversees all field operations across hubs. Manages site visits, MMP cycles, and field staff.',
+    affects: 'MMP Management, Site Visits, Field Ops Hub, Coordinator management, Down-Payments.',
   },
   financialAdmin: {
     code: 'financialAdmin',
     label: 'Financial Admin',
-    legacy: ['FinancialAdmin', 'financialAdmin', 'financial_admin', 'Financial Admin']
+    legacy: ['FinancialAdmin', 'financialAdmin', 'financial_admin', 'Financial Admin'],
+    description: 'Full financial management access. Handles accounting, approvals, and all money-related operations.',
+    affects: 'Finance Hub, Cost Submissions, Down-Payments, Wallet, Accounting, Budget, Cash Flow.',
   },
   projectManager: {
     code: 'projectManager',
     label: 'Project Manager',
-    legacy: ['ProjectManager', 'projectManager', 'project_manager', 'Project Manager']
+    legacy: ['ProjectManager', 'projectManager', 'project_manager', 'Project Manager'],
+    description: 'Manages project lifecycles, tasks, and milestones. No access to financial approvals or HR.',
+    affects: 'Project Flow, Tasks, Gantt, Portfolio Dashboard, Project Analytics.',
   },
   seniorOperationsLead: {
     code: 'seniorOperationsLead',
     label: 'Senior Operations Lead',
-    legacy: ['SeniorOperationsLead', 'seniorOperationsLead', 'senior_operations_lead', 'Senior Operations Lead']
+    legacy: ['SeniorOperationsLead', 'seniorOperationsLead', 'senior_operations_lead', 'Senior Operations Lead'],
+    description: 'Senior oversight of operational activities. Read access to all hub operations and reporting.',
+    affects: 'Monitoring Dashboard, MMP overview, Site Visit reports, Operational analytics.',
   },
   supervisor: {
     code: 'supervisor',
     label: 'Supervisor',
-    legacy: ['Supervisor', 'supervisor']
+    legacy: ['Supervisor', 'supervisor'],
+    description: 'Hub-level supervision. Reviews Tier 1 down-payment requests and manages coordinators in their hub.',
+    affects: 'Down-Payments (Tier 1 approval), Coordinator oversight, Site Visits, Hub reports.',
   },
   coordinator: {
     code: 'coordinator',
     label: 'Coordinator',
-    legacy: ['Coordinator', 'coordinator']
+    legacy: ['Coordinator', 'coordinator'],
+    description: 'Coordinates and manages site visits and field activities within an assigned hub or locality.',
+    affects: 'MMP (assigned sites), Site Visits, Down-Payment requests, Field Ops Hub.',
   },
   dataTeam: {
     code: 'dataTeam',
     label: 'Data Team',
-    legacy: ['DataTeam', 'dataTeam', 'data_team', 'Data Team']
+    legacy: ['DataTeam', 'dataTeam', 'data_team', 'Data Team'],
+    description: 'Data management and quality control. Can review, edit, and manage site entry data across hubs.',
+    affects: 'Data Tools, Site Entry Management, MMP data, Surveys, Reporting.',
   },
   dataCollector: {
     code: 'dataCollector',
     label: 'Data Collector',
-    legacy: ['DataCollector', 'dataCollector', 'data_collector', 'Data Collector', 'datacollector']
+    legacy: ['DataCollector', 'dataCollector', 'data_collector', 'Data Collector', 'datacollector'],
+    description: 'Field staff with the most restricted access. Can only see their own assigned sites and personal workspace.',
+    affects: 'My Sites, My Expenses, My Tasks, My Wallet — personal workspace only. No admin pages.',
   },
   reviewer: {
     code: 'reviewer',
     label: 'Reviewer',
-    legacy: ['Reviewer', 'reviewer']
+    legacy: ['Reviewer', 'reviewer'],
+    description: 'Read-only review access to submissions and reports. Cannot approve, edit, or create records.',
+    affects: 'Submission review queue, Reports (read-only). No write access to any operational pages.',
   },
   employee: {
     code: 'employee',
     label: 'Employee',
-    legacy: ['Employee', 'employee']
+    legacy: ['Employee', 'employee'],
+    description: 'Internal staff member with personal workspace only. Cannot access operational or admin pages.',
+    affects: 'My Payslip, My Leave, My Tasks, My Profile — personal HR tools only.',
   },
   // HR roles — used by the new HR Hub pages (LeaveRequests, PerformanceReviews,
   // SalaryIncrements, Positions, TrainingCertifications, HierarchyAuditLog).
-  // Without these entries, normalizeRole('hr') returned null and the
-  // hasAnyRole(['super_admin','admin','hr']) checks silently denied access
-  // even to legitimate HR users.
   hr: {
     code: 'hr',
     label: 'HR',
-    legacy: ['HR', 'hr', 'human_resources', 'humanResources', 'Human Resources']
+    legacy: ['HR', 'hr', 'human_resources', 'humanResources', 'Human Resources'],
+    description: 'HR operations staff. Manages employee records, leave requests, and day-to-day HR tasks.',
+    affects: 'HR Hub (leave, performance, staff directory), Employee profiles, Training records.',
   },
   hrManager: {
     code: 'hrManager',
     label: 'HR Manager',
-    legacy: ['HRManager', 'hrManager', 'hr_manager', 'HR Manager', 'HR_Manager']
-  }
+    legacy: ['HRManager', 'hrManager', 'hr_manager', 'HR Manager', 'HR_Manager'],
+    description: 'Full HR leadership access. Manages payroll, salary increments, hiring, and all HR operations.',
+    affects: 'Full HR Hub — Payroll, EOSB, Salary Advances, Positions, Performance, Leave approvals.',
+  },
 };
 
 // All canonical role codes
@@ -204,6 +235,19 @@ export function toRoleCode(input: string): RoleCode {
  */
 export function toRoleLabel(code: RoleCode): RoleLabel {
   return ROLE_MAP[code].label;
+}
+
+/**
+ * Get the hint (description + affects) for any role string.
+ * Returns null if the role is unrecognized.
+ */
+export function getRoleHint(input: string): { description: string; affects: string } | null {
+  const normalized = normalizeRole(input);
+  if (!normalized) return null;
+  return {
+    description: ROLE_MAP[normalized].description,
+    affects: ROLE_MAP[normalized].affects,
+  };
 }
 
 /**
