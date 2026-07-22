@@ -640,6 +640,25 @@ function ProfileDetail({
               <span>Updated {profile.updated_at ? format(parseISO(profile.updated_at), 'dd MMM yyyy') : '—'}</span>
             </div>
           </div>
+
+          {/* ── View Full Profile ── */}
+          <div className="px-6 py-4 border-t border-border bg-muted/20">
+            {profile.employee_id && (() => {
+              const idPrefix = profile.employee_id.match(/^([A-Z]+)/)?.[1];
+              return idPrefix ? (
+                <div className="flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-md border border-amber-200 dark:border-amber-800 mb-3">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>ID prefix is <strong>{idPrefix}</strong> — open Full Profile to verify country code and fix if wrong.</span>
+                </div>
+              ) : null;
+            })()}
+            <Link to={`/users/${profile.id}`} onClick={onClose}>
+              <Button variant="outline" className="w-full gap-2" data-testid={`btn-view-full-profile-${profile.id}`}>
+                <ChevronRight className="h-4 w-4" />
+                View Full Profile & Employment Details
+              </Button>
+            </Link>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
