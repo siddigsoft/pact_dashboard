@@ -82,7 +82,7 @@ const TAB_GROUPS = [
   {
     id: 'finance', label: 'Finance', color: '#D97706', Icon: CreditCard,
     tabs: [
-      { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
+      { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.', fieldStaffOnly: true },
       { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
       { id: 'benefits',     emoji: '🩺', label: 'Benefits',              description: 'Active benefit enrollments, open enrollment requests, and covered dependents for this staff member.' },
     ],
@@ -160,6 +160,17 @@ const UserDetail: FC = () => {
   const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
   const canEditBankAccount = isAdminRole;
   const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
+
+  // Classification & Compensation is only relevant for field-staff roles.
+  // Check the VIEWED user's primary role AND additional roles.
+  const FIELD_STAFF_ROLES = ['supervisor', 'coordinator', 'datacollector', 'data_collector', 'hubsupervisor', 'hub_supervisor'];
+  const viewedUserRole = (user?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  const viewedUserAdditional = [
+    ...(Array.isArray(user?.additionalRoles) ? user.additionalRoles : []),
+    ...(Array.isArray(user?.roles) ? user.roles : []),
+  ].map((r: any) => String(r).toLowerCase().replace(/[\s_-]/g, ''));
+  const showCompensation = FIELD_STAFF_ROLES.includes(viewedUserRole) ||
+    viewedUserAdditional.some(r => FIELD_STAFF_ROLES.includes(r));
 
   // Only Admin, SuperAdmin, and HR_Admin can edit profile data.
   // ICT and other admin-tier roles are view-only on employee profiles.
@@ -1442,7 +1453,11 @@ const UserDetail: FC = () => {
         {/* ── Level 2: Group tabs ── */}
         <div className="px-5 pt-3 flex items-end gap-1.5">
           {TAB_GROUPS.map(g => {
-            const visibleTabs = g.tabs.filter(t => !(t as any).adminOnly || isAdmin);
+            const visibleTabs = g.tabs.filter(t => {
+              if ((t as any).adminOnly && !isAdmin) return false;
+              if ((t as any).fieldStaffOnly && !showCompensation) return false;
+              return true;
+            });
             if (visibleTabs.length === 0) return null;
             const isActive = activeGroup.id === g.id;
             return (
@@ -1498,10 +1513,10 @@ const UserDetail: FC = () => {
               <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: `${accent}25`, backgroundColor: `${accent}12` }}>
                 <span className="text-[13px]">{activeTabInGroup.emoji}</span>
                 <span className="text-[12px] font-bold text-white tracking-wide">{activeGroup.label}</span>
-                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.filter(t => !(t as any).adminOnly || isAdmin).length} pages</span>
+                <span className="ml-auto text-[10px] text-gray-400">{activeGroup.tabs.filter(t => !((t as any).adminOnly && !isAdmin) && !((t as any).fieldStaffOnly && !showCompensation)).length} pages</span>
               </div>
               <div className="p-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {activeGroup.tabs.filter(t => !(t as any).adminOnly || isAdmin).map(t => {
+                {activeGroup.tabs.filter(t => !((t as any).adminOnly && !isAdmin) && !((t as any).fieldStaffOnly && !showCompensation)).map(t => {
                   const isActive = activeSection === t.id;
                   return (
                     <button
@@ -2435,8 +2450,13 @@ const UserDetail: FC = () => {
               ) : null}
             </div>)}
 
-            {/* ── COMPENSATION SECTION ─────────────────────────────────────── */}
-            {activeSection === 'compensation' && (<div className="p-5 sm:p-6 space-y-6">
+            {/* ── COMPENSATION SECTION — field staff only ───────────────────── */}
+            {activeSection === 'compensation' && !showCompensation && (
+              <div className="p-10 text-center text-muted-foreground text-sm">
+                Classification &amp; Compensation is only available for Supervisors, Coordinators, and Data Collectors.
+              </div>
+            )}
+            {activeSection === 'compensation' && showCompensation && (<div className="p-5 sm:p-6 space-y-6">
               {user.bankAccount ? (
                 <div className="space-y-4">
                   <div className="bg-muted/20 rounded-xl p-5 border border-border/40 space-y-4">
