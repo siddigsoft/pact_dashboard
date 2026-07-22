@@ -59,6 +59,7 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'superAdmin',
     label: 'Super Admin',
     legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin'],
+    hidden: true,
     description: 'Full platform ownership. Bypasses all permission checks. Can appoint/remove other Super Admins and change any user\'s role including Admin.',
     affects: 'All pages — unrestricted access to every feature, setting, and financial record.',
   },
