@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -16,10 +16,52 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Search, Lock, Unlock, Loader2, X, ChevronDown, ChevronRight,
   Users, FileText, Shield, Info, Plus, Globe, User, ChevronsUpDown, UserCircle,
+  Grid3X3, Check,
 } from 'lucide-react';
 import { PAGE_DEFS } from '@/pages/PageAccessControl';
 import { cn } from '@/lib/utils';
 import { toDisplayLabel, normalizeRole } from '@/utils/roleMapping';
+
+// ── Role matrix columns ──────────────────────────────────────────────────────
+const MATRIX_ROLES: { code: string; short: string; full: string }[] = [
+  { code: 'superAdmin',      short: 'SA',    full: 'Super Admin' },
+  { code: 'admin',           short: 'Admin', full: 'Admin' },
+  { code: 'countryDirector', short: 'CD',    full: 'Country Director' },
+  { code: 'ict',             short: 'ICT',   full: 'ICT' },
+  { code: 'fom',             short: 'FOM',   full: 'Field Ops Manager' },
+  { code: 'financialAdmin',  short: 'FA',    full: 'Financial Admin' },
+  { code: 'auditor',         short: 'Aud',   full: 'Auditor' },
+  { code: 'projectManager',  short: 'PM',    full: 'Project Manager' },
+  { code: 'supervisor',      short: 'Sup',   full: 'Supervisor' },
+  { code: 'coordinator',     short: 'Coord', full: 'Coordinator' },
+  { code: 'dataTeam',        short: 'DT',    full: 'Data Team' },
+  { code: 'dataCollector',   short: 'DC',    full: 'Data Collector' },
+  { code: 'reviewer',        short: 'Rev',   full: 'Reviewer' },
+];
+
+function roleHasAccess(pageRoles: string[], roleCode: string): boolean {
+  if (pageRoles.includes('all')) return true;
+  const hasNeg = pageRoles.some(r => r.startsWith('!'));
+  if (hasNeg) {
+    if (pageRoles.includes(`!${roleCode}`)) return false;
+    const positives = pageRoles.filter(r => !r.startsWith('!'));
+    return positives.length === 0 ? true : positives.includes(roleCode);
+  }
+  return pageRoles.includes(roleCode);
+}
+
+// Group PAGE_DEFS by their group label
+function groupPageDefs(search: string) {
+  const filtered = PAGE_DEFS.filter(p =>
+    !search || p.label.toLowerCase().includes(search.toLowerCase()) || p.group.toLowerCase().includes(search.toLowerCase())
+  );
+  const groups: Record<string, typeof PAGE_DEFS> = {};
+  for (const p of filtered) {
+    if (!groups[p.group]) groups[p.group] = [];
+    groups[p.group].push(p);
+  }
+  return groups;
+}
 
 interface Override {
   id: string;
@@ -56,7 +98,7 @@ export function PageAccessOverview() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState<'by-user' | 'by-page'>('by-user');
+  const [viewMode, setViewMode] = useState<'by-user' | 'by-page' | 'by-role'>('by-user');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedPage, setSelectedPage] = useState<string>('');
   const [adding, setAdding] = useState(false);
@@ -198,6 +240,14 @@ export function PageAccessOverview() {
                 )}
               >
                 <FileText className="h-3 w-3" /> By Page <span className="opacity-60">/ حسب الصفحة</span>
+              </button>
+              <button
+                onClick={() => setViewMode('by-role')}
+                className={cn('px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5',
+                  viewMode === 'by-role' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
+                )}
+              >
+                <Grid3X3 className="h-3 w-3" /> By Role <span className="opacity-60">/ حسب الدور</span>
               </button>
             </div>
           </div>
@@ -382,6 +432,95 @@ export function PageAccessOverview() {
                 </Card>
               );
             })}
+          </div>
+        )}
+
+        {/* ── By Role Matrix View ── */}
+        {viewMode === 'by-role' && (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800/50 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                <span className="font-semibold">Default role access</span> — shows what each role can see based on system defaults.
+                Green <span className="font-semibold text-emerald-700 dark:text-emerald-400">✓</span> = accessible, Gray = no access.
+                To grant or block a page for a <span className="font-semibold">specific user</span>, use the "By User" view and add an override.
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-border/60">
+              <table className="w-full text-xs border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-muted/60 border-b border-border/60">
+                    <th className="text-left px-3 py-2 font-semibold text-muted-foreground sticky left-0 bg-muted/60 z-10 min-w-[180px]">
+                      Page
+                    </th>
+                    {MATRIX_ROLES.map(r => (
+                      <Tooltip key={r.code}>
+                        <TooltipTrigger asChild>
+                          <th className="px-2 py-2 font-semibold text-center text-muted-foreground min-w-[46px] cursor-default">
+                            {r.short}
+                          </th>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs font-medium">{r.full}</TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(groupPageDefs(search)).map(([group, pages]) => (
+                    <React.Fragment key={group}>
+                      <tr className="bg-muted/30 border-y border-border/40">
+                        <td
+                          colSpan={MATRIX_ROLES.length + 1}
+                          className="px-3 py-1.5 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide sticky left-0"
+                        >
+                          {group}
+                        </td>
+                      </tr>
+                      {pages.map((page, idx) => (
+                        <tr
+                          key={page.slug}
+                          className={cn(
+                            'border-b border-border/30 transition-colors hover:bg-muted/20',
+                            idx % 2 === 0 ? '' : 'bg-muted/10'
+                          )}
+                        >
+                          <td className="px-3 py-1.5 sticky left-0 bg-background z-10 border-r border-border/30">
+                            <div className="flex items-center gap-1.5">
+                              <page.icon className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="font-medium text-foreground truncate max-w-[140px]">{page.label}</span>
+                            </div>
+                            {page.note && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 ml-4.5 truncate max-w-[150px]">{page.note}</p>
+                            )}
+                          </td>
+                          {MATRIX_ROLES.map(r => {
+                            const access = roleHasAccess(page.roles, r.code);
+                            return (
+                              <td key={r.code} className="px-2 py-1.5 text-center">
+                                {access ? (
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                  </span>
+                                ) : (
+                                  <span className="inline-block w-3 h-0.5 rounded bg-muted-foreground/20 mx-auto" />
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+              {Object.keys(groupPageDefs(search)).length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                  <Shield className="h-8 w-8 mb-2 opacity-30" />
+                  <p className="text-sm">No pages match your search.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

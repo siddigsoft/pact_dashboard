@@ -20,6 +20,7 @@ export type RoleCode =
   | 'dataTeam'
   | 'dataCollector'
   | 'reviewer'
+  | 'auditor'
   | 'employee'
   | 'hr'
   | 'hrManager';
@@ -118,6 +119,11 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'reviewer',
     label: 'Reviewer',
     legacy: ['Reviewer', 'reviewer']
+  },
+  auditor: {
+    code: 'auditor',
+    label: 'Auditor',
+    legacy: ['Auditor', 'auditor']
   },
   employee: {
     code: 'employee',
