@@ -269,6 +269,15 @@ const UserDetail: FC = () => {
   const [hasPersonalDetails, setHasPersonalDetails] = useState(false);
   const [contractPreview, setContractPreview] = useState<{ url: string; name: string; mime: string | null } | null>(null);
   const [perfTrend, setPerfTrend] = useState<{ period: string; rating: number }[]>([]);
+  const [employeeReviews, setEmployeeReviews] = useState<any[]>([]);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [editingReview, setEditingReview] = useState<any | null>(null);
+  const [savingReview, setSavingReview] = useState(false);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [reviewForm, setReviewForm] = useState({
+    review_period: '', review_type: 'annual', overall_rating: 0,
+    strengths: '', development_areas: '', manager_comments: '', next_goals: '',
+  });
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
   const savedDepartmentIdRef = useRef<string | null>(null);
@@ -577,25 +586,94 @@ const UserDetail: FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.employeeId]);
 
-  // Load last 4 completed review scores for sparkline trend
-  useEffect(() => {
+  // Load performance reviews for this employee (all + trend)
+  const loadEmployeeReviews = () => {
     if (!user?.id) return;
     supabase
       .from('performance_reviews')
-      .select('review_period, overall_rating, reviewed_at')
+      .select('*')
       .eq('reviewee_id', user.id)
-      .eq('status', 'completed')
-      .not('overall_rating', 'is', null)
-      .order('reviewed_at', { ascending: false })
-      .limit(4)
+      .order('created_at', { ascending: false })
       .then(({ data }) => {
-        if (data && data.length > 0) {
-          // Reverse so chart shows oldest → newest (latest 4 cycles)
-          const latest = [...data].reverse();
-          setPerfTrend(latest.map((r: any) => ({ period: r.review_period ?? '—', rating: Number(r.overall_rating) })));
+        if (data) {
+          setEmployeeReviews(data);
+          const completed = data
+            .filter((r: any) => r.status === 'completed' && r.overall_rating != null)
+            .slice(0, 4).reverse();
+          setPerfTrend(completed.map((r: any) => ({ period: r.review_period ?? '—', rating: Number(r.overall_rating) })));
         }
       });
-  }, [user?.id]);
+  };
+
+  useEffect(() => { loadEmployeeReviews(); }, [user?.id]);
+
+  const openAddReview = () => {
+    setEditingReview(null);
+    setReviewForm({ review_period: '', review_type: 'annual', overall_rating: 0, strengths: '', development_areas: '', manager_comments: '', next_goals: '' });
+    setReviewDialogOpen(true);
+  };
+
+  const openEditReview = (rev: any) => {
+    setEditingReview(rev);
+    setReviewForm({
+      review_period: rev.review_period || '',
+      review_type: rev.review_type || 'annual',
+      overall_rating: rev.overall_rating || 0,
+      strengths: rev.strengths || '',
+      development_areas: rev.development_areas || '',
+      manager_comments: rev.manager_comments || '',
+      next_goals: rev.next_goals || '',
+    });
+    setReviewDialogOpen(true);
+  };
+
+  const handleSaveReview = async () => {
+    if (!reviewForm.review_period || !user?.id) return;
+    setSavingReview(true);
+    const payload = {
+      reviewee_id: user.id,
+      reviewer_id: currentUser?.id,
+      review_period: reviewForm.review_period,
+      review_type: reviewForm.review_type,
+      overall_rating: reviewForm.overall_rating || null,
+      strengths: reviewForm.strengths || null,
+      development_areas: reviewForm.development_areas || null,
+      manager_comments: reviewForm.manager_comments || null,
+      next_goals: reviewForm.next_goals || null,
+      status: 'completed',
+      cycle_phase: 'manager_review',
+      goals: [],
+      competencies: [],
+      self_assessment_enabled: false,
+      peer_feedback_enabled: false,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const op = editingReview
+      ? supabase.from('performance_reviews').update(payload).eq('id', editingReview.id)
+      : supabase.from('performance_reviews').insert({ ...payload, created_at: new Date().toISOString() });
+    const { error } = await op as any;
+    setSavingReview(false);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: editingReview ? 'Review updated' : 'Review added', description: `Performance review for ${user.name} saved.` });
+      setReviewDialogOpen(false);
+      loadEmployeeReviews();
+    }
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    setDeletingReviewId(id);
+    const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
+    setDeletingReviewId(null);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Review deleted' });
+      loadEmployeeReviews();
+    }
+  };
 
   // Fetch city/address from hr_employee_personal for non-field-staff
   useEffect(() => {
@@ -2410,65 +2488,135 @@ const UserDetail: FC = () => {
             )}
 
             {/* ── PERFORMANCE SECTION ─────────────────────────────────────── */}
-            {activeSection === 'performance' && (<div className="p-5 sm:p-6 space-y-6">
+            {activeSection === 'performance' && (<div className="p-5 sm:p-6 space-y-5">
+
+              {/* Header row */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">Performance Reviews</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{employeeReviews.length} review{employeeReviews.length !== 1 ? 's' : ''} on record</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" asChild>
+                    <a href="/hr?tab=performance" target="_blank" rel="noopener noreferrer">
+                      <Globe className="h-3.5 w-3.5" />Full HR Page
+                    </a>
+                  </Button>
+                  {isAdmin && (
+                    <Button size="sm" className="gap-1.5 text-xs h-8" onClick={openAddReview}>
+                      <Plus className="h-3.5 w-3.5" />Add Review
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               {/* Task-based KPIs */}
-              {user.performance ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {user.performance && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Rating', value: `${user.performance.rating}/5`, color: 'text-primary' },
                     { label: 'Completed Tasks', value: String(user.performance.totalCompletedTasks), color: 'text-foreground' },
-                    { label: 'On-Time Completion', value: `${user.performance.onTimeCompletion}%`, color: 'text-emerald-600 dark:text-emerald-400' },
-                    { label: 'Current Workload', value: String(user.performance.currentWorkload || 0), color: 'text-foreground' },
+                    { label: 'On-Time', value: `${user.performance.onTimeCompletion}%`, color: 'text-emerald-600 dark:text-emerald-400' },
+                    { label: 'Workload', value: String(user.performance.currentWorkload || 0), color: 'text-foreground' },
                   ].map(kpi => (
-                    <div key={kpi.label} className="bg-muted/20 rounded-xl p-5 flex flex-col justify-center border border-border/40">
-                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-2">{kpi.label}</h3>
-                      <p className={`text-2xl sm:text-3xl font-bold ${kpi.color}`}>{kpi.value}</p>
+                    <div key={kpi.label} className="bg-muted/20 rounded-xl p-4 border border-border/40">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">{kpi.label}</p>
+                      <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
                     </div>
                   ))}
                 </div>
-              ) : null}
+              )}
 
-              {/* Review Score Trend — sparkline from last 4 completed review cycles */}
-              {perfTrend.length > 0 ? (
-                <div className="bg-muted/20 rounded-xl p-5 border border-border/40">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <Award className="h-3.5 w-3.5" />Review Score Trend (last {perfTrend.length} cycles)
-                  </h3>
-                  <div className="h-28">
+              {/* Review Score Trend */}
+              {perfTrend.length > 0 && (
+                <div className="bg-muted/20 rounded-xl p-4 border border-border/40">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <Award className="h-3.5 w-3.5" />Score Trend — last {perfTrend.length} cycles
+                  </p>
+                  <div className="h-24">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={perfTrend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                         <XAxis dataKey="period" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                         <YAxis domain={[0, 5]} ticks={[1,2,3,4,5]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                        <Tooltip
-                          contentStyle={{ fontSize: 12, borderRadius: 8, padding: '4px 10px' }}
-                          formatter={(v: number) => [`${v.toFixed(1)} / 5`, 'Rating']}
-                        />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, padding: '4px 10px' }} formatter={(v: number) => [`${v.toFixed(1)} / 5`, 'Rating']} />
                         <ReferenceLine y={3} stroke="#e2e8f0" strokeDasharray="4 2" />
-                        <Line
-                          type="monotone" dataKey="rating" stroke="#f59e0b"
-                          strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }}
-                          activeDot={{ r: 6 }}
-                        />
+                        <Line type="monotone" dataKey="rating" stroke="#f59e0b" strokeWidth={2} dot={{ fill: '#f59e0b', r: 4 }} activeDot={{ r: 6 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex justify-between mt-1">
-                    {perfTrend.map(pt => (
-                      <div key={pt.period} className="text-center">
-                        <p className="text-[10px] text-muted-foreground truncate max-w-16">{pt.period}</p>
-                        <p className="text-xs font-semibold text-amber-600">{pt.rating.toFixed(1)}★</p>
+                </div>
+              )}
+
+              {/* Reviews list */}
+              {employeeReviews.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Review History</p>
+                  {employeeReviews.map((rev: any) => {
+                    const statusColors: Record<string, string> = {
+                      completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                      submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                      draft:     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                    };
+                    const statusCls = statusColors[rev.status] || 'bg-muted text-muted-foreground';
+                    return (
+                      <div key={rev.id} className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/10 p-4 hover:bg-muted/20 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{rev.review_period || '—'}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{rev.review_type}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusCls}`}>{rev.status}</span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1.5">
+                            {rev.overall_rating != null && (
+                              <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold">
+                                {'★'.repeat(Math.round(rev.overall_rating))}{'☆'.repeat(5 - Math.round(rev.overall_rating))}
+                                <span className="text-muted-foreground font-normal text-xs ml-1">{Number(rev.overall_rating).toFixed(1)}/5</span>
+                              </span>
+                            )}
+                            {rev.reviewed_at && (
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(rev.reviewed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                          {rev.strengths && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-1"><span className="font-medium text-foreground">Strengths:</span> {rev.strengths}</p>}
+                          {rev.development_areas && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1"><span className="font-medium text-foreground">Development:</span> {rev.development_areas}</p>}
+                        </div>
+                        {isAdmin && (
+                          <div className="flex gap-1 flex-shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditReview(rev)} title="Edit review">
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteReview(rev.id)}
+                              disabled={deletingReviewId === rev.id}
+                              title="Delete review"
+                            >
+                              {deletingReviewId === rev.id
+                                ? <span className="animate-spin h-3 w-3 border-2 border-destructive/30 border-t-destructive rounded-full" />
+                                : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              ) : !user.performance ? (
-                <div className="text-center py-16">
-                  <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto mb-4">
-                    <Award className="h-12 w-12 text-muted-foreground/40" />
+              ) : (
+                <div className="text-center py-12 space-y-3">
+                  <div className="p-4 rounded-2xl bg-muted/30 w-fit mx-auto">
+                    <Award className="h-10 w-10 text-muted-foreground/40" />
                   </div>
-                  <p className="text-muted-foreground">No performance data available yet.</p>
+                  <p className="text-sm text-muted-foreground">No performance reviews yet.</p>
+                  {isAdmin && (
+                    <Button size="sm" className="gap-2" onClick={openAddReview}>
+                      <Plus className="h-4 w-4" />Add First Review
+                    </Button>
+                  )}
                 </div>
-              ) : null}
+              )}
             </div>)}
 
             {/* ── COMPENSATION & BANK SECTION ──────────────────────────────── */}
@@ -3242,6 +3390,113 @@ ALTER TABLE public.profiles
             </Card>
         </div>
       </div>
+
+      {/* ── Add / Edit Performance Review Dialog ─────────────────── */}
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-amber-500" />
+              {editingReview ? 'Edit Performance Review' : 'Add Performance Review'}
+            </DialogTitle>
+            {user && <p className="text-sm text-muted-foreground mt-0.5">for {user.name}</p>}
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold">Review Period <span className="text-destructive">*</span></label>
+                <input
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="e.g. Q1 2026, Annual 2025"
+                  value={reviewForm.review_period}
+                  onChange={e => setReviewForm(p => ({ ...p, review_period: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold">Review Type</label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={reviewForm.review_type}
+                  onChange={e => setReviewForm(p => ({ ...p, review_type: e.target.value }))}
+                >
+                  <option value="annual">Annual</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="probation">Probation</option>
+                  <option value="mid_year">Mid-Year</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Overall Rating</label>
+              <div className="flex items-center gap-2">
+                {[1,2,3,4,5].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setReviewForm(p => ({ ...p, overall_rating: n }))}
+                    className={`text-2xl transition-transform hover:scale-110 ${n <= reviewForm.overall_rating ? 'text-amber-400' : 'text-muted-foreground/30'}`}
+                  >★</button>
+                ))}
+                {reviewForm.overall_rating > 0 && (
+                  <span className="text-sm font-semibold text-muted-foreground ml-1">{reviewForm.overall_rating}/5</span>
+                )}
+                {reviewForm.overall_rating > 0 && (
+                  <button type="button" className="text-xs text-muted-foreground underline ml-1" onClick={() => setReviewForm(p => ({ ...p, overall_rating: 0 }))}>Clear</button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Strengths</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                rows={2} placeholder="Key strengths demonstrated..."
+                value={reviewForm.strengths}
+                onChange={e => setReviewForm(p => ({ ...p, strengths: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Development Areas</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                rows={2} placeholder="Areas to improve..."
+                value={reviewForm.development_areas}
+                onChange={e => setReviewForm(p => ({ ...p, development_areas: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Manager Comments</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                rows={2} placeholder="Overall comments from manager..."
+                value={reviewForm.manager_comments}
+                onChange={e => setReviewForm(p => ({ ...p, manager_comments: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Next Goals</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                rows={2} placeholder="Goals for next period..."
+                value={reviewForm.next_goals}
+                onChange={e => setReviewForm(p => ({ ...p, next_goals: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setReviewDialogOpen(false)} disabled={savingReview}>Cancel</Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={handleSaveReview}
+                disabled={savingReview || !reviewForm.review_period}
+              >
+                {savingReview
+                  ? <><span className="animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full" />Saving…</>
+                  : <><Award className="h-3.5 w-3.5" />{editingReview ? 'Update Review' : 'Save Review'}</>
+                }
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={bankAccountFormOpen} onOpenChange={setBankAccountFormOpen}>
         <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
