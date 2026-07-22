@@ -82,7 +82,7 @@ const TAB_GROUPS = [
   {
     id: 'finance', label: 'Finance', color: '#D97706', Icon: CreditCard,
     tabs: [
-      { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.', fieldStaffOnly: true },
+      { id: 'compensation', emoji: '💰', label: 'Compensation & Bank',   description: 'Salary grade, bank account details, payment method, and pay history for this staff member.' },
       { id: 'performance',  emoji: '📊', label: 'Performance',           description: 'Performance review scores, quarterly objectives, and development notes from review cycles.' },
       { id: 'benefits',     emoji: '🩺', label: 'Benefits',              description: 'Active benefit enrollments, open enrollment requests, and covered dependents for this staff member.' },
     ],
@@ -2450,13 +2450,8 @@ const UserDetail: FC = () => {
               ) : null}
             </div>)}
 
-            {/* ── COMPENSATION SECTION — field staff only ───────────────────── */}
-            {activeSection === 'compensation' && !showCompensation && (
-              <div className="p-10 text-center text-muted-foreground text-sm">
-                Classification &amp; Compensation is only available for Supervisors, Coordinators, and Data Collectors.
-              </div>
-            )}
-            {activeSection === 'compensation' && showCompensation && (<div className="p-5 sm:p-6 space-y-6">
+            {/* ── COMPENSATION & BANK SECTION ──────────────────────────────── */}
+            {activeSection === 'compensation' && (<div className="p-5 sm:p-6 space-y-6">
               {user.bankAccount ? (
                 <div className="space-y-4">
                   <div className="bg-muted/20 rounded-xl p-5 border border-border/40 space-y-4">
@@ -2546,8 +2541,8 @@ const UserDetail: FC = () => {
                 </div>
               )}
 
-            {/* Classification sub-section */}
-            {canManageClassifications && (
+            {/* Classification sub-section — field staff only */}
+            {showCompensation && canManageClassifications && (
               <div className="border-t pt-6 px-6 pb-6 space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
