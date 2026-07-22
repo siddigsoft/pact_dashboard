@@ -1481,17 +1481,27 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Enforce single-role: remove any roles that DIFFER from the new primary role,
-      // then ensure exactly one matching entry exists.  We do this in a safe order:
       // Ensure the primary role exists in user_roles.
       // NOTE: we do NOT delete other user_roles entries here — those are
       // intentional secondary/additional role assignments (e.g. a FOM who is
       // also a Hub Supervisor for a specific hub). Managing those is done
       // through the Additional Roles panel in the Access & Security tab.
+      // EXCEPTION: if the new role is a privileged (non-field-staff) role, remove any
+      // stale 'dataCollector' entry that would override the sidebar/access checks.
       if (updatedUser.role) {
         await supabase
           .from('user_roles')
           .upsert({ user_id: updatedUser.id, role: updatedUser.role }, { onConflict: 'user_id,role', ignoreDuplicates: true });
+
+        const privilegedRoles = ['admin','superAdmin','ict','fom','supervisor','hubsupervisor','dataTeam','financialAdmin','countryDirector'];
+        if (privilegedRoles.includes((updatedUser.role || '').toLowerCase().replace(/[\s_-]/g,'')) ||
+            privilegedRoles.includes(updatedUser.role || '')) {
+          await supabase
+            .from('user_roles')
+            .delete()
+            .eq('user_id', updatedUser.id)
+            .eq('role', 'dataCollector');
+        }
       }
 
       // Update local caches only after confirmed DB success
