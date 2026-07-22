@@ -1245,6 +1245,11 @@ export default function SurveyDetail() {
         if (!val) return '""';
         return esc(Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | '));
       }
+      if (q.type === 'image') return a.answer_json ? esc(`[Photo: ${q.label} — download via Attachments ZIP]`) : '""';
+      if (q.type === 'file') {
+        const m = (() => { try { return JSON.parse(String(a.answer_json)); } catch { return null; } })();
+        return esc(m?.name ? `[File: ${m.name}]` : '[File attached — download via Attachments ZIP]');
+      }
       if (Array.isArray(a.answer_json)) return esc((a.answer_json as string[]).join('; '));
       if (a.answer_text) return esc(a.answer_text);
       if (a.answer_json !== null && a.answer_json !== undefined) return esc(String(a.answer_json));
@@ -1349,6 +1354,11 @@ export default function SurveyDetail() {
       if (q.type === 'likert') {
         const val = (() => { try { return typeof a.answer_json === 'object' && !Array.isArray(a.answer_json) ? a.answer_json as Record<string, string> : JSON.parse(String(a.answer_json)); } catch { return null; } })();
         return val ? Object.entries(val).map(([row, col]) => `${row}: ${col}`).join(' | ') : '';
+      }
+      if (q.type === 'image') return a.answer_json ? `[Photo: ${q.label} — see attachments ZIP]` : '';
+      if (q.type === 'file') {
+        const m = (() => { try { return JSON.parse(String(a.answer_json)); } catch { return null; } })();
+        return m?.name ? `[File: ${m.name} — see attachments ZIP]` : '[File attached]';
       }
       if (Array.isArray(a.answer_json)) return (a.answer_json as string[]).join('; ');
       if (a.answer_text) return a.answer_text;
@@ -1605,6 +1615,71 @@ export default function SurveyDetail() {
     const wb = XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb, ws, 'Responses');
     XLSXStyle.writeFile(wb, `${survey?.title ?? 'survey'}_responses_report.xlsx`);
+  };
+
+  const [downloadingAttachments, setDownloadingAttachments] = useState(false);
+  const downloadAttachmentsZip = async () => {
+    if (!responses.length) return;
+    setDownloadingAttachments(true);
+    try {
+      const rIds = responses.map(r => r.id);
+      const ans = await fetchAllAnswersForResponses(rIds);
+      const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 50);
+      const zip = new JSZip();
+      let fileCount = 0;
+      const usedNames = new Set<string>();
+      const uniqueName = (base: string, ext: string) => {
+        let name = `${base}.${ext}`;
+        let i = 2;
+        while (usedNames.has(name)) { name = `${base}_${i}.${ext}`; i++; }
+        usedNames.add(name);
+        return name;
+      };
+      for (const r of responses) {
+        const ra = ans.filter(a => a.response_id === r.id);
+        const respName = sanitize(r.respondent_name ?? r.respondent_email ?? 'Unknown');
+        for (const a of ra) {
+          const q = questions.find(qq => qq.id === a.question_id);
+          if (!q) continue;
+          const qLabel = sanitize(q.label);
+          if (q.type === 'image' && a.answer_json) {
+            const dataUrl = String(a.answer_json);
+            const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/s);
+            if (match) {
+              const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+              const fname = uniqueName(`${respName}_${qLabel}`, ext);
+              zip.file(fname, match[2], { base64: true });
+              fileCount++;
+            }
+          } else if (q.type === 'file' && a.answer_json) {
+            const meta = (() => { try { return JSON.parse(String(a.answer_json)); } catch { return null; } })();
+            if (meta?.data) {
+              const match = String(meta.data).match(/^data:[^;]+;base64,(.+)$/s);
+              if (match) {
+                const origExt = (meta.name ?? 'file').split('.').pop() ?? 'bin';
+                const fname = uniqueName(`${respName}_${qLabel}`, origExt);
+                zip.file(fname, match[1], { base64: true });
+                fileCount++;
+              }
+            }
+          }
+        }
+      }
+      if (fileCount === 0) {
+        toast({ title: 'No attachments found', description: 'No image or file uploads were found in these responses.' });
+        return;
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${survey?.title ?? 'survey'}_attachments.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: `Downloaded ${fileCount} attachment${fileCount !== 1 ? 's' : ''}`, description: 'Files named: RespondentName_QuestionLabel.ext' });
+    } finally {
+      setDownloadingAttachments(false);
+    }
   };
 
   const exportNotSubmitted = async () => {
@@ -2555,6 +2630,10 @@ export default function SurveyDetail() {
               </Button>
               <Button size="sm" variant="outline" onClick={exportExcel} className="gap-1.5 text-xs h-8 shrink-0" data-testid="btn-export-excel">
                 <FileSpreadsheet className="w-3.5 h-3.5" />Excel
+              </Button>
+              <Button size="sm" variant="outline" onClick={downloadAttachmentsZip} disabled={downloadingAttachments} className="gap-1.5 text-xs h-8 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50" data-testid="btn-download-attachments">
+                {downloadingAttachments ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                Attachments
               </Button>
               {pendingTargetUsers.length > 0 && (
                 <button
@@ -7768,23 +7847,49 @@ function SubmissionDialog({
               if (!ans) {
                 displayValue = <span className="text-slate-300 italic text-sm">No answer</span>;
               } else if (q.type === 'image' && ans.answer_json) {
+                const sanitizeLabel = (s: string) => s.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 50);
+                const dataUrl = String(ans.answer_json);
+                const extMatch = dataUrl.match(/^data:image\/(\w+);base64,/);
+                const ext = extMatch ? (extMatch[1] === 'jpeg' ? 'jpg' : extMatch[1]) : 'jpg';
+                const dlName = `${sanitizeLabel(response.respondent_name ?? response.respondent_email ?? 'respondent')}_${sanitizeLabel(q.label)}.${ext}`;
                 displayValue = (
-                  <img
-                    src={String(ans.answer_json)}
-                    className="max-h-40 rounded-lg border border-slate-200 cursor-pointer hover:opacity-90"
-                    alt="Response image"
-                    onClick={() => {
-                      const idx = imageAnswers.findIndex(a => a.id === ans.id);
-                      if (idx >= 0) setGalleryIndex(idx);
-                    }}
-                  />
+                  <div className="space-y-2">
+                    <img
+                      src={dataUrl}
+                      className="max-h-40 rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 w-full object-cover"
+                      alt={q.label}
+                      onClick={() => {
+                        const idx = imageAnswers.findIndex(a => a.id === ans.id);
+                        if (idx >= 0) setGalleryIndex(idx);
+                      }}
+                    />
+                    <a
+                      href={dataUrl}
+                      download={dlName}
+                      className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      <Download className="w-3.5 h-3.5" />{dlName}
+                    </a>
+                  </div>
                 );
               } else if (q.type === 'file' && ans.answer_json) {
                 const meta = (() => { try { return JSON.parse(String(ans.answer_json)); } catch { return null; } })();
+                const sanitizeLabel = (s: string) => s.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 50);
+                const origExt = (meta?.name ?? 'file').split('.').pop() ?? 'bin';
+                const dlName = `${sanitizeLabel(response.respondent_name ?? response.respondent_email ?? 'respondent')}_${sanitizeLabel(q.label)}.${origExt}`;
                 displayValue = (
                   <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 text-sm text-slate-700">
                     <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{meta ? `${meta.name} (${(meta.size / 1024).toFixed(1)} KB)` : String(ans.answer_json)}</span>
+                    <span className="flex-1">{meta ? `${meta.name} (${(meta.size / 1024).toFixed(1)} KB)` : '[File attached]'}</span>
+                    {meta?.data && (
+                      <a
+                        href={meta.data}
+                        download={dlName}
+                        className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />Download
+                      </a>
+                    )}
                   </div>
                 );
               } else if (q.type === 'gps' && ans.answer_text) {
