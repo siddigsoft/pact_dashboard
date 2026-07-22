@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,19 +118,39 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
   const [expForm, setExpForm] = useState<ExpEntry | null>(null);
   const [expSaving, setExpSaving] = useState(false);
 
+  // Refs used to scroll the inline forms into view when they open
+  const eduFormRef = useRef<HTMLDivElement>(null);
+  const expFormRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: e }, { data: x }] = await Promise.all([
+      const [{ data: e, error: eErr }, { data: x, error: xErr }] = await Promise.all([
         supabase.from('hr_employee_education').select('*').eq('profile_id', userId).order('graduation_year', { ascending: false }),
         supabase.from('hr_employee_experience').select('*').eq('profile_id', userId).order('start_date', { ascending: false }),
       ]);
+      if (eErr) console.warn('[EmployeeEducationTab] education fetch error:', eErr.message);
+      if (xErr) console.warn('[EmployeeEducationTab] experience fetch error:', xErr.message);
       setEdu(e || []);
       setExp(x || []);
       setLoading(false);
     };
     load();
   }, [userId]);
+
+  // Scroll the education form into view whenever it opens
+  useEffect(() => {
+    if (eduForm) {
+      setTimeout(() => eduFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
+  }, [!!eduForm]);
+
+  // Scroll the experience form into view whenever it opens
+  useEffect(() => {
+    if (expForm) {
+      setTimeout(() => expFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
+  }, [!!expForm]);
 
   const saveEdu = async () => {
     if (!eduForm) return;
@@ -229,7 +249,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
         {/* Add / Edit form */}
         {eduForm && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
+          <div ref={eduFormRef} className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold">{eduForm.id ? 'Edit Qualification' : 'Add New Qualification'}</h4>
               <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEduForm(null)}><X className="h-3.5 w-3.5" /></Button>
@@ -334,7 +354,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
         {/* Add / Edit form */}
         {expForm && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
+          <div ref={expFormRef} className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold">{expForm.id ? 'Edit Position' : 'Add New Position'}</h4>
               <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpForm(null)}><X className="h-3.5 w-3.5" /></Button>
