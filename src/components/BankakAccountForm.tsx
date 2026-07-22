@@ -32,6 +32,7 @@ interface CountryPreset {
   recommended: string[];
   mode: "simple" | "full";
   tip?: string;
+  accountNumberMaxLength?: number;
 }
 
 const COUNTRY_PRESETS: Record<string, CountryPreset> = {
@@ -41,7 +42,8 @@ const COUNTRY_PRESETS: Record<string, CountryPreset> = {
     required: ["accountName", "bankName", "accountNumber", "branch"],
     recommended: [],
     mode: "simple",
-    tip: "Sudanese accounts typically use 7-digit account numbers.",
+    accountNumberMaxLength: 7,
+    tip: "Sudanese accounts use exactly 7-digit account numbers.",
   },
   SS: {
     label: "South Sudan", flag: "🇸🇸", currency: "SSP",
@@ -348,19 +350,37 @@ export function BankakAccountForm({
                 )} />
 
                 {/* Account Number */}
-                <FormField control={form.control} name="accountNumber" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs font-semibold">{lbl("Account Number", "accountNumber")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={preset?.accountNumberHint || "Enter account number"}
-                        className="h-10 bg-background border-border/60 focus:border-primary font-mono tracking-wider"
-                        {...field} disabled={disabled}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField control={form.control} name="accountNumber" render={({ field }) => {
+                  const maxLen = preset?.accountNumberMaxLength;
+                  const curLen = (field.value || "").length;
+                  const overLimit = maxLen !== undefined && curLen > maxLen;
+                  return (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">
+                        <span className="flex items-center justify-between w-full">
+                          {lbl("Account Number", "accountNumber")}
+                          {maxLen !== undefined && (
+                            <span className={`text-[10px] font-mono ml-2 ${overLimit ? "text-destructive font-bold" : "text-muted-foreground"}`}>
+                              {curLen}/{maxLen}
+                            </span>
+                          )}
+                        </span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={preset?.accountNumberHint || "Enter account number"}
+                          className={`h-10 bg-background border-border/60 focus:border-primary font-mono tracking-wider ${overLimit ? "border-destructive focus:border-destructive" : ""}`}
+                          maxLength={maxLen}
+                          {...field} disabled={disabled}
+                        />
+                      </FormControl>
+                      {overLimit && (
+                        <p className="text-[11px] text-destructive">Sudan account numbers must be exactly {maxLen} digits.</p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }} />
 
                 {/* Branch */}
                 <FormField control={form.control} name="branch" render={({ field }) => (
