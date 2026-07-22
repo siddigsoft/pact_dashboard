@@ -1441,9 +1441,12 @@ export default function WorkspaceHub() {
 
   async function createFolder() {
     if (!newFolderName.trim()) return;
+    // Enforce ancestor floor — never save a level below the most restrictive ancestor
+    const enforcedLevel: SecurityLevel =
+      CLEARANCE_ORDER[newFolderSec] >= CLEARANCE_ORDER[ancestorSecFloor] ? newFolderSec : ancestorSecFloor;
     const { error } = await supabase.from('workspace_folders').insert({
       name: newFolderName.trim(), description: newFolderDesc.trim() || null,
-      security_level: newFolderSec, created_by: userId,
+      security_level: enforcedLevel, created_by: userId,
       parent_folder_id: selectedFolder?.id ?? null,
     });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
@@ -2216,6 +2219,15 @@ export default function WorkspaceHub() {
   }
   const breadcrumbs = getBreadcrumbPath(selectedFolderId);
 
+  // Most restrictive security level among ALL ancestor folders — new subfolders cannot go below this
+  const ancestorSecFloor: SecurityLevel = useMemo(() => {
+    if (!breadcrumbs.length) return 'public';
+    return breadcrumbs.reduce<SecurityLevel>((max, f) =>
+      CLEARANCE_ORDER[f.security_level] > CLEARANCE_ORDER[max] ? f.security_level : max,
+      'public'
+    );
+  }, [breadcrumbs]);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -2291,7 +2303,7 @@ export default function WorkspaceHub() {
           {/* Bottom: new folder + clearance */}
           <div className="mt-auto p-3 border-t border-gray-200 space-y-2">
             {isAdmin && (
-              <button onClick={() => { setNewFolderSec(selectedFolder?.security_level ?? 'internal'); setNewFolderOpen(true); }}
+              <button onClick={() => { setNewFolderSec(ancestorSecFloor); setNewFolderOpen(true); }}
                 className="w-full flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-200/60 dark:hover:bg-muted transition-colors">
                 <Plus className="h-3.5 w-3.5" /> New folder
               </button>
@@ -2836,12 +2848,23 @@ export default function WorkspaceHub() {
               </div>
               <div>
                 <label className="text-xs font-semibold mb-2 block">Security Level</label>
+                {ancestorSecFloor !== 'public' && (
+                  <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mb-2 flex items-center gap-1.5">
+                    <Lock className="h-3 w-3 flex-shrink-0" />
+                    Floor set by ancestor folder — cannot go below <span className="font-bold">{SEC_CFG[ancestorSecFloor].label}</span>
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-1.5">
                   {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
                     const Icon = cfg.icon;
+                    const belowFloor = CLEARANCE_ORDER[level as SecurityLevel] < CLEARANCE_ORDER[ancestorSecFloor];
                     return (
-                      <button key={level} onClick={() => setNewFolderSec(level)}
+                      <button key={level}
+                        disabled={belowFloor}
+                        onClick={() => !belowFloor && setNewFolderSec(level as SecurityLevel)}
+                        title={belowFloor ? `Cannot set below ancestor floor (${SEC_CFG[ancestorSecFloor].label})` : undefined}
                         className={cn('flex flex-col items-center gap-1 p-2 rounded-xl border text-[10px] font-semibold transition-all',
+                          belowFloor ? 'opacity-30 cursor-not-allowed border-border' :
                           newFolderSec === level ? `${cfg.bg} ${cfg.text} ${cfg.border} border-2` : 'border-border hover:bg-muted/30')}>
                         <Icon className="h-4 w-4" />{cfg.label}
                       </button>
