@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit, X, Loader2, Users, Heart, ShieldCheck, Baby } from "lucide-react";
+import { Plus, Trash2, Edit, X, Loader2, Users, Heart, ShieldCheck, Baby, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Dependent {
@@ -132,24 +132,35 @@ export default function EmployeeDependentsTab({ userId, isAdmin }: { userId: str
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             {form.id ? 'Edit Dependent' : 'New Dependent'}
           </p>
+
+          {/* Info banner */}
+          <div className="flex gap-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 px-3.5 py-3 text-xs text-blue-800 dark:text-blue-300">
+            <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
+            <span>
+              Add family members who depend on this employee financially.
+              Use the checkboxes below to mark who should receive benefits or be enrolled in health insurance.
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-              <label className="text-xs text-muted-foreground">Full Name *</label>
-              <Input value={form.full_name} onChange={e => f('full_name')(e.target.value)} placeholder="Full name" className="h-9" />
+              <label className="text-xs font-medium text-muted-foreground">Full Name *</label>
+              <Input value={form.full_name} onChange={e => f('full_name')(e.target.value)} placeholder="Full legal name" className="h-9" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Relationship *</label>
+              <label className="text-xs font-medium text-muted-foreground">Relationship *</label>
               <Select value={form.relationship} onValueChange={f('relationship')}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>{Object.entries(REL_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Date of Birth</label>
+              <label className="text-xs font-medium text-muted-foreground">Date of Birth</label>
               <Input type="date" value={form.date_of_birth || ''} onChange={e => f('date_of_birth')(e.target.value)} className="h-9" />
+              <p className="text-[10px] text-muted-foreground">Used to calculate age and insurance eligibility.</p>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Gender</label>
+              <label className="text-xs font-medium text-muted-foreground">Gender</label>
               <Select value={form.gender || ''} onValueChange={f('gender')}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select…" /></SelectTrigger>
                 <SelectContent>
@@ -160,25 +171,63 @@ export default function EmployeeDependentsTab({ userId, isAdmin }: { userId: str
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">National ID / Document No.</label>
+              <label className="text-xs font-medium text-muted-foreground">National ID / Document No.</label>
               <Input value={form.national_id_no || ''} onChange={e => f('national_id_no')(e.target.value)} placeholder="ID number" className="h-9 font-mono" />
+              <p className="text-[10px] text-muted-foreground">Passport, national card, or birth certificate number.</p>
             </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-              <label className="text-xs text-muted-foreground">Notes</label>
-              <Input value={form.notes || ''} onChange={e => f('notes')(e.target.value)} placeholder="Additional notes (optional)" className="h-9" />
+              <label className="text-xs font-medium text-muted-foreground">Notes</label>
+              <Input value={form.notes || ''} onChange={e => f('notes')(e.target.value)} placeholder="e.g. special circumstances, contact info…" className="h-9" />
             </div>
-            <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-4">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={!!form.is_beneficiary} onChange={e => f('is_beneficiary')(e.target.checked)} className="h-4 w-4 rounded accent-primary" data-testid="checkbox-is-beneficiary" />
-                <span className="text-sm font-medium">Designated Beneficiary</span>
-                <span className="text-xs text-muted-foreground">(EOSB/gratuity/insurance)</span>
+
+            {/* Checkboxes with explanations */}
+            <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+
+              {/* Designated Beneficiary */}
+              <label className="flex gap-3 cursor-pointer select-none rounded-lg border border-border/50 bg-background p-3.5 hover:border-green-400/60 hover:bg-green-50/40 dark:hover:bg-green-950/20 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={!!form.is_beneficiary}
+                  onChange={e => f('is_beneficiary')(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 rounded accent-primary shrink-0"
+                  data-testid="checkbox-is-beneficiary"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                    <span className="text-sm font-semibold">Designated Beneficiary</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    This person will receive the employee's financial entitlements (EOSB, gratuity, life insurance payout) in case of death or end of service.
+                    Tick this for the primary financial heir — usually a spouse or parent.
+                  </p>
+                </div>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={!!form.health_insurance} onChange={e => f('health_insurance')(e.target.checked)} className="h-4 w-4 rounded accent-primary" data-testid="checkbox-health-insurance" />
-                <span className="text-sm font-medium">Covered by Health Insurance</span>
+
+              {/* Covered by Health Insurance */}
+              <label className="flex gap-3 cursor-pointer select-none rounded-lg border border-border/50 bg-background p-3.5 hover:border-blue-400/60 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={!!form.health_insurance}
+                  onChange={e => f('health_insurance')(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 rounded accent-primary shrink-0"
+                  data-testid="checkbox-health-insurance"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Heart className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-sm font-semibold">Covered by Health Insurance</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    This dependent is enrolled in the organisation's medical insurance plan.
+                    Their healthcare costs will be covered under the employee's policy.
+                    Tick this for children and spouses on the company's insurance roster.
+                  </p>
+                </div>
               </label>
             </div>
           </div>
+
           <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleSave} disabled={saving || !form.full_name} className="gap-1.5" data-testid="button-save-dependent">
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save
