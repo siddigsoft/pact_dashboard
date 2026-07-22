@@ -362,7 +362,7 @@
     if (!isHidden('/my-team')) {
       workspaceItems.push({ id: 'my-team', title: "My Team", url: "/my-team", icon: Users, priority: 3, isPinned: isPinned('/my-team') });
     }
-    if (!isDataCollector && !isHidden('/calendar')) {
+    if (!(isDataCollector && !isSuperAdmin && !isAdmin && !isICT && !isFOM && !isCountryDirector) && !isHidden('/calendar')) {
       workspaceItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
     }
     if (!isHidden('/notifications')) {
@@ -387,7 +387,9 @@
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager)) {
-      const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? "My Sites Management" : "MMP Management";
+      // Management/admin roles always get "MMP Management"; only pure field-staff see "My Sites Management"
+      const isManagement = isSuperAdmin || isAdmin || isICT || isFOM || isCountryDirector || isProjectManager || isDataTeam;
+      const mmpTitle = (!isManagement && (isDataCollector || isCoordinator || isSupervisor)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector;
