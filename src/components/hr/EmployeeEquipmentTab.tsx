@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Laptop, Phone, CreditCard, Car, Tablet, Camera, Radio, Package, Loader2, AlertTriangle, Plus, RotateCcw } from "lucide-react";
+import { Laptop, Phone, CreditCard, Car, Tablet, Camera, Radio, Package, Loader2, AlertTriangle, Plus, RotateCcw, ExternalLink } from "lucide-react";
 import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 
 const ASSET_TYPE_ICONS: Record<string, React.ElementType> = {
@@ -262,9 +262,20 @@ export default function EmployeeEquipmentTab({ userId, isAdmin }: { userId: stri
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Asset (available only) *</label>
               {availableAssets.length === 0 ? (
-                <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-3 border border-amber-200">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  No available assets. Add assets in the Equipment registry first.
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800/50 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>No available assets in the Equipment Registry.</span>
+                  </div>
+                  <a
+                    href="/hr?tab=equipment"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700 bg-white dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/30 px-3 py-1.5 rounded-md transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open Equipment Registry to add assets
+                  </a>
                 </div>
               ) : (
                 <Select value={assignForm.assetId} onValueChange={v => setAssignForm(p => ({ ...p, assetId: v }))}>
