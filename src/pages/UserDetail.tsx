@@ -3082,9 +3082,13 @@ const UserDetail: FC = () => {
             </div>)}
 
             {/* ── EDUCATION SECTION ────────────────────────────────────────── */}
-            {activeSection === 'education' && (<div className="p-5 sm:p-6">
+            {/* NOTE: This section uses CSS display instead of conditional rendering so
+                EmployeeEducationTab never unmounts and never loses its form state.
+                React's && operator would unmount the component on every realtime ping
+                (setUser creates a new object → re-render → activeSection check flickers). */}
+            <div className="p-5 sm:p-6" style={{ display: activeSection === 'education' ? undefined : 'none' }}>
               <EmployeeEducationTab userId={user.id} isAdmin={!!canEditProfile} />
-            </div>)}
+            </div>
 
             {/* ── SKILLS SECTION ───────────────────────────────────────────── */}
             {activeSection === 'skills' && (<div className="p-5 sm:p-6">

@@ -164,6 +164,9 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
+    // Reset open forms when switching to a different employee profile
+    setEduForm(null);
+    setExpForm(null);
     const load = async () => {
       setLoading(true);
       setDbError(null);
