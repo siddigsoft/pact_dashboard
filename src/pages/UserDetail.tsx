@@ -35,6 +35,7 @@ import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCom
 import EmployeePersonalTab from "@/components/hr/EmployeePersonalTab";
 import EmployeeEducationTab from "@/components/hr/EmployeeEducationTab";
 import EmployeeDependentsTab from "@/components/hr/EmployeeDependentsTab";
+import EmployeeNextOfKinSection from "@/components/hr/EmployeeNextOfKinSection";
 import EmployeeITAccountsTab from "@/components/hr/EmployeeITAccountsTab";
 import EmployeeEquipmentTab from "@/components/hr/EmployeeEquipmentTab";
 import EmployeePoliciesTab from "@/components/hr/EmployeePoliciesTab";
@@ -3087,9 +3088,14 @@ const UserDetail: FC = () => {
             </div>)}
 
             {/* ── DEPENDENTS SECTION ───────────────────────────────────────── */}
-            {activeSection === 'dependents' && (<div className="p-5 sm:p-6">
-              <EmployeeDependentsTab userId={user.id} isAdmin={!!canEditProfile} />
-            </div>)}
+            {activeSection === 'dependents' && (
+              <div className="p-5 sm:p-6 space-y-8">
+                <EmployeeNextOfKinSection userId={user.id} isAdmin={!!canEditProfile} />
+                <div className="border-t border-border/40 pt-6">
+                  <EmployeeDependentsTab userId={user.id} isAdmin={!!canEditProfile} />
+                </div>
+              </div>
+            )}
 
             {/* ── ACCESS & SECURITY SECTION ────────────────────────────────── */}
             {activeSection === 'access' && (
