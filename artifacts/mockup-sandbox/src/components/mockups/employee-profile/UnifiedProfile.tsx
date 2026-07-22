@@ -2,29 +2,32 @@ import { useState, useEffect, useContext, createContext, useRef } from "react";
 
 // ── Contexts ──────────────────────────────────────────────────────────────────
 type ToastFn = (msg: string, type?: "success"|"error"|"info") => void;
-const ToastCtx = createContext<ToastFn>(() => {});
+const ToastCtx    = createContext<ToastFn>(() => {});
 const DocPreviewCtx = createContext<(name: string) => void>(() => {});
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const NAVY = "#1D3461";
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 const NAV = [
-  { id: "overview",     icon: "🏠", label: "Overview",                group: "Profile",    count: 0  },
-  { id: "employment",   icon: "💼", label: "Employment & Contract",   group: "Profile",    count: 0  },
-  { id: "personal",     icon: "👤", label: "Personal Details",        group: "Profile",    count: 0  },
-  { id: "location",     icon: "📍", label: "Location & Work",         group: "Profile",    count: 0  },
-  { id: "education",    icon: "🎓", label: "Education & Experience",  group: "Background", count: 5  },
-  { id: "documents",    icon: "📁", label: "Document Vault",          group: "Background", count: 6  },
-  { id: "skills",       icon: "⚡", label: "Skills & Languages",      group: "Background", count: 10 },
-  { id: "training",     icon: "🏅", label: "Training & Certs",        group: "Background", count: 4  },
-  { id: "dependents",   icon: "👨‍👩‍👧", label: "Dependents",              group: "Background", count: 3  },
-  { id: "equipment",    icon: "💻", label: "Equipment",               group: "Background", count: 3  },
-  { id: "policies",     icon: "📜", label: "Policies",                group: "Background", count: 7  },
-  { id: "compensation", icon: "💰", label: "Compensation & Bank",     group: "Finance",    count: 0  },
-  { id: "performance",  icon: "📊", label: "Performance",             group: "Finance",    count: 4  },
-  { id: "benefits",     icon: "🛡️", label: "Benefits & Leave",        group: "Finance",    count: 0  },
-  { id: "access",       icon: "🔒", label: "Access & Security",       group: "System",     count: 0  },
-  { id: "itaccounts",   icon: "🖥️", label: "IT Accounts",             group: "System",     count: 5  },
-  { id: "hrnotes",      icon: "📝", label: "HR Notes",                group: "System",     count: 3  },
-  { id: "activitylog",  icon: "🕐", label: "Activity Log",            group: "System",     count: 10 },
+  { id: "overview",     icon: "🏠", label: "Overview",               group: "Profile",    count: 0  },
+  { id: "employment",   icon: "💼", label: "Employment & Contract",  group: "Profile",    count: 0  },
+  { id: "personal",     icon: "👤", label: "Personal Details",       group: "Profile",    count: 0  },
+  { id: "location",     icon: "📍", label: "Location & Work",        group: "Profile",    count: 0  },
+  { id: "education",    icon: "🎓", label: "Education & Experience", group: "Background", count: 5  },
+  { id: "documents",    icon: "📁", label: "Document Vault",         group: "Background", count: 6  },
+  { id: "skills",       icon: "⚡", label: "Skills & Languages",     group: "Background", count: 10 },
+  { id: "training",     icon: "🏅", label: "Training & Certs",       group: "Background", count: 4  },
+  { id: "dependents",   icon: "👨‍👩‍👧", label: "Dependents",             group: "Background", count: 3  },
+  { id: "equipment",    icon: "💻", label: "Equipment",              group: "Background", count: 3  },
+  { id: "policies",     icon: "📜", label: "Policies",               group: "Background", count: 7  },
+  { id: "compensation", icon: "💰", label: "Compensation & Bank",    group: "Finance",    count: 0  },
+  { id: "performance",  icon: "📊", label: "Performance",            group: "Finance",    count: 4  },
+  { id: "benefits",     icon: "🛡️", label: "Benefits & Leave",       group: "Finance",    count: 0  },
+  { id: "access",       icon: "🔒", label: "Access & Security",      group: "System",     count: 0  },
+  { id: "itaccounts",   icon: "🖥️", label: "IT Accounts",            group: "System",     count: 5  },
+  { id: "hrnotes",      icon: "📝", label: "HR Notes",               group: "System",     count: 3  },
+  { id: "activitylog",  icon: "🕐", label: "Activity Log",           group: "System",     count: 10 },
 ];
 const GROUPS = ["Profile", "Background", "Finance", "System"];
 const COMPLETENESS: Record<string, number> = {
@@ -46,10 +49,16 @@ const TIMESTAMPS: Record<string, string> = {
   hrnotes: "Jun 18 · Ahmed Hassan", activitylog: "Today 09:14 · System",
 };
 const GLOBAL_ALERTS = [
-  { id: "a1", level: "red",   icon: "🚨", text: "Work Permit expired Dec 2024 — immediate renewal required", section: "documents" },
+  { id: "a1", level: "red",   icon: "🚨", text: "Work Permit expired Dec 2024 — immediate renewal required", section: "documents"  },
   { id: "a2", level: "amber", icon: "⚠️", text: "Contract expires in 164 days — start renewal process",     section: "employment" },
-  { id: "a3", level: "amber", icon: "⚠️", text: "First Aid cert expired Jun 2024",                          section: "training" },
-  { id: "a4", level: "blue",  icon: "ℹ️", text: "2 mandatory policies pending signature",                   section: "policies" },
+  { id: "a3", level: "amber", icon: "⚠️", text: "First Aid cert expired Jun 2024",                          section: "training"   },
+  { id: "a4", level: "blue",  icon: "ℹ️", text: "2 mandatory policies pending signature",                   section: "policies"   },
+];
+const BADGE_COLORS = [
+  { label: "Navy",    value: "#1D3461" },
+  { label: "Forest",  value: "#14532d" },
+  { label: "Charcoal",value: "#374151" },
+  { label: "Crimson", value: "#7f1d1d" },
 ];
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
@@ -113,7 +122,7 @@ function Field({ label, value, wide, required, editable, sensitive }: {
           </span>
           {sensitive && val && (
             <button type="button" onClick={handleCopy}
-              style={{ fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "var(--faint)", padding: "2px 4px", borderRadius: 4, opacity: 0.7 }}
+              style={{ fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "var(--faint)", padding: "2px 4px", borderRadius: 4 }}
               title="Copy to clipboard">
               {copied ? "✓" : "⧉"}
             </button>
@@ -128,7 +137,7 @@ function Card({ title, badge, ts, locked, onLock, children, action, id: anchorId
   { title: string; badge?: React.ReactNode; ts?: string; locked?: boolean; onLock?: () => void; children: React.ReactNode; action?: React.ReactNode; id?: string }) {
   return (
     <div id={anchorId} style={{ background: "var(--surface)", border: `1px solid ${locked ? "var(--c-amber-bg)" : "var(--border)"}`, borderRadius: 12, overflow: "hidden", marginBottom: "var(--gap)" }}>
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--hl)", display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontWeight: 700, fontSize: 12, color: "var(--text)", flex: 1 }}>{title}</span>
         {badge}{locked && <Tag label="🔒 Locked" color="amber" />}
         {ts && <span style={{ fontSize: 10, color: "var(--faint)" }}>Last edit: {ts}</span>}
@@ -160,20 +169,36 @@ function Btn({ label, color, onClick }: { label: string; color?: "navy"|"gray"|"
   );
 }
 
+// BUG FIX #3 — Toast uses slideUp animation; keyframe is defined in <style> at root render
 function Toast({ msg, type }: { msg: string; type: string }) {
   const bg = type === "success" ? "var(--c-green-bg)" : type === "error" ? "var(--c-red-bg)" : "var(--c-blue-bg)";
   const fg = type === "success" ? "var(--c-green-fg)" : type === "error" ? "var(--c-red-fg)" : "var(--c-blue-fg)";
   const icon = type === "success" ? "✅" : type === "error" ? "❌" : "ℹ️";
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, padding: "10px 16px", borderRadius: 10, background: bg, border: `1px solid ${fg}33`, color: fg, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", animation: "slideUp 0.25s ease" }}>
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, padding: "10px 16px", borderRadius: 10, background: bg, border: `1px solid ${fg}`, borderLeftWidth: 3, color: fg, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", animation: "slideUp 0.25s ease" }}>
       <span>{icon}</span>{msg}
+    </div>
+  );
+}
+
+// Toggle switch
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
+      <button type="button" onClick={() => onChange(!on)}
+        style={{ width: 36, height: 20, borderRadius: 999, background: on ? "var(--navy)" : "var(--border)", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+        <div style={{ position: "absolute", top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "white", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+      </button>
+      <span style={{ fontSize: 12, color: "var(--text)" }}>{label}</span>
     </div>
   );
 }
 
 // ── Alert Bar ─────────────────────────────────────────────────────────────────
 
-function AlertBar({ alerts, onNavigate, onDismiss }: { alerts: typeof GLOBAL_ALERTS; onNavigate: (s: string) => void; onDismiss: (id: string) => void }) {
+function AlertBar({ alerts, onNavigate, onDismiss }: {
+  alerts: typeof GLOBAL_ALERTS; onNavigate: (s: string) => void; onDismiss: (id: string) => void;
+}) {
   if (!alerts.length) return null;
   return (
     <div style={{ padding: "8px 20px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 5, background: "var(--surface)" }}>
@@ -185,7 +210,7 @@ function AlertBar({ alerts, onNavigate, onDismiss }: { alerts: typeof GLOBAL_ALE
             <span style={{ fontSize: 14 }}>{a.icon}</span>
             <span style={{ fontSize: 12, color: fg, flex: 1 }}>{a.text}</span>
             <button type="button" onClick={() => onNavigate(a.section)}
-              style={{ fontSize: 11, fontWeight: 600, color: fg, background: "var(--surface)", border: "none", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: 0.8 }}>View →</button>
+              style={{ fontSize: 11, fontWeight: 600, color: fg, background: "var(--surface)", border: "none", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: 0.85 }}>View →</button>
             <button type="button" onClick={() => onDismiss(a.id)}
               style={{ fontSize: 14, color: fg, background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
@@ -195,9 +220,11 @@ function AlertBar({ alerts, onNavigate, onDismiss }: { alerts: typeof GLOBAL_ALE
   );
 }
 
-// ── Search Overlay (with keyboard nav) ────────────────────────────────────────
+// ── Search Overlay (keyboard navigation) ──────────────────────────────────────
 
-function SearchOverlay({ open, onClose, onNavigate }: { open: boolean; onClose: () => void; onNavigate: (id: string) => void }) {
+function SearchOverlay({ open, onClose, onNavigate }: {
+  open: boolean; onClose: () => void; onNavigate: (id: string) => void;
+}) {
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
   useEffect(() => { if (!open) { setQ(""); setHi(0); } }, [open]);
@@ -265,7 +292,7 @@ function CVMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 // ── QR Code + Barcode SVGs ────────────────────────────────────────────────────
 
-function QRCodeSVG({ size = 64, fg = "black" }: { size?: number; fg?: string }) {
+function QRCodeSVG({ size = 64 }: { size?: number }) {
   const p = [
     [1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
@@ -289,7 +316,7 @@ function QRCodeSVG({ size = 64, fg = "black" }: { size?: number; fg?: string }) 
   return (
     <svg width={size} height={size} style={{ display: "block" }}>
       {p.map((row, ri) => row.map((cell, ci) =>
-        cell ? <rect key={`${ri}-${ci}`} x={ci * cs} y={ri * cs} width={cs + 0.5} height={cs + 0.5} fill={fg} /> : null
+        cell ? <rect key={`${ri}-${ci}`} x={ci * cs} y={ri * cs} width={cs + 0.5} height={cs + 0.5} fill="black" /> : null
       ))}
     </svg>
   );
@@ -306,26 +333,13 @@ function BarcodeStrip({ value, width = 120 }: { value: string; width?: number })
   );
 }
 
-// ── Employee Badge Modal ──────────────────────────────────────────────────────
+// ── Badge faces (module-level so they are stable references) ─────────────────
 
-function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
-  const [flipped, setFlipped] = useState(false);
-  const [printed, setPrinted] = useState(false);
-  const showToast = useContext(ToastCtx);
-
-  const handlePrint = () => {
-    setPrinted(true);
-    showToast("Badge sent to printer", "success");
-    setTimeout(() => setPrinted(false), 2000);
-  };
-
+function BadgeFrontFace({ color }: { color: string }) {
   const cardW = 340, cardH = 215;
-  const NAVY = "#1D3461";
-
-  const FrontFace = () => (
+  return (
     <div style={{ width: cardW, height: cardH, borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", position: "relative", background: "white", fontFamily: "sans-serif" }}>
-      {/* Top band */}
-      <div style={{ background: NAVY, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
+      <div style={{ background: color, height: 54, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 30, height: 30, borderRadius: "50%", background: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🌍</div>
           <div>
@@ -338,20 +352,14 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
           <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 7 }}>STAFF ID CARD</div>
         </div>
       </div>
-
-      {/* Holographic shimmer strip */}
       <div style={{ height: 4, background: "linear-gradient(90deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff,#ff6b6b)", opacity: 0.7 }} />
-
-      {/* Body */}
       <div style={{ display: "flex", gap: 14, padding: "12px 14px" }}>
-        {/* Photo */}
         <div style={{ flexShrink: 0 }}>
-          <div style={{ width: 76, height: 88, borderRadius: 10, background: `linear-gradient(135deg,${NAVY},#0F2041)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "white", fontWeight: 800, border: "3px solid #e5e7eb" }}>YM</div>
+          <div style={{ width: 76, height: 88, borderRadius: 10, background: `linear-gradient(135deg,${color},${color}cc)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "white", fontWeight: 800, border: "3px solid #e5e7eb" }}>YM</div>
         </div>
-        {/* Details */}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", lineHeight: 1.2 }}>YOUSIF MOHAMMED</div>
-          <div style={{ fontSize: 10, color: NAVY, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>Field Operations Manager</div>
+          <div style={{ fontSize: 10, color: color, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>Field Operations Manager</div>
           <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>Field Operations Department</div>
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 2 }}>
             <div style={{ fontSize: 9, color: "#374151" }}>🏢 <strong>Hub:</strong> Khartoum HQ</div>
@@ -359,7 +367,6 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
             <div style={{ fontSize: 9, color: "#374151" }}>📞 <strong>ICE:</strong> +249 912 345 678</div>
           </div>
         </div>
-        {/* QR */}
         <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
           <div style={{ padding: 3, border: "1px solid #e5e7eb", borderRadius: 6, background: "white" }}>
             <QRCodeSVG size={56} />
@@ -367,9 +374,7 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: 7, color: "#9ca3af" }}>Scan to verify</div>
         </div>
       </div>
-
-      {/* Bottom band */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: NAVY, height: 36, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px" }}>
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: color, height: 36, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px" }}>
         <div>
           <div style={{ color: "white", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em" }}>PACT-FOM-0042</div>
           <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 7 }}>Valid until Dec 31, 2025</div>
@@ -381,10 +386,13 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
 
-  const BackFace = () => (
+function BadgeBackFace({ color }: { color: string }) {
+  const cardW = 340, cardH = 215;
+  return (
     <div style={{ width: cardW, height: cardH, borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", background: "white", fontFamily: "sans-serif" }}>
-      <div style={{ background: NAVY, height: 54, display: "flex", alignItems: "center", padding: "0 16px" }}>
+      <div style={{ background: color, height: 54, display: "flex", alignItems: "center", padding: "0 16px" }}>
         <div style={{ color: "white", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em" }}>EMERGENCY INFORMATION</div>
       </div>
       <div style={{ height: 4, background: "linear-gradient(90deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff,#ff6b6b)", opacity: 0.7 }} />
@@ -410,21 +418,61 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
       <div style={{ display: "flex", justifyContent: "center", paddingBottom: 6 }}>
         <BarcodeStrip value="PACT-FOM-0042" width={200} />
       </div>
-      <div style={{ background: NAVY, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: color, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 8 }}>Security Level B · Issued Jan 14, 2023 · pact-sudan.org</div>
       </div>
     </div>
   );
+}
+
+// ── Employee Badge Modal (3D flip + color picker) ─────────────────────────────
+
+function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
+  const [flipped, setFlipped] = useState(false);
+  const [badgeColor, setBadgeColor] = useState(NAVY);
+  const [printed, setPrinted] = useState(false);
+  const showToast = useContext(ToastCtx);
+
+  const handlePrint = () => {
+    setPrinted(true);
+    showToast("Badge sent to printer", "success");
+    setTimeout(() => setPrinted(false), 2000);
+  };
+
+  const cardW = 340, cardH = 215;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 998, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20 }}
+    <div style={{ position: "fixed", inset: 0, zIndex: 998, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20 }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
         <div style={{ color: "white", fontSize: 14, fontWeight: 700 }}>🆔 Employee ID Badge Preview</div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>CR80 standard (85.6 × 54 mm) — shown at 4× screen size</div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>CR80 standard (85.6 × 54 mm)</div>
 
-        {/* Badge face */}
-        {flipped ? <BackFace /> : <FrontFace />}
+        {/* 3D flip container — BUG FIX: uses CSS 3D transform instead of instant swap */}
+        <div style={{ perspective: "900px" }}>
+          <div style={{
+            position: "relative", width: cardW, height: cardH,
+            transformStyle: "preserve-3d",
+            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            transition: "transform 0.6s cubic-bezier(0.4,0.2,0.2,1)",
+          }}>
+            <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden" }}>
+              <BadgeFrontFace color={badgeColor} />
+            </div>
+            <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}>
+              <BadgeBackFace color={badgeColor} />
+            </div>
+          </div>
+        </div>
+
+        {/* Color theme picker */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Theme:</span>
+          {BADGE_COLORS.map(c => (
+            <button key={c.value} type="button" onClick={() => setBadgeColor(c.value)} title={c.label}
+              style={{ width: 22, height: 22, borderRadius: "50%", background: c.value, border: `2px solid ${badgeColor === c.value ? "white" : "transparent"}`, cursor: "pointer", outline: "none" }} />
+          ))}
+        </div>
 
         {/* Controls */}
         <div style={{ display: "flex", gap: 10 }}>
@@ -436,8 +484,8 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
             style={{ padding: "9px 18px", borderRadius: 9, background: printed ? "#22c55e" : "white", border: "none", color: printed ? "white" : "#111", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             {printed ? "✅ Sent!" : "🖨️ Print Badge"}
           </button>
-          <button type="button" onClick={() => { showToast("Badge saved as PDF", "success"); }}
-            style={{ padding: "9px 18px", borderRadius: 9, background: NAVY, border: "none", color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button type="button" onClick={() => showToast("Badge saved as PDF", "success")}
+            style={{ padding: "9px 18px", borderRadius: 9, background: badgeColor, border: "none", color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             💾 Save as PDF
           </button>
           <button type="button" onClick={onClose}
@@ -445,8 +493,8 @@ function EmployeeBadgeModal({ onClose }: { onClose: () => void }) {
             ✕ Close
           </button>
         </div>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textAlign: "center" }}>
-          Badge includes: holographic strip · QR verification · ICAO-compliant layout · security level marking
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>
+          Holographic strip · QR verification · Security level B · ICAO-compliant
         </div>
       </div>
     </div>
@@ -467,32 +515,27 @@ function DocPreviewDrawer({ docName, onClose }: { docName: string; onClose: () =
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{docName}</div>
             <div style={{ fontSize: 10, color: "var(--faint)" }}>PDF Document · 2.4 MB</div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Btn label="⬇ Download" color="gray" />
-            <Btn label="🖨️ Print" color="gray" />
-            <button type="button" onClick={onClose} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "var(--faint)" }}>×</button>
-          </div>
+          <Btn label="⬇ Download" color="gray" />
+          <Btn label="🖨️ Print" color="gray" />
+          <button type="button" onClick={onClose} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "var(--faint)" }}>×</button>
         </div>
-        {/* Mock document viewer */}
-        <div style={{ flex: 1, overflowY: "auto", background: "#525659", padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Page 1 */}
+        <div style={{ flex: 1, overflowY: "auto", background: "#525659", padding: 20 }}>
           <div style={{ background: "white", borderRadius: 4, padding: "32px 36px", boxShadow: "0 2px 12px rgba(0,0,0,0.3)", minHeight: 480 }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#1D3461" }}>PACT WORLD INC.</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>PACT WORLD INC.</div>
               <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>Sudan Country Office · Khartoum</div>
               <div style={{ marginTop: 12, fontWeight: 700, fontSize: 13, color: "#111" }}>
-                {docName.includes("Passport") ? "PASSPORT COPY" : docName.includes("contract") || docName.includes("Agreement") ? "EMPLOYMENT AGREEMENT" : "OFFICIAL DOCUMENT"}
+                {docName.includes("Passport") ? "PASSPORT COPY" : docName.includes("Agreement") || docName.includes("contract") ? "EMPLOYMENT AGREEMENT" : "OFFICIAL DOCUMENT"}
               </div>
-              <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>Ref: HR/2024/DOC-0042</div>
             </div>
-            <div style={{ borderTop: "2px solid #1D3461", marginBottom: 16 }} />
+            <div style={{ borderTop: `2px solid ${NAVY}`, marginBottom: 16 }} />
             {[
               { label: "Employee Full Name", value: "Yousif Ahmed Mohammed" },
-              { label: "Employee ID",        value: "PACT-FOM-0042" },
+              { label: "Employee ID",        value: "PACT-FOM-0042"        },
               { label: "Position",           value: "Field Operations Manager" },
-              { label: "Department",         value: "Field Operations" },
-              { label: "Issue Date",         value: "January 14, 2023" },
-              { label: "Document No.",       value: "SD1928374" },
+              { label: "Department",         value: "Field Operations"     },
+              { label: "Issue Date",         value: "January 14, 2023"     },
+              { label: "Document No.",       value: "SD1928374"            },
             ].map(row => (
               <div key={row.label} style={{ display: "flex", fontSize: 10, padding: "5px 0", borderBottom: "1px solid #f3f4f6" }}>
                 <span style={{ width: 140, color: "#6b7280", fontWeight: 600 }}>{row.label}</span>
@@ -510,7 +553,7 @@ function DocPreviewDrawer({ docName, onClose }: { docName: string; onClose: () =
                 <div style={{ width: 100, borderTop: "1px solid #374151", paddingTop: 4, fontSize: 9, color: "#6b7280" }}>Authorised By HR</div>
               </div>
             </div>
-            <div style={{ marginTop: 24, padding: "6px 10px", background: "#f0fdf4", borderRadius: 6, fontSize: 9, color: "#166534", display: "flex", gap: 6 }}>
+            <div style={{ marginTop: 24, padding: "6px 10px", background: "#f0fdf4", borderRadius: 6, fontSize: 9, color: "#166534" }}>
               ✅ Verified by HR Admin · Jun 20, 2024 · Digital signature valid
             </div>
           </div>
@@ -555,25 +598,22 @@ function LeaveRequestModal({ onClose }: { onClose: () => void }) {
               </select>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>From *</label>
-                <input type="date" value={form.from} onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>To *</label>
-                <input type="date" value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
+              {(["from","to"] as const).map(k => (
+                <div key={k}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>{k === "from" ? "From" : "To"} *</label>
+                  <input type="date" value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+              ))}
             </div>
             {days > 0 && (
               <div style={{ padding: "8px 12px", background: "var(--c-blue-bg)", borderRadius: 8, fontSize: 12, color: "var(--c-blue-fg)", fontWeight: 600 }}>
-                📅 Duration: <strong>{days} working day{days !== 1 ? "s" : ""}</strong> · Balance after: <strong>{14 - days} days</strong> remaining
+                📅 Duration: <strong>{days} day{days !== 1 ? "s" : ""}</strong> · Balance after: <strong>{14 - days} days</strong> remaining
               </div>
             )}
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Reason / Notes</label>
-              <textarea value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} rows={3} placeholder="Optional — e.g. family event, medical appointment…"
+              <textarea value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} rows={3} placeholder="Optional…"
                 style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
             </div>
           </div>
@@ -587,16 +627,130 @@ function LeaveRequestModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Send Email Modal (ENHANCEMENT: new) ──────────────────────────────────────
+
+function SendEmailModal({ onClose }: { onClose: () => void }) {
+  const showToast = useContext(ToastCtx);
+  const [form, setForm] = useState({ to: "yousif.mohammed@pact-sd.org", cc: "", subject: "Re: Your profile update", body: "" });
+  const send = () => { showToast("Email sent to Yousif Mohammed", "success"); onClose(); };
+
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 995, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={onClose}>
+      <div style={{ background: "var(--surface)", borderRadius: 14, width: 500, border: "1px solid var(--border)", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)", background: "var(--hl)", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>📧</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", flex: 1 }}>Compose Email</span>
+          <button type="button" onClick={onClose} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "var(--faint)" }}>×</button>
+        </div>
+        <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {[
+            { k: "to" as const,      label: "To" },
+            { k: "cc" as const,      label: "CC" },
+            { k: "subject" as const, label: "Subject" },
+          ].map(f => (
+            <div key={f.k}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>{f.label}</label>
+              <input value={form[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} style={inputStyle} />
+            </div>
+          ))}
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Message</label>
+            <textarea value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} rows={5}
+              placeholder="Type your message…"
+              style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+        </div>
+        <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--faint)", flex: 1 }}>From: hr.system@pact-sudan.org</span>
+          <Btn label="Cancel" color="gray" onClick={onClose} />
+          <Btn label="📤 Send" color="navy" onClick={send} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Offboard Confirmation Modal (ENHANCEMENT: new) ────────────────────────────
+
+function OffboardModal({ onClose }: { onClose: () => void }) {
+  const showToast = useContext(ToastCtx);
+  const [confirm, setConfirm] = useState("");
+  const [step, setStep] = useState(1);
+  const canProceed = confirm.toLowerCase() === "yousif mohammed";
+
+  const proceed = () => {
+    if (!canProceed) return;
+    setStep(2);
+    setTimeout(() => { showToast("Offboarding process initiated", "info"); onClose(); }, 2000);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 996, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={onClose}>
+      <div style={{ background: "var(--surface)", borderRadius: 14, width: 460, border: "1px solid var(--c-red-fg)", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", overflow: "hidden" }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "16px 20px", background: "var(--c-red-bg)", borderBottom: `1px solid var(--c-red-fg)` }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--c-red-fg)" }}>⚠️ Initiate Employee Offboarding</div>
+          <div style={{ fontSize: 12, color: "var(--c-red-fg)", marginTop: 4, opacity: 0.8 }}>This action will begin the formal separation process for this employee.</div>
+        </div>
+        {step === 1 ? (
+          <div style={{ padding: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+              {[
+                "All system access will be scheduled for revocation",
+                "A final payrun and EOSB calculation will be triggered",
+                "HR team and direct manager will be notified",
+                "Employee dossier will be archived after 90 days",
+              ].map(item => (
+                <div key={item} style={{ display: "flex", gap: 8, fontSize: 12, color: "var(--text)" }}>
+                  <span style={{ color: "var(--c-red-fg)", flexShrink: 0 }}>•</span> {item}
+                </div>
+              ))}
+            </div>
+            <div style={{ background: "var(--hl)", borderRadius: 10, padding: "14px" }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", display: "block", marginBottom: 8 }}>
+                Type <em>"Yousif Mohammed"</em> to confirm:
+              </label>
+              <input value={confirm} onChange={e => setConfirm(e.target.value)}
+                placeholder="Employee full name…"
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${canProceed ? "var(--c-green-fg)" : "var(--border)"}`, background: "var(--surface)", color: "var(--text)", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: "40px 20px", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Initiating offboarding…</div>
+            <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>Notifying HR team and scheduling access removal</div>
+          </div>
+        )}
+        {step === 1 && (
+          <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Btn label="Cancel" color="gray" onClick={onClose} />
+            <button type="button" onClick={proceed}
+              style={{ fontSize: 11, fontWeight: 700, color: "white", background: canProceed ? "var(--c-red-fg)" : "var(--border)", border: "none", borderRadius: 7, padding: "6px 16px", cursor: canProceed ? "pointer" : "not-allowed", opacity: canProceed ? 1 : 0.5, transition: "all 0.2s" }}>
+              🚪 Proceed to Offboard
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Org Chart ─────────────────────────────────────────────────────────────────
 
 function OrgChart() {
   const nodes = [
-    { id: "dir", label: "Hassan Ali",   role: "Director",     x: 200, y: 10,  color: "#1D3461", me: false },
-    { id: "mgr", label: "Ahmed Hassan", role: "Senior PM",    x: 200, y: 80,  color: "#4f46e5", me: false },
-    { id: "me",  label: "Yousif M.",    role: "FOM — YOU",    x: 200, y: 150, color: "#0ea5e9", me: true  },
-    { id: "r1",  label: "Sara Ali",     role: "Coordinator",  x: 80,  y: 220, color: "#6b7280", me: false },
-    { id: "r2",  label: "Omar Nour",    role: "Coordinator",  x: 200, y: 220, color: "#6b7280", me: false },
-    { id: "r3",  label: "Hiba M.",      role: "D. Collector", x: 320, y: 220, color: "#6b7280", me: false },
+    { id: "dir", label: "Hassan Ali",   role: "Director",    x: 200, y: 10,  color: NAVY,    me: false },
+    { id: "mgr", label: "Ahmed Hassan", role: "Senior PM",   x: 200, y: 80,  color: "#4f46e5", me: false },
+    { id: "me",  label: "Yousif M.",    role: "FOM — YOU",   x: 200, y: 150, color: "#0ea5e9", me: true  },
+    { id: "r1",  label: "Sara Ali",     role: "Coordinator", x: 80,  y: 220, color: "#6b7280", me: false },
+    { id: "r2",  label: "Omar Nour",    role: "Coordinator", x: 200, y: 220, color: "#6b7280", me: false },
+    { id: "r3",  label: "Hiba M.",      role: "D.Collector", x: 320, y: 220, color: "#6b7280", me: false },
   ];
   const edges = [["dir","mgr"],["mgr","me"],["me","r1"],["me","r2"],["me","r3"]];
   return (
@@ -604,7 +758,7 @@ function OrgChart() {
       <svg width="420" height="268" style={{ display: "block" }}>
         {edges.map(([a, b]) => {
           const from = nodes.find(n => n.id === a)!;
-          const to = nodes.find(n => n.id === b)!;
+          const to   = nodes.find(n => n.id === b)!;
           return <line key={a+b} x1={from.x+50} y1={from.y+32} x2={to.x+50} y2={to.y} stroke="var(--border)" strokeWidth="2" />;
         })}
         {nodes.map(n => (
@@ -619,7 +773,7 @@ function OrgChart() {
   );
 }
 
-// ── Wellbeing Pulse Widget ────────────────────────────────────────────────────
+// ── Wellbeing Pulse ───────────────────────────────────────────────────────────
 
 function WellbeingPulse() {
   const showToast = useContext(ToastCtx);
@@ -627,7 +781,7 @@ function WellbeingPulse() {
   const [submitted, setSubmitted] = useState(false);
   const emojis = ["😞","😐","🙂","😊","🤩"];
   const labels = ["Poor","Fair","Good","Great","Excellent"];
-  const submit = () => { setSubmitted(true); showToast(`Wellbeing pulse submitted: ${labels[score - 1]}`, "success"); };
+  const submit = () => { setSubmitted(true); showToast(`Wellbeing pulse: ${labels[score - 1]}`, "success"); };
   return (
     <div style={{ padding: "12px 16px", background: "var(--hl)", borderRadius: 10, border: "1px solid var(--border)" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>❤️ Wellbeing Pulse — How are you doing today?</div>
@@ -661,39 +815,38 @@ function SalaryChart() {
   const max = Math.max(...data.map(d => d.amount)) * 1.2;
   const w = 360, h = 80;
   return (
-    <div>
-      <svg width={w} height={h + 30} style={{ display: "block" }}>
-        {data.map((d, i) => {
-          const bw = 60, bh = (d.amount / max) * h;
-          const x = i * (w / data.length) + 20;
-          const y = h - bh;
-          return (
-            <g key={i}>
-              <rect x={x} y={y} width={bw} height={bh} rx={6} fill="var(--navy)" opacity={0.85} />
-              <text x={x + bw/2} y={y - 4} textAnchor="middle" fontSize={9} fill="var(--text)">
-                {(d.amount/1000).toFixed(0)}K
-              </text>
-              <text x={x + bw/2} y={h + 12} textAnchor="middle" fontSize={8} fill="var(--faint)">{d.period}</text>
-              <text x={x + bw/2} y={h + 22} textAnchor="middle" fontSize={8} fill="var(--navy)" fontWeight="700">{d.level}</text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
+    <svg width={w} height={h + 30} style={{ display: "block" }}>
+      {data.map((d, i) => {
+        const bw = 60, bh = (d.amount / max) * h;
+        const x = i * (w / data.length) + 20;
+        const y = h - bh;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={bw} height={bh} rx={6} fill="var(--navy)" opacity={0.85} />
+            <text x={x + bw/2} y={y - 4} textAnchor="middle" fontSize={9} fill="var(--text)">{(d.amount/1000).toFixed(0)}K</text>
+            <text x={x + bw/2} y={h + 12} textAnchor="middle" fontSize={8} fill="var(--faint)">{d.period}</text>
+            <text x={x + bw/2} y={h + 22} textAnchor="middle" fontSize={8} fill="var(--navy)" fontWeight="700">{d.level}</text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
-// ── Section Anchor Sub-Nav ────────────────────────────────────────────────────
-
+// BUG FIX #4 — AnchorNav uses scrollIntoView (not href anchors that only work with window scroll)
 function AnchorNav({ items }: { items: { label: string; id: string }[] }) {
   const [active, setActive] = useState(items[0]?.id);
+  const scrollTo = (id: string) => {
+    setActive(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <div style={{ display: "flex", gap: 4, marginBottom: 12, borderBottom: "2px solid var(--border)", paddingBottom: 0 }}>
       {items.map(item => (
-        <a key={item.id} href={`#${item.id}`} onClick={() => setActive(item.id)}
-          style={{ fontSize: 11, fontWeight: active === item.id ? 700 : 500, color: active === item.id ? "var(--navy)" : "var(--faint)", padding: "6px 12px", textDecoration: "none", borderBottom: active === item.id ? "2px solid var(--navy)" : "2px solid transparent", marginBottom: -2, whiteSpace: "nowrap" }}>
+        <button key={item.id} type="button" onClick={() => scrollTo(item.id)}
+          style={{ fontSize: 11, fontWeight: active === item.id ? 700 : 500, color: active === item.id ? "var(--navy)" : "var(--faint)", padding: "6px 12px", background: "none", border: "none", cursor: "pointer", borderBottom: active === item.id ? "2px solid var(--navy)" : "2px solid transparent", marginBottom: -2, whiteSpace: "nowrap" }}>
           {item.label}
-        </a>
+        </button>
       ))}
     </div>
   );
@@ -708,8 +861,7 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
 
   return (
     <>
-      {/* Hero */}
-      <div style={{ background: "linear-gradient(135deg,#1D3461 0%,#0F2041 100%)", borderRadius: 12, padding: "14px 18px", marginBottom: "var(--gap)", color: "white" }}>
+      <div style={{ background: `linear-gradient(135deg,${NAVY} 0%,#0F2041 100%)`, borderRadius: 12, padding: "14px 18px", marginBottom: "var(--gap)", color: "white" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 2 }}>Profile Completeness</div>
@@ -725,8 +877,7 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
               ))}
             </div>
           </div>
-          {/* Animated progress ring */}
-          <svg width="56" height="56" viewBox="0 0 56 56" style={{ transition: "all 0.6s ease" }}>
+          <svg width="56" height="56" viewBox="0 0 56 56">
             <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
             <circle cx="28" cy="28" r="22" fill="none" stroke="white" strokeWidth="6"
               strokeDasharray={`${circ * overall / 100} ${circ * (1 - overall / 100)}`}
@@ -739,14 +890,13 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         </div>
       </div>
 
-      {/* Quick stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginBottom: "var(--gap)" }}>
         {[
-          { l: "Days Employed", v: "847",      i: "📅" },
-          { l: "Department",    v: "Field Ops", i: "🏢" },
-          { l: "Contract Ends", v: "Dec 2025",  i: "📋" },
-          { l: "Leave Balance", v: "14 days",   i: "🌴" },
-          { l: "Wellbeing",     v: "4.2 / 5",   i: "❤️" },
+          { l: "Days Employed", v: "847",       i: "📅" },
+          { l: "Department",    v: "Field Ops",  i: "🏢" },
+          { l: "Contract Ends", v: "Dec 2025",   i: "📋" },
+          { l: "Leave Balance", v: "14 days",    i: "🌴" },
+          { l: "Wellbeing",     v: "4.2 / 5",    i: "❤️" },
         ].map(s => (
           <div key={s.l} style={{ background: "var(--hl)", borderRadius: 10, padding: "10px 12px", border: "1px solid var(--border)" }}>
             <div style={{ fontSize: 17, marginBottom: 2 }}>{s.i}</div>
@@ -756,14 +906,12 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         ))}
       </div>
 
-      {/* Photo + Summary */}
       <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, marginBottom: "var(--gap)" }}>
         <Card title="Photo">
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            {/* Photo hover — properly wired to parent */}
             <div style={{ position: "relative", cursor: "pointer" }}
               onMouseEnter={() => setPhotoHover(true)} onMouseLeave={() => setPhotoHover(false)}>
-              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg,#1D3461,#0F2041)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "white", fontWeight: 800 }}>YM</div>
+              <div style={{ width: 72, height: 72, borderRadius: "50%", background: `linear-gradient(135deg,${NAVY},#0F2041)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "white", fontWeight: 800 }}>YM</div>
               <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(0,0,0,0.45)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, opacity: photoHover ? 1 : 0, transition: "opacity 0.2s" }}>
                 <span style={{ fontSize: 14 }}>📷</span>
                 <span style={{ fontSize: 8, color: "white", fontWeight: 700 }}>Change</span>
@@ -786,16 +934,14 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         </Card>
       </div>
 
-      {/* Wellbeing Pulse */}
       <div style={{ marginBottom: "var(--gap)" }}><WellbeingPulse /></div>
 
-      {/* Upcoming events */}
       <Card title="Upcoming Events & Reminders">
         <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
           {[
-            { d: "Dec 31, 2025", label: "Contract Expiry",             i: "📋", color: "amber" },
-            { d: "Mar 2025",     label: "HEAT Cert Renewal Due",        i: "🏅", color: "amber" },
-            { d: "Aug 2025",     label: "Annual Performance Review",    i: "📊", color: "blue"  },
+            { d: "Dec 31, 2025", label: "Contract Expiry",              i: "📋", color: "amber" },
+            { d: "Mar 2025",     label: "HEAT Cert Renewal Due",         i: "🏅", color: "amber" },
+            { d: "Aug 2025",     label: "Annual Performance Review",     i: "📊", color: "blue"  },
             { d: "Jan 2026",     label: "5-Year Service Milestone 🎉",  i: "🏆", color: "green" },
           ].map(e => (
             <div key={e.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 7, background: "var(--hl)", border: "1px solid var(--border)" }}>
@@ -809,7 +955,6 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         </div>
       </Card>
 
-      {/* Recognition */}
       <Card title="Recognition & Awards" badge={<Tag label="3 awards" color="indigo" />}>
         <div style={{ display: "flex", gap: 10 }}>
           {[
@@ -826,7 +971,6 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         </div>
       </Card>
 
-      {/* Checklist — clickable jump links */}
       <Card title="Section Completion — click any row to jump">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
           {NAV.map(s => {
@@ -843,6 +987,42 @@ function OverviewSection({ onJump }: { onJump: (id: string) => void }) {
         </div>
       </Card>
     </>
+  );
+}
+
+// ENHANCEMENT: Notification preferences in Employment
+function NotificationPrefs() {
+  const showToast = useContext(ToastCtx);
+  const [prefs, setPrefs] = useState({
+    emailDigest:      true,
+    contractAlerts:   true,
+    whatsapp:         false,
+    inApp:            true,
+    deadlineReminders:true,
+    leaveUpdates:     true,
+  });
+  const toggle = (k: keyof typeof prefs) => {
+    setPrefs(p => {
+      const next = { ...p, [k]: !p[k] };
+      showToast(`${k} notifications ${!p[k] ? "enabled" : "disabled"}`, "info");
+      return next;
+    });
+  };
+  return (
+    <Card title="Notification Preferences" badge={<Tag label="Saved" color="green" />}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+        {(Object.entries({
+          emailDigest:      "📧 Email Digest (daily)",
+          contractAlerts:   "📋 Contract & Renewal Alerts",
+          whatsapp:         "💬 WhatsApp Messages",
+          inApp:            "🔔 In-App Notifications",
+          deadlineReminders:"⏰ Deadline Reminders",
+          leaveUpdates:     "🌴 Leave Status Updates",
+        }) as [keyof typeof prefs, string][]).map(([k, label]) => (
+          <Toggle key={k} on={prefs[k]} onChange={() => toggle(k)} label={label} />
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -873,7 +1053,8 @@ function EmploymentSection() {
           <div style={{ flex: 1 }} />
           <div style={{ padding: "7px 12px", background: "var(--c-amber-bg)", borderRadius: 8, border: "1px solid var(--c-amber-fg)", fontSize: 11, color: "var(--c-amber-fg)", display: "flex", alignItems: "center", gap: 8 }}>
             ⚠️ Expires in <strong>164 days</strong>
-            <button type="button" style={{ fontSize: 11, fontWeight: 700, color: "white", background: "#1D3461", border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
+            {/* BUG FIX: was hardcoded #1D3461 — now uses var(--navy) */}
+            <button type="button" style={{ fontSize: 11, fontWeight: 700, color: "white", background: "var(--navy)", border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}>
               Start Renewal →
             </button>
           </div>
@@ -899,10 +1080,10 @@ function EmploymentSection() {
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Development Plan</div>
           {[
-            { task: "Complete Advanced PM Certification",       done: true  },
-            { task: "Lead 2 multi-sector assessments",          done: true  },
-            { task: "Attend Senior Leadership Programme",       done: false },
-            { task: "Manage full programme cycle independently",done: false },
+            { task: "Complete Advanced PM Certification",        done: true  },
+            { task: "Lead 2 multi-sector assessments",           done: true  },
+            { task: "Attend Senior Leadership Programme",        done: false },
+            { task: "Manage full programme cycle independently", done: false },
           ].map(t => (
             <div key={t.task} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border)", alignItems: "center" }}>
               <span>{t.done ? "✅" : "⬜"}</span>
@@ -914,13 +1095,15 @@ function EmploymentSection() {
       <Card title="Onboarding Status" badge={<Tag label="9/10 Complete" color="green" />}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
           {["Profile Created","Role Assigned","Dept Set","Contract Set","Salary Config","Bank Account","Employee ID","Documents","Personal Info","Education"].map((s, i) => (
-            <div key={s} style={{ textAlign: "center", padding: "7px 4px", background: i === 7 ? "var(--c-amber-bg)" : "var(--c-green-bg)", border: `1px solid ${i === 7 ? "var(--c-amber-fg)" : "var(--c-green-fg)"}22`, borderRadius: 8 }}>
+            <div key={s} style={{ textAlign: "center", padding: "7px 4px", background: i === 7 ? "var(--c-amber-bg)" : "var(--c-green-bg)", border: `1px solid ${i === 7 ? "var(--c-amber-fg)" : "var(--c-green-fg)"}`, borderRadius: 8 }}>
               <div style={{ fontSize: 14, marginBottom: 2 }}>{i === 7 ? "⚠️" : "✅"}</div>
               <div style={{ fontSize: 9, color: "var(--text)", lineHeight: 1.3 }}>{s}</div>
             </div>
           ))}
         </div>
       </Card>
+      {/* ENHANCEMENT: Notification preferences */}
+      <NotificationPrefs />
     </>
   );
 }
@@ -940,26 +1123,26 @@ function PersonalSection() {
       </Card>
       <Card title="Passport" ts={TIMESTAMPS.personal} action={<Btn label="✎ Edit" color="gray" />}>
         <Grid3>
-          <Field label="Passport No."  value="SD1928374"  sensitive editable />
-          <Field label="Issue Date"    value="Jun 2019"   editable />
+          <Field label="Passport No."  value="SD1928374"    sensitive editable />
+          <Field label="Issue Date"    value="Jun 2019"     editable />
           <Field label="Expiry"        value="Jun 30, 2027" editable />
-          <Field label="Issue Country" value="Sudan"      editable />
+          <Field label="Issue Country" value="Sudan"        editable />
         </Grid3>
       </Card>
       <Card title="Home Address" ts={TIMESTAMPS.personal} action={<Btn label="✎ Edit" color="gray" />}>
         <Grid3>
-          <Field label="Address Line 1" value="Block 14, House 7"          editable />
-          <Field label="Neighbourhood"  value="Al Riyadh"                  editable />
-          <Field label="City"           value="Khartoum"                   editable />
-          <Field label="Country"        value="Sudan"                      editable />
+          <Field label="Address Line 1" value="Block 14, House 7" editable />
+          <Field label="Neighbourhood"  value="Al Riyadh"         editable />
+          <Field label="City"           value="Khartoum"          editable />
+          <Field label="Country"        value="Sudan"             editable />
         </Grid3>
       </Card>
       <Card title="Emergency Contact" ts={TIMESTAMPS.personal} action={<Btn label="✎ Edit" color="gray" />}>
         <Grid3>
-          <Field label="Contact Name" value="Fatima Omar"               editable />
-          <Field label="Relationship" value="Spouse"                    editable />
-          <Field label="Phone"        value="+249 912 345 678"          sensitive editable />
-          <Field label="Email"        value="fatima.omar@gmail.com"     sensitive editable />
+          <Field label="Contact Name" value="Fatima Omar"           editable />
+          <Field label="Relationship" value="Spouse"                editable />
+          <Field label="Phone"        value="+249 912 345 678"      sensitive editable />
+          <Field label="Email"        value="fatima.omar@gmail.com" sensitive editable />
         </Grid3>
       </Card>
     </>
@@ -981,22 +1164,22 @@ function LocationSection() {
       </Card>
       <Card title="GPS Location Data">
         <Grid3>
-          <Field label="Latitude"       value="15.5007° N" />
-          <Field label="Longitude"      value="32.5599° E" />
-          <Field label="Accuracy"       value="±12 m" />
-          <Field label="Sharing Status" value="Enabled" />
-          <Field label="Last Updated"   value="Today 09:14" />
+          <Field label="Latitude"       value="15.5007° N"        />
+          <Field label="Longitude"      value="32.5599° E"        />
+          <Field label="Accuracy"       value="±12 m"             />
+          <Field label="Sharing Status" value="Enabled"           />
+          <Field label="Last Updated"   value="Today 09:14"       />
           <Field label="Device"         value="Samsung Galaxy A54" />
         </Grid3>
-        <div style={{ marginTop: 10, borderRadius: 8, background: "var(--c-green-bg)", border: `1px solid var(--c-green-fg)33`, padding: "7px 12px", fontSize: 11, color: "var(--c-green-fg)" }}>
+        <div style={{ marginTop: 10, borderRadius: 8, background: "var(--c-green-bg)", border: "1px solid var(--c-green-fg)", borderLeftWidth: 3, padding: "7px 12px", fontSize: 11, color: "var(--c-green-fg)" }}>
           📡 Location sharing active · Last ping 14 min ago
         </div>
       </Card>
       <Card title="Transfer / Mobility History">
         {[
-          { from: "Kassala Field Base", to: "Khartoum HQ",       date: "Jan 2024", reason: "Role change to FOM",    type: "transfer"   },
-          { from: "Gedaref Hub",        to: "Kassala Field Base", date: "Jun 2022", reason: "Operational need",      type: "temporary"  },
-          { from: "Khartoum HQ",        to: "Gedaref Hub",        date: "Mar 2021", reason: "Project assignment",    type: "assignment" },
+          { from: "Kassala Field Base", to: "Khartoum HQ",       date: "Jan 2024", reason: "Role change to FOM",  type: "transfer"   },
+          { from: "Gedaref Hub",        to: "Kassala Field Base", date: "Jun 2022", reason: "Operational need",    type: "temporary"  },
+          { from: "Khartoum HQ",        to: "Gedaref Hub",        date: "Mar 2021", reason: "Project assignment",  type: "assignment" },
         ].map((t, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, background: "var(--hl)", border: "1px solid var(--border)", marginBottom: 6 }}>
             <span>🔄</span>
@@ -1077,7 +1260,6 @@ function DocumentsSection() {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        {/* Filter chips */}
         <div style={{ display: "flex", gap: 5 }}>
           {["All","Verified","Pending","Rejected"].map(f => (
             <button key={f} type="button" onClick={() => setFilter(f)}
@@ -1093,25 +1275,21 @@ function DocumentsSection() {
       </div>
       <Card title={`HR Documents (${filtered.length})`} badge={<Tag label={`${docs.filter(d=>d.v==="verified").length} verified`} color="green" />}
         locked={locked} onLock={() => setLocked(v => !v)}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {filtered.map(d => {
-            const [bg, fg, vlabel] = vm[d.v];
-            return (
-              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)" }}>
-                <span style={{ fontSize: 16 }}>{d.type.split(" ")[0]}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{d.type.split(" ").slice(1).join(" ")}</div>
-                  <div style={{ fontSize: 10, color: "var(--faint)" }}>{d.name} · {d.size}{d.expiry ? ` · Exp. ${d.expiry}` : ""}</div>
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: bg, color: fg }}>{vlabel}</span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <Btn label="View" color="gray" onClick={() => openPreview(d.type.split(" ").slice(1).join(" "))} />
-                  <Btn label="⬇" color="gray" />
-                </div>
+        {filtered.map(d => {
+          const [bg, fg, vlabel] = vm[d.v];
+          return (
+            <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", marginBottom: 6 }}>
+              <span style={{ fontSize: 16 }}>{d.type.split(" ")[0]}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{d.type.split(" ").slice(1).join(" ")}</div>
+                <div style={{ fontSize: 10, color: "var(--faint)" }}>{d.name} · {d.size}{d.expiry ? ` · Exp. ${d.expiry}` : ""}</div>
               </div>
-            );
-          })}
-        </div>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: bg, color: fg }}>{vlabel}</span>
+              <Btn label="View" color="gray" onClick={() => openPreview(d.type.split(" ").slice(1).join(" "))} />
+              <Btn label="⬇" color="gray" />
+            </div>
+          );
+        })}
       </Card>
       <Card title="Employment Contracts" badge={<Tag label="2 files" color="blue" />}>
         {[
@@ -1143,9 +1321,7 @@ function SkillsSection() {
     { name: "MS Office Suite",      level: "Expert",       end: 9  },
     { name: "GIS / Mapping",        level: "Intermediate", end: 3  },
   ];
-  const lc: Record<string,[TagColor]> = {
-    Expert: ["amber"], Advanced: ["purple"], Intermediate: ["blue"], Beginner: ["gray"],
-  };
+  const lc: Record<string,TagColor> = { Expert: "amber", Advanced: "purple", Intermediate: "blue", Beginner: "gray" };
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1156,9 +1332,8 @@ function SkillsSection() {
         {skills.map(s => (
           <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{s.name}</span>
-            <Tag label={s.level} color={lc[s.level]?.[0] ?? "gray"} />
-            <span title={`${s.end} endorsements`} style={{ fontSize: 10, color: "var(--navy)", fontWeight: 700 }}>+{s.end}</span>
-            <span style={{ fontSize: 14, cursor: "pointer", color: "var(--faint)" }}>×</span>
+            <Tag label={s.level} color={lc[s.level] ?? "gray"} />
+            <span style={{ fontSize: 10, color: "var(--navy)", fontWeight: 700 }}>+{s.end}</span>
           </div>
         ))}
       </div>
@@ -1168,15 +1343,14 @@ function SkillsSection() {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
         {[
-          { name: "Arabic",  prof: "Native",        end: 4, color: "green"  as TagColor },
-          { name: "English", prof: "Fluent",         end: 6, color: "blue"   as TagColor },
-          { name: "French",  prof: "Conversational", end: 2, color: "amber"  as TagColor },
+          { name: "Arabic",  prof: "Native",        c: "green"  as TagColor },
+          { name: "English", prof: "Fluent",         c: "blue"   as TagColor },
+          { name: "French",  prof: "Conversational", c: "amber"  as TagColor },
         ].map(l => (
           <div key={l.name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface)" }}>
             <span>🌐</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{l.name}</span>
-            <Tag label={l.prof} color={l.color} />
-            <span style={{ fontSize: 10, color: "var(--navy)", fontWeight: 700 }}>+{l.end}</span>
+            <Tag label={l.prof} color={l.c} />
           </div>
         ))}
       </div>
@@ -1262,9 +1436,9 @@ function EquipmentSection() {
       </div>
       <Card title="Assigned Equipment">
         {[
-          { name: "Dell Latitude 5540", type: "Laptop",     sn: "DL5540-0042",  issued: "Jan 2023", i: "💻" },
-          { name: "Samsung Galaxy A54", type: "Phone",      sn: "SM-A546B-0788",issued: "Mar 2023", i: "📱" },
-          { name: "Garmin GPSMAP 67",   type: "GPS Device", sn: "GPM67-KH-09",  issued: "Nov 2023", i: "📡" },
+          { name: "Dell Latitude 5540", type: "Laptop",     sn: "DL5540-0042",   issued: "Jan 2023", i: "💻" },
+          { name: "Samsung Galaxy A54", type: "Phone",      sn: "SM-A546B-0788", issued: "Mar 2023", i: "📱" },
+          { name: "Garmin GPSMAP 67",   type: "GPS Device", sn: "GPM67-KH-09",   issued: "Nov 2023", i: "📡" },
         ].map(eq => (
           <div key={eq.sn} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", marginBottom: 6 }}>
             <span style={{ fontSize: 18 }}>{eq.i}</span>
@@ -1300,70 +1474,65 @@ function PoliciesSection() {
           ⚠️ {policies.length - signed} mandatory polic{policies.length - signed === 1 ? "y requires" : "ies require"} signature
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {policies.map(p => (
-          <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)" }}>
-            <span>📜</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{p.name}</div>
-              <div style={{ fontSize: 10, color: "var(--faint)" }}>{p.signed ? `Signed ${p.signed}` : "Not yet signed"}{p.req && <span style={{ marginLeft: 6, color: "var(--c-red-fg)", fontWeight: 700 }}>• Required</span>}</div>
+      {policies.map(p => (
+        <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", marginBottom: 6 }}>
+          <span>📜</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{p.name}</div>
+            <div style={{ fontSize: 10, color: "var(--faint)" }}>
+              {p.signed ? `Signed ${p.signed}` : "Not yet signed"}
+              {p.req && <span style={{ marginLeft: 6, color: "var(--c-red-fg)", fontWeight: 700 }}>• Required</span>}
             </div>
-            {p.ok ? <Tag label="✅ Signed" color="green" /> : <Btn label="Sign Now" color="navy" />}
           </div>
-        ))}
-      </div>
+          {p.ok ? <Tag label="✅ Signed" color="green" /> : <Btn label="Sign Now" color="navy" />}
+        </div>
+      ))}
     </Card>
   );
 }
 
 function CompensationSection() {
   const anchors = [
-    { label: "Salary", id: "comp-salary" },
-    { label: "Bank",   id: "comp-bank"   },
-    { label: "EOSB",   id: "comp-eosb"   },
-    { label: "Advances",id: "comp-adv"   },
-    { label: "Payslips",id: "comp-pay"   },
-  ];
-  const payslips = [
-    { month: "Jun 2024", gross: "SDG 285,000", net: "SDG 261,500", status: "Paid" },
-    { month: "May 2024", gross: "SDG 285,000", net: "SDG 261,500", status: "Paid" },
-    { month: "Apr 2024", gross: "SDG 285,000", net: "SDG 248,750", status: "Paid" },
-    { month: "Mar 2024", gross: "SDG 285,000", net: "SDG 261,500", status: "Paid" },
+    { label: "Salary",   id: "comp-salary"  },
+    { label: "Bank",     id: "comp-bank"    },
+    { label: "EOSB",     id: "comp-eosb"    },
+    { label: "Advances", id: "comp-adv"     },
+    { label: "Payslips", id: "comp-pay"     },
   ];
   return (
     <>
       <AnchorNav items={anchors} />
       <Card title="Salary Configuration" id="comp-salary" ts={TIMESTAMPS.compensation} action={<Btn label="✎ Edit" color="gray" />}>
         <Grid3>
-          <Field label="Contract Type"       value="Salary"                  editable />
-          <Field label="Classification"      value="Level B"                  editable />
-          <Field label="Base Salary"         value="SDG 250,000 / month"     editable />
-          <Field label="Transport Allowance" value="SDG 15,000"              editable />
-          <Field label="Housing Allowance"   value="SDG 20,000"              editable />
-          <Field label="Total Package"       value="SDG 285,000 / month"     />
+          <Field label="Contract Type"       value="Salary"              editable />
+          <Field label="Classification"      value="Level B"             editable />
+          <Field label="Base Salary"         value="SDG 250,000 / month" editable />
+          <Field label="Transport Allowance" value="SDG 15,000"          editable />
+          <Field label="Housing Allowance"   value="SDG 20,000"          editable />
+          <Field label="Total Package"       value="SDG 285,000 / month" />
         </Grid3>
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Salary History Chart</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Salary History</div>
           <SalaryChart />
         </div>
       </Card>
       <Card title="Bank Account" id="comp-bank" action={<Btn label="✎ Edit" color="gray" />}>
         <Grid3>
-          <Field label="Bank Name"    value="Bank of Khartoum"    editable />
-          <Field label="Account Name" value="Yousif A. Mohammed"  editable />
-          <Field label="Account No."  value="•••• •••• 4821"      sensitive />
-          <Field label="Branch"       value="Khartoum Main"       editable />
-          <Field label="IBAN"         value="SD•••• •••• ••93"    sensitive />
+          <Field label="Bank Name"    value="Bank of Khartoum"   editable />
+          <Field label="Account Name" value="Yousif A. Mohammed" editable />
+          <Field label="Account No."  value="•••• •••• 4821"     sensitive />
+          <Field label="Branch"       value="Khartoum Main"      editable />
+          <Field label="IBAN"         value="SD•••• •••• ••93"   sensitive />
         </Grid3>
       </Card>
       <Card title="EOSB / Gratuity" id="comp-eosb">
         <Grid3>
-          <Field label="Years of Service" value="2 years 6 months" />
-          <Field label="Accrued Gratuity" value="SDG 437,500" />
-          <Field label="Formula"          value="21 days/yr (≤5yrs)" />
-          <Field label="Day Rate"         value="SDG 8,333" />
-          <Field label="Calc Date"        value="Jul 22, 2026" />
-          <Field label="Projected (5yr)"  value="SDG 875,000" />
+          <Field label="Years of Service" value="2 years 6 months"       />
+          <Field label="Accrued Gratuity" value="SDG 437,500"             />
+          <Field label="Formula"          value="21 days/yr (≤5yrs)"      />
+          <Field label="Day Rate"         value="SDG 8,333"               />
+          <Field label="Calc Date"        value="Jul 22, 2026"            />
+          <Field label="Projected (5yr)"  value="SDG 875,000"             />
         </Grid3>
       </Card>
       <Card title="Salary Advances" id="comp-adv" badge={<Tag label="1 active" color="amber" />}>
@@ -1382,14 +1551,19 @@ function CompensationSection() {
         ))}
       </Card>
       <Card title="Payslip History" id="comp-pay" badge={<Btn label="⬇ All" color="gray" />}>
-        {payslips.map(p => (
+        {[
+          { month: "Jun 2024", gross: "SDG 285,000", net: "SDG 261,500" },
+          { month: "May 2024", gross: "SDG 285,000", net: "SDG 261,500" },
+          { month: "Apr 2024", gross: "SDG 285,000", net: "SDG 248,750" },
+          { month: "Mar 2024", gross: "SDG 285,000", net: "SDG 261,500" },
+        ].map(p => (
           <div key={p.month} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, background: "var(--hl)", border: "1px solid var(--border)", marginBottom: 6 }}>
             <span>📄</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{p.month}</div>
               <div style={{ fontSize: 10, color: "var(--faint)" }}>Gross {p.gross} · Net {p.net}</div>
             </div>
-            <Tag label={p.status} color="green" />
+            <Tag label="Paid" color="green" />
             <Btn label="⬇ PDF" color="gray" />
           </div>
         ))}
@@ -1405,26 +1579,27 @@ function PerformanceSection() {
     { period: "Q3 2023", rating: 3.8, tasks: 31, onTime: 84 },
     { period: "Q2 2023", rating: 4.0, tasks: 29, onTime: 90 },
   ];
-  const w = 200, h = 50;
-  const sparkMax = 5, sparkMin = 3;
+  const w = 200, h = 50, sparkMin = 3, sparkMax = 5;
   const pts = reviews.map((r, i) => {
     const x = (i / (reviews.length - 1)) * (w - 20) + 10;
     const y = h - 8 - ((r.rating - sparkMin) / (sparkMax - sparkMin)) * (h - 16);
     return `${x},${y}`;
   }).join(" ");
+  // BUG FIX #2 — removed `22` hex suffix after var(...) which produced invalid CSS
+  const kpis = [
+    { l: "Latest Rating", v: "4.5/5",  i: "⭐", bg: "var(--c-amber-bg)", fg: "var(--c-amber-fg)" },
+    { l: "Tasks Done",    v: "42",      i: "✅", bg: "var(--c-green-bg)", fg: "var(--c-green-fg)" },
+    { l: "On-Time Rate",  v: "95%",     i: "⏱️", bg: "var(--c-blue-bg)",  fg: "var(--c-blue-fg)"  },
+    { l: "Workload",      v: "Medium",  i: "📊", bg: "var(--c-purple-bg)",fg: "var(--c-purple-fg)"},
+  ];
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: "var(--gap)" }}>
-        {[
-          { l: "Latest Rating", v: "4.5/5",  i: "⭐", c: "amber" as TagColor  },
-          { l: "Tasks Done",    v: "42",      i: "✅", c: "green" as TagColor  },
-          { l: "On-Time Rate",  v: "95%",     i: "⏱️", c: "blue"  as TagColor  },
-          { l: "Workload",      v: "Medium",  i: "📊", c: "purple" as TagColor },
-        ].map(k => (
-          <div key={k.l} style={{ padding: "11px 12px", borderRadius: 10, background: `var(--c-${k.c}-bg)`, border: `1px solid var(--c-${k.c}-fg)22` }}>
+        {kpis.map(k => (
+          <div key={k.l} style={{ padding: "11px 12px", borderRadius: 10, background: k.bg, border: `1px solid ${k.fg}` }}>
             <div style={{ fontSize: 17, marginBottom: 3 }}>{k.i}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: `var(--c-${k.c}-fg)` }}>{k.v}</div>
-            <div style={{ fontSize: 10, color: `var(--c-${k.c}-fg)`, opacity: 0.8, marginTop: 1 }}>{k.l}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: k.fg }}>{k.v}</div>
+            <div style={{ fontSize: 10, color: k.fg, opacity: 0.8, marginTop: 1 }}>{k.l}</div>
           </div>
         ))}
       </div>
@@ -1488,9 +1663,9 @@ function BenefitsSection({ onLeaveRequest }: { onLeaveRequest: () => void }) {
       <Card title="Leave Balances" action={<Btn label="+ Request Leave" color="navy" onClick={onLeaveRequest} />}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
           {[
-            { type: "Annual",     total: 21, left: 14 },
-            { type: "Sick",       total: 10, left: 8  },
-            { type: "Compassion", total: 3,  left: 3  },
+            { type: "Annual",      total: 21, left: 14 },
+            { type: "Sick",        total: 10, left: 8  },
+            { type: "Compassion",  total: 3,  left: 3  },
           ].map(l => (
             <div key={l.type} style={{ padding: "10px 12px", borderRadius: 10, background: "var(--hl)", border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", marginBottom: 4 }}>{l.type} Leave</div>
@@ -1505,16 +1680,16 @@ function BenefitsSection({ onLeaveRequest }: { onLeaveRequest: () => void }) {
       </Card>
       <Card title="Leave Request History" badge={<Tag label="4 this year" color="blue" />}>
         {[
-          { type: "Annual Leave", from: "Mar 10", to: "Mar 17", days: 7, status: "Approved", approver: "Ahmed Hassan" },
-          { type: "Sick Leave",   from: "Feb 5",  to: "Feb 6",  days: 2, status: "Approved", approver: "Ahmed Hassan" },
-          { type: "Annual Leave", from: "Dec 24", to: "Jan 2",  days: 5, status: "Approved", approver: "Ahmed Hassan" },
-          { type: "Annual Leave", from: "Aug 15", to: "Aug 15", days: 1, status: "Rejected", approver: "Ahmed Hassan" },
+          { type: "Annual Leave", from: "Mar 10", to: "Mar 17", days: 7, status: "Approved" },
+          { type: "Sick Leave",   from: "Feb 5",  to: "Feb 6",  days: 2, status: "Approved" },
+          { type: "Annual Leave", from: "Dec 24", to: "Jan 2",  days: 5, status: "Approved" },
+          { type: "Annual Leave", from: "Aug 15", to: "Aug 15", days: 1, status: "Rejected" },
         ].map((r, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, background: "var(--hl)", border: "1px solid var(--border)", marginBottom: 6 }}>
             <span>🌴</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{r.type} · {r.days} day{r.days !== 1 ? "s" : ""}</div>
-              <div style={{ fontSize: 10, color: "var(--faint)" }}>{r.from} → {r.to} · {r.approver}</div>
+              <div style={{ fontSize: 10, color: "var(--faint)" }}>{r.from} → {r.to}</div>
             </div>
             <Tag label={r.status} color={r.status === "Approved" ? "green" : "red"} />
           </div>
@@ -1533,7 +1708,7 @@ function AccessSection() {
           { device: "Android App (v2.1.4)", ip: "196.1.15.44",  loc: "Khartoum", last: "Yesterday 14:30", current: false },
           { device: "Firefox / macOS",      ip: "41.67.100.22", loc: "Unknown",  last: "Jun 18, 09:00",   current: false },
         ].map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, border: `1px solid ${s.current ? "var(--c-blue-fg)33" : "var(--border)"}`, background: s.current ? "var(--c-blue-bg)" : "var(--hl)", marginBottom: 6 }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8, border: `1px solid ${s.current ? "var(--c-blue-fg)" : "var(--border)"}`, background: s.current ? "var(--c-blue-bg)" : "var(--hl)", marginBottom: 6 }}>
             <span>{s.device.includes("Android") ? "📱" : "💻"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{s.device}</div>
@@ -1558,9 +1733,6 @@ function AccessSection() {
             {r.primary ? <Tag label="Primary" color="blue" /> : <><Tag label="Additional" color="gray" /><Btn label="Remove" color="red" /></>}
           </div>
         ))}
-        <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--navy)", background: "var(--navyBg)", border: "1px dashed var(--navy)", borderRadius: 8, padding: "7px", cursor: "pointer", width: "100%" }}>
-          + Assign Additional Role
-        </button>
       </Card>
       <Card title="Security Event Log">
         {[
@@ -1579,16 +1751,6 @@ function AccessSection() {
           </div>
         ))}
       </Card>
-      <Card title="Account Status" action={<Btn label="✎ Edit" color="gray" />}>
-        <Grid3>
-          <Field label="Status"         value="Active"       />
-          <Field label="2FA Enabled"    value="Yes (TOTP)"   />
-          <Field label="Last Password"  value="Jun 20, 2024" />
-          <Field label="Sessions"       value="3 devices"    />
-          <Field label="Email Verified" value="Yes"          />
-          <Field label="Created"        value="Jan 14, 2023" />
-        </Grid3>
-      </Card>
     </>
   );
 }
@@ -1598,11 +1760,11 @@ function ITAccountsSection() {
     <>
       <Card title="Provisioned Accounts" badge={<Tag label="4 active" color="green" />}>
         {[
-          { system: "PACT Command Center",  user: "y.mohammed@pact-sd.org", status: "Active",    prov: "Jan 2023" },
-          { system: "Microsoft 365",        user: "yousif.m@pactworld.org", status: "Active",    prov: "Jan 2023" },
-          { system: "Zoom Meetings",        user: "yousif.pact@zoom.us",    status: "Active",    prov: "Feb 2023" },
-          { system: "SharePoint",           user: "yousif.m@pactworld.org", status: "Active",    prov: "Jan 2023" },
-          { system: "ODK Collect",          user: "y.mohammed.field",       status: "Suspended", prov: "Jun 2023" },
+          { system: "PACT Command Center", user: "y.mohammed@pact-sd.org", status: "Active",    prov: "Jan 2023" },
+          { system: "Microsoft 365",       user: "yousif.m@pactworld.org", status: "Active",    prov: "Jan 2023" },
+          { system: "Zoom Meetings",       user: "yousif.pact@zoom.us",    status: "Active",    prov: "Feb 2023" },
+          { system: "SharePoint",          user: "yousif.m@pactworld.org", status: "Active",    prov: "Jan 2023" },
+          { system: "ODK Collect",         user: "y.mohammed.field",       status: "Suspended", prov: "Jun 2023" },
         ].map(a => (
           <div key={a.system} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--hl)", marginBottom: 6 }}>
             <span>🖥️</span>
@@ -1622,20 +1784,52 @@ function ITAccountsSection() {
   );
 }
 
+// ENHANCEMENT: HR Notes with inline add form
 function HRNotesSection() {
+  const showToast = useContext(ToastCtx);
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ category: "Performance", text: "" });
   const notes = [
     { author: "Ahmed Hassan", date: "Jun 18, 2024", category: "Performance", text: "Yousif demonstrated exceptional leadership during the Kassala emergency response. Recommend fast-tracking him for Level C classification in the upcoming cycle." },
     { author: "Sara (HR)",    date: "Mar 10, 2024", category: "Compliance",  text: "Work permit renewal initiated with MoL. Expect 4–6 week processing time. Employee advised to limit international travel." },
     { author: "System",       date: "Jan 2, 2024",  category: "Contract",    text: "Contract auto-renewed for 12 months effective Jan 1 2024. Signed addendum uploaded to Document Vault." },
   ];
+  const saveNote = () => {
+    if (!form.text.trim()) { showToast("Note cannot be empty", "error"); return; }
+    showToast("HR note saved", "success");
+    setAddOpen(false);
+    setForm({ category: "Performance", text: "" });
+  };
+
   return (
     <>
       <div style={{ padding: "8px 12px", background: "var(--c-amber-bg)", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--c-amber-fg)" }}>
         🔒 HR Internal Notes — visible to HR Managers and Directors only
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <Btn label="+ Add Note" color="navy" />
+        <Btn label={addOpen ? "✕ Cancel" : "+ Add Note"} color={addOpen ? "gray" : "navy"} onClick={() => setAddOpen(v => !v)} />
       </div>
+      {addOpen && (
+        <div style={{ background: "var(--hl)", borderRadius: 12, border: "1px solid var(--navy)", padding: "14px", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>New HR Note</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: "var(--faint)", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Category</label>
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12, outline: "none" }}>
+                {["Performance","Compliance","Contract","Conduct","Medical","Other"].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <label style={{ fontSize: 10, fontWeight: 600, color: "var(--faint)", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Note</label>
+          <textarea value={form.text} onChange={e => setForm(p => ({ ...p, text: e.target.value }))} rows={4} placeholder="Enter confidential HR note…"
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+            <Btn label="Cancel" color="gray" onClick={() => setAddOpen(false)} />
+            <Btn label="💾 Save Note" color="navy" onClick={saveNote} />
+          </div>
+        </div>
+      )}
       {notes.map((n, i) => (
         <div key={i} style={{ background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden", marginBottom: 10 }}>
           <div style={{ padding: "8px 14px", background: "var(--hl)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -1659,18 +1853,18 @@ function HRNotesSection() {
 function ActivityLogSection() {
   const [actorFilter, setActorFilter] = useState("All");
   const log = [
-    { who: "System",        action: "Profile last active",             field: "",                  time: "Today 09:14",    icon: "🟢", type: "System"   },
-    { who: "Ahmed Hassan",  action: "Updated Employment — Reports To", field: "→ Ahmed Hassan",    time: "Jun 15",         icon: "✏️", type: "HR"       },
-    { who: "HR Admin",      action: "Uploaded document",               field: "Work Permit 2024",  time: "Jun 20",         icon: "📄", type: "HR"       },
-    { who: "Payroll Admin", action: "Updated salary — Level B",        field: "SDG 250,000/mo",    time: "Jan 2024",       icon: "💰", type: "Payroll"  },
-    { who: "IT Admin",      action: "Provisioned account",             field: "ODK Collect",       time: "Jun 2023",       icon: "🖥️", type: "IT"       },
-    { who: "Ahmed Hassan",  action: "Submitted performance review",    field: "Q1 2024 · 4.5★",   time: "Apr 2024",       icon: "📊", type: "HR"       },
-    { who: "System",        action: "Contract auto-renewed",           field: "12 months",         time: "Jan 2, 2024",    icon: "📋", type: "System"   },
-    { who: "Yousif M.",     action: "Uploaded document",               field: "CV 2024.pdf",       time: "Feb 2024",       icon: "📄", type: "Employee" },
-    { who: "HR Admin",      action: "Signed policy",                   field: "Security Protocols",time: "Feb 2024",       icon: "📜", type: "HR"       },
-    { who: "System",        action: "Employee ID assigned",            field: "PACT-FOM-0042",     time: "Jan 14, 2023",   icon: "🆔", type: "System"   },
+    { who: "System",        action: "Profile last active",             field: "",                  time: "Today 09:14",     icon: "🟢", type: "System"   },
+    { who: "Ahmed Hassan",  action: "Updated Employment — Reports To", field: "→ Ahmed Hassan",    time: "Jun 15",          icon: "✏️", type: "HR"       },
+    { who: "HR Admin",      action: "Uploaded document",               field: "Work Permit 2024",  time: "Jun 20",          icon: "📄", type: "HR"       },
+    { who: "Payroll Admin", action: "Updated salary — Level B",        field: "SDG 250,000/mo",    time: "Jan 2024",        icon: "💰", type: "Payroll"  },
+    { who: "IT Admin",      action: "Provisioned account",             field: "ODK Collect",       time: "Jun 2023",        icon: "🖥️", type: "IT"       },
+    { who: "Ahmed Hassan",  action: "Submitted performance review",    field: "Q1 2024 · 4.5★",   time: "Apr 2024",        icon: "📊", type: "HR"       },
+    { who: "System",        action: "Contract auto-renewed",           field: "12 months",         time: "Jan 2, 2024",     icon: "📋", type: "System"   },
+    { who: "Yousif M.",     action: "Uploaded document",               field: "CV 2024.pdf",       time: "Feb 2024",        icon: "📄", type: "Employee" },
+    { who: "HR Admin",      action: "Signed policy",                   field: "Security Protocols",time: "Feb 2024",        icon: "📜", type: "HR"       },
+    { who: "System",        action: "Employee ID assigned",            field: "PACT-FOM-0042",     time: "Jan 14, 2023",    icon: "🆔", type: "System"   },
   ];
-  const actors = ["All", "System", "HR", "Payroll", "IT", "Employee"];
+  const actors = ["All","System","HR","Payroll","IT","Employee"];
   const filtered = actorFilter === "All" ? log : log.filter(e => e.type === actorFilter);
   return (
     <>
@@ -1710,16 +1904,19 @@ function ActivityLogSection() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function UnifiedProfile() {
-  const [active, setActive] = useState("overview");
-  const [dark, setDark] = useState(false);
-  const [compact, setCompact] = useState(false);
-  const [cvOpen, setCvOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [alerts, setAlerts] = useState(GLOBAL_ALERTS);
-  const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
-  const [badgeOpen, setBadgeOpen] = useState(false);
-  const [docPreview, setDocPreview] = useState<string | null>(null);
-  const [leaveModal, setLeaveModal] = useState(false);
+  const [active, setActive]           = useState("overview");
+  const [dark, setDark]               = useState(false);
+  const [compact, setCompact]         = useState(false);
+  const [cvOpen, setCvOpen]           = useState(false);
+  const [searchOpen, setSearchOpen]   = useState(false);
+  const [alerts, setAlerts]           = useState(GLOBAL_ALERTS);
+  const [toast, setToast]             = useState<{ msg: string; type: string } | null>(null);
+  const [badgeOpen, setBadgeOpen]     = useState(false);
+  const [docPreview, setDocPreview]   = useState<string | null>(null);
+  const [leaveModal, setLeaveModal]   = useState(false);
+  const [emailModal, setEmailModal]   = useState(false);   // ENHANCEMENT: Send Email
+  const [offboard, setOffboard]       = useState(false);   // ENHANCEMENT: Offboard guard
+  const [syncing, setSyncing]         = useState(false);   // ENHANCEMENT: Sync Dossier
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const showToast: ToastFn = (msg, type = "success") => {
@@ -1728,10 +1925,24 @@ export function UnifiedProfile() {
     toastTimer.current = setTimeout(() => setToast(null), 2500);
   };
 
+  // ENHANCEMENT: Sync Dossier — shows spinner for 2s then toast
+  const handleSync = () => {
+    if (syncing) return;
+    setSyncing(true);
+    setTimeout(() => { setSyncing(false); showToast("Dossier synced — all sections up to date", "success"); }, 2000);
+  };
+
+  // ENHANCEMENT: Print Profile — calls window.print()
+  const handlePrint = () => { window.print(); };
+
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setSearchOpen(true); }
-      if (e.key === "Escape") { setSearchOpen(false); setCvOpen(false); setBadgeOpen(false); setDocPreview(null); setLeaveModal(false); }
+      if (e.key === "Escape") {
+        setSearchOpen(false); setCvOpen(false); setBadgeOpen(false);
+        setDocPreview(null); setLeaveModal(false); setEmailModal(false);
+        setOffboard(false);
+      }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -1739,25 +1950,27 @@ export function UnifiedProfile() {
 
   const overall = Math.round(Object.values(COMPLETENESS).reduce((a, b) => a + b, 0) / Object.keys(COMPLETENESS).length);
 
+  // BUG FIX #1 — --hl was identical to --surface in dark mode (#1e293b = #1e293b).
+  // Now --hl is a distinct lighter shade (#253249) so card headers/inset rows are visible.
   const cssVars = {
-    "--bg": dark ? "#0f172a" : "#f8f9fc",
-    "--surface": dark ? "#1e293b" : "#ffffff",
-    "--border": dark ? "#334155" : "#f3f4f6",
-    "--text": dark ? "#f1f5f9" : "#111827",
-    "--muted": dark ? "#94a3b8" : "#6b7280",
-    "--faint": dark ? "#64748b" : "#9ca3af",
-    "--navy": dark ? "#60a5fa" : "#1D3461",
-    "--navyBg": dark ? "#1e3a5f" : "#eef2ff",
-    "--hl": dark ? "#1e293b" : "#f9fafb",
-    "--gap": compact ? "8px" : "14px",
-    "--c-green-bg": dark ? "#14532d" : "#dcfce7",
-    "--c-green-fg": dark ? "#4ade80" : "#166534",
-    "--c-amber-bg": dark ? "#78350f" : "#fef3c7",
-    "--c-amber-fg": dark ? "#fbbf24" : "#92400e",
-    "--c-blue-bg": dark ? "#1e3a5f" : "#dbeafe",
-    "--c-blue-fg": dark ? "#60a5fa" : "#1e40af",
-    "--c-red-bg": dark ? "#7f1d1d" : "#fee2e2",
-    "--c-red-fg": dark ? "#f87171" : "#991b1b",
+    "--bg":          dark ? "#0b1120" : "#f8f9fc",
+    "--surface":     dark ? "#1a2538" : "#ffffff",
+    "--border":      dark ? "#2d3e56" : "#f3f4f6",
+    "--text":        dark ? "#f1f5f9" : "#111827",
+    "--muted":       dark ? "#94a3b8" : "#6b7280",
+    "--faint":       dark ? "#64748b" : "#9ca3af",
+    "--navy":        dark ? "#60a5fa" : NAVY,
+    "--navyBg":      dark ? "#1e3a5f" : "#eef2ff",
+    "--hl":          dark ? "#253249" : "#f9fafb",  // ← FIX: was "#1a2538" same as --surface
+    "--gap":         compact ? "8px" : "14px",
+    "--c-green-bg":  dark ? "#14532d" : "#dcfce7",
+    "--c-green-fg":  dark ? "#4ade80" : "#166534",
+    "--c-amber-bg":  dark ? "#78350f" : "#fef3c7",
+    "--c-amber-fg":  dark ? "#fbbf24" : "#92400e",
+    "--c-blue-bg":   dark ? "#1e3a5f" : "#dbeafe",
+    "--c-blue-fg":   dark ? "#60a5fa" : "#1e40af",
+    "--c-red-bg":    dark ? "#7f1d1d" : "#fee2e2",
+    "--c-red-fg":    dark ? "#f87171" : "#991b1b",
     "--c-purple-bg": dark ? "#4c1d95" : "#f3e8ff",
     "--c-purple-fg": dark ? "#c084fc" : "#6b21a8",
     "--c-indigo-bg": dark ? "#312e81" : "#eef2ff",
@@ -1784,28 +1997,44 @@ export function UnifiedProfile() {
       case "itaccounts":   return <ITAccountsSection />;
       case "hrnotes":      return <HRNotesSection />;
       case "activitylog":  return <ActivityLogSection />;
-      default: return null;
+      default:             return null;
     }
   };
 
   return (
     <ToastCtx.Provider value={showToast}>
       <DocPreviewCtx.Provider value={setDocPreview}>
-        <div style={{ display: "flex", height: "100vh", fontFamily: "'Inter',-apple-system,sans-serif", background: "var(--bg)", overflow: "hidden", ...cssVars }}
+        {/* BUG FIX #3 — @keyframes defined here so Toast animation works */}
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(14px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+          }
+          @media print {
+            body * { visibility: hidden; }
+            #profile-print-area, #profile-print-area * { visibility: visible; }
+            #profile-print-area { position: absolute; left: 0; top: 0; }
+          }
+        `}</style>
+
+        <div id="profile-print-area"
+          style={{ display: "flex", height: "100vh", fontFamily: "'Inter',-apple-system,sans-serif", background: "var(--bg)", overflow: "hidden", ...cssVars }}
           onClick={() => cvOpen && setCvOpen(false)}>
 
           {/* Overlays */}
           <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={id => { setActive(id); setSearchOpen(false); }} />
-          {badgeOpen && <EmployeeBadgeModal onClose={() => setBadgeOpen(false)} />}
-          {docPreview && <DocPreviewDrawer docName={docPreview} onClose={() => setDocPreview(null)} />}
-          {leaveModal && <LeaveRequestModal onClose={() => setLeaveModal(false)} />}
-          {toast && <Toast msg={toast.msg} type={toast.type} />}
+          {badgeOpen   && <EmployeeBadgeModal onClose={() => setBadgeOpen(false)} />}
+          {docPreview  && <DocPreviewDrawer   docName={docPreview} onClose={() => setDocPreview(null)} />}
+          {leaveModal  && <LeaveRequestModal  onClose={() => setLeaveModal(false)} />}
+          {emailModal  && <SendEmailModal     onClose={() => setEmailModal(false)} />}
+          {offboard    && <OffboardModal      onClose={() => setOffboard(false)} />}
+          {toast       && <Toast msg={toast.msg} type={toast.type} />}
 
-          {/* ── SIDEBAR ────────────────────────────────────────────────────── */}
+          {/* ── SIDEBAR ──────────────────────────────────────────────────── */}
           <div style={{ width: compact ? 52 : 208, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto", transition: "width 0.2s" }}>
             {!compact && (
               <div style={{ padding: "16px 12px", borderBottom: "1px solid var(--border)", textAlign: "center" }}>
-                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg,#1D3461,#0F2041)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px", fontSize: 20, color: "white", fontWeight: 800 }}>YM</div>
+                <div style={{ width: 56, height: 56, borderRadius: "50%", background: `linear-gradient(135deg,${NAVY},#0F2041)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px", fontSize: 20, color: "white", fontWeight: 800 }}>YM</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Yousif Mohammed</div>
                 <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>Field Ops Manager</div>
                 <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 1 }}>PACT-FOM-0042</div>
@@ -1851,17 +2080,21 @@ export function UnifiedProfile() {
             <div style={{ padding: compact ? "8px 4px" : "8px 6px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
               {compact ? (
                 <>
-                  <button type="button" title="Send Email" style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>📧</button>
-                  <button type="button" title="Signatures" style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>✍️</button>
-                  <button type="button" title="Employee Badge" onClick={() => setBadgeOpen(true)} style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>🆔</button>
-                  <button type="button" title="Offboard" style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>🚪</button>
+                  <button type="button" title="Send Email"     onClick={() => setEmailModal(true)}  style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>📧</button>
+                  <button type="button" title="Signatures"     onClick={() => showToast("Signature request sent", "info")} style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>✍️</button>
+                  <button type="button" title="Employee Badge" onClick={() => setBadgeOpen(true)}   style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>🆔</button>
+                  <button type="button" title="Offboard"       onClick={() => setOffboard(true)}    style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontSize: 16, textAlign: "center" }}>🚪</button>
                 </>
               ) : (
                 <>
-                  <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--navy)", background: "var(--navyBg)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>📧 Send Email</button>
-                  <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>✍️ Signatures</button>
-                  <button type="button" onClick={() => setBadgeOpen(true)} style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>🆔 Employee Badge</button>
-                  <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--c-red-fg)", background: "var(--c-red-bg)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>🚪 Offboard</button>
+                  <button type="button" onClick={() => setEmailModal(true)}
+                    style={{ fontSize: 11, fontWeight: 600, color: "var(--navy)", background: "var(--navyBg)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>📧 Send Email</button>
+                  <button type="button" onClick={() => showToast("Signature request sent", "info")}
+                    style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>✍️ Signatures</button>
+                  <button type="button" onClick={() => setBadgeOpen(true)}
+                    style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>🆔 Employee Badge</button>
+                  <button type="button" onClick={() => setOffboard(true)}
+                    style={{ fontSize: 11, fontWeight: 600, color: "var(--c-red-fg)", background: "var(--c-red-bg)", border: "none", borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>🚪 Offboard</button>
                 </>
               )}
             </div>
@@ -1890,14 +2123,18 @@ export function UnifiedProfile() {
                   style={{ padding: "5px 8px", background: compact ? "var(--navyBg)" : "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>
                   {compact ? "⊞" : "⊟"}
                 </button>
-                <button type="button" onClick={() => setDark(v => !v)} title={dark ? "Light" : "Dark"}
+                <button type="button" onClick={() => setDark(v => !v)} title={dark ? "Light mode" : "Dark mode"}
                   style={{ padding: "5px 8px", background: "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>
                   {dark ? "☀️" : "🌙"}
                 </button>
-                <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 11px", cursor: "pointer" }}>
-                  📂 Sync Dossier
+                {/* ENHANCEMENT: Sync Dossier with spinner */}
+                <button type="button" onClick={handleSync}
+                  style={{ fontSize: 11, fontWeight: 600, color: syncing ? "var(--c-blue-fg)" : "var(--muted)", background: syncing ? "var(--c-blue-bg)" : "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 11px", cursor: "pointer", transition: "all 0.2s" }}>
+                  {syncing ? "⏳ Syncing…" : "📂 Sync Dossier"}
                 </button>
-                <button type="button" style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 11px", cursor: "pointer" }}>
+                {/* ENHANCEMENT: Print Profile → window.print() */}
+                <button type="button" onClick={handlePrint}
+                  style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", background: "var(--hl)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 11px", cursor: "pointer" }}>
                   🖨️ Print Profile
                 </button>
                 <div style={{ position: "relative" }}>
@@ -1907,7 +2144,8 @@ export function UnifiedProfile() {
                   </button>
                   <CVMenu open={cvOpen} onClose={() => setCvOpen(false)} />
                 </div>
-                <button type="button" style={{ fontSize: 12, fontWeight: 700, color: "white", background: "var(--navy)", border: "none", borderRadius: 7, padding: "6px 13px", cursor: "pointer" }}>
+                <button type="button"
+                  style={{ fontSize: 12, fontWeight: 700, color: "white", background: "var(--navy)", border: "none", borderRadius: 7, padding: "6px 13px", cursor: "pointer" }}>
                   ✎ Edit Profile
                 </button>
               </div>
