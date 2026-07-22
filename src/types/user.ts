@@ -18,6 +18,8 @@ export interface User {
   isApproved?: boolean;
   /** Raw status from profiles: 'pending' | 'approved' | 'rejected' | 'inactive' | string */
   profileStatus?: string;
+  /** How many times this user has self-uploaded a profile photo (capped at 3 for non-admins) */
+  photoUploadCount?: number;
   employeeId?: string;
   
   /**

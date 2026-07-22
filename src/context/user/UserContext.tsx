@@ -140,7 +140,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles');
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles, photo_upload_count');
       
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -209,6 +209,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             secondaryHubId: profile.secondary_hub_id || (profile.location as Record<string, string> | null)?.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
+            photoUploadCount: (profile as any).photo_upload_count ?? existingUser.photoUploadCount ?? 0,
             username: profile.username || existingUser.username,
             fullName: profile.full_name || existingUser.fullName,
             phone: profile.phone || existingUser.phone,
@@ -416,7 +417,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles';
+      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles, photo_upload_count';
 
       let { data: profileData } = await supabase
         .from('profiles')
@@ -529,6 +530,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
         localityId: (userProfile as any).locality_id,
         avatar: (userProfile as any).avatar_url,
+        photoUploadCount: (userProfile as any).photo_upload_count ?? 0,
         username: (userProfile as any).username,
         fullName: (userProfile as any).full_name,
         phone: (userProfile as any).phone,
@@ -875,6 +877,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
           localityId: userProfile.locality_id,
           avatar: userProfile.avatar_url,
+          photoUploadCount: (userProfile as any).photo_upload_count ?? 0,
           username: userProfile.username,
           fullName: userProfile.full_name,
           phone: userProfile.phone,

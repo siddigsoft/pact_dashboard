@@ -180,6 +180,8 @@ const UserDetail: FC = () => {
   // ── Avatar upload ─────────────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  // Local count so UI updates immediately after a successful upload
+  const [localPhotoCount, setLocalPhotoCount] = useState<number | null>(null);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -193,9 +195,13 @@ const UserDetail: FC = () => {
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
       const url = `${publicUrl}?t=${Date.now()}`;
-      const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id);
-      if (dbErr) throw dbErr;
-      setUser(prev => prev ? { ...prev, avatar: url } : prev);
+      // Use the SECURITY DEFINER RPC so any authenticated user can update their own
+      // avatar while enforcing the 3-upload cap for non-admins.
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_profile_avatar', { p_user_id: user.id, p_url: url });
+      if (rpcErr) throw rpcErr;
+      if (rpcResult?.error) throw new Error(rpcResult.error);
+      setUser(prev => prev ? { ...prev, avatar: url, photoUploadCount: rpcResult?.count ?? ((prev.photoUploadCount ?? 0) + 1) } : prev);
+      setLocalPhotoCount(rpcResult?.count ?? ((localPhotoCount ?? (user.photoUploadCount ?? 0)) + 1));
       toast({ title: 'Photo updated', description: 'Profile picture saved successfully.' });
     } catch (err: any) {
       toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
@@ -1762,53 +1768,77 @@ const UserDetail: FC = () => {
               )}
 
               {/* ── Profile Photo ──────────────────────────────────────────── */}
-              {isAdmin && (
-                <div className="bg-muted/20 rounded-xl p-4 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest mb-3">Profile Photo</h3>
-                  <div className="flex items-center gap-4">
-                    {/* Avatar preview */}
-                    <div
-                      className="relative h-20 w-20 rounded-xl overflow-hidden shrink-0 ring-2 ring-border/40 cursor-pointer group"
-                      onClick={() => avatarInputRef.current?.click()}
-                      title="Click to change photo"
-                    >
-                      {avatarUploading ? (
-                        <div className="h-full w-full flex items-center justify-center bg-muted">
-                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                        </div>
-                      ) : user.avatar ? (
-                        <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center text-xl font-extrabold text-white" style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}>
-                          {user.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '??'}
-                        </div>
-                      )}
-                      {/* Hover overlay */}
-                      {!avatarUploading && (
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Camera className="h-5 w-5 text-white" />
-                        </div>
+              {(isAdmin || isOwnProfile) && (() => {
+                const photoCount  = localPhotoCount ?? (user.photoUploadCount ?? 0);
+                const isLocked    = !isAdmin && photoCount >= 3;
+                const canClick    = !isLocked && !avatarUploading;
+                return (
+                  <div className="bg-muted/20 rounded-xl p-4 border border-border/40 hover:border-border/60 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Profile Photo</h3>
+                      {/* Upload counter — shown only to non-admins */}
+                      {!isAdmin && (
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                          isLocked
+                            ? 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/40'
+                            : photoCount === 2
+                            ? 'text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40'
+                            : 'text-muted-foreground bg-muted'
+                        }`}>
+                          {photoCount}/3 changes used
+                        </span>
                       )}
                     </div>
-                    {/* Info + button */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">{user.avatar ? 'Photo uploaded' : 'No photo yet'}</p>
-                      <p className="text-xs text-muted-foreground">JPG, PNG, or WebP · Max 5 MB</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={() => avatarInputRef.current?.click()}
-                        disabled={avatarUploading}
-                        data-testid="button-change-photo"
+                    <div className="flex items-center gap-4">
+                      {/* Avatar preview */}
+                      <div
+                        className={`relative h-20 w-20 rounded-xl overflow-hidden shrink-0 ring-2 ring-border/40 ${canClick ? 'cursor-pointer group' : 'cursor-not-allowed opacity-80'}`}
+                        onClick={() => canClick && avatarInputRef.current?.click()}
+                        title={isLocked ? 'Upload limit reached — contact HR or Admin' : 'Click to change photo'}
                       >
-                        {avatarUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
-                        {avatarUploading ? 'Uploading…' : user.avatar ? 'Change Photo' : 'Upload Photo'}
-                      </Button>
+                        {avatarUploading ? (
+                          <div className="h-full w-full flex items-center justify-center bg-muted">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : user.avatar ? (
+                          <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-xl font-extrabold text-white" style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}>
+                            {user.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '??'}
+                          </div>
+                        )}
+                        {canClick && !avatarUploading && (
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Camera className="h-5 w-5 text-white" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Info + button */}
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <p className="text-sm font-medium">{user.avatar ? 'Photo uploaded' : 'No photo yet'}</p>
+                        <p className="text-xs text-muted-foreground">JPG, PNG, or WebP · Max 5 MB</p>
+                        {isLocked ? (
+                          <p className="text-xs text-red-600 dark:text-red-400 font-medium leading-snug">
+                            Upload limit reached. Contact HR or Admin to update your photo.
+                          </p>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => avatarInputRef.current?.click()}
+                            disabled={avatarUploading}
+                            data-testid="button-change-photo"
+                          >
+                            {avatarUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+                            {avatarUploading ? 'Uploading…' : user.avatar ? 'Change Photo' : 'Upload Photo'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
