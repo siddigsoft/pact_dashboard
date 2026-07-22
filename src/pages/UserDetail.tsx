@@ -155,6 +155,8 @@ const UserDetail: FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [bankAccountFormOpen, setBankAccountFormOpen] = useState(false);
+  const [deleteBankAccountConfirmOpen, setDeleteBankAccountConfirmOpen] = useState(false);
+  const [isDeletingBankAccount, setIsDeletingBankAccount] = useState(false);
 
   const roleStr = (currentUser?.role || '').toLowerCase();
   const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
@@ -914,6 +916,25 @@ const UserDetail: FC = () => {
     };
     fetchClassificationHistory();
   }, [user?.id, canManageClassifications, getClassificationHistory]);
+
+  const handleDeleteBankAccount = async () => {
+    if (!user || !updateUser) return;
+    setIsDeletingBankAccount(true);
+    const updatedUser: User = { ...user, bankAccount: undefined };
+    try {
+      const success = await updateUser(updatedUser);
+      if (success) {
+        setUser(updatedUser);
+        toast({ title: "Bank Account Removed", description: `Bank account details have been deleted for ${user.name}.` });
+        setDeleteBankAccountConfirmOpen(false);
+      }
+    } catch (err) {
+      console.error("Error deleting bank account:", err);
+      toast({ title: "Delete failed", description: "Could not remove the bank account. Please try again.", variant: "destructive" });
+    } finally {
+      setIsDeletingBankAccount(false);
+    }
+  };
 
   const handleBankAccountSubmit = (values: BankakAccountFormValues) => {
     if (!user) return;
@@ -2522,9 +2543,19 @@ const UserDetail: FC = () => {
                     )}
                   </div>
                   {canEditBankAccount && (
-                    <Button onClick={() => setBankAccountFormOpen(true)} className="gap-2">
-                      <Edit className="h-4 w-4" />Edit Bank Account
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => setBankAccountFormOpen(true)} variant="outline" className="gap-2">
+                        <Edit className="h-4 w-4" />Edit
+                      </Button>
+                      <Button
+                        onClick={() => setDeleteBankAccountConfirmOpen(true)}
+                        variant="destructive"
+                        className="gap-2"
+                        data-testid="button-delete-bank-account"
+                      >
+                        <Trash2 className="h-4 w-4" />Delete
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -3225,6 +3256,33 @@ ALTER TABLE public.profiles
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteBankAccountConfirmOpen} onOpenChange={setDeleteBankAccountConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" /> Delete Bank Account
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the bank account details for <strong>{user?.name}</strong>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingBankAccount}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteBankAccount}
+              disabled={isDeletingBankAccount}
+              className="bg-destructive hover:bg-destructive/90 gap-2"
+            >
+              {isDeletingBankAccount ? (
+                <><span className="animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full" />Deleting…</>
+              ) : (
+                <><Trash2 className="h-3.5 w-3.5" />Delete Account</>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {user && (
         <ManageClassificationDialog
