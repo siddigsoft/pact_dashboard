@@ -519,12 +519,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Prefer DB full_name; if null fall back to whatever is already in memory/localStorage
-      // so a page refresh never wipes a name the user successfully saved.
-      const storedFullName = currentUser?.fullName || (() => {
-        try { return (JSON.parse(localStorage.getItem('PACTCurrentUser') || '{}') as any)?.fullName; } catch { return null; }
-      })();
-      const resolvedFullName = (userProfile as any).full_name || storedFullName || null;
+      // Prefer DB full_name; fall back to localStorage so a page refresh never wipes a saved name.
+      let resolvedFullName: string | null = (userProfile as any).full_name || null;
+      if (!resolvedFullName) {
+        try {
+          const _stored = localStorage.getItem('PACTCurrentUser');
+          if (_stored) {
+            const _parsed = JSON.parse(_stored) as any;
+            if (_parsed && _parsed.id === authUser.id && _parsed.fullName) {
+              resolvedFullName = _parsed.fullName;
+            }
+          }
+        } catch (lsErr) {
+          console.warn('[UserContext] Could not read fullName from localStorage', lsErr);
+        }
+      }
       const resolvedName = resolvedFullName || authUser.email?.split('@')[0] || 'User';
 
       const supabaseUser: User = {
@@ -874,11 +883,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
         
-        // Prefer DB full_name; fall back to existing memory/localStorage so refresh never wipes a saved name
-        const _storedFN2 = (() => {
-          try { return (JSON.parse(localStorage.getItem('PACTCurrentUser') || '{}') as any)?.fullName; } catch { return null; }
-        })();
-        const _resolvedFN2 = userProfile.full_name || _storedFN2 || null;
+        // Prefer DB full_name; fall back to localStorage so a page refresh never wipes a saved name.
+        let _resolvedFN2: string | null = userProfile.full_name || null;
+        if (!_resolvedFN2) {
+          try {
+            const _s2 = localStorage.getItem('PACTCurrentUser');
+            if (_s2) {
+              const _p2 = JSON.parse(_s2) as any;
+              if (_p2 && _p2.id === authData.user.id && _p2.fullName) {
+                _resolvedFN2 = _p2.fullName;
+              }
+            }
+          } catch (lsErr2) {
+            console.warn('[UserContext] Could not read fullName from localStorage (login path)', lsErr2);
+          }
+        }
         const _resolvedName2 = _resolvedFN2 || authData.user.email?.split('@')[0] || 'User';
 
         const supabaseUser: User = {
