@@ -334,14 +334,18 @@
     const isICT = hasRole('ict');
     const isFinancialAdmin = hasRole('financialAdmin');
     const isAuditor = hasRole('auditor');
-    const isDataCollector = hasRole('dataCollector');
-    const isCoordinator = hasRole('coordinator');
     const isFOM = hasRole('fom');
     const isSupervisor = hasRole('supervisor');
     const isDataTeam = hasRole('dataTeam');
     const isProjectManager = hasRole('projectManager');
     const isCountryDirector = hasRole('countryDirector');
     const isEmployee = hasRole('employee');
+    // Management roles win: if a user has both a management role AND a field-staff
+    // role in their combined role pool (stale user_roles entries are the common cause),
+    // treat them as management so navigation labels and visibility are correct.
+    const _hasMgmt = isSuperAdmin || isAdmin || isICT || isFOM || isFinancialAdmin || isAuditor;
+    const isDataCollector = hasRole('dataCollector') && !_hasMgmt;
+    const isCoordinator   = hasRole('coordinator')   && !_hasMgmt;
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -645,10 +649,14 @@
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
-    const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
+    // Management roles always override field-staff flags — a user with both
+    // admin AND dataCollector in their roles (stale entry) is treated as admin.
+    const _isRawDataCollector = roles?.includes('DataCollector' as AppRole) || 
                             roles?.includes('dataCollector' as AppRole) || 
                             currentUser?.role?.toLowerCase() === 'datacollector' ||
                             currentUser?.role?.toLowerCase() === 'data collector';
+    const _isAnyManagement = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'FOM', 'countryDirector', 'financialAdmin', 'dataTeam', 'projectManager']);
+    const isDataCollector = _isRawDataCollector && !_isAnyManagement;
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
     // (the hasAnyRole function reference changes every render â€” never put it in deps)
