@@ -2465,7 +2465,13 @@ const UserDetail: FC = () => {
                       {user.bankAccount.country && (
                         <div className="space-y-1.5">
                           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Country</p>
-                          <p className="font-semibold text-base">{user.bankAccount.country}</p>
+                          <p className="font-semibold text-base">
+                            {({SD:"🇸🇩 Sudan",SS:"🇸🇸 South Sudan",KE:"🇰🇪 Kenya",ET:"🇪🇹 Ethiopia",
+                               UG:"🇺🇬 Uganda",EG:"🇪🇬 Egypt",JO:"🇯🇴 Jordan",AE:"🇦🇪 UAE",
+                               GB:"🇬🇧 United Kingdom",US:"🇺🇸 United States",DE:"🇩🇪 Germany",
+                               FR:"🇫🇷 France",OTHER:"🌍 Other"} as Record<string,string>
+                            )[user.bankAccount.country] || user.bankAccount.country}
+                          </p>
                         </div>
                       )}
                       {user.bankAccount.currency && (
