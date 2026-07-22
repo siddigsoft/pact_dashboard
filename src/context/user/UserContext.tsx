@@ -201,7 +201,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           return {
             id: profile.id,
-            name: profile.full_name || profile.username || 'Unknown',
+            name: profile.full_name || existingUser.fullName || existingUser.name || 'Unknown',
             email: profile.email || existingUser.email || '',
             role: profile.role || 'dataCollector',
             roles: allUserRoles[profile.id] || [],
@@ -519,9 +519,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // Prefer DB full_name; if null fall back to whatever is already in memory/localStorage
+      // so a page refresh never wipes a name the user successfully saved.
+      const storedFullName = currentUser?.fullName || (() => {
+        try { return (JSON.parse(localStorage.getItem('PACTCurrentUser') || '{}') as any)?.fullName; } catch { return null; }
+      })();
+      const resolvedFullName = (userProfile as any).full_name || storedFullName || null;
+      const resolvedName = resolvedFullName || authUser.email?.split('@')[0] || 'User';
+
       const supabaseUser: User = {
         id: authUser.id,
-        name: (userProfile as any).full_name || authUser.email?.split('@')[0] || 'User',
+        name: resolvedName,
         email: authUser.email || '',
         role: isProtectedOwner(authUser.id) ? 'superAdmin' : ((userProfile as any).role || userRole),
         roles: userRolesList.length > 0 ? userRolesList : undefined,
@@ -533,7 +541,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         avatar: (userProfile as any).avatar_url,
         photoUploadCount: (userProfile as any).photo_upload_count ?? 0,
         username: (userProfile as any).username,
-        fullName: (userProfile as any).full_name,
+        fullName: resolvedFullName,
         phone: (userProfile as any).phone,
         employeeId: (userProfile as any).employee_id,
         lastActive: (profileData as any)?.last_activity || new Date().toISOString(),
@@ -866,9 +874,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
         
+        // Prefer DB full_name; fall back to existing memory/localStorage so refresh never wipes a saved name
+        const _storedFN2 = (() => {
+          try { return (JSON.parse(localStorage.getItem('PACTCurrentUser') || '{}') as any)?.fullName; } catch { return null; }
+        })();
+        const _resolvedFN2 = userProfile.full_name || _storedFN2 || null;
+        const _resolvedName2 = _resolvedFN2 || authData.user.email?.split('@')[0] || 'User';
+
         const supabaseUser: User = {
           id: authData.user.id,
-          name: userProfile.full_name || authData.user.email?.split('@')[0] || 'User',
+          name: _resolvedName2,
           email: authData.user.email || '',
           role: isProtectedOwner(authData.user.id) ? 'superAdmin' : (userProfile.role || userRole),
           roles: userRolesList.length > 0 ? userRolesList : undefined,
@@ -880,7 +895,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatar: userProfile.avatar_url,
           photoUploadCount: (userProfile as any).photo_upload_count ?? 0,
           username: userProfile.username,
-          fullName: userProfile.full_name,
+          fullName: _resolvedFN2,
           phone: userProfile.phone,
           employeeId: userProfile.employee_id,
           lastActive: new Date().toISOString(),
