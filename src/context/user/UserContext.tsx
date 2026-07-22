@@ -1386,12 +1386,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availability: user.availability || 'offline'
       };
       
-      // Build the update payload used for both direct update and as fallback
+      // Build the update payload used for both direct update and as fallback.
+      // IMPORTANT: For the protected owner, NEVER include `role` in the payload.
+      // The DB trigger (protect_owner_profile) fires whenever NEW.role != OLD.role
+      // and reverts the ENTIRE row — including full_name — even without raising an
+      // error. Excluding role from the payload keeps the trigger silent and allows
+      // all other fields (name, phone, avatar, etc.) to save correctly.
       const updatePayload: Record<string, any> = {
         full_name: updatedUser.fullName || updatedUser.name,
         username: updatedUser.username,
         email: updatedUser.email,
-        role: updatedUser.role,
         avatar_url: updatedUser.avatar,
         hub_id: updatedUser.hubId,
         state_id: updatedUser.stateId,
@@ -1401,6 +1405,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bank_account: (updatedUser as any).bankAccount || null,
         updated_at: new Date().toISOString(),
       };
+      // Only include role in the payload for non-protected-owner accounts.
+      if (!isProtectedOwner(updatedUser.id)) {
+        updatePayload.role = updatedUser.role;
+      }
 
       // Try direct update first — no row-count check (RLS may block RETURNING without blocking UPDATE)
       const { error: directError } = await supabase
@@ -1417,7 +1425,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             new_full_name: updatedUser.fullName || updatedUser.name || null,
             new_username: updatedUser.username || null,
             new_email: updatedUser.email || null,
-            new_role: updatedUser.role || null,
+            // Never send role for protected owner — the DB trigger reverts the entire row otherwise
+            new_role: isProtectedOwner(updatedUser.id) ? null : (updatedUser.role || null),
             new_avatar_url: updatedUser.avatar || null,
             new_hub_id: updatedUser.hubId || null,
             new_state_id: updatedUser.stateId || null,
