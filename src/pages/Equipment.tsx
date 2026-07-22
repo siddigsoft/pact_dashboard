@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
 import { useAppContext } from '@/context/AppContext';
-import { Package, Plus, Search, RefreshCw, X, Wrench, CheckCircle, AlertTriangle, Filter } from 'lucide-react';
+import { Package, Plus, Search, RefreshCw, X, Wrench, CheckCircle, AlertTriangle, Filter, Info, ExternalLink } from 'lucide-react';
 
 interface Equipment {
   id: string;
@@ -142,6 +142,25 @@ export default function EquipmentPage() {
         <Button onClick={() => setShowForm(true)} data-testid="button-add-equipment">
           <Plus className="w-4 h-4 mr-2" /> Add Equipment
         </Button>
+      </div>
+
+      {/* Clarification banner */}
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/50 px-4 py-3">
+        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">This page tracks field operations equipment (vehicles, kits, GPS devices).</p>
+          <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+            To assign laptops, phones, SIM cards, or office assets <span className="font-semibold">to individual employees</span>, use the HR Equipment Registry.
+          </p>
+        </div>
+        <a
+          href="/hr?tab=equipment"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors shrink-0"
+          data-testid="link-hr-equipment-registry"
+        >
+          <ExternalLink className="h-3 w-3" />
+          HR Equipment Registry
+        </a>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
