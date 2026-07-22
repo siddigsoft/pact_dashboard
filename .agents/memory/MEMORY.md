@@ -15,3 +15,4 @@
 - [pact-excel-export-standard](pact-excel-export-standard.md) — All PACT report pages should offer Excel via `exportToExcel`/`exportStandardExcel` (or the branded ExcelJS builder for staff pages); add as an extra button, never remove existing CSV/PDF.
 - [untracked-security-definer-rpcs](untracked-security-definer-rpcs.md) — get_entry_enrichment and similar RPCs live only in Supabase, no migration file; never edit them blind, always add a new separately-named RPC instead.
 - [role-management-permission-system](role-management-permission-system.md) — isSuperAdmin bug fixed; 34 resources in roles.ts; checkPermission() must be used for overrides to work; page_access vs user_permission_overrides are separate tables.
+- [protected-owner-role-lock](protected-owner-role-lock.md) — protect_owner_profile DB trigger blocks profiles.role SQL updates; fix must be 3 isProtectedOwner() overrides in UserContext.

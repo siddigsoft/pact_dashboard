@@ -50,6 +50,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedUser = JSON.parse(storedUser) as User;
         return {
           ...parsedUser,
+          role: isProtectedOwner(parsedUser.id) ? 'superAdmin' : (parsedUser.role || 'dataCollector'),
           availability: parsedUser.availability || 'online',
           lastActive: parsedUser.lastActive || new Date().toISOString()
         };
@@ -522,7 +523,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: authUser.id,
         name: (userProfile as any).full_name || (userProfile as any).username || authUser.email?.split('@')[0] || 'User',
         email: authUser.email || '',
-        role: (userProfile as any).role || userRole,
+        role: isProtectedOwner(authUser.id) ? 'superAdmin' : ((userProfile as any).role || userRole),
         roles: userRolesList.length > 0 ? userRolesList : undefined,
         additionalRoles: Array.isArray((userProfile as any).additional_roles) ? (userProfile as any).additional_roles : [],
         stateId: (userProfile as any).state_id,
@@ -869,7 +870,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: authData.user.id,
           name: userProfile.full_name || userProfile.username || authData.user.email?.split('@')[0] || 'User',
           email: authData.user.email || '',
-          role: userProfile.role || userRole,
+          role: isProtectedOwner(authData.user.id) ? 'superAdmin' : (userProfile.role || userRole),
           roles: userRolesList.length > 0 ? userRolesList : undefined,
           additionalRoles: Array.isArray((userProfile as any).additional_roles) ? (userProfile as any).additional_roles : [],
           stateId: userProfile.state_id,
