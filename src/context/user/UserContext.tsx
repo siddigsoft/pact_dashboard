@@ -242,6 +242,30 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem(`user-${user.id}`, JSON.stringify(user));
         });
         setAppUsers(supabaseUsers);
+
+        // Sync currentUser with fresh DB data so the navbar always shows the up-to-date name.
+        // refreshUsers() is the only place that fetches ALL profiles from DB; without this
+        // sync, currentUser.name can stay stale (email prefix) even after full_name is saved.
+        setCurrentUser(prev => {
+          if (!prev) return prev;
+          const fresh = supabaseUsers.find(u => u.id === prev.id);
+          if (!fresh) return prev;
+          // Only update if the fresh record has a real name value worth keeping
+          const freshName = fresh.fullName || fresh.name;
+          if (!freshName || freshName === prev.id) return prev;
+          const next = {
+            ...prev,
+            name: freshName,
+            fullName: fresh.fullName || prev.fullName,
+            avatar: fresh.avatar || prev.avatar,
+            phone: fresh.phone || prev.phone,
+            employeeId: fresh.employeeId || prev.employeeId,
+          };
+          try {
+            localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
       }
     } catch (error) {
       console.error("Error in fetchUsers:", error);
