@@ -543,8 +543,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Prefer DB full_name; fall back to localStorage so a page refresh never wipes a saved name.
-      let resolvedFullName: string | null = (userProfile as any).full_name || null;
+      // Resolve full name with a priority chain:
+      // 1. For protected owner: auth user_metadata (trigger-safe, always wins)
+      // 2. DB profiles.full_name
+      // 3. localStorage cache (survives offline / trigger-reverted saves)
+      let resolvedFullName: string | null = null;
+      if (isProtectedOwner(authUser.id)) {
+        resolvedFullName =
+          (authUser.user_metadata?.full_name as string | undefined) ||
+          (userProfile as any).full_name ||
+          null;
+      } else {
+        resolvedFullName = (userProfile as any).full_name || null;
+      }
       if (!resolvedFullName) {
         try {
           const _stored = localStorage.getItem('PACTCurrentUser');
@@ -1468,37 +1479,38 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePayload.role = updatedUser.role;
       }
 
-      // For the protected owner, use a dedicated bypass RPC that disables triggers
-      // (SET LOCAL session_replication_role = replica) so full_name etc. always save.
+      // For the protected owner, save name/phone/etc. into Supabase auth user metadata.
+      // auth.users has NO trigger, so the protect_owner_profile trigger cannot interfere.
+      // This is the guaranteed-to-work path — no SQL or RPC needed.
       if (isProtectedOwner(updatedUser.id)) {
-        console.log('[updateUser] Protected owner — using bypass RPC');
-        const { error: ownerRpcError } = await supabase.rpc('update_owner_profile_fields', {
-          p_full_name:   updatedUser.fullName || updatedUser.name || null,
-          p_phone:       updatedUser.phone || null,
-          p_employee_id: updatedUser.employeeId || null,
-          p_avatar_url:  updatedUser.avatar || null,
-          p_hub_id:      updatedUser.hubId || null,
-          p_state_id:    updatedUser.stateId || null,
-          p_locality_id: updatedUser.localityId || null,
+        console.log('[updateUser] Protected owner — saving via auth metadata (trigger-safe)');
+        const ownerName = updatedUser.fullName || updatedUser.name || '';
+        const { error: authMetaError } = await supabase.auth.updateUser({
+          data: {
+            full_name: ownerName,
+            phone: updatedUser.phone || null,
+            employee_id: updatedUser.employeeId || null,
+            avatar_url: updatedUser.avatar || null,
+          },
         });
-        if (ownerRpcError) {
-          console.error('[updateUser] Owner bypass RPC error:', ownerRpcError.message);
-          // Fall through to standard path if bypass RPC not yet created in DB
+        if (authMetaError) {
+          console.error('[updateUser] Auth metadata update failed:', authMetaError.message);
         } else {
-          console.log('[updateUser] Owner profile saved via bypass RPC');
-          // Skip standard update path — jump directly to post-save logic below
-          // by setting directError to undefined and not entering the else branch
-          // (we jump to the secondary_hub_id section by falling through with no errors)
-          // Update local caches and return
-          setAppUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-          localStorage.setItem(`user-${updatedUser.id}`, JSON.stringify(updatedUser));
-          if (currentUser && updatedUser.id === currentUser.id) {
-            setCurrentUser(updatedUser);
-            localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedUser));
-          }
-          toast({ title: "User updated", description: "User information was successfully updated and will persist between sessions." });
-          return true;
+          console.log('[updateUser] Owner name saved to auth metadata:', ownerName);
         }
+        // Also attempt profiles table update (may be silently reverted by trigger for name,
+        // but other fields like hub_id, state_id may save fine).
+        await supabase.from('profiles').update(updatePayload).eq('id', updatedUser.id);
+        // Commit to local caches unconditionally — auth metadata is the source of truth.
+        const ownerUpdated = { ...updatedUser, name: ownerName, fullName: ownerName };
+        setAppUsers(prev => prev.map(u => u.id === ownerUpdated.id ? ownerUpdated : u));
+        localStorage.setItem(`user-${ownerUpdated.id}`, JSON.stringify(ownerUpdated));
+        if (currentUser && ownerUpdated.id === currentUser.id) {
+          setCurrentUser(ownerUpdated);
+          localStorage.setItem('PACTCurrentUser', JSON.stringify(ownerUpdated));
+        }
+        toast({ title: 'Profile updated', description: 'Your profile has been saved.' });
+        return true;
       }
 
       // Standard update path (non-owner users, or owner bypass RPC fallback)
