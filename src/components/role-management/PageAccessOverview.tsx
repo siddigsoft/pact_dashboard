@@ -18,7 +18,7 @@ import {
   Users, FileText, Shield, Info, Plus, Globe, User, ChevronsUpDown, UserCircle,
   Grid3X3, Check,
 } from 'lucide-react';
-import { PAGE_DEFS } from '@/pages/PageAccessControl';
+import { PAGE_DEFS, PAGE_GROUPS } from '@/pages/PageAccessControl';
 import { cn } from '@/lib/utils';
 import { toDisplayLabel, normalizeRole } from '@/utils/roleMapping';
 
@@ -107,6 +107,7 @@ export function PageAccessOverview() {
   const [newBlocked, setNewBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userPickerOpen, setUserPickerOpen] = useState(false);
+  const [pagePickerOpen, setPagePickerOpen] = useState(false);
 
   const { data: overrides = [], isLoading } = useQuery<Override[]>({
     queryKey: ['page-access-overrides'],
@@ -317,18 +318,53 @@ export function PageAccessOverview() {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Page <span className="opacity-60">/ الصفحة</span></label>
-                  <Select value={newSlug} onValueChange={setNewSlug}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select page…" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {PAGE_DEFS.map(p => (
-                        <SelectItem key={p.slug} value={p.slug} className="text-xs">
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={pagePickerOpen} onOpenChange={setPagePickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full h-8 text-xs justify-between font-normal"
+                        data-testid="page-access-page-picker"
+                      >
+                        {newSlug
+                          ? (() => { const p = PAGE_DEFS.find(d => d.slug === newSlug); return p?.label || newSlug; })()
+                          : <span className="text-muted-foreground">Select page…</span>
+                        }
+                        <ChevronsUpDown className="ml-1 h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[340px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search page name or path…" className="text-xs h-8" />
+                        <CommandList className="max-h-72">
+                          <CommandEmpty className="text-xs py-3 text-center text-muted-foreground">No pages found.</CommandEmpty>
+                          {PAGE_GROUPS.map(group => {
+                            const pages = PAGE_DEFS.filter(p => p.group === group);
+                            if (!pages.length) return null;
+                            return (
+                              <CommandGroup key={group} heading={group}>
+                                {pages.map(p => (
+                                  <CommandItem
+                                    key={p.slug}
+                                    value={`${p.label} ${p.group} ${p.path}`}
+                                    onSelect={() => { setNewSlug(p.slug); setPagePickerOpen(false); }}
+                                    className="text-xs py-1.5"
+                                    data-testid={`page-picker-option-${p.slug}`}
+                                  >
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <span className="font-medium truncate">{p.label}</span>
+                                      <span className="text-[10px] text-muted-foreground truncate">{p.path}</span>
+                                    </div>
+                                    {newSlug === p.slug && <Check className="h-3 w-3 ml-2 flex-shrink-0 text-primary" />}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            );
+                          })}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Effect <span className="opacity-60">/ التأثير</span></label>
