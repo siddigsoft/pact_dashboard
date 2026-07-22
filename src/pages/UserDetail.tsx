@@ -1770,12 +1770,36 @@ const UserDetail: FC = () => {
                     <p className="font-semibold text-base font-mono">{user.phone || <span className="text-muted-foreground italic font-sans">Not set</span>}</p>
                   )}
                 </div>
-                <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
-                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employee ID</h3>
+                <div className={`bg-muted/20 rounded-xl p-4 space-y-2 border hover:border-border/60 transition-colors ${(() => { const p = user.employeeId?.match(/^([A-Z]+)/)?.[1]; return p && empCountryCode && p !== empCountryCode ? 'border-red-300 dark:border-red-700' : 'border-border/40'; })()}`}>
+                  <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                    Employee ID
+                    {(() => {
+                      const p = user.employeeId?.match(/^([A-Z]+)/)?.[1];
+                      return p && empCountryCode && p !== empCountryCode
+                        ? <span className="text-[9px] font-bold uppercase tracking-widest text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded-full">Prefix mismatch</span>
+                        : null;
+                    })()}
+                  </h3>
                   {editMode ? (
                     <Input value={editForm.employeeId || ""} onChange={e => handleEditChange("employeeId", e.target.value)} className="h-11 bg-background rounded-lg" />
                   ) : (
-                    <p className="font-semibold text-base">{user.employeeId || <span className="text-muted-foreground italic">Not set</span>}</p>
+                    <>
+                      <p className="font-semibold text-base font-mono">{user.employeeId || <span className="text-muted-foreground italic font-sans">Not set</span>}</p>
+                      {(() => {
+                        const idPrefix = user.employeeId?.match(/^([A-Z]+)/)?.[1] ?? null;
+                        const mismatch = idPrefix && empCountryCode && idPrefix !== empCountryCode;
+                        if (!mismatch) return null;
+                        return (
+                          <div className="flex items-start gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2.5 py-2 rounded-md border border-red-200 dark:border-red-800">
+                            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            <span className="flex-1">
+                              ID prefix <strong>{idPrefix}</strong> doesn't match assigned country <strong>{empCountryCode}</strong> — workspace folder is named with the wrong country code.
+                              {isAdmin && <> Go to <strong>Employment tab</strong> to fix.</>}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </div>
                 <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 hover:border-border/60 transition-colors">
