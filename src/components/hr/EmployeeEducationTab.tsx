@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,6 @@ import {
   Plus, Trash2, Loader2, GraduationCap, Briefcase,
   Edit, Save, X, Calendar, Building2, MapPin, Tag,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 interface EduEntry {
   id?: string;
@@ -118,11 +117,8 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
   const [expForm, setExpForm] = useState<ExpEntry | null>(null);
   const [expSaving, setExpSaving] = useState(false);
 
-  // Refs used to scroll the inline forms into view when they open
-  const eduFormRef = useRef<HTMLDivElement>(null);
-  const expFormRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
+    if (!userId) return;
     const load = async () => {
       setLoading(true);
       const [{ data: e, error: eErr }, { data: x, error: xErr }] = await Promise.all([
@@ -138,19 +134,13 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
     load();
   }, [userId]);
 
-  // Scroll the education form into view whenever it opens
-  useEffect(() => {
-    if (eduForm) {
-      setTimeout(() => eduFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    }
-  }, [!!eduForm]);
+  const openEduForm = (entry?: EduEntry) => {
+    setEduForm(entry ? { ...entry } : { ...EMPTY_EDU });
+  };
 
-  // Scroll the experience form into view whenever it opens
-  useEffect(() => {
-    if (expForm) {
-      setTimeout(() => expFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    }
-  }, [!!expForm]);
+  const openExpForm = (entry?: ExpEntry) => {
+    setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
+  };
 
   const saveEdu = async () => {
     if (!eduForm) return;
@@ -236,10 +226,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           subtitle={`${edu.length} academic qualification${edu.length !== 1 ? 's' : ''} on record`}
           action={isAdmin ? (
             <Button
+              type="button"
               size="sm"
               variant={eduForm ? "ghost" : "outline"}
               className={`h-8 gap-1.5 text-xs ${eduForm ? 'text-muted-foreground hover:text-foreground' : ''}`}
-              onClick={() => eduForm ? setEduForm(null) : setEduForm({ ...EMPTY_EDU })}
+              onClick={() => eduForm ? setEduForm(null) : openEduForm()}
               data-testid="button-add-education"
             >
               {eduForm ? <><X className="h-3 w-3" /> Cancel</> : <><Plus className="h-3 w-3" /> Add Qualification</>}
@@ -249,10 +240,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
         {/* Add / Edit form */}
         {eduForm && (
-          <div ref={eduFormRef} className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold">{eduForm.id ? 'Edit Qualification' : 'Add New Qualification'}</h4>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEduForm(null)}><X className="h-3.5 w-3.5" /></Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEduForm(null)}><X className="h-3.5 w-3.5" /></Button>
             </div>
             <FormRow>
               <FormField label="Degree / Qualification Level" required>
@@ -280,10 +271,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
               </FormField>
             </FormRow>
             <div className="flex gap-2 pt-1 border-t border-border/40">
-              <Button size="sm" onClick={saveEdu} disabled={eduSaving || !eduForm.institution} className="gap-1.5">
+              <Button type="button" size="sm" onClick={saveEdu} disabled={eduSaving || !eduForm.institution} className="gap-1.5">
                 {eduSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEduForm(null)}>Cancel</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEduForm(null)}>Cancel</Button>
             </div>
           </div>
         )}
@@ -294,7 +285,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
             <GraduationCap className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No education history recorded yet.</p>
             {isAdmin && (
-              <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setEduForm({ ...EMPTY_EDU })} data-testid="button-add-education-empty">
+              <Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => openEduForm()} data-testid="button-add-education-empty">
                 <Plus className="h-3 w-3" /> Add First Qualification
               </Button>
             )}
@@ -303,7 +294,6 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           <div className="space-y-2">
             {edu.map((e, i) => (
               <div key={e.id || i} className="flex items-stretch gap-0 rounded-xl border border-border/40 overflow-hidden hover:border-border/70 hover:shadow-sm transition-all bg-background">
-                {/* Left accent stripe */}
                 <div className="w-1 shrink-0 bg-primary/20" />
                 <div className="flex items-center gap-4 px-4 py-3.5 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
@@ -322,8 +312,8 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
                   </div>
                   {isAdmin && (
                     <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEduForm({ ...e })} data-testid={`button-edit-edu-${e.id}`}><Edit className="h-3 w-3" /></Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => e.id && deleteEdu(e.id)} data-testid={`button-delete-edu-${e.id}`}><Trash2 className="h-3 w-3" /></Button>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => openEduForm(e)} data-testid={`button-edit-edu-${e.id}`}><Edit className="h-3 w-3" /></Button>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => e.id && deleteEdu(e.id)} data-testid={`button-delete-edu-${e.id}`}><Trash2 className="h-3 w-3" /></Button>
                     </div>
                   )}
                 </div>
@@ -341,10 +331,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           subtitle={`${exp.length} position${exp.length !== 1 ? 's' : ''} on record`}
           action={isAdmin ? (
             <Button
+              type="button"
               size="sm"
               variant={expForm ? "ghost" : "outline"}
               className={`h-8 gap-1.5 text-xs ${expForm ? 'text-muted-foreground hover:text-foreground' : ''}`}
-              onClick={() => expForm ? setExpForm(null) : setExpForm({ ...EMPTY_EXP })}
+              onClick={() => expForm ? setExpForm(null) : openExpForm()}
               data-testid="button-add-experience"
             >
               {expForm ? <><X className="h-3 w-3" /> Cancel</> : <><Plus className="h-3 w-3" /> Add Position</>}
@@ -354,10 +345,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
         {/* Add / Edit form */}
         {expForm && (
-          <div ref={expFormRef} className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold">{expForm.id ? 'Edit Position' : 'Add New Position'}</h4>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpForm(null)}><X className="h-3.5 w-3.5" /></Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpForm(null)}><X className="h-3.5 w-3.5" /></Button>
             </div>
             <FormRow>
               <FormField label="Employer / Organisation" required>
@@ -393,10 +384,10 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
               </FormField>
             </FormRow>
             <div className="flex gap-2 pt-1 border-t border-border/40">
-              <Button size="sm" onClick={saveExp} disabled={expSaving || !expForm.employer || !expForm.job_title || !expForm.start_date} className="gap-1.5">
+              <Button type="button" size="sm" onClick={saveExp} disabled={expSaving || !expForm.employer || !expForm.job_title || !expForm.start_date} className="gap-1.5">
                 {expSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setExpForm(null)}>Cancel</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setExpForm(null)}>Cancel</Button>
             </div>
           </div>
         )}
@@ -407,7 +398,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
             <Briefcase className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No employment history recorded yet.</p>
             {isAdmin && (
-              <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setExpForm({ ...EMPTY_EXP })} data-testid="button-add-experience-empty">
+              <Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => openExpForm()} data-testid="button-add-experience-empty">
                 <Plus className="h-3 w-3" /> Add First Position
               </Button>
             )}
@@ -416,11 +407,9 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           <div className="space-y-2">
             {exp.map((e, i) => (
               <div key={e.id || i} className="flex items-stretch gap-0 rounded-xl border border-border/40 overflow-hidden hover:border-border/70 hover:shadow-sm transition-all bg-background">
-                {/* Left accent stripe — green for current, gray for past */}
                 <div className={`w-1 shrink-0 ${e.is_current ? 'bg-green-500' : 'bg-muted-foreground/20'}`} />
                 <div className="flex items-start gap-4 px-4 py-3.5 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
-                    {/* Title row */}
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="font-semibold text-sm">{e.job_title}</span>
                       {e.is_current && (
@@ -434,13 +423,11 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
                         </span>
                       )}
                     </div>
-                    {/* Org + meta */}
                     <p className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
                       <Building2 className="h-3.5 w-3.5 shrink-0" />
                       <span className="font-medium text-foreground/80">{e.employer}</span>
                       {e.location && <><span className="text-muted-foreground/40">·</span><MapPin className="h-3 w-3" />{e.location}</>}
                     </p>
-                    {/* Dates */}
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       {e.start_date} — {e.is_current ? <span className="text-green-600 font-medium">Present</span> : (e.end_date || 'N/A')}
@@ -449,8 +436,8 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
                   </div>
                   {isAdmin && (
                     <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => setExpForm({ ...e })} data-testid={`button-edit-exp-${e.id}`}><Edit className="h-3 w-3" /></Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => e.id && deleteExp(e.id)} data-testid={`button-delete-exp-${e.id}`}><Trash2 className="h-3 w-3" /></Button>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => openExpForm(e)} data-testid={`button-edit-exp-${e.id}`}><Edit className="h-3 w-3" /></Button>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => e.id && deleteExp(e.id)} data-testid={`button-delete-exp-${e.id}`}><Trash2 className="h-3 w-3" /></Button>
                     </div>
                   )}
                 </div>

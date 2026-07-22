@@ -1564,6 +1564,7 @@ const UserDetail: FC = () => {
             return (
               <button
                 key={g.id}
+                type="button"
                 onClick={() => { setActiveSection(visibleTabs[0].id); setDropOpen(false); }}
                 className={`group relative flex items-center gap-2 px-4 pt-2.5 pb-3 rounded-t-xl text-sm font-semibold transition-all duration-150 border border-b-0 shrink-0 ${isActive ? 'text-white' : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/10'}`}
                 style={isActive ? { backgroundColor: `${g.color}1e`, borderColor: `${g.color}40` } : {}}
@@ -1589,6 +1590,7 @@ const UserDetail: FC = () => {
           ref={dropRef}
         >
           <button
+            type="button"
             onClick={() => setDropOpen(v => !v)}
             className={`flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all duration-150 border min-w-0 flex-1 max-w-sm ${dropOpen ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-200 hover:bg-white/8 hover:text-white'}`}
           >
@@ -1622,6 +1624,7 @@ const UserDetail: FC = () => {
                   return (
                     <button
                       key={t.id}
+                      type="button"
                       onClick={() => { setActiveSection(t.id); setDropOpen(false); }}
                       className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-left transition-all duration-100 ${isActive ? 'text-white' : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'}`}
                       style={isActive ? { backgroundColor: `${accent}28`, outline: `1px solid ${accent}50` } : {}}
