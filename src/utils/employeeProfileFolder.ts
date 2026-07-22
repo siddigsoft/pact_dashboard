@@ -164,46 +164,44 @@ export async function syncHrDocsToWorkspace(
     for (const doc of hrDocs) {
       const wsPath = doc.file_path; // same path key, different bucket
 
-      // If already registered in workspace_files, skip the expensive download+upload
-      if (!registeredPaths.has(wsPath)) {
-        // Download from staff-contracts
-        const { data: blob, error: dlErr } = await supabase.storage
-          .from('staff-contracts')
-          .download(doc.file_path);
-        if (dlErr || !blob) {
-          console.warn('[profileFolder] could not download HR doc:', doc.doc_name, dlErr?.message);
-          continue;
-        }
+      if (registeredPaths.has(wsPath)) continue; // already in workspace — skip entirely
 
-        // Upload to workspace-files bucket
-        const { error: upErr } = await supabase.storage
-          .from('workspace-files')
-          .upload(wsPath, blob, {
-            contentType: doc.file_mime || 'application/octet-stream',
-            upsert: true,
-          });
-        if (upErr) {
-          console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
-          continue;
-        }
+      // Download from staff-contracts
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from('staff-contracts')
+        .download(doc.file_path);
+      if (dlErr || !blob) {
+        console.warn('[profileFolder] could not download HR doc:', doc.doc_name, dlErr?.message);
+        continue;
       }
 
-      if (!registeredPaths.has(wsPath)) {
-        const docLabel = (doc.doc_type || 'other').replace(/_/g, ' ')
-          .replace(/\b\w/g, (c: string) => c.toUpperCase());
-        await upsertWorkspaceFile(
-          empFolderId,
-          doc.doc_name,
-          wsPath,
-          null,
-          doc.file_size ?? blob.size,
-          user.id,
-          `HR Document — ${docLabel}`,
-          doc.file_mime || undefined,
-          ['hr-document', doc.doc_type],
-        ).catch(e => console.warn('[profileFolder] HR doc register failed:', doc.doc_name, e.message));
-        registeredPaths.add(wsPath);
+      // Upload to workspace-files bucket
+      const { error: upErr } = await supabase.storage
+        .from('workspace-files')
+        .upload(wsPath, blob, {
+          contentType: doc.file_mime || 'application/octet-stream',
+          upsert: true,
+        });
+      if (upErr) {
+        console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
+        continue;
       }
+
+      // Register in workspace_files table (blob is guaranteed in scope here)
+      const docLabel = (doc.doc_type || 'other').replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+      await upsertWorkspaceFile(
+        empFolderId,
+        doc.doc_name,
+        wsPath,
+        null,
+        doc.file_size ?? blob.size,
+        user.id,
+        `HR Document — ${docLabel}`,
+        doc.file_mime || undefined,
+        ['hr-document', doc.doc_type],
+      ).catch(e => console.warn('[profileFolder] HR doc register failed:', doc.doc_name, e.message));
+      registeredPaths.add(wsPath);
     }
   } catch (e: any) {
     console.warn('[profileFolder] syncHrDocsToWorkspace error:', e.message);
