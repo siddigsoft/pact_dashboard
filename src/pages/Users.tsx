@@ -767,7 +767,9 @@ const Users = () => {
         <TableCell className="py-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <RoleBadge role={getPrimaryRoleLabel(user)} size="sm" />
-            <UserClassificationBadge userId={user.id} compact />
+            {!['admin', 'Admin', 'superAdmin', 'SuperAdmin', 'super_admin'].includes(user.role || '') && (
+              <UserClassificationBadge userId={user.id} compact />
+            )}
           </div>
           {user.stateId && STATE_ID_TO_NAME.has(user.stateId) && (
             <div className="flex items-center gap-1 mt-1">
