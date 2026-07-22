@@ -237,6 +237,8 @@ const UserDetail: FC = () => {
   const [showConfirmEmploymentDialog, setShowConfirmEmploymentDialog] = useState(false);
   const [empWorkingPattern, setEmpWorkingPattern] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
+  const [regenIdConfirm, setRegenIdConfirm] = useState(false);
+  const [regenIdLoading, setRegenIdLoading] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
   const [showCvMenu, setShowCvMenu] = useState(false);
   const cvMenuRef = useRef<HTMLDivElement>(null);
@@ -798,6 +800,44 @@ const UserDetail: FC = () => {
       toast({ title: "Error saving employment record", description: message, variant: "destructive" });
     } finally {
       setEmpSaving(false);
+    }
+  };
+
+  // ── Regenerate Employee ID (fixes country prefix mismatch) ───────────────
+  const handleRegenerateId = async () => {
+    if (!empCountryCode || !empContractStart || !user?.id) return;
+    setRegenIdLoading(true);
+    try {
+      const { data: genId, error: genErr } = await supabase.rpc('generate_employee_id', {
+        p_country_code: empCountryCode.trim().toUpperCase(),
+        p_contract_date: empContractStart,
+      });
+      if (genErr || !genId) throw new Error(genErr?.message || 'ID generation failed');
+
+      const oldFolderName = user.employeeId ? computeFolderName(user) : null;
+      const newFolderName = computeFolderName({ ...user, employeeId: genId as string });
+
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ employee_id: genId })
+        .eq('id', user.id);
+      if (updateErr) throw updateErr;
+
+      // Rename the workspace folder so the path stays consistent
+      if (oldFolderName && newFolderName && oldFolderName !== newFolderName) {
+        await supabase
+          .from('workspace_folders')
+          .update({ name: newFolderName })
+          .eq('name', oldFolderName);
+      }
+
+      toast({ title: '✅ Employee ID regenerated', description: `New ID: ${genId as string}` });
+      setRegenIdConfirm(false);
+      setTimeout(() => window.location.reload(), 900);
+    } catch (err: any) {
+      toast({ title: 'Failed to regenerate ID', description: err.message, variant: 'destructive' });
+    } finally {
+      setRegenIdLoading(false);
     }
   };
 
@@ -1965,7 +2005,31 @@ const UserDetail: FC = () => {
                 <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Employee ID</h4>
                   {user.employeeId ? (
-                    <p className="font-semibold text-sm font-mono">{user.employeeId}</p>
+                    <>
+                      <p className="font-semibold text-sm font-mono">{user.employeeId}</p>
+                      {(() => {
+                        const idPrefix = user.employeeId?.match(/^([A-Z]+)/)?.[1] ?? null;
+                        const mismatch = idPrefix && empCountryCode && idPrefix !== empCountryCode;
+                        if (!mismatch) return null;
+                        return (
+                          <div className="flex items-start gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2.5 py-2 rounded-md border border-red-200 dark:border-red-800 mt-1">
+                            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            <span className="flex-1">
+                              ID prefix <strong>{idPrefix}</strong> doesn't match country <strong>{empCountryCode}</strong>. This caused the folder to be named with the wrong country code.
+                            </span>
+                            {isAdmin && (
+                              <button
+                                onClick={() => setRegenIdConfirm(true)}
+                                className="ml-1 shrink-0 text-[10px] font-bold text-red-700 dark:text-red-400 underline hover:no-underline"
+                                data-testid="btn-regenerate-employee-id"
+                              >
+                                Fix ID
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </>
                   ) : (
                     <p className="text-xs text-muted-foreground italic">
                       {empContractStart && empCountryCode ? "Auto-assigned on save" : "Set country + start date to enable"}
@@ -3002,6 +3066,42 @@ ALTER TABLE public.profiles
               data-testid="btn-confirm-employment-confirm"
             >
               ✓ Confirm Employment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Regenerate Employee ID confirmation */}
+      <AlertDialog open={regenIdConfirm} onOpenChange={setRegenIdConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Regenerate Employee ID?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  The current ID <strong className="font-mono">{user?.employeeId}</strong> has a <strong>{user?.employeeId?.match(/^([A-Z]+)/)?.[1]}</strong> country prefix but this employee's country is set to <strong>{empCountryCode}</strong>.
+                </p>
+                <p>
+                  A new ID will be generated with the <strong>{empCountryCode}</strong> prefix and the workspace folder will be renamed to match.
+                </p>
+                <p className="text-amber-600 dark:text-amber-400 font-medium">
+                  Any links or references using the old folder name will need to be updated manually.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={regenIdLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleRegenerateId}
+              disabled={regenIdLoading}
+              data-testid="btn-confirm-regen-employee-id"
+            >
+              {regenIdLoading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Regenerating…</> : '🔄 Regenerate ID'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
