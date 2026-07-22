@@ -22,6 +22,51 @@ import {
 import { User } from "@/types";
 import { Building2, CreditCard, Globe, Info, Save, CheckCircle2 } from "lucide-react";
 
+// ── Major international currencies always shown in the dropdown ──────────────
+const MAJOR_CURRENCIES = [
+  { code: "USD", label: "US Dollar",      flag: "🇺🇸" },
+  { code: "EUR", label: "Euro",           flag: "🇪🇺" },
+  { code: "GBP", label: "British Pound",  flag: "🇬🇧" },
+  { code: "CHF", label: "Swiss Franc",    flag: "🇨🇭" },
+  { code: "JPY", label: "Japanese Yen",   flag: "🇯🇵" },
+];
+
+// Local-currency names for display in the dropdown
+const CURRENCY_LABELS: Record<string, string> = {
+  SDG: "Sudanese Pound", SSP: "South Sudanese Pound", KES: "Kenyan Shilling",
+  ETB: "Ethiopian Birr",  UGX: "Ugandan Shilling",    EGP: "Egyptian Pound",
+  JOD: "Jordanian Dinar", AED: "UAE Dirham",           GBP: "British Pound",
+  USD: "US Dollar",       EUR: "Euro",                 CHF: "Swiss Franc",
+  JPY: "Japanese Yen",    QAR: "Qatari Riyal",          SAR: "Saudi Riyal",
+};
+
+function getCurrencyOptions(
+  countryCode: string,
+  preset: CountryPreset | undefined
+): { code: string; label: string; flag: string }[] {
+  const local = preset?.currency;
+  const opts: { code: string; label: string; flag: string }[] = [];
+
+  // 1. Local currency first (if it has one and is not already a major)
+  if (local && !MAJOR_CURRENCIES.some(m => m.code === local)) {
+    opts.push({
+      code: local,
+      label: CURRENCY_LABELS[local] ?? local,
+      flag: preset!.flag,
+    });
+  }
+
+  // 2. Add the top 4 major currencies (USD, EUR, GBP, CHF)
+  //    If local IS one of them, put it first naturally by showing it via the
+  //    major list — deduplicate by filtering.
+  for (const m of MAJOR_CURRENCIES) {
+    if (opts.length >= 4) break; // cap at 4 total options
+    if (!opts.some(o => o.code === m.code)) opts.push(m);
+  }
+
+  return opts;
+}
+
 // ── Country presets ──────────────────────────────────────────────────────────
 interface CountryPreset {
   label: string;
@@ -229,10 +274,14 @@ export function BankakAccountForm({
   const preset = COUNTRY_PRESETS[selectedCountry];
   const isSimple = preset?.mode === "simple";
 
+  // When the country changes, always reset the currency to that country's default.
+  // This fixes the bug where switching from e.g. Ethiopia to Uganda kept "ETB".
   useEffect(() => {
     if (!preset) return;
-    if (!isSimple && preset.currency && !form.getValues("currency")) {
+    if (!isSimple && preset.currency) {
       form.setValue("currency", preset.currency);
+    } else if (!isSimple && !preset.currency) {
+      form.setValue("currency", "USD"); // fallback for "Other" with no local currency
     }
   }, [selectedCountry]);
 
@@ -397,21 +446,42 @@ export function BankakAccountForm({
                   </FormItem>
                 )} />
 
-                {/* Currency — full-mode only */}
+                {/* Currency — full-mode only, dropdown with local + 3 majors */}
                 {!isSimple && (
-                  <FormField control={form.control} name="currency" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs font-semibold">{lbl("Currency", "currency")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g. USD, EUR, GBP"
-                          className="h-10 bg-background border-border/60 focus:border-primary font-mono uppercase"
-                          {...field} disabled={disabled}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  <FormField control={form.control} name="currency" render={({ field }) => {
+                    const currencyOpts = getCurrencyOptions(selectedCountry, preset);
+                    return (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold">{lbl("Currency", "currency")}</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || ""}
+                          disabled={disabled}
+                        >
+                          <FormControl>
+                            <SelectTrigger
+                              data-testid="select-bank-currency"
+                              className="h-10 bg-background border-border/60 focus:border-primary"
+                            >
+                              <SelectValue placeholder="Select currency…" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {currencyOpts.map(opt => (
+                              <SelectItem key={opt.code} value={opt.code}>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-base leading-none">{opt.flag}</span>
+                                  <span className="font-mono font-semibold text-xs">{opt.code}</span>
+                                  <span className="text-xs text-muted-foreground">{opt.label}</span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }} />
                 )}
               </div>
             </div>
