@@ -446,17 +446,6 @@ const Users = () => {
           });
           return;
         }
-        // Sync user_roles so both sources agree (upsert new role, remove old ones)
-        const now = new Date().toISOString();
-        await supabase
-          .from('user_roles')
-          .upsert({ user_id: user.id, role: selectedRole, assigned_by: currentUser?.id, assigned_at: now }, { onConflict: 'user_id,role', ignoreDuplicates: true });
-        await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', user.id)
-          .neq('role', selectedRole)
-          .not('role', 'is', null);
       }
       const approved = await approveUser(user.id);
       if (!approved) {
