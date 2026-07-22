@@ -55,9 +55,8 @@ type RoleConfig = {
 export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
   superAdmin: {
     code: 'superAdmin',
-    label: 'Admin', // Display as "Admin" in UI for security
+    label: 'Super Admin',
     legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin'],
-    hidden: true // Hide from role selection dropdowns
   },
   admin: {
     code: 'admin',
