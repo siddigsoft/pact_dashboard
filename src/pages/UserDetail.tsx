@@ -491,15 +491,21 @@ const UserDetail: FC = () => {
 
   useEffect(() => {
     if (id) {
-      setIsLoadingUser(true);
       const foundUser = users.find(u => u.id === id);
       if (foundUser) {
+        // Only show the full loading spinner on the very first load (user is null).
+        // On subsequent refreshes triggered by realtime subscription updates we
+        // silently update the user object so child tab components (EmployeeEducationTab
+        // etc.) are NOT unmounted and do NOT lose their local form state.
+        if (!user) setIsLoadingUser(true);
         setUser(foundUser);
         // Normalize role to canonical code for dropdown matching
         const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
         setEditForm({ ...foundUser, role: normalizedRole as any });
         setIsLoadingUser(false);
-      } else {
+      } else if (!user) {
+        // Only navigate away if we have never loaded the user (not a transient
+        // refresh gap where users momentarily doesn't contain this ID).
         toast({
           title: "User not found",
           description: `No user with ID ${id} exists`,
