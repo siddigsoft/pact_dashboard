@@ -1359,12 +1359,20 @@ export default function WorkspaceHub() {
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
-  const rootFolders = folders.filter(f => !f.parent_folder_id);
+  // Filter folders by security clearance — folder creator and admins always see their own folders
+  const visibleFolders = useMemo(() =>
+    folders.filter(f =>
+      isSuperAdmin || isAdmin || f.created_by === userId ||
+      CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]
+    ),
+  [folders, isSuperAdmin, isAdmin, userId, effectiveClearance]);
+
+  const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
     const m: Record<string, WFolder[]> = {};
-    folders.forEach(f => { if (f.parent_folder_id) { if (!m[f.parent_folder_id]) m[f.parent_folder_id] = []; m[f.parent_folder_id].push(f); } });
+    visibleFolders.forEach(f => { if (f.parent_folder_id) { if (!m[f.parent_folder_id]) m[f.parent_folder_id] = []; m[f.parent_folder_id].push(f); } });
     return m;
-  }, [folders]);
+  }, [visibleFolders]);
 
   // Sub-folders visible in the main content area for the current folder
   const VIRTUAL_VIEWS = new Set(['__recent__', '__pinned__', '__mine__', '__all__', '__task_docs__', '__trash__']);
@@ -1673,6 +1681,13 @@ export default function WorkspaceHub() {
   }
 
   function openFolder(folder: WFolder) {
+    // Block navigation if this folder's security level exceeds user's clearance
+    // (owner and admins always pass through)
+    const isOwner = folder.created_by === userId;
+    if (!isOwner && !isSuperAdmin && !isAdmin && CLEARANCE_ORDER[folder.security_level] > CLEARANCE_ORDER[effectiveClearance]) {
+      toast({ title: 'Access denied', description: `You need ${SEC_CFG[folder.security_level].label} clearance to open this folder.`, variant: 'destructive' });
+      return;
+    }
     if (folder.password_hash && !unlockedFolderIds.has(folder.id)) {
       setPasswordPromptTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true });
       setPasswordInput('');
@@ -2276,7 +2291,7 @@ export default function WorkspaceHub() {
           {/* Bottom: new folder + clearance */}
           <div className="mt-auto p-3 border-t border-gray-200 space-y-2">
             {isAdmin && (
-              <button onClick={() => setNewFolderOpen(true)}
+              <button onClick={() => { setNewFolderSec(selectedFolder?.security_level ?? 'internal'); setNewFolderOpen(true); }}
                 className="w-full flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-200/60 dark:hover:bg-muted transition-colors">
                 <Plus className="h-3.5 w-3.5" /> New folder
               </button>
