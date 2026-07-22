@@ -1564,6 +1564,71 @@ const UserDetail: FC = () => {
                 )}
               </div>
 
+            {/* ── PENDING APPROVAL BANNER — always visible regardless of active tab ── */}
+            {isAdmin && !user.isApproved && (
+              <div className="mx-4 mt-3 rounded-xl border border-red-400/50 bg-red-50 dark:bg-red-950/30 dark:border-red-700/50 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0 mt-0.5">
+                    <UserCheck className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-red-800 dark:text-red-300">Access Pending Approval</p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 leading-relaxed">
+                      This account is waiting for admin approval. The user cannot log in until you approve their access.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700 text-white gap-1.5 h-8 text-xs font-semibold"
+                    onClick={() => approveUser(user.id)}
+                    disabled={isApproving}
+                    data-testid="button-approve-user-banner"
+                  >
+                    {isApproving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                    {isApproving ? 'Approving…' : 'Approve Access'}
+                  </Button>
+                  <button
+                    onClick={() => setActiveSection('access')}
+                    className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium underline underline-offset-2 whitespace-nowrap"
+                  >
+                    View details →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── ACTIVE USER — quick account status strip for admins ── */}
+            {isAdmin && user.isApproved && activeSection === 'overview' && (
+              <div className="mx-4 mt-3 rounded-xl border border-green-200/60 dark:border-green-800/40 bg-green-50/60 dark:bg-green-950/20 px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-xs font-semibold text-green-700 dark:text-green-400">Account Active</span>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">· Last active: {user.lastActive ? new Date(user.lastActive).toLocaleDateString() : 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveSection('access')}
+                    className="text-[11px] text-muted-foreground hover:text-foreground font-medium flex items-center gap-1"
+                  >
+                    <ShieldCheck className="h-3 w-3" /> Access & Roles →
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+                    onClick={() => rejectUser(user.id)}
+                    disabled={isRejecting}
+                    data-testid="button-deactivate-user-banner"
+                  >
+                    {isRejecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserX className="h-3 w-3" />}
+                    Deactivate
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* ── OVERVIEW SECTION ───────────────────────────────────────── */}
             {activeSection === 'overview' && (<div className="p-5 sm:p-6 space-y-5">
 
