@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Loader2, GraduationCap, Briefcase,
-  Edit, Save, X, Calendar, Building2, MapPin, Tag,
+  Edit, Save, X, Calendar, Building2, MapPin, Tag, AlertTriangle,
 } from "lucide-react";
 
 interface EduEntry {
@@ -107,39 +107,103 @@ function FormField({ label, required, span, children }: {
   );
 }
 
-export default function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+/** Returns true if the Supabase error means the table doesn't exist yet */
+function isTableMissing(msg: string) {
+  return msg.includes('relation') && (msg.includes('does not exist') || msg.includes('doesn\'t exist'));
+}
+
+/** Returns true if the error is an RLS / permission block */
+function isRlsError(msg: string) {
+  return msg.includes('row-level security') || msg.includes('permission denied') || msg.includes('violates');
+}
+
+const SQL_HINT = 'supabase/migrations/20260723_hr_education_experience_complete.sql';
+
+function DbSetupBanner({ error }: { error: string }) {
+  const isTable = isTableMissing(error);
+  const isRls   = isRlsError(error);
+  return (
+    <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 flex gap-3">
+      <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+      <div className="text-sm">
+        <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">
+          {isTable
+            ? 'Database tables not set up yet'
+            : isRls
+              ? 'Permission denied by database policy'
+              : 'Database error'}
+        </p>
+        <p className="text-amber-700 dark:text-amber-400 mb-2">
+          {isTable
+            ? 'The Education & Experience tables need to be created in Supabase before records can be saved.'
+            : isRls
+              ? 'Row-level security is blocking access. The RLS policies need to be fixed.'
+              : error}
+        </p>
+        {(isTable || isRls) && (
+          <p className="text-xs text-amber-600 dark:text-amber-500 font-mono bg-amber-100 dark:bg-amber-900/40 rounded px-2 py-1 inline-block">
+            Run in Supabase SQL Editor: {SQL_HINT}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const { toast } = useToast();
   const [edu, setEdu] = useState<EduEntry[]>([]);
   const [exp, setExp] = useState<ExpEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [eduForm, setEduForm] = useState<EduEntry | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [dbError, setDbError]   = useState<string | null>(null);
+  const [eduForm, setEduForm]   = useState<EduEntry | null>(null);
   const [eduSaving, setEduSaving] = useState(false);
-  const [expForm, setExpForm] = useState<ExpEntry | null>(null);
+  const [expForm, setExpForm]   = useState<ExpEntry | null>(null);
   const [expSaving, setExpSaving] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setDbError(null);
       const [{ data: e, error: eErr }, { data: x, error: xErr }] = await Promise.all([
         supabase.from('hr_employee_education').select('*').eq('profile_id', userId).order('graduation_year', { ascending: false }),
         supabase.from('hr_employee_experience').select('*').eq('profile_id', userId).order('start_date', { ascending: false }),
       ]);
-      if (eErr) console.warn('[EmployeeEducationTab] education fetch error:', eErr.message);
-      if (xErr) console.warn('[EmployeeEducationTab] experience fetch error:', xErr.message);
+      if (cancelled) return;
+      const firstError = eErr || xErr;
+      if (firstError) setDbError(firstError.message);
       setEdu(e || []);
       setExp(x || []);
       setLoading(false);
     };
     load();
+    return () => { cancelled = true; };
   }, [userId]);
 
-  const openEduForm = (entry?: EduEntry) => {
-    setEduForm(entry ? { ...entry } : { ...EMPTY_EDU });
-  };
+  const openEduForm = (entry?: EduEntry) => setEduForm(entry ? { ...entry } : { ...EMPTY_EDU });
+  const openExpForm = (entry?: ExpEntry) => setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
 
-  const openExpForm = (entry?: ExpEntry) => {
-    setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
+  const handleSaveError = (e: any, what: string) => {
+    const msg: string = e?.message || String(e);
+    if (isTableMissing(msg)) {
+      toast({
+        title: `Cannot save ${what} — table missing`,
+        description: `Run the migration SQL first: ${SQL_HINT}`,
+        variant: 'destructive',
+      });
+      setDbError(msg);
+    } else if (isRlsError(msg)) {
+      toast({
+        title: `Cannot save ${what} — permission denied`,
+        description: `RLS policy is blocking this. Run: ${SQL_HINT}`,
+        variant: 'destructive',
+      });
+      setDbError(msg);
+    } else {
+      toast({ title: `Save failed`, description: msg, variant: 'destructive' });
+    }
   };
 
   const saveEdu = async () => {
@@ -153,7 +217,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
       const yr = eduForm.graduation_year;
       if (yr !== null && yr !== undefined && (isNaN(yr) || yr < 1950 || yr > 2099)) {
         toast({ title: 'Invalid graduation year', description: 'Please enter a year between 1950 and 2099', variant: 'destructive' });
-        setEduSaving(false); return;
+        return;
       }
       const payload = { ...eduForm, graduation_year: yr && !isNaN(yr) ? yr : null, profile_id: userId };
       if (eduForm.id) {
@@ -168,7 +232,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
       setEduForm(null);
       toast({ title: 'Education entry saved' });
     } catch (e: any) {
-      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+      handleSaveError(e, 'education');
     } finally { setEduSaving(false); }
   };
 
@@ -180,12 +244,12 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
 
   const saveExp = async () => {
     if (!expForm) return;
-    const missingExp: string[] = [];
-    if (!expForm.employer.trim()) missingExp.push('Employer / Organisation');
-    if (!expForm.job_title.trim()) missingExp.push('Job Title');
-    if (!expForm.start_date) missingExp.push('Start Date');
-    if (missingExp.length > 0) {
-      toast({ title: 'Required fields missing', description: `Please fill in: ${missingExp.join(', ')}`, variant: 'destructive' });
+    const missing: string[] = [];
+    if (!expForm.employer.trim()) missing.push('Employer / Organisation');
+    if (!expForm.job_title.trim()) missing.push('Job Title');
+    if (!expForm.start_date) missing.push('Start Date');
+    if (missing.length > 0) {
+      toast({ title: 'Required fields missing', description: `Please fill in: ${missing.join(', ')}`, variant: 'destructive' });
       return;
     }
     setExpSaving(true);
@@ -203,7 +267,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
       setExpForm(null);
       toast({ title: 'Experience entry saved' });
     } catch (e: any) {
-      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+      handleSaveError(e, 'experience');
     } finally { setExpSaving(false); }
   };
 
@@ -213,12 +277,19 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
     setExp(p => p.filter(r => r.id !== id));
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
 
   return (
     <div className="space-y-8">
 
-      {/* ── Education History ────────────────────────────────────────────── */}
+      {/* DB setup error banner — only shows if tables are missing or RLS is wrong */}
+      {dbError && <DbSetupBanner error={dbError} />}
+
+      {/* ── Education History ─────────────────────────────────────────── */}
       <div>
         <SectionHeader
           icon={<GraduationCap className="h-5 w-5" />}
@@ -238,7 +309,6 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           ) : undefined}
         />
 
-        {/* Add / Edit form */}
         {eduForm && (
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
@@ -279,7 +349,6 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           </div>
         )}
 
-        {/* Education list */}
         {edu.length === 0 && !eduForm ? (
           <div className="text-center py-10 border rounded-xl border-dashed bg-muted/5">
             <GraduationCap className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
@@ -323,7 +392,7 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
         )}
       </div>
 
-      {/* ── Employment History ───────────────────────────────────────────── */}
+      {/* ── Employment History ───────────────────────────────────────── */}
       <div>
         <SectionHeader
           icon={<Briefcase className="h-5 w-5" />}
@@ -343,7 +412,6 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           ) : undefined}
         />
 
-        {/* Add / Edit form */}
         {expForm && (
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
             <div className="flex items-center justify-between">
@@ -384,7 +452,14 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
               </FormField>
             </FormRow>
             <div className="flex gap-2 pt-1 border-t border-border/40">
-              <Button type="button" size="sm" onClick={saveExp} disabled={expSaving || !expForm.employer || !expForm.job_title || !expForm.start_date} className="gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                onClick={saveExp}
+                disabled={expSaving || !expForm.employer.trim() || !expForm.job_title.trim() || !expForm.start_date}
+                className="gap-1.5"
+                data-testid="button-save-experience"
+              >
                 {expSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setExpForm(null)}>Cancel</Button>
@@ -392,7 +467,6 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
           </div>
         )}
 
-        {/* Experience list */}
         {exp.length === 0 && !expForm ? (
           <div className="text-center py-10 border rounded-xl border-dashed bg-muted/5">
             <Briefcase className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
@@ -449,3 +523,5 @@ export default function EmployeeEducationTab({ userId, isAdmin }: { userId: stri
     </div>
   );
 }
+
+export default memo(EmployeeEducationTab);
