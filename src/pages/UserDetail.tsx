@@ -910,9 +910,15 @@ const UserDetail: FC = () => {
     const updatedUser: User = {
       ...user,
       bankAccount: {
-        accountName: values.accountName,
+        accountName:   values.accountName,
         accountNumber: values.accountNumber,
-        branch: values.branch
+        bankName:      values.bankName      || undefined,
+        branch:        values.branch        || undefined,
+        iban:          values.iban          || undefined,
+        swiftBic:      values.swiftBic      || undefined,
+        country:       values.country       || undefined,
+        currency:      values.currency      || undefined,
+        routingNumber: values.routingNumber || undefined,
       }
     };
 
@@ -2433,19 +2439,66 @@ const UserDetail: FC = () => {
             {activeSection === 'compensation' && (<div className="p-5 sm:p-6 space-y-6">
               {user.bankAccount ? (
                 <div className="space-y-4">
-                  <div className="bg-muted/20 rounded-xl p-5 border border-border/40 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Name</p>
-                      <p className="font-semibold text-base break-words">{user.bankAccount.accountName}</p>
+                  <div className="bg-muted/20 rounded-xl p-5 border border-border/40 space-y-4">
+                    {/* Core details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Holder Name</p>
+                        <p className="font-semibold text-base break-words">{user.bankAccount.accountName}</p>
+                      </div>
+                      {user.bankAccount.bankName && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Bank Name</p>
+                          <p className="font-semibold text-base break-words">{user.bankAccount.bankName}</p>
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Number</p>
+                        <p className="font-semibold text-base font-mono tracking-wider">{user.bankAccount.accountNumber}</p>
+                      </div>
+                      {user.bankAccount.branch && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Branch</p>
+                          <p className="font-semibold text-base break-words">{user.bankAccount.branch}</p>
+                        </div>
+                      )}
+                      {user.bankAccount.country && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Country</p>
+                          <p className="font-semibold text-base">{user.bankAccount.country}</p>
+                        </div>
+                      )}
+                      {user.bankAccount.currency && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Currency</p>
+                          <p className="font-semibold text-base">{user.bankAccount.currency}</p>
+                        </div>
+                      )}
                     </div>
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Account Number</p>
-                      <p className="font-semibold text-base font-mono">{user.bankAccount.accountNumber}</p>
-                    </div>
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Branch</p>
-                      <p className="font-semibold text-base break-words">{user.bankAccount.branch}</p>
-                    </div>
+                    {/* International banking fields */}
+                    {(user.bankAccount.iban || user.bankAccount.swiftBic || user.bankAccount.routingNumber) && (
+                      <div className="border-t border-border/40 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <p className="sm:col-span-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">International Banking</p>
+                        {user.bankAccount.iban && (
+                          <div className="sm:col-span-2 space-y-1.5">
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">IBAN</p>
+                            <p className="font-semibold text-base font-mono tracking-wider break-all">{user.bankAccount.iban}</p>
+                          </div>
+                        )}
+                        {user.bankAccount.swiftBic && (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">SWIFT / BIC</p>
+                            <p className="font-semibold text-base font-mono uppercase">{user.bankAccount.swiftBic}</p>
+                          </div>
+                        )}
+                        {user.bankAccount.routingNumber && (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Routing / Sort Code</p>
+                            <p className="font-semibold text-base font-mono">{user.bankAccount.routingNumber}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {canEditBankAccount && (
                     <Button onClick={() => setBankAccountFormOpen(true)} className="gap-2">

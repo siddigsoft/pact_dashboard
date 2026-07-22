@@ -132,7 +132,13 @@ export interface User {
   bankAccount?: {
     accountName: string;
     accountNumber: string;
-    branch: string;
+    branch?: string;
+    bankName?: string;
+    iban?: string;
+    swiftBic?: string;
+    country?: string;
+    currency?: string;
+    routingNumber?: string;
   };
 
   /**
