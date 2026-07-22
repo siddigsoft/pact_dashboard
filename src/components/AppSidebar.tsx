@@ -1336,15 +1336,15 @@
                 >
                   <div className="relative shrink-0">
                     <Avatar className="h-7 w-7">
-                      <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                      <AvatarImage src={currentUser.avatar} alt={currentUser.fullName || currentUser.name} />
                       <AvatarFallback className="bg-blue-600 text-white text-[10px]">
-                        {getInitials(currentUser.name)}
+                        {getInitials(currentUser.fullName || currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
                     <RealtimeStatusDot className="absolute -bottom-0.5 -right-0.5" />
                   </div>
                   <div className="flex flex-col items-start text-left leading-tight group-data-[collapsible=icon]:hidden min-w-0 flex-1">
-                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate w-full">{currentUser.name}</span>
+                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate w-full">{currentUser.fullName || currentUser.name}</span>
                     <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate w-full">{getPrimaryRole()}</span>
                   </div>
                   <ChevronUp className="ml-auto h-3.5 w-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden shrink-0" />
@@ -1353,7 +1353,7 @@
               <DropdownMenuContent side="top" align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium">{currentUser.name}</p>
+                    <p className="text-sm font-medium">{currentUser.fullName || currentUser.name}</p>
                     <p className="text-xs text-muted-foreground">{currentUser.email}</p>
                   </div>
                 </DropdownMenuLabel>

@@ -521,7 +521,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const supabaseUser: User = {
         id: authUser.id,
-        name: (userProfile as any).full_name || (userProfile as any).username || authUser.email?.split('@')[0] || 'User',
+        name: (userProfile as any).full_name || authUser.email?.split('@')[0] || 'User',
         email: authUser.email || '',
         role: isProtectedOwner(authUser.id) ? 'superAdmin' : ((userProfile as any).role || userRole),
         roles: userRolesList.length > 0 ? userRolesList : undefined,
@@ -868,7 +868,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         const supabaseUser: User = {
           id: authData.user.id,
-          name: userProfile.full_name || userProfile.username || authData.user.email?.split('@')[0] || 'User',
+          name: userProfile.full_name || authData.user.email?.split('@')[0] || 'User',
           email: authData.user.email || '',
           role: isProtectedOwner(authData.user.id) ? 'superAdmin' : (userProfile.role || userRole),
           roles: userRolesList.length > 0 ? userRolesList : undefined,
