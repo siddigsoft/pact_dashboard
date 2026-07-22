@@ -1444,11 +1444,25 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePayload.role = updatedUser.role;
       }
 
+      // Debug: log exact payload going to DB
+      console.log('[updateUser] payload:', JSON.stringify(updatePayload));
+      console.log('[updateUser] isProtectedOwner:', isProtectedOwner(updatedUser.id), 'role in payload:', 'role' in updatePayload);
+
       // Try direct update first — no row-count check (RLS may block RETURNING without blocking UPDATE)
       const { error: directError } = await supabase
         .from('profiles')
         .update(updatePayload)
         .eq('id', updatedUser.id);
+
+      console.log('[updateUser] direct update result — error:', directError?.message ?? 'none');
+
+      // After update, read back what actually got saved to DB
+      const { data: verifyData } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', updatedUser.id)
+        .single();
+      console.log('[updateUser] DB value after update — full_name:', verifyData?.full_name, 'role:', verifyData?.role);
 
       if (directError) {
         console.warn("Direct update failed, trying RPC:", directError.message);
