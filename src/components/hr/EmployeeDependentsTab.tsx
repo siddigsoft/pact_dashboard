@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit, X, Loader2, Users, Heart, ShieldCheck, Baby, Info, Phone, Mail, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Edit, X, Loader2, Users, Heart, ShieldCheck, Baby, Info, Phone, Mail, AlertCircle, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Dependent {
@@ -14,6 +14,7 @@ interface Dependent {
   date_of_birth?: string;
   gender?: string;
   national_id_no?: string;
+  address?: string;
   is_beneficiary: boolean;
   health_insurance: boolean;
   is_next_of_kin: boolean;
@@ -24,8 +25,8 @@ interface Dependent {
 
 const EMPTY_DEP: Dependent = {
   full_name: '', relationship: 'child', date_of_birth: '',
-  gender: '', national_id_no: '', is_beneficiary: false,
-  health_insurance: false, is_next_of_kin: false,
+  gender: '', national_id_no: '', address: '',
+  is_beneficiary: false, health_insurance: false, is_next_of_kin: false,
   nok_phone: '', nok_email: '', notes: '',
 };
 
@@ -223,6 +224,13 @@ export default function EmployeeDependentsTab({ userId, isAdmin }: { userId: str
               <Input value={form.national_id_no || ''} onChange={e => f('national_id_no')(e.target.value)} placeholder="ID number" className="h-9 font-mono" />
               <p className="text-[10px] text-muted-foreground">Passport, national card, or birth certificate number.</p>
             </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-3 w-3" /> Address
+              </label>
+              <Input value={form.address || ''} onChange={e => f('address')(e.target.value)} placeholder="City, Country (optional)" className="h-9" />
+              <p className="text-[10px] text-muted-foreground">Useful if this dependent lives at a different address.</p>
+            </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
               <label className="text-xs font-medium text-muted-foreground">Notes</label>
               <Input value={form.notes || ''} onChange={e => f('notes')(e.target.value)} placeholder="e.g. special circumstances, contact info…" className="h-9" />
@@ -401,6 +409,11 @@ export default function EmployeeDependentsTab({ userId, isAdmin }: { userId: str
                     )}
                     {d.gender && <span className="capitalize">{d.gender}</span>}
                     {d.national_id_no && <span className="font-mono">{d.national_id_no}</span>}
+                    {d.address && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3 shrink-0" />{d.address}
+                      </span>
+                    )}
                   </div>
                   {d.is_next_of_kin && (d.nok_phone || d.nok_email) && (
                     <div className="flex flex-wrap gap-3 mt-1.5">
