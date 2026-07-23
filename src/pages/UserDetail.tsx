@@ -1381,12 +1381,12 @@ const UserDetail: FC = () => {
 
               {/* Back breadcrumb */}
               <button
-                onClick={() => navigate("/employees")}
+                onClick={() => navigate(-1)}
                 className="flex items-center gap-1 text-[11px] text-white/50 hover:text-white/80 transition-colors shrink-0"
                 data-testid="button-back-users"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Employees</span>
+                <span className="hidden sm:inline">Back</span>
               </button>
               <span className="text-white/20 text-xs shrink-0">›</span>
 
