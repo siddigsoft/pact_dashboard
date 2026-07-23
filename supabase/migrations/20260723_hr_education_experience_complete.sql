@@ -64,19 +64,35 @@ CREATE POLICY "hr_education_delete" ON public.hr_employee_education
 
 -- ── 3. Experience table ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.hr_employee_experience (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  profile_id  UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  employer    TEXT NOT NULL,
-  job_title   TEXT NOT NULL,
-  start_date  DATE NOT NULL,
-  end_date    DATE,
-  is_current  BOOLEAN NOT NULL DEFAULT FALSE,
-  description TEXT,
-  location    TEXT,
-  sector      TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id          UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  employer            TEXT NOT NULL,
+  job_title           TEXT NOT NULL,
+  employment_type     TEXT,
+  start_date          DATE NOT NULL,
+  end_date            DATE,
+  is_current          BOOLEAN NOT NULL DEFAULT FALSE,
+  description         TEXT,
+  achievements        TEXT,
+  location            TEXT,
+  sector              TEXT,
+  supervisor_name     TEXT,
+  reason_for_leaving  TEXT,
+  reference_available BOOLEAN NOT NULL DEFAULT FALSE,
+  reference_name      TEXT,
+  reference_contact   TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Add new comprehensive columns to existing tables (safe for re-runs)
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS employment_type     TEXT;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS achievements        TEXT;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS supervisor_name     TEXT;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS reason_for_leaving  TEXT;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS reference_available BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS reference_name      TEXT;
+ALTER TABLE public.hr_employee_experience ADD COLUMN IF NOT EXISTS reference_contact   TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_hr_employee_experience_profile_id
   ON public.hr_employee_experience (profile_id);
