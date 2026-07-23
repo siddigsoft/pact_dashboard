@@ -257,6 +257,7 @@ const UserDetail: FC = () => {
   const [showConfirmEmploymentDialog, setShowConfirmEmploymentDialog] = useState(false);
   const [empWorkingPattern, setEmpWorkingPattern] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
+  const [empEditMode, setEmpEditMode] = useState(false);
   const [regenIdConfirm, setRegenIdConfirm] = useState(false);
   const [regenIdLoading, setRegenIdLoading] = useState(false);
   const [cvExporting, setCvExporting] = useState(false);
@@ -910,6 +911,7 @@ const UserDetail: FC = () => {
       savedDepartmentIdRef.current = empDepartmentId || null;
 
       toast({ title: "Employment record updated" });
+      setEmpEditMode(false);
       // Pass freshUser so the folder sync uses the newly-assigned ID (if any)
       // rather than the stale `user` closure which still has employeeId = null.
       void triggerFolderSync(freshUser);
@@ -2128,13 +2130,37 @@ const UserDetail: FC = () => {
 
             {/* ── EMPLOYMENT SECTION ──────────────────────────────────────── */}
             {activeSection === 'employment' && (<div className="p-3 sm:p-4 space-y-3">
+              {/* Section header with Edit toggle */}
+              {isAdmin && (
+                <div className="flex items-center justify-between pb-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    {empEditMode ? 'Make changes below, then save.' : 'View-only. Click Edit to make changes.'}
+                  </p>
+                  {empEditMode ? (
+                    <button
+                      onClick={() => setEmpEditMode(false)}
+                      className="text-[11px] font-semibold text-muted-foreground hover:text-foreground border border-border/60 rounded-lg px-3 py-1 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setEmpEditMode(true)}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:text-primary/80 border border-primary/30 hover:border-primary/60 rounded-lg px-3 py-1 transition-all"
+                      data-testid="btn-edit-employment"
+                    >
+                      ✏️ Edit
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {/* Department */}
                 <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     <Building2 className="h-3 w-3" /> Department
                   </h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
                       <SelectTrigger className="h-8 text-sm" data-testid="select-emp-department"><SelectValue placeholder="No department" /></SelectTrigger>
                       <SelectContent>
@@ -2152,7 +2178,7 @@ const UserDetail: FC = () => {
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     Employment Type <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
                   </h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Select value={empType} onValueChange={setEmpType}>
                       <SelectTrigger className="h-8 text-sm" data-testid="select-emp-type"><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
@@ -2172,7 +2198,7 @@ const UserDetail: FC = () => {
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     Contract Start <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required</span>
                   </h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Input type="date" value={empContractStart} onChange={e => setEmpContractStart(e.target.value)} className="h-8 text-sm" data-testid="input-contract-start" />
                   ) : (
                     <p className="font-semibold text-sm">{empContractStart || "—"}</p>
@@ -2182,7 +2208,7 @@ const UserDetail: FC = () => {
                 {/* Contract End Date */}
                 <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Contract End</h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Input type="date" value={empContractEnd} onChange={e => setEmpContractEnd(e.target.value)} className="h-8 text-sm" data-testid="input-contract-end" />
                   ) : (
                     <p className="font-semibold text-sm">{empContractEnd || "—"}</p>
@@ -2206,7 +2232,7 @@ const UserDetail: FC = () => {
                         : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted/30 border border-border/40 rounded-full px-1.5 py-0.5">— Not Set</span>
                     }
                   </div>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <div className="space-y-1">
                       <label className="text-[10px] text-muted-foreground">End Date</label>
                       <Input type="date" value={empProbationEnd} onChange={e => { setEmpProbationEnd(e.target.value); if (e.target.value) setEmpProbationConfirmed(false); }} className="h-8 text-sm" data-testid="input-probation-end" />
@@ -2239,7 +2265,7 @@ const UserDetail: FC = () => {
                 {/* Working Pattern */}
                 <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 border border-border/40">
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest">Working Pattern</h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Select value={empWorkingPattern || "none"} onValueChange={v => setEmpWorkingPattern(v === "none" ? "" : v)}>
                       <SelectTrigger className="h-8 text-sm" data-testid="select-working-pattern"><SelectValue placeholder="Not specified" /></SelectTrigger>
                       <SelectContent>
@@ -2261,7 +2287,7 @@ const UserDetail: FC = () => {
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     🌍 Country Code <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">Required for ID</span>
                   </h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Select value={empCountryCode || "none"} onValueChange={v => setEmpCountryCode(v === "none" ? "" : v)}>
                       <SelectTrigger className="h-8 text-sm" data-testid="select-country-code"><SelectValue placeholder="Select country…" /></SelectTrigger>
                       <SelectContent className="max-h-60">
@@ -2339,7 +2365,7 @@ const UserDetail: FC = () => {
                   <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                     <UserCheck className="h-3 w-3" /> Reports To
                   </h4>
-                  {isAdmin ? (
+                  {isAdmin && empEditMode ? (
                     <Select value={empReportsTo || "none"} onValueChange={v => setEmpReportsTo(v === "none" ? "" : v)}>
                       <SelectTrigger className="h-8 text-sm" data-testid="select-reports-to"><SelectValue placeholder="No manager" /></SelectTrigger>
                       <SelectContent>
@@ -2355,8 +2381,8 @@ const UserDetail: FC = () => {
                 </div>
               </div>
 
-              {/* Notification Preferences */}
-              {isAdmin && (
+              {/* Notification Preferences — only visible in edit mode */}
+              {isAdmin && empEditMode && (
                 <div className="bg-muted/20 rounded-lg p-3 border border-border/40">
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
                     <div className="relative flex-shrink-0">
@@ -2373,8 +2399,14 @@ const UserDetail: FC = () => {
                 </div>
               )}
 
-              {isAdmin && (
-                <div className="flex justify-end">
+              {isAdmin && empEditMode && (
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setEmpEditMode(false)}
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground border border-border/60 rounded-lg px-4 py-1.5 transition-all"
+                  >
+                    Cancel
+                  </button>
                   <Button size="sm" onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
                     {empSaving ? "Saving…" : "Save Employment Record"}
                   </Button>
