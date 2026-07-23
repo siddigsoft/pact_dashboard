@@ -21,6 +21,7 @@ import {
   Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
   Info, Receipt, User, Clock, FileSpreadsheet, Hash, Loader2,
+  UserPlus,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -614,6 +615,12 @@ export default function PreFundingReconciliation() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [matchingFeed, setMatchingFeed] = useState(false);
   const [matchResults, setMatchResults] = useState<{ matched: number; unmatched: number } | null>(null);
+
+  // Unattributed filter + inline staff assignment
+  const [showUnattributed, setShowUnattributed] = useState(false);
+  const [assignTxn, setAssignTxn]       = useState<PreFundTransaction | null>(null);
+  const [assignUserId, setAssignUserId] = useState('');
+  const [assigning, setAssigning]       = useState(false);
 
   // Effective paid/available:
   //   Priority 1 — sum of 'payment' txns from pre_fund_transactions (when RPC deployed).
@@ -1283,6 +1290,27 @@ export default function PreFundingReconciliation() {
     finally { setImporting(false); }
   };
 
+  const handleAssignStaff = async () => {
+    if (!assignTxn || !assignUserId) return;
+    setAssigning(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .update({ user_id: assignUserId })
+        .eq('id', assignTxn.id);
+      if (error) throw error;
+      setTxns(prev => prev.map(t => t.id === assignTxn.id ? { ...t, user_id: assignUserId } : t));
+      const name = allocUsers.find(u => u.id === assignUserId)?.name ?? 'staff member';
+      toast({ title: 'Staff assigned', description: `Transaction attributed to ${name}.` });
+      setAssignTxn(null);
+      setAssignUserId('');
+    } catch (e: any) {
+      toast({ title: 'Failed to assign', description: e.message, variant: 'destructive' });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const handleAddTxn = async () => {
     if (!selectedFund || !txnForm.amount || !txnForm.transaction_date) { toast({ title: 'Required fields missing', variant: 'destructive' }); return; }
     setSaving(true);
@@ -1751,6 +1779,9 @@ export default function PreFundingReconciliation() {
   const accountingTxns = transactions.filter(t => t.transaction_type !== 'bank_statement');
   const totalReconciled = accountingTxns.filter(t => t.reconciled).reduce((s, t) => s + t.amount, 0);
   const totalUnreconciled = accountingTxns.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
+  // Unattributed = payment txns with no user_id assigned
+  const unattributedPayments = transactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
+  const displayTxns = showUnattributed ? unattributedPayments : transactions;
 
   if (!canAccess) return (
     <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
@@ -2219,6 +2250,25 @@ export default function PreFundingReconciliation() {
                               ))}
                             </SelectContent>
                           </Select>
+
+                          {/* Unattributed filter chip — inside the group pill row */}
+                          {unattributedPayments.length > 0 && (
+                            <button
+                              onClick={() => setShowUnattributed(v => !v)}
+                              className={cn(
+                                'flex items-center gap-1.5 h-6 px-2.5 rounded-full border text-[10px] font-semibold transition-colors shrink-0',
+                                showUnattributed
+                                  ? 'bg-amber-500 border-amber-500 text-white'
+                                  : 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30 dark:border-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                              )}
+                              data-testid="button-filter-unattributed"
+                              title="Show only payment transactions with no staff assigned"
+                            >
+                              <UserPlus className="h-2.5 w-2.5 shrink-0" />
+                              Unattributed ({unattributedPayments.length})
+                              {showUnattributed && <X className="h-2.5 w-2.5 shrink-0" />}
+                            </button>
+                          )}
                         </div>
 
                         {/* Count badge (always visible, shows 0 when none) */}
@@ -2352,7 +2402,7 @@ export default function PreFundingReconciliation() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {transactions.map(t => (
+                        {displayTxns.map(t => (
                           <TableRow
                             key={t.id}
                             data-testid={`row-txn-${t.id}`}
@@ -2397,13 +2447,25 @@ export default function PreFundingReconciliation() {
                             <TableCell className="text-muted-foreground whitespace-nowrap">
                               {t.source_table ? t.source_table.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace('Down Payment Requests', 'Down-Payment').replace('Operational Cost Submissions', 'Op.Cost').replace('Pre Fund Transactions', 'Manual') : '—'}
                             </TableCell>
-                            <TableCell className="whitespace-nowrap">
+                            <TableCell className="whitespace-nowrap" onClick={e => e.stopPropagation()}>
                               {t.user_id ? (
                                 <span className="flex items-center gap-1">
                                   <User className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                                   {profileMap.get(t.user_id) ?? <span className="text-muted-foreground italic">Unknown</span>}
                                 </span>
-                              ) : '—'}
+                              ) : t.transaction_type === 'payment' && allocUsers.length > 0 ? (
+                                <button
+                                  onClick={() => { setAssignTxn(t); setAssignUserId(''); }}
+                                  className="flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-[10px] font-medium border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+                                  data-testid={`button-assign-staff-${t.id}`}
+                                  title="Assign this payment to a staff allocation"
+                                >
+                                  <UserPlus className="h-2.5 w-2.5 shrink-0" />
+                                  Assign
+                                </button>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="whitespace-nowrap">
                               {t.created_by ? (
@@ -2661,6 +2723,107 @@ export default function PreFundingReconciliation() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowAddTxn(false); setTxnAllocUserId(null); }}>Cancel</Button>
             <Button onClick={handleAddTxn} disabled={saving} data-testid="button-save-txn">{saving ? 'Adding…' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Assign Staff Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={!!assignTxn} onOpenChange={v => { if (!v) { setAssignTxn(null); setAssignUserId(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <UserPlus className="h-4 w-4 text-amber-600" />
+              Assign Staff to Transaction
+            </DialogTitle>
+          </DialogHeader>
+          {assignTxn && (
+            <div className="space-y-4 py-1">
+              {/* Transaction summary */}
+              <div className="rounded-lg bg-muted/40 border px-3 py-2.5 space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium">{format(parseISO(assignTxn.transaction_date), 'MMM d, yyyy')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount</span>
+                  <span className="font-mono font-semibold">{assignTxn.currency} {formatNumber(assignTxn.amount, 0)}</span>
+                </div>
+                {assignTxn.description && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground shrink-0">Description</span>
+                    <span className="text-right truncate">{assignTxn.description}</span>
+                  </div>
+                )}
+                {assignTxn.reference && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Reference</span>
+                    <span className="font-mono">{assignTxn.reference}</span>
+                  </div>
+                )}
+              </div>
+              {/* Staff picker */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Assign to staff member</Label>
+                {allocUsers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground border rounded p-2">
+                    No staff allocations found for this fund. Set up allocations first in the Fund Registry.
+                  </p>
+                ) : (
+                  <Select value={assignUserId} onValueChange={setAssignUserId}>
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-assign-user">
+                      <SelectValue placeholder="Select staff member…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allocUsers.map(u => {
+                        const remaining = u.allocated - u.spent;
+                        const overBudget = assignTxn.amount > remaining && remaining >= 0;
+                        return (
+                          <SelectItem key={u.id} value={u.id} data-testid={`option-assign-user-${u.id}`}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{u.name}</span>
+                              <span className={cn('text-[10px]', overBudget ? 'text-rose-500' : 'text-muted-foreground')}>
+                                {u.currency} {formatNumber(remaining, 0)} remaining
+                                {overBudget && ' — exceeds remaining allocation'}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {/* Preview badge for selected user */}
+              {assignUserId && (() => {
+                const u = allocUsers.find(x => x.id === assignUserId);
+                if (!u) return null;
+                const remaining = u.allocated - u.spent;
+                const after = remaining - assignTxn.amount;
+                return (
+                  <div className={cn('text-xs rounded px-3 py-2', after < 0 ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800')}>
+                    <div className="flex justify-between">
+                      <span>Before:</span>
+                      <span className="font-mono">{u.currency} {formatNumber(remaining, 0)} remaining</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span>After:</span>
+                      <span className="font-mono">{u.currency} {formatNumber(after, 0)} remaining</span>
+                    </div>
+                    {after < 0 && <p className="mt-1 font-semibold">⚠ This exceeds {u.name}'s allocation</p>}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssignTxn(null); setAssignUserId(''); }}>Cancel</Button>
+            <Button
+              onClick={handleAssignStaff}
+              disabled={assigning || !assignUserId}
+              data-testid="button-confirm-assign-staff"
+            >
+              {assigning ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Assigning…</> : 'Assign Staff'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

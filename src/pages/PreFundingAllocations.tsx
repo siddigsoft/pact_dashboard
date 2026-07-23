@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -108,6 +109,7 @@ function roleBadge(role: string) {
 export default function PreFundingAllocations() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
+  const navigate = useNavigate();
   // Finance/Admin can see everyone; other roles see only their own row
   const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const canAccess = isFinanceAdmin || !!currentUser?.id;
@@ -434,17 +436,28 @@ export default function PreFundingAllocations() {
         <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
           <Info className="h-4 w-4 text-amber-600 mt-0.5" />
           <AlertDescription className="text-sm text-amber-800 dark:text-amber-300">
-            <span className="font-semibold">Unattributed spend detected:</span>{' '}
-            The fund has paid out{' '}
-            <span className="font-mono font-semibold">{formatNumber(fundTotalPaid, 0)}</span> total,
-            but only{' '}
-            <span className="font-mono font-semibold">{formatNumber(attributedSpend, 0)}</span> is
-            tracked against specific allocations.{' '}
-            <span className="font-mono font-semibold text-amber-700">{formatNumber(unattributedSpend, 0)}</span> was
-            paid out without user attribution — likely linked via Reconciliation without selecting an allocated
-            staff member, or auto-linked to an open-pool fund.
-            To fix: in <strong>Reconciliation → Add Transaction</strong>, set the staff member when
-            adding payment transactions.
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <span className="font-semibold">Unattributed spend detected:</span>{' '}
+                The fund has paid out{' '}
+                <span className="font-mono font-semibold">{formatNumber(fundTotalPaid, 0)}</span> total,
+                but only{' '}
+                <span className="font-mono font-semibold">{formatNumber(attributedSpend, 0)}</span> is
+                tracked against specific allocations.{' '}
+                <span className="font-mono font-semibold text-amber-700">{formatNumber(unattributedSpend, 0)}</span>{' '}
+                was paid out without user attribution.
+                Open the Reconciliation page, filter by <strong>Unattributed</strong>, and use the{' '}
+                <strong>Assign Staff</strong> button on each transaction to fix this.
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                onClick={() => navigate('/pre-funding?tab=reconciliation')}
+              >
+                Fix in Reconciliation →
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
