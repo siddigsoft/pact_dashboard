@@ -81,6 +81,34 @@ const ROLE_OPTIONS: [string, string][] = [
   ['DataCollector', 'Data Collector'], ['DataTeam', 'Data Team'], ['Supervisor', 'Supervisor'],
   ['Field Operation Manager (FOM)', 'Field Operation Manager'], ['Reviewer', 'Reviewer'],
 ];
+
+/**
+ * Normalize any DB role value to its canonical PascalCase key (used in ROLE_OPTIONS).
+ * The DB stores roles in mixed formats: 'admin', 'Admin', 'super_admin', 'SuperAdmin', etc.
+ * This lets the filter work regardless of which format is stored.
+ */
+const ROLE_NORMALIZE_MAP: Record<string, string> = {
+  superadmin:                     'SuperAdmin',
+  super_admin:                    'SuperAdmin',
+  admin:                          'Admin',
+  coordinator:                    'Coordinator',
+  datacollector:                  'DataCollector',
+  data_collector:                 'DataCollector',
+  datateam:                       'DataTeam',
+  data_team:                      'DataTeam',
+  supervisor:                     'Supervisor',
+  fom:                            'Field Operation Manager (FOM)',
+  'field operation manager':      'Field Operation Manager (FOM)',
+  'field operation manager (fom)':'Field Operation Manager (FOM)',
+  field_operation_manager:        'Field Operation Manager (FOM)',
+  reviewer:                       'Reviewer',
+  employee:                       'employee',
+};
+function normalizeRoleKey(role: string | null): string {
+  if (!role) return '';
+  const lower = role.toLowerCase().trim();
+  return ROLE_NORMALIZE_MAP[lower] || role;
+}
 const ROLE_COLORS: Record<string, string> = {
   /* ── PascalCase ── */
   SuperAdmin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
@@ -986,7 +1014,7 @@ export default function StaffDirectory() {
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
       if (stateFilter !== 'all' && !profileMatchesState(p, stateFilter)) return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
-      if (roleFilter !== 'all' && p.role !== roleFilter) return false;
+      if (roleFilter !== 'all' && normalizeRoleKey(p.role) !== roleFilter) return false;
       if (statusFilter === 'online'  && p.presence !== 'online')  return false;
       if (statusFilter === 'away'    && p.presence !== 'away')    return false;
       if (statusFilter === 'offline' && p.presence !== 'offline') return false;
@@ -1017,7 +1045,7 @@ export default function StaffDirectory() {
       if (hubFilter !== 'all'      && p.hub_id      !== hubFilter)      return false;
       if (stateFilter !== 'all'    && !profileMatchesState(p, stateFilter))    return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
-      if (roleFilter !== 'all'     && p.role        !== roleFilter)     return false;
+      if (roleFilter !== 'all'     && normalizeRoleKey(p.role) !== roleFilter) return false;
       return true;
     });
   }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter]);
