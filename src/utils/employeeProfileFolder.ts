@@ -308,27 +308,58 @@ export async function syncProfileFolder(
 }
 
 /**
- * Lightweight: ensures the Workspace Hub folder hierarchy exists
- * WITHOUT generating a PDF. Called on every profile page load.
- * Also auto-syncs any HR documents not yet in the workspace folder.
+ * READ-ONLY folder lookup — does NOT create new folders.
+ * Finds an existing workspace folder by name (case-insensitive).
+ */
+async function findWorkspaceFolder(
+  name: string,
+  parentId: string | null,
+): Promise<string | null> {
+  try {
+    const base = supabase
+      .from('workspace_folders')
+      .select('id')
+      .ilike('name', name)
+      .eq('archived', false)
+      .limit(1);
+    const { data } = parentId
+      ? await base.eq('parent_folder_id', parentId)
+      : await base.is('parent_folder_id', null);
+    return data?.[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lightweight: syncs HR documents into the Workspace Hub folder on page load.
+ * IMPORTANT — this function is READ-ONLY for the folder hierarchy.
+ * It NEVER creates new folders. If the employee's folder doesn't already
+ * exist in workspace_folders it returns silently and waits for the next
+ * explicit save / triggerFolderSync call (which calls syncProfileFolder) to
+ * create it.  Without this guard every page load re-creates a stale folder
+ * whenever the employee's ID has changed but Fix Prefix hasn't been applied yet.
  */
 export async function ensureWorkspaceHubFolders(
   user: { id: string; employeeId?: string | null; name?: string | null },
 ): Promise<void> {
   if (!user?.id || !user.employeeId) return;
   try {
-    const folderName       = computeFolderName(user);
-    const hrFolderId       = await ensureWorkspaceFolder('HR',       null,         user.id);
-    const profilesFolderId = await ensureWorkspaceFolder('Profiles', hrFolderId,   user.id);
-    const empFolderId      = await ensureWorkspaceFolder(folderName, profilesFolderId, user.id);
+    const folderName = computeFolderName(user);
 
-    // Auto-sync HR docs that aren't yet in the workspace folder
-    // Quick check: compare hr_employee_documents count vs workspace_files count
+    // Only look up — never create.  Bail out if the folder chain doesn't exist yet.
+    const hrFolderId = await findWorkspaceFolder('HR', null);
+    if (!hrFolderId) return;
+    const profilesFolderId = await findWorkspaceFolder('Profiles', hrFolderId);
+    if (!profilesFolderId) return;
+    const empFolderId = await findWorkspaceFolder(folderName, profilesFolderId);
+    if (!empFolderId) return; // folder not yet created — triggerFolderSync will handle it on save
+
+    // Auto-sync HR docs that aren't yet registered in the workspace folder
     const [{ count: hrCount }, { count: wsCount }] = await Promise.all([
       supabase.from('hr_employee_documents').select('id', { count: 'exact', head: true }).eq('profile_id', user.id),
       supabase.from('workspace_files').select('id', { count: 'exact', head: true }).eq('folder_id', empFolderId),
     ]);
-    // If workspace has fewer files than HR (ignoring the PROFILE_SUMMARY.pdf), sync them
     if ((hrCount ?? 0) > 0 && (wsCount ?? 0) < (hrCount ?? 0) + 1) {
       await syncHrDocsToWorkspace(user, empFolderId);
     }
