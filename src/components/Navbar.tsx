@@ -56,6 +56,38 @@ const Navbar = () => {
         const [globalSearch, setGlobalSearch] = useState('');
         const [showDropdown, setShowDropdown] = useState(false);
 
+        // Resolve the displayed role label from user_roles (currentUser.roles) first,
+        // falling back to profiles.role only when no user_roles entries exist.
+        // This prevents stale profiles.role (e.g. 'dataCollector') from showing
+        // in the navbar dropdown for users who have a higher role in user_roles.
+        const resolvedRoleLabel = (() => {
+          if (!currentUser) return 'My Account';
+          const ROLE_LABEL: Record<string, string> = {
+            superadmin: 'Super Admin', admin: 'Admin', ict: 'ICT',
+            fom: 'Field Ops Manager', financialadmin: 'Financial Admin',
+            supervisor: 'Supervisor', hubsupervisor: 'Hub Supervisor',
+            coordinator: 'Coordinator', datacollector: 'Data Collector',
+            datateam: 'Data Team', employee: 'Employee', hr: 'HR',
+            hrmanager: 'HR Manager', countrydirector: 'Country Director',
+            projectmanager: 'Project Manager', reviewer: 'Reviewer',
+            senioroperationslead: 'Senior Ops Lead',
+          };
+          const roleList: string[] = Array.isArray(currentUser.roles) && (currentUser.roles as string[]).length > 0
+            ? (currentUser.roles as string[])
+            : currentUser.role ? [currentUser.role] : [];
+          // Highest-privilege roles win
+          for (const r of roleList) {
+            const n = String(r).toLowerCase().replace(/[\s_-]/g, '');
+            if (n === 'superadmin') return 'Super Admin';
+            if (n === 'admin') return 'Admin';
+          }
+          if (roleList.length > 0) {
+            const n = String(roleList[0]).toLowerCase().replace(/[\s_-]/g, '');
+            return ROLE_LABEL[n] || String(roleList[0]).charAt(0).toUpperCase() + String(roleList[0]).slice(1);
+          }
+          return 'My Account';
+        })();
+
         // Auto-reconnect when window regains focus
         useFocusReconnect();
 
@@ -146,7 +178,7 @@ const Navbar = () => {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-56">
                                                         <DropdownMenuLabel className="text-xs text-gray-500">
-                                                                {currentUser?.role || 'My Account'}
+                                                                {resolvedRoleLabel}
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem onClick={() => navigate(`/users/${currentUser?.id}`)}>
