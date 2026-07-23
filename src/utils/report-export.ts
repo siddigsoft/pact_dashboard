@@ -641,19 +641,42 @@ export function exportMultiSheetExcel(
     }
 
     const headers = Object.keys(sheet.data[0]);
-    const rows = sheet.data.map(row => headers.map(h => row[h] ?? ''));
-    const titleRows: (string | number)[][] = [
-      [`PACT Command Center - ${sheet.name}`],
-      [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Records: ${sheet.data.length}`],
+    const rows = sheet.data.map(row => headers.map(h => {
+      const v = row[h];
+      // Preserve numbers as numbers; everything else as string/empty
+      if (v === null || v === undefined) return '';
+      return v;
+    }));
+
+    const titleRows: any[][] = [
+      [`PACT Command Center — ${sheet.name} Report`],
+      [`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}   |   Records: ${sheet.data.length}`],
       [],
     ];
     const allRows = [...titleRows, headers, ...rows];
     const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+
+    // Merge title rows across all columns
     worksheet['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
     ];
-    worksheet['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 4, 14), 40) }));
+
+    // Auto-fit column widths based on header AND data content (sample up to 50 rows)
+    const sampleRows = rows.slice(0, 50);
+    worksheet['!cols'] = headers.map((h, ci) => {
+      const headerLen = h.length;
+      const maxContentLen = sampleRows.reduce((max, row) => {
+        const cell = row[ci];
+        const len = cell === null || cell === undefined ? 0 : String(cell).length;
+        return Math.max(max, len);
+      }, 0);
+      return { wch: Math.min(Math.max(headerLen, maxContentLen, 10) + 2, 50) };
+    });
+
+    // Freeze the header row (row 4 = after 2 title rows + blank + header)
+    worksheet['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 4, topLeftCell: 'A5' }];
+
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
   });
 

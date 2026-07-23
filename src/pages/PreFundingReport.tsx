@@ -127,10 +127,13 @@ export default function PreFundingReport() {
   const [statusFilter, setStatusFilter]     = useState('all');
   const [currencyFilter, setCurrencyFilter] = useState('All');
   const [projectFilter, setProjectFilter]   = useState('all');
+  const [fundFilter, setFundFilter]         = useState('all');
   const [dateFrom, setDateFrom]             = useState('');
   const [dateTo, setDateTo]                 = useState('');
   const [txnSearch, setTxnSearch]           = useState('');
   const [txnUserFilter, setTxnUserFilter]   = useState('all');
+  // Hub map: userId → hub name (for Excel export)
+  const [profHubMap, setProfHubMap]         = useState<Map<string, string>>(new Map());
 
   // Reconciliation expand state
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
@@ -149,7 +152,7 @@ export default function PreFundingReport() {
           .select('id,pre_fund_request_id,step_label,status,step_order,is_required,approved_at,notes,assigned_user_id,assigned_user_ids')
           .order('step_order'),
         supabase.from('projects').select('id,name').order('name'),
-        supabase.from('profiles').select('id,full_name,email'),
+        supabase.from('profiles').select('id,full_name,email,hub_id'),
         (supabase as any).from('pre_fund_allocations')
           .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes')
           .order('created_at', { ascending: false }),
@@ -201,6 +204,19 @@ export default function PreFundingReport() {
       setProjects((projRes.data as any) ?? []);
       setProfiles(profMap);
 
+      // Build hub map for Excel export: userId → hub name
+      try {
+        const hubsRes = await (supabase as any).from('hubs').select('id,name').limit(500);
+        if (!hubsRes.error && hubsRes.data) {
+          const hubM = new Map<string, string>((hubsRes.data as any[]).map((h: any) => [h.id, h.name as string]));
+          const phm = new Map<string, string>();
+          ((profRes.data as any) ?? []).forEach((p: any) => {
+            phm.set(p.id, p.hub_id ? (hubM.get(p.hub_id) ?? p.hub_id) : '—');
+          });
+          setProfHubMap(phm);
+        }
+      } catch { /* hubs table not available */ }
+
       // Build currency list from fund currencies + exchange rate pairs
       const ratesRes = await (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency');
       const currSet = new Set<string>();
@@ -224,10 +240,11 @@ export default function PreFundingReport() {
       if (projectFilter === '__none__' && f.project_id) return false;
       if (projectFilter !== '__none__' && f.project_id !== projectFilter) return false;
     }
+    if (fundFilter !== 'all' && f.id !== fundFilter) return false;
     if (dateFrom && f.created_at < dateFrom) return false;
     if (dateTo   && f.created_at.split('T')[0] > dateTo) return false;
     return true;
-  }), [funds, statusFilter, currencyFilter, projectFilter, dateFrom, dateTo]);
+  }), [funds, statusFilter, currencyFilter, projectFilter, fundFilter, dateFrom, dateTo]);
 
   const filteredTxns = useMemo(() => {
     const fundIds = new Set(filteredFunds.map(f => f.id));
@@ -564,23 +581,29 @@ export default function PreFundingReport() {
       },
       {
         name: 'Transactions',
-        data: filteredTxns.map(t => ({
-          Date: t.transaction_date ?? '',
-          'Created At': t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
-          'Staff Name': t.user_name ?? '—',
-          'Fund Name': t.fund_name ?? '—',
-          Type: t.transaction_type,
-          Reference: t.reference ?? '',
-          Description: t.description ?? '',
-          Source: t.source_table
+        data: filteredTxns.map(t => {
+          const userId = t.user_id ?? t.created_by ?? null;
+          const hub = userId ? (profHubMap.get(userId) ?? '—') : '—';
+          const category = t.source_table
             ? (t.source_table === 'down_payment_requests' ? 'Down Payment'
               : t.source_table === 'operational_cost_submissions' ? 'Cost Submission'
               : t.source_table)
-            : 'Manual',
-          Amount: t.amount,
-          Currency: t.currency,
-          Reconciled: t.reconciled ? 'Yes' : 'No',
-        }))
+            : 'Manual';
+          return {
+            Date: t.transaction_date ?? '',
+            'Created At': t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
+            'Staff Name': t.user_name ?? '—',
+            Hub: hub,
+            'Fund Name': t.fund_name ?? '—',
+            'Transaction Type': t.transaction_type,
+            Category: category,
+            Reference: t.reference ?? '',
+            Description: t.description ?? '',
+            Amount: t.amount,
+            Currency: t.currency,
+            Reconciled: t.reconciled ? 'Yes' : 'No',
+          };
+        }),
       },
       {
         name: 'Approval Chain',
@@ -668,6 +691,16 @@ export default function PreFundingReport() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex flex-col gap-1 min-w-[180px]">
+          <Label className="text-xs">Fund</Label>
+          <Select value={fundFilter} onValueChange={setFundFilter}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Funds</SelectItem>
+              {funds.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs">Created From</Label>
           <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 text-xs w-[130px]" />
@@ -676,9 +709,9 @@ export default function PreFundingReport() {
           <Label className="text-xs">Created To</Label>
           <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 text-xs w-[130px]" />
         </div>
-        {(statusFilter !== 'all' || currencyFilter !== 'All' || projectFilter !== 'all' || dateFrom || dateTo) && (
+        {(statusFilter !== 'all' || currencyFilter !== 'All' || projectFilter !== 'all' || fundFilter !== 'all' || dateFrom || dateTo) && (
           <Button variant="ghost" size="sm" className="h-8 text-xs self-end"
-            onClick={() => { setStatusFilter('all'); setCurrencyFilter('All'); setProjectFilter('all'); setDateFrom(''); setDateTo(''); }}>
+            onClick={() => { setStatusFilter('all'); setCurrencyFilter('All'); setProjectFilter('all'); setFundFilter('all'); setDateFrom(''); setDateTo(''); }}>
             Clear Filters
           </Button>
         )}

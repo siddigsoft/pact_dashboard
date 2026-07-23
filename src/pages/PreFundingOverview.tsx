@@ -214,6 +214,8 @@ export default function PreFundingOverview() {
   // dpId → userId: built from validDpData.created_by so txnsByFundUser can attribute
   // spend correctly when pre_fund_transactions.user_id is null (officer stored in created_by).
   const [dpUserMap, setDpUserMap] = useState<Map<string, string>>(new Map());
+  // ocsId → submitted_by (actual staff member who owns the OCS allocation spend)
+  const [ocsUserMap, setOcsUserMap] = useState<Map<string, string>>(new Map());
   const [rates, setRates]         = useState<ExchangeRate[]>([]);
   const [settings, setSettings]   = useState<Settings | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -275,7 +277,7 @@ export default function PreFundingOverview() {
         // NOTE: down_payment_requests has NO submitted_by column — that field only exists on operational_cost_submissions
         const [validDpData, validOcsData, backLinkedDpData, profData] = await Promise.all([
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,created_by').in('id', chunk), dpIds),
-          fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
+          fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
           // Targeted profiles fetch for ALL users referenced (allocation holders + txn users)
           allPreFetchUserIds.length > 0
@@ -337,13 +339,19 @@ export default function PreFundingOverview() {
           if (uid) dpMap.set(dp.id as string, uid as string);
         }
         setDpUserMap(dpMap);
+        // Build ocsId → submitted_by map so OCS payment txns are credited to the right staff member
+        const ocsMap = new Map<string, string>();
+        for (const ocs of validOcsData) {
+          const uid = (ocs as any).submitted_by;
+          if (uid) ocsMap.set(ocs.id as string, uid as string);
+        }
+        setOcsUserMap(ocsMap);
         // Build profiles map — profData is now an array (from fetchAllIn, not a Supabase response object)
         const profRows: any[] = Array.isArray(profData) ? profData : ((profData as any).data ?? []);
         const m = new Map<string, string>();
         profRows.forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
-        // Supplement with DP-resolved user IDs whose profiles may not have been included above
-        // (e.g., requested_by values that aren't allocation holders — fetch them now if any are missing)
-        const dpResolvedIds = [...new Set([...dpMap.values()])].filter(uid => !m.has(uid));
+        // Supplement with DP/OCS-resolved user IDs whose profiles may not have been included above
+        const dpResolvedIds = [...new Set([...dpMap.values(), ...ocsMap.values()])].filter(uid => !m.has(uid));
         if (dpResolvedIds.length > 0) {
           const extraProfs = await fetchAllIn(
             chunk => supabase.from('profiles').select('id,full_name,email').in('id', chunk),
@@ -457,6 +465,10 @@ export default function PreFundingOverview() {
       if (!resolved && t.source_table === 'down_payment_requests' && t.source_id) {
         resolved = dpUserMap.get(t.source_id) ?? null;
       }
+      // OCS: submitted_by is the allocation holder (staff member who incurred the cost)
+      if (!resolved && t.source_table === 'operational_cost_submissions' && t.source_id) {
+        resolved = ocsUserMap.get(t.source_id) ?? null;
+      }
 
       // Step 2: allocation-aware attribution
       const holders = allocHoldersByFund.get(t.pre_fund_request_id) ?? new Set<string>();
@@ -479,7 +491,7 @@ export default function PreFundingOverview() {
       m.set(t.pre_fund_request_id, byUser);
     }
     return m;
-  }, [txns, dpUserMap, allocHoldersByFund]);
+  }, [txns, dpUserMap, ocsUserMap, allocHoldersByFund]);
 
   // Effective paid amount per fund:
   //   Priority 1 — sum of 'payment' transactions from pre_fund_transactions (most accurate;
