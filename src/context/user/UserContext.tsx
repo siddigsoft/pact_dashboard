@@ -357,11 +357,32 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
+          // Build the incremental patch from the realtime payload.
+          // We intentionally only merge fields that are actually present in the
+          // payload (undefined = not in payload = do not overwrite existing value).
+          const profilePatch: Partial<User> = {
+            availability: updated.availability ?? undefined,
+            location: locationData !== undefined ? locationData : undefined,
+          };
+          // Role, avatar, name, email, and status are included whenever they
+          // change — this ensures a logged-in user's session reflects any
+          // admin role change without requiring a reload.
+          if (updated.role      !== undefined) profilePatch.role      = updated.role || 'dataCollector';
+          if (updated.avatar_url !== undefined) profilePatch.avatar   = updated.avatar_url || undefined;
+          if (updated.full_name  !== undefined) { profilePatch.name = updated.full_name; profilePatch.fullName = updated.full_name; }
+          if (updated.email      !== undefined) profilePatch.email    = updated.email;
+          if (updated.status     !== undefined) { profilePatch.profileStatus = updated.status; profilePatch.isApproved = updated.status === 'approved'; }
+          if (updated.hub_id     !== undefined) profilePatch.hubId     = updated.hub_id;
+          if (updated.state_id   !== undefined) profilePatch.stateId   = updated.state_id;
+          if (updated.locality_id !== undefined) profilePatch.localityId = updated.locality_id;
+          if (updated.phone      !== undefined) profilePatch.phone     = updated.phone;
+          if (updated.employee_id !== undefined) profilePatch.employeeId = updated.employee_id;
+
           setAppUsers(prev => prev.map(u => {
             if (u.id !== updated.id) return u;
             return {
               ...u,
-              availability: updated.availability ?? u.availability,
+              ...profilePatch,
               location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
             };
           }));
@@ -370,7 +391,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!prev || prev.id !== updated.id) return prev;
             const next = {
               ...prev,
-              availability: updated.availability ?? prev.availability,
+              ...profilePatch,
               location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
             } as User;
             try {
@@ -1523,13 +1544,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn("Direct update failed, trying RPC:", directError.message);
         // Fallback: RPC bypasses RLS but may have the COALESCE jsonb bug on location column
         try {
+          // IMPORTANT: pass undefined (not null) for avatar_url when the caller
+          // did not explicitly clear the photo — the RPC uses COALESCE so passing
+          // null would wipe an existing avatar that was never changed.
+          const rpcAvatarUrl = updatedUser.avatar !== undefined
+            ? (updatedUser.avatar || null)   // explicit value: pass as-is (null clears, string sets)
+            : undefined;                      // not touched: omit from call
           const { error: rpcError } = await supabase.rpc('admin_update_profile', {
             target_id: updatedUser.id,
             new_full_name: updatedUser.fullName || updatedUser.name || null,
             new_username: updatedUser.username || null,
             new_email: updatedUser.email || null,
             new_role: updatedUser.role || null,
-            new_avatar_url: updatedUser.avatar || null,
+            new_avatar_url: rpcAvatarUrl !== undefined ? rpcAvatarUrl : null,
             new_hub_id: updatedUser.hubId || null,
             new_state_id: updatedUser.stateId || null,
             new_locality_id: updatedUser.localityId || null,

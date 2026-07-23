@@ -916,32 +916,34 @@
       // Guard: if profile role itself says superAdmin, trust it even if context hasn't resolved yet
       const profileRoleNorm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
       if (profileRoleNorm === 'superadmin') return "Super Admin";
+      // Canonical role label map (keys are normalised: lowercase, no spaces/underscores/dashes)
+      const ROLE_LABEL: Record<string, string> = {
+        superadmin:          "Super Admin",
+        admin:               "Admin",
+        ict:                 "ICT",
+        fom:                 "Field Ops Manager",
+        financialadmin:      "Financial Admin",
+        financialauditor:    "Financial Auditor",
+        auditor:             "Financial Auditor",
+        supervisor:          "Supervisor",
+        hubsupervisor:       "Hub Supervisor",
+        coordinator:         "Coordinator",
+        datacollector:       "Data Collector",
+        datateam:            "Data Team",
+        countrydirector:     "Country Director",
+        projectmanager:      "Project Manager",
+        senioroperationslead:"Senior Ops Lead",
+        reviewer:            "Reviewer",
+        employee:            "Employee",
+        hr:                  "HR",
+        hrmanager:           "HR Manager",
+      };
       if (roles && roles.length > 0) {
         if (roles.includes("admin" as AppRole)) return "Admin";
-        const roleMap: Record<string, string> = {
-          admin: "Admin",
-          ict: "ICT",
-          fom: "Field Ops Manager",
-          financialAdmin: "Financial Admin",
-          auditor: "Financial Auditor",
-          supervisor: "Supervisor",
-          coordinator: "Coordinator",
-          dataCollector: "Data Collector",
-        };
-        return roleMap[roles[0]] || roles[0].charAt(0).toUpperCase() + roles[0].slice(1);
+        const norm0 = (roles[0] as string).toLowerCase().replace(/[\s_-]/g, '');
+        return ROLE_LABEL[norm0] || (roles[0] as string).charAt(0).toUpperCase() + (roles[0] as string).slice(1);
       }
-      const fallbackRoleMap: Record<string, string> = {
-        superadmin: "Super Admin",
-        admin: "Admin",
-        ict: "ICT",
-        fom: "Field Ops Manager",
-        financialadmin: "Financial Admin",
-        auditor: "Financial Auditor",
-        supervisor: "Supervisor",
-        coordinator: "Coordinator",
-        datacollector: "Data Collector",
-      };
-      return fallbackRoleMap[profileRoleNorm] || currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+      return ROLE_LABEL[profileRoleNorm] || currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
     };
 
     const handleLogout = () => {

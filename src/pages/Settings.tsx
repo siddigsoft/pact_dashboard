@@ -691,9 +691,11 @@ const Settings = () => {
     setIsUploadingAvatar(true);
 
     try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const fileExt = file.name.split(".").pop() ?? 'jpg';
+      // Use fixed filename UUID.ext (no timestamp) so the path always matches
+      // the storage RLS policy "avatars/<uuid>.<ext>".  upsert:true replaces
+      // the previous file.  Cache-busting is handled via the query string below.
+      const filePath = `avatars/${currentUser.id}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -707,7 +709,8 @@ const Settings = () => {
         .from("avatars")
         .getPublicUrl(filePath);
 
-      const avatarUrl = urlData.publicUrl;
+      // Append cache-buster so the browser doesn't serve a stale image
+      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
       const { error: updateError } = await supabase
         .from("profiles")
