@@ -218,8 +218,9 @@ export default function PreFundingOverview() {
   const [ocsUserMap, setOcsUserMap] = useState<Map<string, string>>(new Map());
   const [rates, setRates]         = useState<ExchangeRate[]>([]);
   const [settings, setSettings]   = useState<Settings | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(true);
+  const [error, setError]             = useState<string | null>(null);
   const [baseCurrency, setBase]   = useState('USD');
   const [statusFilter, setStatus] = useState<string>('active');
   const [refreshing, setRefreshing] = useState(false);
@@ -227,7 +228,9 @@ export default function PreFundingOverview() {
 
   const load = useCallback(async () => {
     try {
-      // ── Step 1: lightweight headers (small tables, no pagination needed) ──────────
+      setError(null);
+      setLoadingDetails(true);
+      // ── Phase 1: fund headers only — renders the page immediately ──────────────
       const [fundsRes, ratesRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
@@ -245,8 +248,10 @@ export default function PreFundingOverview() {
         setSettings({ base_currency: s.base_currency ?? 'USD' });
         setBase(s.base_currency ?? 'USD');
       }
+      // ← Show fund cards NOW; detail tables will fill in during Phase 2
+      setLoading(false);
 
-      // ── Step 2: rows scoped to the loaded fund IDs — much faster than global fetches ──
+      // ── Phase 2: allocation + transaction details (background) ─────────────────
       const fundIds = loadedFunds.map((f: any) => f.id as string);
       const [allocsData, rawTxns] = await Promise.all([
         fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').in('pre_fund_request_id', chunk).order('allocated_amount', { ascending: false }), fundIds),
@@ -346,10 +351,13 @@ export default function PreFundingOverview() {
           if (uid) ocsMap.set(ocs.id as string, uid as string);
         }
         setOcsUserMap(ocsMap);
-        // Build profiles map — profData is now an array (from fetchAllIn, not a Supabase response object)
+        // Build profiles map — only store rows with a real name or email; omit UUID-only placeholders
         const profRows: any[] = Array.isArray(profData) ? profData : ((profData as any).data ?? []);
         const m = new Map<string, string>();
-        profRows.forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        profRows.forEach((p: any) => {
+          const name = (p.full_name || '').trim() || (p.email || '').trim();
+          if (name) m.set(p.id, name);
+        });
         // Supplement with DP/OCS-resolved user IDs whose profiles may not have been included above
         const dpResolvedIds = [...new Set([...dpMap.values(), ...ocsMap.values()])].filter(uid => !m.has(uid));
         if (dpResolvedIds.length > 0) {
@@ -358,7 +366,8 @@ export default function PreFundingOverview() {
             dpResolvedIds
           );
           for (const p of extraProfs as any[]) {
-            m.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
+            const name = (p.full_name || '').trim() || (p.email || '').trim();
+            if (name) m.set(p.id, name);
           }
         }
         setProfiles(m);
@@ -367,6 +376,7 @@ export default function PreFundingOverview() {
       setError(e.message ?? 'Failed to load');
     } finally {
       setLoading(false);
+      setLoadingDetails(false);
     }
   }, []);
 
@@ -938,13 +948,22 @@ export default function PreFundingOverview() {
                   {/* ── User Allocations Panel ──────────────────────────── */}
                   {isOpen && (
                     <div className="border rounded-lg overflow-hidden bg-muted/20 dark:bg-muted/10">
-                      {fundAllocs.length === 0 ? (
+                      {loadingDetails ? (
+                        <div className="p-4 space-y-2">
+                          {[1,2].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
+                        </div>
+                      ) : fundAllocs.length === 0 ? (
                         <div className="text-center py-6 text-muted-foreground text-sm">
                           <User className="h-8 w-8 mx-auto mb-2 opacity-30" />
                           No allocations yet for this fund
                         </div>
                       ) : (
                         <div className="overflow-x-auto">
+                          {(() => {
+                            // Fund-level unattributed spend — distributed proportionally as fallback
+                            const totAllocAmt = fundAllocs.reduce((s, a) => s + a.allocated_amount, 0);
+                            const unknownPayment = fundTxnsByUser.get('__unknown__')?.get('payment') ?? 0;
+                            return (
                           <table className="w-full text-[12px]">
                             <thead>
                               <tr className="bg-muted/50 border-b">
@@ -958,12 +977,18 @@ export default function PreFundingOverview() {
                             </thead>
                             <tbody className="divide-y">
                               {fundAllocs.map(a => {
-                                const userName = profiles.get(a.user_id) ?? a.user_id.slice(0, 8);
-                                // Get transaction breakdown for this user for this fund
+                                // Name: use profile → fallback to "Staff (id-prefix)"
+                                const userName = profiles.get(a.user_id) ?? `Staff (${a.user_id.slice(0, 8)})`;
+                                // Transaction breakdown for this user
                                 const userTxns = fundTxnsByUser.get(a.user_id) ?? new Map<string, number>();
-                                // Derive spent from payment txns (spent_amount DB column is not updated by the payment system)
                                 const txnSpent = userTxns.get('payment') ?? 0;
-                                const displaySpent = txnSpent > 0 ? txnSpent : (a.spent_amount ?? 0);
+                                // Spent priority: 1) DB spent_amount  2) attributed txns  3) proportional share of unattributed
+                                const propSpent = unknownPayment > 0 && totAllocAmt > 0
+                                  ? Math.round(unknownPayment * a.allocated_amount / totAllocAmt) : 0;
+                                const isEstimated = txnSpent === 0 && (a.spent_amount ?? 0) === 0 && propSpent > 0;
+                                const displaySpent = (a.spent_amount ?? 0) > 0 ? (a.spent_amount ?? 0)
+                                  : txnSpent > 0 ? txnSpent
+                                  : propSpent;
                                 const remaining = a.allocated_amount - displaySpent;
                                 const pctUsed = a.allocated_amount > 0
                                   ? Math.min(100, Math.round((displaySpent / a.allocated_amount) * 100))
@@ -991,8 +1016,11 @@ export default function PreFundingOverview() {
 
                                     {/* Spent */}
                                     <td className="px-4 py-3 text-right">
-                                      <span className={cn('font-mono font-medium', displaySpent > 0 ? 'text-rose-600' : 'text-muted-foreground')}>
-                                        {a.currency} {formatNumber(displaySpent, 0)}
+                                      <span
+                                        className={cn('font-mono font-medium', displaySpent > 0 ? 'text-rose-600' : 'text-muted-foreground')}
+                                        title={isEstimated ? 'Estimated: proportionally distributed from unattributed fund payments' : undefined}
+                                      >
+                                        {isEstimated ? '~' : ''}{a.currency} {formatNumber(displaySpent, 0)}
                                       </span>
                                     </td>
 
@@ -1051,11 +1079,14 @@ export default function PreFundingOverview() {
                             {/* Footer totals */}
                             {fundAllocs.length > 1 && (() => {
                               const totAlloc = fundAllocs.reduce((s, a) => s + a.allocated_amount, 0);
-                              // Use txn-derived spent per user (same logic as per-row above)
+                              // Mirror the same priority logic as per-row: DB spent_amount → attributed txns → proportional
                               const totSpent = fundAllocs.reduce((s, a) => {
                                 const uTxns = fundTxnsByUser.get(a.user_id) ?? new Map<string, number>();
                                 const txnPaid = uTxns.get('payment') ?? 0;
-                                return s + (txnPaid > 0 ? txnPaid : (a.spent_amount ?? 0));
+                                const prop = unknownPayment > 0 && totAllocAmt > 0
+                                  ? Math.round(unknownPayment * a.allocated_amount / totAllocAmt) : 0;
+                                const spent = (a.spent_amount ?? 0) > 0 ? (a.spent_amount ?? 0) : txnPaid > 0 ? txnPaid : prop;
+                                return s + spent;
                               }, 0);
                               const totRem   = totAlloc - totSpent;
                               const totPct   = totAlloc > 0 ? Math.min(100, Math.round((totSpent / totAlloc) * 100)) : 0;
@@ -1076,6 +1107,8 @@ export default function PreFundingOverview() {
                               );
                             })()}
                           </table>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
