@@ -408,17 +408,21 @@ export default function PreFundingAllocations() {
             { label: 'Spent So Far',    value: formatNumber(fundTotalPaid, 0),    sub: 'from fund (all payments)', icon: TrendingDown,  accent: fundTotalPaid > totalAllocated ? 'bg-rose-600' : 'bg-emerald-600' },
           ]).map(k => (
             <Card key={k.label}>
-              <CardContent className="pt-4 pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</div>
-                    <div className="text-2xl font-bold mt-1 tabular-nums leading-none">{k.value}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{k.sub}</div>
+              <CardContent className="pt-3 pb-3 px-4">
+                {/* Label row + icon badge — icon never competes with numbers */}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
+                    {k.label}
                   </div>
-                  <div className={cn('flex items-center justify-center h-10 w-10 rounded-xl shrink-0 text-white', k.accent)}>
-                    <k.icon className="h-5 w-5" />
+                  <div className={cn('flex items-center justify-center h-7 w-7 rounded-lg shrink-0 text-white', k.accent)}>
+                    <k.icon className="h-3.5 w-3.5" />
                   </div>
                 </div>
+                {/* Number on its own row — full width, never clipped */}
+                <div className="text-xl font-bold tabular-nums leading-none tracking-tight">
+                  {k.value}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1">{k.sub}</div>
               </CardContent>
             </Card>
           ))}
