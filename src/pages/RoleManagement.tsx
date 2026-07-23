@@ -18,7 +18,7 @@ import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
 import { PageAccessOverview } from '@/components/role-management/PageAccessOverview';
 import { ModuleControlCenter } from '@/components/role-management/ModuleControlCenter';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
+import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole, ResourceType, ActionType } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
@@ -40,7 +40,8 @@ const RoleManagement = () => {
     assignRoleToUser,
     removeRoleFromUser,
     getUserRolesByUserId,
-    fetchUserRoles
+    fetchUserRoles,
+    fetchRoles,
   } = useRoleManagement();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -196,6 +197,30 @@ const RoleManagement = () => {
   const handleRemoveRoleFromUser = async (userId: string, roleId?: string, role?: AppRole): Promise<void> => {
     await removeRoleFromUser(userId, roleId, role);
     await refreshUsers();
+  };
+
+  // ── Module Control Center permission toggle ───────────────────────────────
+  const handleToggleModulePermission = async (
+    liveRole: RoleWithPermissions,
+    resource: ResourceType,
+    action: ActionType,
+    currentlyHas: boolean,
+  ): Promise<void> => {
+    const currentPerms = liveRole.permissions.map(p => ({
+      resource: p.resource as ResourceType,
+      action: p.action as ActionType,
+    }));
+    const newPerms = currentlyHas
+      ? currentPerms.filter(p => !(p.resource === resource && p.action === action))
+      : [...currentPerms, { resource, action }];
+
+    const ok = await updateRole(liveRole.id, { permissions: newPerms });
+    if (ok) {
+      toast({
+        title: currentlyHas ? 'Permission revoked' : 'Permission granted',
+        description: `${liveRole.display_name || liveRole.name} — ${resource}:${action}`,
+      });
+    }
   };
 
   const handleCloneRole = (role: RoleWithPermissions) => {
@@ -445,7 +470,11 @@ const RoleManagement = () => {
                 كل وحدة وصفحة وزر وتقرير في النظام — مع مؤشرات تغطية الأدوار. انقر على أي صف لرؤية الأدوار التي يمكنها تنفيذه.
               </p>
             </div>
-            <ModuleControlCenter />
+            <ModuleControlCenter
+              roles={roles}
+              onTogglePermission={handleToggleModulePermission}
+              canEdit={isSuperAdmin}
+            />
           </TabsContent>
         )}
 
