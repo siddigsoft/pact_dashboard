@@ -643,10 +643,18 @@
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
+    // isDataCollector must use user_roles (via `roles`) as the authoritative source.
+    // Falling back to currentUser.role is only correct when NO roles have been
+    // loaded yet — because profiles.role can be stale (e.g. 'dataCollector')
+    // even after an admin assigned a higher role via user_roles only.
+    // Using currentUser.role unconditionally caused the sidebar to flip to
+    // data-collector mode on any profiles UPDATE realtime event.
     const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
                             roles?.includes('dataCollector' as AppRole) || 
-                            currentUser?.role?.toLowerCase() === 'datacollector' ||
-                            currentUser?.role?.toLowerCase() === 'data collector';
+                            ((!roles || roles.length === 0) && (
+                              currentUser?.role?.toLowerCase() === 'datacollector' ||
+                              currentUser?.role?.toLowerCase() === 'data collector'
+                            ));
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
     // (the hasAnyRole function reference changes every render â€” never put it in deps)

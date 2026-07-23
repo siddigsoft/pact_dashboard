@@ -357,32 +357,65 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          // Build the incremental patch from the realtime payload.
-          // We intentionally only merge fields that are actually present in the
-          // payload (undefined = not in payload = do not overwrite existing value).
-          const profilePatch: Partial<User> = {
-            availability: updated.availability ?? undefined,
-            location: locationData !== undefined ? locationData : undefined,
+          // ── Build per-use-case patches ───────────────────────────────────────
+          //
+          // The subscription has NO row-level filter, so it fires for EVERY
+          // profiles UPDATE in the system — including employment-record saves
+          // that never touch the role or avatar columns.  Supabase always sends
+          // the full new row, so `updated.role` always contains whatever is in
+          // `profiles.role` even when the role was NOT what changed.
+          //
+          // To avoid false overwrites we split the patch into two flavours:
+          //
+          //  • listPatch  – applied to setAppUsers (admin's list view).
+          //                 Safe to include role/avatar because admins need to
+          //                 see other users' changes live in the directory.
+          //
+          //  • selfPatch  – applied to setCurrentUser (the logged-in user's own
+          //                 session).  We deliberately exclude `role` here because:
+          //                   a) The current user's effective role is resolved from
+          //                      user_roles via useAuthorization (TanStack Query),
+          //                      NOT from profiles.role alone.
+          //                   b) An employment-record save (department, dates…)
+          //                      fires a realtime event with the unchanged
+          //                      profiles.role value, which would incorrectly
+          //                      revert the session role (e.g. admin → dataCollector).
+          //                 We also exclude avatar from selfPatch when the DB value
+          //                 is null: spreading { avatar: undefined } removes the
+          //                 property entirely, causing the avatar to disappear.
+
+          const buildPatch = (includeRole: boolean): Partial<User> => {
+            const patch: Partial<User> = {
+              availability: updated.availability ?? undefined,
+              location:     locationData !== undefined ? locationData : undefined,
+            };
+            // role — only for list view (see comment above)
+            if (includeRole && updated.role !== undefined) {
+              patch.role = updated.role || 'dataCollector';
+            }
+            // avatar — only set if there is an actual URL; never clear via realtime
+            if (updated.avatar_url) {
+              patch.avatar = updated.avatar_url;
+            }
+            if (updated.full_name  !== undefined) { patch.name = updated.full_name; patch.fullName = updated.full_name; }
+            if (updated.email      !== undefined) patch.email        = updated.email;
+            if (updated.status     !== undefined) { patch.profileStatus = updated.status; patch.isApproved = updated.status === 'approved'; }
+            if (updated.hub_id     !== undefined) patch.hubId        = updated.hub_id;
+            if (updated.state_id   !== undefined) patch.stateId      = updated.state_id;
+            if (updated.locality_id !== undefined) patch.localityId  = updated.locality_id;
+            if (updated.phone      !== undefined) patch.phone        = updated.phone;
+            if (updated.employee_id !== undefined) patch.employeeId  = updated.employee_id;
+            return patch;
           };
-          // Role, avatar, name, email, and status are included whenever they
-          // change — this ensures a logged-in user's session reflects any
-          // admin role change without requiring a reload.
-          if (updated.role      !== undefined) profilePatch.role      = updated.role || 'dataCollector';
-          if (updated.avatar_url !== undefined) profilePatch.avatar   = updated.avatar_url || undefined;
-          if (updated.full_name  !== undefined) { profilePatch.name = updated.full_name; profilePatch.fullName = updated.full_name; }
-          if (updated.email      !== undefined) profilePatch.email    = updated.email;
-          if (updated.status     !== undefined) { profilePatch.profileStatus = updated.status; profilePatch.isApproved = updated.status === 'approved'; }
-          if (updated.hub_id     !== undefined) profilePatch.hubId     = updated.hub_id;
-          if (updated.state_id   !== undefined) profilePatch.stateId   = updated.state_id;
-          if (updated.locality_id !== undefined) profilePatch.localityId = updated.locality_id;
-          if (updated.phone      !== undefined) profilePatch.phone     = updated.phone;
-          if (updated.employee_id !== undefined) profilePatch.employeeId = updated.employee_id;
+
+          const listPatch = buildPatch(true);   // includes role (for admin list view)
+          const selfPatch = buildPatch(false);  // excludes role (for current user session)
 
           setAppUsers(prev => prev.map(u => {
             if (u.id !== updated.id) return u;
             return {
               ...u,
-              ...profilePatch,
+              ...listPatch,
               location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
             };
           }));
@@ -391,7 +424,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!prev || prev.id !== updated.id) return prev;
             const next = {
               ...prev,
-              ...profilePatch,
+              ...selfPatch,
               location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
             } as User;
             try {
