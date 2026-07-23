@@ -97,7 +97,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [authReady]);
   
   const { toast } = useToast();
-  const { roles, hasRole, addRole, removeRole } = useRoles(currentUser?.id);
+  // useRoles() always returns an empty array — roles are already fetched at login
+  // into currentUser.roles (user_roles table). Derive roles from currentUser so
+  // the sidebar getPrimaryRole(), isDataCollector, and menu-group logic all see
+  // the real role list instead of an empty array (which caused "Data Collector"
+  // to show for every user regardless of their actual assigned roles).
+  const { hasRole, addRole, removeRole } = useRoles(currentUser?.id);
+  const roles: AppRole[] = Array.isArray(currentUser?.roles) && (currentUser.roles as AppRole[]).length > 0
+    ? (currentUser.roles as AppRole[])
+    : [];
 
   const [emailVerification, setEmailVerification] = useState<{ pending: boolean; email?: string }>({ pending: false });
 
