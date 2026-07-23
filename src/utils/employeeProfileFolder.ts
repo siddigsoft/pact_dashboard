@@ -37,25 +37,35 @@ async function ensureWorkspaceFolder(
   parentId: string | null,
   createdBy: string | null,
 ): Promise<string> {
+  // Use ilike (case-insensitive) so that previously-created folders with
+  // different capitalisation (e.g. "mukisa_christian" vs "Mukisa_Christian")
+  // are found and reused rather than creating a duplicate row.
   let existingId: string | null = null;
   if (parentId) {
     const { data } = await supabase
       .from('workspace_folders')
-      .select('id')
-      .eq('name', name)
+      .select('id, name')
+      .ilike('name', name)
       .eq('parent_folder_id', parentId)
       .eq('archived', false)
       .limit(1);
     existingId = data?.[0]?.id ?? null;
+    // If found under a different casing, normalise the name to current canonical form
+    if (existingId && data?.[0]?.name !== name) {
+      await supabase.from('workspace_folders').update({ name }).eq('id', existingId);
+    }
   } else {
     const { data } = await supabase
       .from('workspace_folders')
-      .select('id')
-      .eq('name', name)
+      .select('id, name')
+      .ilike('name', name)
       .is('parent_folder_id', null)
       .eq('archived', false)
       .limit(1);
     existingId = data?.[0]?.id ?? null;
+    if (existingId && data?.[0]?.name !== name) {
+      await supabase.from('workspace_folders').update({ name }).eq('id', existingId);
+    }
   }
   if (existingId) return existingId;
 

@@ -924,39 +924,51 @@ const UserDetail: FC = () => {
     }
   };
 
-  // ── Regenerate Employee ID (fixes country prefix mismatch) ───────────────
+  // ── Fix Employee ID prefix (corrects country prefix mismatch) ───────────────
+  // IMPORTANT: this must NEVER call generate_employee_id() — that mints a brand-new
+  // sequential number and creates yet another workspace folder. Instead we only
+  // replace the leading country-code letters while keeping the date+sequence intact.
+  // e.g.  SD202607210010  →  UG202607210010   (same number, correct prefix)
   const handleRegenerateId = async () => {
-    if (!empCountryCode || !empContractStart || !user?.id) return;
+    if (!empCountryCode || !user?.id || !user.employeeId) return;
     setRegenIdLoading(true);
     try {
-      const { data: genId, error: genErr } = await supabase.rpc('generate_employee_id', {
-        p_country_code: empCountryCode.trim().toUpperCase(),
-        p_contract_date: empContractStart,
-      });
-      if (genErr || !genId) throw new Error(genErr?.message || 'ID generation failed');
+      const correctPrefix  = empCountryCode.trim().toUpperCase();
+      const existingId     = user.employeeId;
 
-      const oldFolderName = user.employeeId ? computeFolderName(user) : null;
-      const newFolderName = computeFolderName({ ...user, employeeId: genId as string });
+      // Strip old prefix letters (e.g. "SD") and attach the correct ones
+      const oldPrefixLen   = existingId.match(/^([A-Z]+)/)?.[1]?.length ?? 2;
+      const fixedId        = correctPrefix + existingId.slice(oldPrefixLen);
+
+      if (fixedId === existingId) {
+        toast({ title: 'No change needed', description: 'The prefix is already correct.' });
+        setRegenIdConfirm(false);
+        return;
+      }
+
+      const oldFolderName = computeFolderName(user);
+      const newFolderName = computeFolderName({ ...user, employeeId: fixedId });
 
       const { error: updateErr } = await supabase
         .from('profiles')
-        .update({ employee_id: genId })
+        .update({ employee_id: fixedId })
         .eq('id', user.id);
       if (updateErr) throw updateErr;
 
-      // Rename the workspace folder so the path stays consistent
+      // Rename the workspace folder so the path stays consistent.
+      // Use ilike so we match regardless of capitalisation drift.
       if (oldFolderName && newFolderName && oldFolderName !== newFolderName) {
         await supabase
           .from('workspace_folders')
           .update({ name: newFolderName })
-          .eq('name', oldFolderName);
+          .ilike('name', oldFolderName);
       }
 
-      toast({ title: '✅ Employee ID regenerated', description: `New ID: ${genId as string}` });
+      toast({ title: '✅ Employee ID prefix fixed', description: `${existingId} → ${fixedId}` });
       setRegenIdConfirm(false);
       setTimeout(() => window.location.reload(), 900);
     } catch (err: any) {
-      toast({ title: 'Failed to regenerate ID', description: err.message, variant: 'destructive' });
+      toast({ title: 'Failed to fix ID prefix', description: err.message, variant: 'destructive' });
     } finally {
       setRegenIdLoading(false);
     }
@@ -3736,16 +3748,22 @@ ALTER TABLE public.profiles
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              Regenerate Employee ID?
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Fix Employee ID Prefix?
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
-                  The current ID <strong className="font-mono">{user?.employeeId}</strong> has a <strong>{user?.employeeId?.match(/^([A-Z]+)/)?.[1]}</strong> country prefix but this employee's country is set to <strong>{empCountryCode}</strong>.
+                  The current ID <strong className="font-mono">{user?.employeeId}</strong> starts with <strong>{user?.employeeId?.match(/^([A-Z]+)/)?.[1]}</strong> but this employee's country is <strong>{empCountryCode}</strong>.
                 </p>
                 <p>
-                  A new ID will be generated with the <strong>{empCountryCode}</strong> prefix and the workspace folder will be renamed to match.
+                  Only the country prefix will be corrected —{' '}
+                  <strong className="font-mono">
+                    {user?.employeeId
+                      ? empCountryCode + user.employeeId.slice(user.employeeId.match(/^([A-Z]+)/)?.[1]?.length ?? 2)
+                      : ''}
+                  </strong>.{' '}
+                  The sequence number stays the same. No new folder will be created — the existing workspace folder will be renamed to match.
                 </p>
                 <p className="text-amber-600 dark:text-amber-400 font-medium">
                   Any links or references using the old folder name will need to be updated manually.
@@ -3756,12 +3774,12 @@ ALTER TABLE public.profiles
           <AlertDialogFooter>
             <AlertDialogCancel disabled={regenIdLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-amber-600 hover:bg-amber-700"
               onClick={handleRegenerateId}
               disabled={regenIdLoading}
               data-testid="btn-confirm-regen-employee-id"
             >
-              {regenIdLoading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Regenerating…</> : '🔄 Regenerate ID'}
+              {regenIdLoading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Fixing…</> : '🔧 Fix Prefix'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
