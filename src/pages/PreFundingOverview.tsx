@@ -493,40 +493,16 @@ export default function PreFundingOverview() {
     return m;
   }, [txns, dpUserMap, ocsUserMap, allocHoldersByFund]);
 
-  // Effective paid amount per fund:
-  //   Priority 1 — sum of 'payment' transactions from pre_fund_transactions (most accurate;
-  //                available once link_payment_atomically_rpc is deployed).
-  //   Priority 2 — fund.paid_amount DB column (updated by directLinkPayment even when the
-  //                pre_fund_transactions INSERT is blocked by RLS, as long as the UPDATE on
-  //                pre_fund_requests succeeds).
-  // We deliberately do NOT fall back to summing unlinked DPs from down_payment_requests
-  // because those include all historical DPs across the system that predate pre-fund linkage.
-  const effectivePaidByFund = useMemo(() => {
-    const m = new Map<string, number>();
-    // Seed with DB paid_amount (reliable fallback when no txn rows exist yet)
-    for (const f of funds) m.set(f.id, Number(f.paid_amount ?? 0));
-    // Override with computed-from-transactions for any fund that has payment txns
-    const hasTxnByFund = new Set<string>();
-    for (const t of txns) {
-      if (t.transaction_type !== 'payment') continue;
-      if (!hasTxnByFund.has(t.pre_fund_request_id)) {
-        m.set(t.pre_fund_request_id, 0); // reset before accumulating
-        hasTxnByFund.add(t.pre_fund_request_id);
-      }
-      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
-    }
-    return m;
-  }, [funds, txns]);
-
+  // Fund-level KPI cards and fund header cards read paid_amount / available_balance directly
+  // from the DB row — these columns are the single source of truth, maintained by Supabase
+  // triggers and directLinkPayment RPCs. A previous transaction-based override was removed
+  // because it could sum more than the DB recorded, making Available appear too low.
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
-  const totalFunded = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
-  const totalAvail  = activeFunds.reduce((s, f) => {
-    const effPaid = effectivePaidByFund.get(f.id) ?? 0;
-    return s + toBase(Math.max(0, f.amount - effPaid), f.currency);
-  }, 0);
+  const totalFunded  = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
+  const totalAvail   = activeFunds.reduce((s, f) => s + toBase(Number(f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0))), f.currency), 0);
   const totalCommit  = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
-  const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(effectivePaidByFund.get(f.id) ?? 0, f.currency), 0);
+  const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(Number(f.paid_amount ?? 0), f.currency), 0);
   const endingSoon  = activeFunds.filter(f => {
     if (!f.end_date) return false;
     return differenceInDays(parseISO(f.end_date), new Date()) >= 0 && differenceInDays(parseISO(f.end_date), new Date()) <= (f.warning_days ?? 14);
@@ -543,15 +519,14 @@ export default function PreFundingOverview() {
 
   function exportBalances() {
     const rows = filtered.map(f => {
-      const effPaid = effectivePaidByFund.get(f.id) ?? 0;
       return {
         'Fund Name': f.name,
         'Source': f.source ?? '—',
         'Status': STATUS_CFG[f.status]?.label ?? f.status,
         'Amount': f.amount,
-        'Paid Out': effPaid,
+        'Paid Out': f.paid_amount ?? 0,
         'Committed': f.committed_amount,
-        'Available': Math.max(0, f.amount - effPaid),
+        'Available': f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0)),
         'Currency': f.currency,
         'Start Date': f.start_date ?? '—',
         'End Date': f.end_date ?? '—',
@@ -669,9 +644,7 @@ export default function PreFundingOverview() {
       {!loading && (() => {
         const expiring = activeFunds.filter(f => {
           if (!f.end_date) return false;
-          // Use transaction-computed available balance (same source as the fund cards)
-          const effPaid = effectivePaidByFund.get(f.id) ?? 0;
-          const effAvail = Math.max(0, f.amount - effPaid);
+          const effAvail = f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0));
           if (effAvail <= 0) return false;
           const d = differenceInDays(parseISO(f.end_date), new Date());
           return d >= 0 && d <= 30;
@@ -687,8 +660,7 @@ export default function PreFundingOverview() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {expiring.map(f => {
                   const d = differenceInDays(parseISO(f.end_date!), new Date());
-                  const effPaid = effectivePaidByFund.get(f.id) ?? 0;
-                  const effAvail = Math.max(0, f.amount - effPaid);
+                  const effAvail = f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0));
                   const cls = d <= 7 ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
                   return (
                     <span key={f.id} className={cn('text-xs px-2 py-0.5 rounded-full font-medium', cls)}>
@@ -773,9 +745,11 @@ export default function PreFundingOverview() {
       ) : (
         <div className="space-y-4">
           {filtered.map(f => {
-            // Use effective paid/available derived from filtered txns (excludes reverted/deleted-DP orphans)
-            const effPaid  = effectivePaidByFund.get(f.id) ?? 0;
-            const effAvail = Math.max(0, f.amount - effPaid);
+            // Use DB-authoritative columns so fund cards match the Reconciliation tab.
+            // paid_amount and available_balance are maintained by Supabase triggers and
+            // directLinkPayment RPCs — they are the single source of truth for fund totals.
+            const effPaid  = Number(f.paid_amount ?? 0);
+            const effAvail = Number(f.available_balance ?? Math.max(0, f.amount - effPaid));
             // ef is a corrected copy of f — all helper functions that accept f get right values
             const ef = { ...f, paid_amount: effPaid, available_balance: effAvail };
 
