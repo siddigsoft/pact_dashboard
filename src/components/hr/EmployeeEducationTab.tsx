@@ -8,6 +8,7 @@ import {
   Plus, Trash2, Loader2, GraduationCap, Briefcase,
   Edit, Save, X, Calendar, MapPin, AlertTriangle,
   Building2, Tag, UserCheck, Phone, ChevronDown, ChevronUp,
+  Info,
 } from "lucide-react";
 
 interface EduEntry {
@@ -24,7 +25,7 @@ interface ExpEntry {
   id?: string;
   employer: string;
   job_title: string;
-  employment_type: string;
+  employment_type?: string;
   sector?: string;
   location?: string;
   start_date: string;
@@ -34,7 +35,7 @@ interface ExpEntry {
   achievements?: string;
   supervisor_name?: string;
   reason_for_leaving?: string;
-  reference_available: boolean;
+  reference_available?: boolean;
   reference_name?: string;
   reference_contact?: string;
 }
@@ -88,16 +89,33 @@ const REASONS_FOR_LEAVING = [
 ];
 
 const EMPTY_EDU: EduEntry = {
-  degree_level: 'bachelor', institution: '', field_of_study: '', graduation_year: null, country: '', grade: '',
+  degree_level: 'bachelor', institution: '', field_of_study: '',
+  graduation_year: null, country: '', grade: '',
 };
 
 const EMPTY_EXP: ExpEntry = {
-  employer: '', job_title: '', employment_type: 'Full-time', sector: '', location: '',
+  employer: '', job_title: '', employment_type: 'Full-time',
+  sector: '', location: '',
   start_date: '', end_date: '', is_current: false,
   description: '', achievements: '', supervisor_name: '',
-  reason_for_leaving: '', reference_available: false, reference_name: '', reference_contact: '',
+  reason_for_leaving: '', reference_available: false,
+  reference_name: '', reference_contact: '',
 };
 
+const SQL_HINT = 'supabase/migrations/20260723_hr_education_experience_complete.sql';
+
+// ── Error classifiers ──────────────────────────────────────────────────────────
+function isTableMissing(msg: string) {
+  return msg.includes('relation') && (msg.includes('does not exist') || msg.includes("doesn't exist"));
+}
+function isRlsError(msg: string) {
+  return msg.includes('row-level security') || msg.includes('permission denied') || msg.includes('violates');
+}
+function isColumnMissing(msg: string) {
+  return msg.includes('column') && msg.includes('does not exist');
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
 function SectionHeader({
   icon, title, subtitle, action,
 }: { icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }) {
@@ -132,52 +150,90 @@ function FormField({ label, required, span, children }: {
   );
 }
 
-/** Returns true if the Supabase error means the table doesn't exist yet */
-function isTableMissing(msg: string) {
-  return msg.includes('relation') && (msg.includes('does not exist') || msg.includes('doesn\'t exist'));
-}
-
-/** Returns true if the error is an RLS / permission block */
-function isRlsError(msg: string) {
-  return msg.includes('row-level security') || msg.includes('permission denied') || msg.includes('violates');
-}
-
-const SQL_HINT = 'supabase/migrations/20260723_hr_education_experience_complete.sql';
-
 function DbSetupBanner({ error }: { error: string }) {
-  const isTable = isTableMissing(error);
-  const isRls   = isRlsError(error);
+  const isTable  = isTableMissing(error);
+  const isRls    = isRlsError(error);
+  const isColumn = isColumnMissing(error);
+  const title = isTable
+    ? 'Database tables not set up yet'
+    : isRls
+      ? 'Permission denied by database policy'
+      : isColumn
+        ? 'Extended columns not yet added to the experience table'
+        : 'Database error';
+  const body = isTable
+    ? 'The Education & Experience tables need to be created in Supabase before records can be saved.'
+    : isRls
+      ? 'Row-level security is blocking access. The RLS policies need to be fixed.'
+      : isColumn
+        ? 'The experience table exists but is missing the new extended columns. Basic saves still work — run the migration to enable all fields.'
+        : error;
   return (
     <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 flex gap-3">
       <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
       <div className="text-sm">
-        <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">
-          {isTable ? 'Database tables not set up yet' : isRls ? 'Permission denied by database policy' : 'Database error'}
+        <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">{title}</p>
+        <p className="text-amber-700 dark:text-amber-400 mb-2">{body}</p>
+        <p className="text-xs text-amber-600 dark:text-amber-500 font-mono bg-amber-100 dark:bg-amber-900/40 rounded px-2 py-1 inline-block">
+          Run in Supabase SQL Editor: {SQL_HINT}
         </p>
-        <p className="text-amber-700 dark:text-amber-400 mb-2">
-          {isTable
-            ? 'The Education & Experience tables need to be created in Supabase before records can be saved.'
-            : isRls
-              ? 'Row-level security is blocking access. The RLS policies need to be fixed.'
-              : error}
-        </p>
-        {(isTable || isRls) && (
-          <p className="text-xs text-amber-600 dark:text-amber-500 font-mono bg-amber-100 dark:bg-amber-900/40 rounded px-2 py-1 inline-block">
-            Run in Supabase SQL Editor: {SQL_HINT}
-          </p>
-        )}
       </div>
     </div>
   );
 }
 
+function MigrationNotice() {
+  return (
+    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-3 flex gap-2 items-start">
+      <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+      <p className="text-xs text-blue-700 dark:text-blue-400">
+        <span className="font-semibold">Extended fields not yet available.</span>{' '}
+        Basic employment details (employer, title, dates) can still be saved.
+        To enable Employment Type, Sector, Achievements, Supervisor &amp; Reference fields,
+        run the updated migration: <span className="font-mono">{SQL_HINT}</span>
+      </p>
+    </div>
+  );
+}
+
+// ── Base payload (columns that existed from the very first migration) ──────────
+function buildBaseExpPayload(form: ExpEntry, userId: string) {
+  return {
+    profile_id: userId,
+    employer:    form.employer,
+    job_title:   form.job_title,
+    start_date:  form.start_date,
+    end_date:    form.is_current ? null : form.end_date || null,
+    is_current:  form.is_current,
+    description: form.description || null,
+    location:    form.location || null,
+    sector:      form.sector || null,
+  };
+}
+
+// ── Full payload (includes all new columns) ────────────────────────────────────
+function buildFullExpPayload(form: ExpEntry, userId: string) {
+  return {
+    ...buildBaseExpPayload(form, userId),
+    employment_type:     form.employment_type || null,
+    achievements:        form.achievements || null,
+    supervisor_name:     form.supervisor_name || null,
+    reason_for_leaving:  form.reason_for_leaving || null,
+    reference_available: form.reference_available ?? false,
+    reference_name:      form.reference_name || null,
+    reference_contact:   form.reference_contact || null,
+  };
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const { toast } = useToast();
 
-  const [edu, setEdu]           = useState<EduEntry[]>([]);
-  const [exp, setExp]           = useState<ExpEntry[]>([]);
-  const [loading, setLoading]   = useState(false);
-  const [dbError, setDbError]   = useState<string | null>(null);
+  const [edu, setEdu]             = useState<EduEntry[]>([]);
+  const [exp, setExp]             = useState<ExpEntry[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [dbError, setDbError]     = useState<string | null>(null);
+  const [extendedColsMissing, setExtendedColsMissing] = useState(false);
 
   const [eduForm, setEduForm]     = useState<EduEntry | null>(null);
   const [eduSaving, setEduSaving] = useState(false);
@@ -209,26 +265,9 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
     return () => { cancelled = true; };
   }, [userId]);
 
+  // Open forms inline (no scroll jump — same behaviour as Education History)
   const openEduForm = (entry?: EduEntry) => setEduForm(entry ? { ...entry } : { ...EMPTY_EDU });
-  const openExpForm = (entry?: ExpEntry) => {
-    setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
-    window.setTimeout(() => {
-      document.getElementById('exp-form-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-  };
-
-  const handleSaveError = (e: any, what: string) => {
-    const msg: string = e?.message || String(e);
-    if (isTableMissing(msg)) {
-      toast({ title: `Cannot save ${what} — table missing`, description: `Run the migration SQL first: ${SQL_HINT}`, variant: 'destructive' });
-      setDbError(msg);
-    } else if (isRlsError(msg)) {
-      toast({ title: `Cannot save ${what} — permission denied`, description: `RLS policy is blocking this. Run: ${SQL_HINT}`, variant: 'destructive' });
-      setDbError(msg);
-    } else {
-      toast({ title: `Save failed`, description: msg, variant: 'destructive' });
-    }
-  };
+  const openExpForm = (entry?: ExpEntry) => setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
 
   const saveEdu = async () => {
     if (!eduForm) return;
@@ -236,13 +275,13 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
       toast({ title: 'Required fields missing', description: 'Please fill in Degree Level and Institution Name', variant: 'destructive' });
       return;
     }
+    const yr = eduForm.graduation_year;
+    if (yr !== null && yr !== undefined && (isNaN(yr) || yr < 1950 || yr > 2099)) {
+      toast({ title: 'Invalid graduation year', description: 'Please enter a year between 1950 and 2099', variant: 'destructive' });
+      return;
+    }
     setEduSaving(true);
     try {
-      const yr = eduForm.graduation_year;
-      if (yr !== null && yr !== undefined && (isNaN(yr) || yr < 1950 || yr > 2099)) {
-        toast({ title: 'Invalid graduation year', description: 'Please enter a year between 1950 and 2099', variant: 'destructive' });
-        return;
-      }
       const payload = { ...eduForm, graduation_year: yr && !isNaN(yr) ? yr : null, profile_id: userId };
       if (eduForm.id) {
         const { error } = await supabase.from('hr_employee_education').update(payload).eq('id', eduForm.id);
@@ -256,8 +295,12 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
       setEduForm(null);
       toast({ title: 'Education entry saved' });
     } catch (e: any) {
-      handleSaveError(e, 'education');
-    } finally { setEduSaving(false); }
+      const msg: string = e?.message || String(e);
+      if (isTableMissing(msg) || isRlsError(msg)) setDbError(msg);
+      toast({ title: 'Save failed', description: msg, variant: 'destructive' });
+    } finally {
+      setEduSaving(false);
+    }
   };
 
   const deleteEdu = async (id: string) => {
@@ -278,25 +321,56 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
     }
     setExpSaving(true);
     try {
-      const payload = {
-        ...expForm,
-        profile_id: userId,
-        end_date: expForm.is_current ? null : expForm.end_date || null,
+      // Try full payload first; fall back to base if new columns are missing
+      const fullPayload = buildFullExpPayload(expForm, userId);
+      const basePayload = buildBaseExpPayload(expForm, userId);
+
+      const tryInsert = async (payload: Record<string, unknown>) => {
+        if (expForm.id) {
+          return supabase.from('hr_employee_experience').update(payload).eq('id', expForm.id);
+        }
+        return supabase.from('hr_employee_experience').insert(payload).select().single();
       };
+
+      let { data: ins, error } = await tryInsert(fullPayload) as any;
+
+      // If new columns don't exist, retry with base columns only
+      if (error && isColumnMissing(error.message)) {
+        setExtendedColsMissing(true);
+        const retry = await tryInsert(basePayload) as any;
+        ins   = retry.data;
+        error = retry.error;
+        if (!error) {
+          toast({
+            title: 'Saved with basic fields only',
+            description: 'Extended fields (Employment Type, Sector, Achievements, Supervisor & Reference) require the updated migration. Basic details were saved successfully.',
+          });
+        }
+      }
+
+      if (error) throw error;
+
       if (expForm.id) {
-        const { error } = await supabase.from('hr_employee_experience').update(payload).eq('id', expForm.id);
-        if (error) throw error;
         setExp(p => p.map(r => r.id === expForm.id ? { ...r, ...expForm } : r));
       } else {
-        const { data: ins, error } = await supabase.from('hr_employee_experience').insert(payload).select().single();
-        if (error) throw error;
-        setExp(p => [ins, ...p]);
+        setExp(p => [ins as ExpEntry, ...p]);
       }
       setExpForm(null);
-      toast({ title: 'Employment record saved' });
+      if (!extendedColsMissing) toast({ title: 'Employment record saved' });
     } catch (e: any) {
-      handleSaveError(e, 'employment');
-    } finally { setExpSaving(false); }
+      const msg: string = e?.message || String(e);
+      if (isTableMissing(msg)) {
+        setDbError(msg);
+        toast({ title: 'Cannot save — table missing', description: `Run the migration SQL first: ${SQL_HINT}`, variant: 'destructive' });
+      } else if (isRlsError(msg)) {
+        setDbError(msg);
+        toast({ title: 'Cannot save — permission denied', description: `Run: ${SQL_HINT}`, variant: 'destructive' });
+      } else {
+        toast({ title: 'Save failed', description: msg, variant: 'destructive' });
+      }
+    } finally {
+      setExpSaving(false);
+    }
   };
 
   const deleteExp = async (id: string) => {
@@ -367,7 +441,7 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
               </FormField>
             </FormRow>
             <div className="flex gap-2 pt-1 border-t border-border/40">
-              <Button type="button" size="sm" onClick={saveEdu} disabled={eduSaving || !eduForm.institution} className="gap-1.5">
+              <Button type="button" size="sm" onClick={saveEdu} disabled={eduSaving || !eduForm.institution.trim()} className="gap-1.5">
                 {eduSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setEduForm(null)}>Cancel</Button>
@@ -437,26 +511,43 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
           ) : undefined}
         />
 
-        {/* ── Add / Edit form ── */}
+        {extendedColsMissing && <MigrationNotice />}
+
+        {/* ── Add / Edit Form ── */}
         {expForm && (
-          <div id="exp-form-anchor" className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-5">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-5">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold">{expForm.id ? 'Edit Employment Record' : 'Add Employment Record'}</h4>
               <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpForm(null)}><X className="h-3.5 w-3.5" /></Button>
             </div>
 
-            {/* Section A — Core Details */}
+            {/* Section A — Position Details */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Position Details</p>
               <FormRow>
                 <FormField label="Employer / Organisation" required>
-                  <Input value={expForm.employer} onChange={e => setExpForm(p => p ? { ...p, employer: e.target.value } : p)} placeholder="Organisation name" className="h-9 text-sm" />
+                  <Input
+                    value={expForm.employer}
+                    onChange={e => setExpForm(p => p ? { ...p, employer: e.target.value } : p)}
+                    placeholder="Organisation name"
+                    className="h-9 text-sm"
+                    data-testid="input-exp-employer"
+                  />
                 </FormField>
                 <FormField label="Job Title / Position" required>
-                  <Input value={expForm.job_title} onChange={e => setExpForm(p => p ? { ...p, job_title: e.target.value } : p)} placeholder="Position / Role" className="h-9 text-sm" />
+                  <Input
+                    value={expForm.job_title}
+                    onChange={e => setExpForm(p => p ? { ...p, job_title: e.target.value } : p)}
+                    placeholder="Position / Role"
+                    className="h-9 text-sm"
+                    data-testid="input-exp-job-title"
+                  />
                 </FormField>
                 <FormField label="Employment Type">
-                  <Select value={expForm.employment_type} onValueChange={v => setExpForm(p => p ? { ...p, employment_type: v } : p)}>
+                  <Select
+                    value={expForm.employment_type || 'Full-time'}
+                    onValueChange={v => setExpForm(p => p ? { ...p, employment_type: v } : p)}
+                  >
                     <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select type…" /></SelectTrigger>
                     <SelectContent>
                       {EMP_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -464,40 +555,68 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
                   </Select>
                 </FormField>
                 <FormField label="Experience Area / Sector">
-                  <Select value={expForm.sector || ''} onValueChange={v => setExpForm(p => p ? { ...p, sector: v } : p)}>
+                  <Select
+                    value={expForm.sector || 'none'}
+                    onValueChange={v => setExpForm(p => p ? { ...p, sector: v === 'none' ? '' : v } : p)}
+                  >
                     <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select sector…" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">— None —</SelectItem>
+                      <SelectItem value="none">— None —</SelectItem>
                       {SECTORS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </FormField>
                 <FormField label="Location (City, Country)">
-                  <Input value={expForm.location || ''} onChange={e => setExpForm(p => p ? { ...p, location: e.target.value } : p)} placeholder="e.g. Khartoum, Sudan" className="h-9 text-sm" />
+                  <Input
+                    value={expForm.location || ''}
+                    onChange={e => setExpForm(p => p ? { ...p, location: e.target.value } : p)}
+                    placeholder="e.g. Khartoum, Sudan"
+                    className="h-9 text-sm"
+                  />
                 </FormField>
               </FormRow>
             </div>
 
-            {/* Section B — Dates */}
+            {/* Section B — Duration */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Duration</p>
               <FormRow>
                 <FormField label="Start Date" required>
-                  <Input type="date" value={expForm.start_date} onChange={e => setExpForm(p => p ? { ...p, start_date: e.target.value } : p)} className="h-9 text-sm" />
+                  <Input
+                    type="date"
+                    value={expForm.start_date}
+                    onChange={e => setExpForm(p => p ? { ...p, start_date: e.target.value } : p)}
+                    className="h-9 text-sm"
+                    data-testid="input-exp-start-date"
+                  />
                 </FormField>
                 <FormField label="End Date">
-                  <Input type="date" value={expForm.end_date || ''} disabled={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, end_date: e.target.value } : p)} className="h-9 text-sm disabled:opacity-40" />
+                  <Input
+                    type="date"
+                    value={expForm.end_date || ''}
+                    disabled={expForm.is_current}
+                    onChange={e => setExpForm(p => p ? { ...p, end_date: e.target.value } : p)}
+                    className="h-9 text-sm disabled:opacity-40"
+                  />
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer mt-1.5">
-                    <input type="checkbox" checked={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date } : p)} className="rounded" />
+                    <input
+                      type="checkbox"
+                      checked={expForm.is_current}
+                      onChange={e => setExpForm(p => p ? { ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date } : p)}
+                      className="rounded"
+                    />
                     Currently working here
                   </label>
                 </FormField>
                 {!expForm.is_current && (
                   <FormField label="Reason for Leaving">
-                    <Select value={expForm.reason_for_leaving || ''} onValueChange={v => setExpForm(p => p ? { ...p, reason_for_leaving: v } : p)}>
+                    <Select
+                      value={expForm.reason_for_leaving || 'not_specified'}
+                      onValueChange={v => setExpForm(p => p ? { ...p, reason_for_leaving: v === 'not_specified' ? '' : v } : p)}
+                    >
                       <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select reason…" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— Not specified —</SelectItem>
+                        <SelectItem value="not_specified">— Not specified —</SelectItem>
                         {REASONS_FOR_LEAVING.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -506,7 +625,7 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
               </FormRow>
             </div>
 
-            {/* Section C — Responsibilities & Achievements */}
+            {/* Section C — Role Description */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Role Description</p>
               <div className="space-y-3">
@@ -536,25 +655,52 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">Supervisor & Reference</p>
               <FormRow>
                 <FormField label="Direct Supervisor / Line Manager">
-                  <Input value={expForm.supervisor_name || ''} onChange={e => setExpForm(p => p ? { ...p, supervisor_name: e.target.value } : p)} placeholder="Supervisor name & title" className="h-9 text-sm" />
+                  <Input
+                    value={expForm.supervisor_name || ''}
+                    onChange={e => setExpForm(p => p ? { ...p, supervisor_name: e.target.value } : p)}
+                    placeholder="Supervisor name & title"
+                    className="h-9 text-sm"
+                  />
                 </FormField>
                 <FormField label="Reference Available?">
                   <div className="flex items-center gap-4 h-9">
                     <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input type="radio" checked={expForm.reference_available === true} onChange={() => setExpForm(p => p ? { ...p, reference_available: true } : p)} className="accent-primary" /> Yes
+                      <input
+                        type="radio"
+                        name={`ref-avail-${expForm.id || 'new'}`}
+                        checked={expForm.reference_available === true}
+                        onChange={() => setExpForm(p => p ? { ...p, reference_available: true } : p)}
+                        className="accent-primary"
+                      /> Yes
                     </label>
                     <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input type="radio" checked={expForm.reference_available === false} onChange={() => setExpForm(p => p ? { ...p, reference_available: false } : p)} className="accent-primary" /> No
+                      <input
+                        type="radio"
+                        name={`ref-avail-${expForm.id || 'new'}`}
+                        checked={!expForm.reference_available}
+                        onChange={() => setExpForm(p => p ? { ...p, reference_available: false } : p)}
+                        className="accent-primary"
+                      /> No
                     </label>
                   </div>
                 </FormField>
                 {expForm.reference_available && (
                   <>
                     <FormField label="Reference Name">
-                      <Input value={expForm.reference_name || ''} onChange={e => setExpForm(p => p ? { ...p, reference_name: e.target.value } : p)} placeholder="Full name & designation" className="h-9 text-sm" />
+                      <Input
+                        value={expForm.reference_name || ''}
+                        onChange={e => setExpForm(p => p ? { ...p, reference_name: e.target.value } : p)}
+                        placeholder="Full name & designation"
+                        className="h-9 text-sm"
+                      />
                     </FormField>
                     <FormField label="Reference Contact">
-                      <Input value={expForm.reference_contact || ''} onChange={e => setExpForm(p => p ? { ...p, reference_contact: e.target.value } : p)} placeholder="Email or phone number" className="h-9 text-sm" />
+                      <Input
+                        value={expForm.reference_contact || ''}
+                        onChange={e => setExpForm(p => p ? { ...p, reference_contact: e.target.value } : p)}
+                        placeholder="Email or phone number"
+                        className="h-9 text-sm"
+                      />
                     </FormField>
                   </>
                 )}
@@ -589,7 +735,8 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
         ) : (
           <div className="space-y-3">
             {exp.map((e, i) => {
-              const isOpen = expExpanded === (e.id || String(i));
+              const cardKey = e.id || String(i);
+              const isOpen = expExpanded === cardKey;
               const duration = (() => {
                 if (!e.start_date) return '';
                 const start = new Date(e.start_date);
@@ -600,8 +747,9 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
                 const mos = months % 12;
                 return [yrs > 0 ? `${yrs}y` : '', mos > 0 ? `${mos}m` : ''].filter(Boolean).join(' ') || '<1m';
               })();
+              const hasDetail = !!(e.description || e.achievements || e.supervisor_name || e.reference_available);
               return (
-                <div key={e.id || i} className="rounded-xl border border-border/40 overflow-hidden hover:border-border/60 transition-all bg-background shadow-sm">
+                <div key={cardKey} className="rounded-xl border border-border/40 overflow-hidden hover:border-border/60 transition-all bg-background shadow-sm">
                   {/* Main row */}
                   <div className="flex items-stretch gap-0">
                     <div className={`w-1.5 shrink-0 ${e.is_current ? 'bg-green-500' : 'bg-muted-foreground/20'}`} />
@@ -624,23 +772,37 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
                         </div>
                         {/* Employer + location */}
                         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap mb-1">
-                          <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" /><span className="font-medium text-foreground/80">{e.employer}</span></span>
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="font-medium text-foreground/80">{e.employer}</span>
+                          </span>
                           {e.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{e.location}</span>}
                         </div>
-                        {/* Dates */}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {/* Dates & duration */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                           <Calendar className="h-3 w-3" />
-                          <span>{e.start_date} — {e.is_current ? <span className="text-green-600 font-medium">Present</span> : (e.end_date || '—')}</span>
+                          <span>
+                            {e.start_date}
+                            {' — '}
+                            {e.is_current
+                              ? <span className="text-green-600 font-medium">Present</span>
+                              : (e.end_date || '—')}
+                          </span>
                           {duration && <span className="text-muted-foreground/60 text-[11px]">({duration})</span>}
                           {e.reason_for_leaving && !e.is_current && (
                             <span className="ml-1 text-[11px] text-muted-foreground/50">· Left: {e.reason_for_leaving}</span>
                           )}
                         </div>
                       </div>
-                      {/* Actions */}
+                      {/* Action buttons */}
                       <div className="flex gap-1 shrink-0 items-center">
-                        {(e.description || e.achievements || e.supervisor_name || e.reference_available) && (
-                          <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => setExpExpanded(isOpen ? null : (e.id || String(i)))}>
+                        {hasDetail && (
+                          <Button
+                            type="button" variant="ghost" size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => setExpExpanded(isOpen ? null : cardKey)}
+                            data-testid={`button-expand-exp-${e.id}`}
+                          >
                             {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                           </Button>
                         )}
@@ -654,7 +816,7 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
                     </div>
                   </div>
 
-                  {/* Expanded detail panel */}
+                  {/* Expandable detail panel */}
                   {isOpen && (
                     <div className="border-t border-border/30 bg-muted/20 px-5 py-4 space-y-3 text-sm">
                       {e.description && (
