@@ -20,6 +20,7 @@ import {
   DollarSign, TrendingDown, CheckCircle2, Clock,
   FileSpreadsheet, Wallet, Activity, GitBranch,
   Users, Receipt, ExternalLink, ChevronDown, ChevronRight,
+  Search,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -133,6 +134,7 @@ export default function PreFundingReport() {
 
   // Reconciliation expand state
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [userSearch, setUserSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -468,48 +470,116 @@ export default function PreFundingReport() {
   const exportExcel = () => {
     const currency = filteredFunds[0]?.currency ?? 'USD';
 
+    // Build per-user summary from reconciliationByUser (already computed)
+    const userSummaryData = reconciliationByUser.map(u => {
+      const txnTotal = u.txns.reduce((s, t) => s + t.amount, 0);
+      const hasAlloc = u.allocated > 0;
+      return {
+        'Staff Name': u.userName,
+        'Currency': u.currency || currency,
+        'Allocated': hasAlloc ? u.allocated : '',
+        'Spent (DB)': hasAlloc ? u.spent : '',
+        'Transactions Total': txnTotal,
+        'Remaining': hasAlloc ? Math.max(0, u.allocated - u.spent) : '',
+        'Utilization %': hasAlloc && u.allocated > 0 ? Math.round((u.spent / u.allocated) * 100) : '',
+        'Payment Count': u.txns.length,
+        'Reconciled': u.txns.filter(t => t.reconciled).length,
+        'Unreconciled': u.txns.filter(t => !t.reconciled).length,
+      };
+    });
+
+    // Totals row for user summary
+    const totalAllocInExcel = reconciliationByUser.reduce((s, u) => s + u.allocated, 0);
+    const totalSpentInExcel  = reconciliationByUser.reduce((s, u) => s + u.spent, 0);
+    const totalTxnAmt        = reconciliationByUser.reduce((s, u) => s + u.txns.reduce((a, t) => a + t.amount, 0), 0);
+    userSummaryData.push({
+      'Staff Name': 'TOTAL',
+      'Currency': currency,
+      'Allocated': totalAllocInExcel,
+      'Spent (DB)': totalSpentInExcel,
+      'Transactions Total': totalTxnAmt,
+      'Remaining': Math.max(0, totalAllocInExcel - totalSpentInExcel),
+      'Utilization %': totalAllocInExcel > 0 ? Math.round((totalSpentInExcel / totalAllocInExcel) * 100) : 0,
+      'Payment Count': reconciliationByUser.reduce((s, u) => s + u.txns.length, 0),
+      'Reconciled': reconciliationByUser.reduce((s, u) => s + u.txns.filter(t => t.reconciled).length, 0),
+      'Unreconciled': reconciliationByUser.reduce((s, u) => s + u.txns.filter(t => !t.reconciled).length, 0),
+    });
+
+    // Fund totals for fund detail sheet
+    const fundDetailData = filteredFunds.map(f => ({
+      'Fund Name': f.name,
+      'Project': f.project_name ?? '—',
+      'Source / Donor': f.source ?? '—',
+      Status: STATUS_CFG[f.status]?.label ?? f.status,
+      Currency: f.currency,
+      'Fund Amount': f.amount,
+      'Total Disbursed': f.paid_amount ?? 0,
+      'Committed': f.committed_amount ?? 0,
+      'Available Balance': f.available_balance ?? 0,
+      'Utilization %': f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
+      'Start Date': f.start_date ?? '',
+      'End Date': f.end_date ?? '',
+      'Created Date': f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
+    }));
+    // Add totals row to fund detail
+    fundDetailData.push({
+      'Fund Name': 'TOTAL',
+      'Project': '',
+      'Source / Donor': '',
+      Status: `${filteredFunds.length} funds`,
+      Currency: currency,
+      'Fund Amount': filteredFunds.reduce((s, f) => s + f.amount, 0),
+      'Total Disbursed': filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0),
+      'Committed': filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0),
+      'Available Balance': filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0),
+      'Utilization %': kpis.utilPct,
+      'Start Date': '',
+      'End Date': '',
+      'Created Date': '',
+    });
+
     exportMultiSheetExcel([
       {
         name: 'Summary',
         data: [
+          { Metric: 'Report Generated', Value: format(new Date(), 'yyyy-MM-dd HH:mm') },
           { Metric: 'Total Funds in View', Value: filteredFunds.length },
           { Metric: 'Active Funds', Value: kpis.activeFunds.length },
-          { Metric: 'Total Funded', Value: `${currency} ${formatNumber(kpis.totalFunded, 2)}` },
-          { Metric: 'Total Disbursed', Value: `${currency} ${formatNumber(kpis.totalPaid, 2)}` },
-          { Metric: 'Total Committed', Value: `${currency} ${formatNumber(kpis.totalCommit, 2)}` },
-          { Metric: 'Available Balance', Value: `${currency} ${formatNumber(kpis.totalBalance, 2)}` },
-          { Metric: 'Overall Utilization', Value: `${kpis.utilPct}%` },
+          { Metric: 'Total Funded', Value: kpis.totalFunded },
+          { Metric: 'Total Disbursed', Value: kpis.totalPaid },
+          { Metric: 'Total Committed', Value: kpis.totalCommit },
+          { Metric: 'Available Balance', Value: kpis.totalBalance },
+          { Metric: 'Overall Utilization %', Value: kpis.utilPct },
           { Metric: 'Total Transactions', Value: filteredTxns.length },
+          { Metric: 'Allocated Staff', Value: reconciliationByUser.filter(u => u.allocated > 0).length },
         ]
       },
       {
         name: 'Fund Detail',
-        data: filteredFunds.map(f => ({
-          'Fund Name': f.name,
-          'Project': f.project_name ?? '—',
-          'Source / Donor': f.source ?? '—',
-          Status: STATUS_CFG[f.status]?.label ?? f.status,
-          Currency: f.currency,
-          Amount: f.amount,
-          Disbursed: f.paid_amount ?? 0,
-          Committed: f.committed_amount ?? 0,
-          Balance: f.available_balance ?? 0,
-          'Utilization %': f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
-          'Start Date': f.start_date ?? '',
-          'End Date': f.end_date ?? '',
-          Created: f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
-        }))
+        data: fundDetailData,
+      },
+      {
+        name: 'Staff Summary',
+        data: userSummaryData,
       },
       {
         name: 'Transactions',
         data: filteredTxns.map(t => ({
           Date: t.transaction_date ?? '',
+          'Created At': t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
+          'Staff Name': t.user_name ?? '—',
           'Fund Name': t.fund_name ?? '—',
           Type: t.transaction_type,
           Reference: t.reference ?? '',
           Description: t.description ?? '',
+          Source: t.source_table
+            ? (t.source_table === 'down_payment_requests' ? 'Down Payment'
+              : t.source_table === 'operational_cost_submissions' ? 'Cost Submission'
+              : t.source_table)
+            : 'Manual',
           Amount: t.amount,
           Currency: t.currency,
+          Reconciled: t.reconciled ? 'Yes' : 'No',
         }))
       },
       {
@@ -520,7 +590,7 @@ export default function PreFundingReport() {
           'Step Label': s.step_label,
           'Required': s.is_required ? 'Required' : 'Optional',
           'Assignee(s)': s.assignee_names ?? '—',
-          Status: s.status === 'approved' ? '✓ Approved' : s.status === 'rejected' ? '✗ Rejected' : '⏳ Pending',
+          Status: s.status === 'approved' ? 'Approved' : s.status === 'rejected' ? 'Rejected' : 'Pending',
           'Date Actioned': s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '—',
           Notes: s.notes ?? '',
         }))
@@ -808,6 +878,44 @@ export default function PreFundingReport() {
                         );
                       })}
                     </TableBody>
+                    {/* Totals footer row */}
+                    {filteredFunds.length > 1 && (() => {
+                      const cur = filteredFunds[0]?.currency ?? '';
+                      const totAmount   = filteredFunds.reduce((s, f) => s + f.amount, 0);
+                      const totDisbursed = filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0);
+                      const totBalance  = filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0);
+                      const totUtil     = totAmount > 0 ? Math.round((totDisbursed / totAmount) * 100) : 0;
+                      return (
+                        <tfoot>
+                          <TableRow className="bg-muted/40 border-t font-semibold text-[12px]">
+                            <TableCell className="pl-4 py-2.5 text-muted-foreground">
+                              {filteredFunds.length} fund{filteredFunds.length !== 1 ? 's' : ''} total
+                            </TableCell>
+                            <TableCell />
+                            <TableCell />
+                            <TableCell className="text-right tabular-nums font-mono">
+                              {cur} {formatNumber(totAmount, 0)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-mono text-rose-600">
+                              {cur} {formatNumber(totDisbursed, 0)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-mono text-emerald-600">
+                              {cur} {formatNumber(totBalance, 0)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                  <div className={cn('h-full rounded-full', totUtil >= 90 ? 'bg-rose-500' : totUtil >= 70 ? 'bg-amber-500' : 'bg-emerald-500')}
+                                    style={{ width: `${Math.min(totUtil, 100)}%` }} />
+                                </div>
+                                <span className="text-xs tabular-nums w-8 text-right">{totUtil}%</span>
+                              </div>
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </tfoot>
+                      );
+                    })()}
                   </Table>
                 </div>
               )}
@@ -970,10 +1078,27 @@ export default function PreFundingReport() {
 
         {/* ── By-User / Reconciliation tab ── */}
         <TabsContent value="reconciliation" className="mt-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Per-user allocation vs actual spending with full transaction history.
-            </p>
+          <div className="flex flex-wrap items-center gap-3 justify-between">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search staff…"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="pl-8 h-8 w-48 text-sm"
+                  data-testid="input-user-search-report"
+                />
+              </div>
+              {userSearch && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setUserSearch('')}>
+                  Clear
+                </Button>
+              )}
+              <span className="text-[11px] text-muted-foreground">
+                {reconciliationByUser.filter(u => !userSearch || u.userName.toLowerCase().includes(userSearch.toLowerCase())).length} user{reconciliationByUser.filter(u => !userSearch || u.userName.toLowerCase().includes(userSearch.toLowerCase())).length !== 1 ? 's' : ''}
+              </span>
+            </div>
             {reconciliationByUser.length > 0 && (
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5"
                 onClick={() => setExpandedUsers(
@@ -995,7 +1120,9 @@ export default function PreFundingReport() {
             </div>
           ) : (
             <div className="space-y-3">
-              {reconciliationByUser.map(u => {
+              {reconciliationByUser.filter(u =>
+                !userSearch || u.userName.toLowerCase().includes(userSearch.toLowerCase())
+              ).map(u => {
                 const isExpanded = expandedUsers.has(u.userId);
                 const txnTotal = u.txns.reduce((s, t) => s + t.amount, 0);
                 const currency = u.currency || u.txns[0]?.currency || 'USD';

@@ -260,6 +260,16 @@ export default function PreFundingOverview() {
         const rawTxnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
         // Collect all user IDs from allocations for targeted profile lookup
         const allocUserIds = [...new Set((allocsData as any[]).map((a: any) => a.user_id as string).filter(Boolean))];
+        // Also collect user IDs referenced directly by transactions (user_id + created_by)
+        // so profiles for those users are available when showing the breakdown.
+        const txnDirectUserIds = [
+          ...new Set([
+            ...rawTxns.map((t: any) => t.user_id as string).filter(Boolean),
+            ...rawTxns.map((t: any) => t.created_by as string).filter(Boolean),
+          ])
+        ];
+        // Merged unique set — fetched all at once to avoid separate round-trips
+        const allPreFetchUserIds = [...new Set([...allocUserIds, ...txnDirectUserIds])];
         // Fetch validation data + profiles in parallel
         // requested_by = who the DP was raised FOR (allocation holder); created_by = disbursing officer fallback
         // NOTE: down_payment_requests has NO submitted_by column — that field only exists on operational_cost_submissions
@@ -267,10 +277,10 @@ export default function PreFundingOverview() {
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,created_by').in('id', chunk), dpIds),
           fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
-          // Targeted profiles fetch for allocation holders — avoids RLS blind-spots from global scan
-          allocUserIds.length > 0
-            ? supabase.from('profiles').select('id,full_name,email').in('id', allocUserIds)
-            : Promise.resolve({ data: [] }),
+          // Targeted profiles fetch for ALL users referenced (allocation holders + txn users)
+          allPreFetchUserIds.length > 0
+            ? fetchAllIn(chunk => supabase.from('profiles').select('id,full_name,email').in('id', chunk), allPreFetchUserIds)
+            : Promise.resolve([]),
         ]);
         // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
         const validDpSet  = new Set(validDpData.filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
@@ -327,10 +337,22 @@ export default function PreFundingOverview() {
           if (uid) dpMap.set(dp.id as string, uid as string);
         }
         setDpUserMap(dpMap);
-        // Build profiles map — targeted fetch for allocation holders is already in profData
-        const profRows = (profData as any).data ?? (profData as any) ?? [];
+        // Build profiles map — profData is now an array (from fetchAllIn, not a Supabase response object)
+        const profRows: any[] = Array.isArray(profData) ? profData : ((profData as any).data ?? []);
         const m = new Map<string, string>();
-        (Array.isArray(profRows) ? profRows : []).forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        profRows.forEach((p: any) => m.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        // Supplement with DP-resolved user IDs whose profiles may not have been included above
+        // (e.g., requested_by values that aren't allocation holders — fetch them now if any are missing)
+        const dpResolvedIds = [...new Set([...dpMap.values()])].filter(uid => !m.has(uid));
+        if (dpResolvedIds.length > 0) {
+          const extraProfs = await fetchAllIn(
+            chunk => supabase.from('profiles').select('id,full_name,email').in('id', chunk),
+            dpResolvedIds
+          );
+          for (const p of extraProfs as any[]) {
+            m.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
+          }
+        }
         setProfiles(m);
       }
     } catch (e: any) {
@@ -406,28 +428,58 @@ export default function PreFundingOverview() {
     return m;
   }, [allocs]);
 
+  // Build per-fund allocation holder sets — needed for allocation-aware attribution below.
+  const allocHoldersByFund = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const a of allocs) {
+      if (!a.pre_fund_request_id || !a.user_id) continue;
+      if (!m.has(a.pre_fund_request_id)) m.set(a.pre_fund_request_id, new Set());
+      m.get(a.pre_fund_request_id)!.add(a.user_id);
+    }
+    return m;
+  }, [allocs]);
+
   // Build per-fund, per-user, per-type spending from transactions.
-  // Priority for user attribution:
-  //   1. t.user_id (set on the txn when the allocation holder is known)
-  //   2. dpUserMap.get(t.source_id) — DP's created_by is the staff member who submitted,
-  //      which matches the allocation holder when user_id is null on the txn row
-  //   3. t.created_by (the disbursing officer — last resort, may not match an allocation)
+  // Priority for user attribution (allocation-aware):
+  //   1. t.user_id — if it's one of the fund's allocation holders, use it directly.
+  //   2. dpUserMap.get(t.source_id) — DP's requested_by (who raised the DP) when user_id is null.
+  //   3. t.created_by — if it IS an allocation holder (officer drew from their allocation).
+  //   4. Resolved owner or created_by as last resort (may be '__unknown__').
+  //
+  // The allocation-aware fallback ensures that when a transaction's user_id resolves to a
+  // non-allocated user (e.g., a field beneficiary) but the approving officer IS the allocation
+  // holder, the spend is credited to the correct row instead of disappearing into __unknown__.
   const txnsByFundUser = useMemo(() => {
     const m = new Map<string, Map<string, Map<string, number>>>();
     for (const t of txns) {
-      let uid = t.user_id as string | null;
-      if (!uid && t.source_table === 'down_payment_requests' && t.source_id) {
-        uid = dpUserMap.get(t.source_id) ?? null;
+      // Step 1: resolve best candidate owner
+      let resolved = t.user_id as string | null;
+      if (!resolved && t.source_table === 'down_payment_requests' && t.source_id) {
+        resolved = dpUserMap.get(t.source_id) ?? null;
       }
-      uid = uid ?? t.created_by ?? '__unknown__';
+
+      // Step 2: allocation-aware attribution
+      const holders = allocHoldersByFund.get(t.pre_fund_request_id) ?? new Set<string>();
+      let attrUid: string;
+      if (resolved && holders.has(resolved)) {
+        // Resolved owner is an allocation holder — perfect match
+        attrUid = resolved;
+      } else if (t.created_by && holders.has(t.created_by)) {
+        // Officer who processed payment holds the allocation — credit them
+        attrUid = t.created_by;
+      } else {
+        // Neither matches — fall back to resolved owner (or unknown)
+        attrUid = resolved ?? t.created_by ?? '__unknown__';
+      }
+
       const byUser = m.get(t.pre_fund_request_id) ?? new Map<string, Map<string, number>>();
-      const byType = byUser.get(uid) ?? new Map<string, number>();
+      const byType = byUser.get(attrUid) ?? new Map<string, number>();
       byType.set(t.transaction_type, (byType.get(t.transaction_type) ?? 0) + (t.amount ?? 0));
-      byUser.set(uid, byType);
+      byUser.set(attrUid, byType);
       m.set(t.pre_fund_request_id, byUser);
     }
     return m;
-  }, [txns, dpUserMap]);
+  }, [txns, dpUserMap, allocHoldersByFund]);
 
   // Effective paid amount per fund:
   //   Priority 1 — sum of 'payment' transactions from pre_fund_transactions (most accurate;

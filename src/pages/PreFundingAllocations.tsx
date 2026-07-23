@@ -393,12 +393,13 @@ export default function PreFundingAllocations() {
 
       {/* KPI row */}
       {!loading && (
-        <div className={`grid gap-3 ${isFinanceAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+        <div className={`grid gap-3 ${isFinanceAdmin ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2'}`}>
           {(isFinanceAdmin ? [
-            { label: 'Staff Allocated', value: String(staff.length),              sub: 'unique people',          icon: Users,          accent: 'bg-violet-600' },
-            { label: 'Total Allocated', value: formatNumber(totalAllocated, 0),   sub: 'across all funds',       icon: Wallet,         accent: 'bg-sky-600' },
-            { label: 'Total Paid Out',  value: formatNumber(fundTotalPaid, 0),    sub: 'from fund balance',      icon: TrendingDown,   accent: 'bg-emerald-600' },
-            { label: 'Over Budget',     value: String(overUsed),                  sub: 'staff exceeded limit',   icon: AlertTriangle,  accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
+            { label: 'Staff Allocated',   value: String(staff.length),                                   sub: 'unique people',           icon: Users,          accent: 'bg-violet-600' },
+            { label: 'Total Allocated',   value: formatNumber(totalAllocated, 0),                        sub: 'across all funds',        icon: Wallet,         accent: 'bg-sky-600' },
+            { label: 'Total Paid Out',    value: formatNumber(fundTotalPaid, 0),                         sub: 'from fund balance',       icon: TrendingDown,   accent: 'bg-emerald-600' },
+            { label: 'Total Remaining',   value: formatNumber(Math.max(0, totalAllocated - totalSpent), 0), sub: 'unspent allocation',   icon: CheckCircle2,   accent: totalAllocated - totalSpent < 0 ? 'bg-rose-600' : 'bg-teal-600' },
+            { label: 'Over Budget',       value: String(overUsed),                                       sub: 'staff exceeded limit',    icon: AlertTriangle,  accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
           ] : [
             { label: 'My Allocation',   value: formatNumber(totalAllocated, 0),   sub: 'assigned to you',        icon: Wallet,         accent: 'bg-sky-600' },
             { label: 'Spent So Far',    value: formatNumber(fundTotalPaid, 0),    sub: 'from fund (all payments)', icon: TrendingDown,  accent: fundTotalPaid > totalAllocated ? 'bg-rose-600' : 'bg-emerald-600' },
