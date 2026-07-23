@@ -859,7 +859,16 @@ const UserDetail: FC = () => {
         }
       }
 
+      // Build the definitive user snapshot for the rest of this save operation.
+      // We must use freshUser (not `user`) everywhere below so that:
+      //   a) triggerFolderSync uses the correct employeeId
+      //   b) a second "Save" click in the same session doesn't re-generate another ID
+      const freshUser = autoEmployeeId ? { ...user, employeeId: autoEmployeeId } : user;
       if (autoEmployeeId) {
+        // Update local state immediately — don't wait for realtime to propagate.
+        // Without this, user.employeeId stays null and every subsequent save
+        // generates yet another ID and creates another workspace folder.
+        setUser(freshUser);
         toast({ title: `Employee ID assigned: ${autoEmployeeId}`, description: "Generated from country code + contract date." });
       }
 
@@ -901,7 +910,9 @@ const UserDetail: FC = () => {
       savedDepartmentIdRef.current = empDepartmentId || null;
 
       toast({ title: "Employment record updated" });
-      void triggerFolderSync();
+      // Pass freshUser so the folder sync uses the newly-assigned ID (if any)
+      // rather than the stale `user` closure which still has employeeId = null.
+      void triggerFolderSync(freshUser);
     } catch (err: unknown) {
       const message = err instanceof Error
         ? err.message
