@@ -499,9 +499,14 @@ const UserDetail: FC = () => {
         // etc.) are NOT unmounted and do NOT lose their local form state.
         if (!user) setIsLoadingUser(true);
         setUser(foundUser);
-        // Normalize role to canonical code for dropdown matching
-        const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
-        setEditForm({ ...foundUser, role: normalizedRole as any });
+        // IMPORTANT: only reset editForm when NOT in edit mode.
+        // Realtime heartbeat updates fire frequently (every few minutes) and
+        // re-running setEditForm while the admin is mid-edit would silently
+        // overwrite any changes they've made — including the role dropdown.
+        if (!editMode) {
+          const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
+          setEditForm({ ...foundUser, role: normalizedRole as any });
+        }
         setIsLoadingUser(false);
       } else if (!user) {
         // Only navigate away if we have never loaded the user (not a transient
@@ -514,7 +519,7 @@ const UserDetail: FC = () => {
         navigate("/users");
       }
     }
-  }, [id, users, navigate, toast]);
+  }, [id, users, navigate, toast, editMode]);
 
   // Update available states when hub changes in edit mode
   useEffect(() => {
