@@ -1,16 +1,18 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Fix update_profile_avatar RPC — admin detection via user_roles
+-- Profile-photo upload — column + RPC (idempotent, safe to re-run)
 --
--- Problem: the original function only checked profiles.role to determine if
--- the caller is an admin.  profiles.role can be stale (e.g. 'dataCollector')
--- for users whose actual role lives in the user_roles table (set via the
--- Role Management screen).  This caused the "Not authorized to update another
--- user's photo" error even for legitimate admins.
---
--- Fix: after the profiles.role check, also query user_roles if the caller
--- is not yet recognised as an admin.
+-- Combines the original 20260722 migration with the admin-detection fix.
+-- Run this in the Supabase SQL Editor.
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- 1. Add upload-counter column (idempotent)
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS photo_upload_count INT NOT NULL DEFAULT 0;
+
+-- 2. SECURITY-DEFINER RPC — bypasses RLS, enforces 3-upload cap for non-admins.
+--    Admin detection checks BOTH profiles.role AND user_roles table, because
+--    profiles.role is often stale when roles are managed via the Role Management
+--    screen (which only writes to user_roles, not profiles.role).
 CREATE OR REPLACE FUNCTION update_profile_avatar(p_user_id uuid, p_url text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -34,9 +36,7 @@ BEGIN
     'admin', 'superadmin', 'super_admin', 'hr_admin', 'ict'
   );
 
-  -- 2. If not recognised from profiles.role, also check user_roles table.
-  --    profiles.role is often stale when a role was assigned via the Role
-  --    Management screen, which only writes to user_roles, not profiles.role.
+  -- 2. Also check user_roles table — profiles.role can be stale
   IF NOT v_is_admin THEN
     SELECT EXISTS (
       SELECT 1
@@ -73,5 +73,5 @@ BEGIN
 END;
 $$;
 
--- Re-grant (idempotent)
+-- 3. Grant execute to all authenticated users (idempotent)
 GRANT EXECUTE ON FUNCTION update_profile_avatar(uuid, text) TO authenticated;
