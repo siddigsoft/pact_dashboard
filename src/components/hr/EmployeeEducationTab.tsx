@@ -120,6 +120,14 @@ function isColumnMissing(msg: string) {
     (msg.includes('Could not find') && msg.includes('column'))
   );
 }
+function isTriggerFieldMissing(msg: string) {
+  // Trigger error when table is missing a column the trigger references:
+  // "record 'new' has no field 'updated_at'"
+  return msg.includes("has no field") || msg.includes("no field");
+}
+function isDbSchemaOutdated(msg: string) {
+  return isTableMissing(msg) || isColumnMissing(msg) || isTriggerFieldMissing(msg);
+}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 function SectionHeader({
@@ -157,23 +165,28 @@ function FormField({ label, required, span, children }: {
 }
 
 function DbSetupBanner({ error }: { error: string }) {
-  const isTable  = isTableMissing(error);
-  const isRls    = isRlsError(error);
-  const isColumn = isColumnMissing(error);
+  const isTable   = isTableMissing(error);
+  const isRls     = isRlsError(error);
+  const isColumn  = isColumnMissing(error);
+  const isTrigger = isTriggerFieldMissing(error);
   const title = isTable
     ? 'Database tables not set up yet'
     : isRls
       ? 'Permission denied by database policy'
-      : isColumn
-        ? 'Extended columns not yet added to the experience table'
-        : 'Database error';
+      : isTrigger
+        ? 'Database schema is outdated — migration required'
+        : isColumn
+          ? 'Extended columns not yet added to the experience table'
+          : 'Database error';
   const body = isTable
     ? 'The Education & Experience tables need to be created in Supabase before records can be saved.'
     : isRls
       ? 'Row-level security is blocking access. The RLS policies need to be fixed.'
-      : isColumn
-        ? 'The experience table exists but is missing the new extended columns. Basic saves still work — run the migration to enable all fields.'
-        : error;
+      : isTrigger
+        ? "The experience table is missing the 'updated_at' column required by its trigger. Please run the migration to bring the schema up to date."
+        : isColumn
+          ? 'The experience table exists but is missing the new extended columns. Basic saves still work — run the migration to enable all fields.'
+          : error;
   return (
     <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 flex gap-3">
       <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
@@ -302,7 +315,7 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
       toast({ title: 'Education entry saved' });
     } catch (e: any) {
       const msg: string = e?.message || String(e);
-      if (isTableMissing(msg) || isRlsError(msg)) setDbError(msg);
+      if (isDbSchemaOutdated(msg) || isRlsError(msg)) setDbError(msg);
       toast({ title: 'Save failed', description: msg, variant: 'destructive' });
     } finally {
       setEduSaving(false);
@@ -365,12 +378,15 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
       if (!extendedColsMissing) toast({ title: 'Employment record saved' });
     } catch (e: any) {
       const msg: string = e?.message || String(e);
-      if (isTableMissing(msg)) {
+      if (isDbSchemaOutdated(msg) || isRlsError(msg)) {
         setDbError(msg);
+      }
+      if (isTableMissing(msg)) {
         toast({ title: 'Cannot save — table missing', description: `Run the migration SQL first: ${SQL_HINT}`, variant: 'destructive' });
       } else if (isRlsError(msg)) {
-        setDbError(msg);
         toast({ title: 'Cannot save — permission denied', description: `Run: ${SQL_HINT}`, variant: 'destructive' });
+      } else if (isTriggerFieldMissing(msg)) {
+        toast({ title: 'Database schema outdated', description: `The experience table is missing required columns. Please run: ${SQL_HINT}`, variant: 'destructive' });
       } else {
         toast({ title: 'Save failed', description: msg, variant: 'destructive' });
       }
