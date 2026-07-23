@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe, LayoutDashboard } from 'lucide-react';
+import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe, LayoutDashboard, Eye } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -17,6 +17,7 @@ import { CostSubmissionPermissions } from '@/components/role-management/CostSubm
 import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
 import { PageAccessOverview } from '@/components/role-management/PageAccessOverview';
 import { ModuleControlCenter } from '@/components/role-management/ModuleControlCenter';
+import { UserAccessProfile } from '@/components/role-management/UserAccessProfile';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole, ResourceType, ActionType } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -363,6 +364,12 @@ const RoleManagement = () => {
             </TabsTrigger>
           )}
 
+          {/* User Access Profile — visible to all who can manage roles */}
+          <TabsTrigger value="user-profile" className="gap-2" data-testid="tab-user-access-profile">
+            <Eye className="h-4 w-4" />
+            <span>User Access Profile <span className="text-[10px] opacity-60">/ ملف صلاحيات المستخدم</span></span>
+          </TabsTrigger>
+
           {/* Access Map — visible to all who can manage roles */}
           <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
             <Grid3X3 className="h-4 w-4" />
@@ -478,7 +485,24 @@ const RoleManagement = () => {
           </TabsContent>
         )}
 
-        {/* ── Tab 6: Access Map (all admins) ── */}
+        {/* ── Tab 6: User Access Profile (all admins) ── */}
+        <TabsContent value="user-profile" className="mt-0">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Eye className="h-5 w-5 text-blue-600" />
+              User Access Profile <span className="text-base font-normal text-muted-foreground" dir="rtl">/ ملف صلاحيات المستخدم</span>
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Select any user to see exactly which pages they can access and what they can do on each module — combining their role permissions and any individual overrides.
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5" dir="rtl">
+              اختر أي مستخدم لرؤية الصفحات التي يمكنه الوصول إليها وما يمكنه فعله في كل وحدة — بما في ذلك صلاحيات دوره وأي تجاوزات فردية.
+            </p>
+          </div>
+          <UserAccessProfile />
+        </TabsContent>
+
+        {/* ── Tab 7: Access Map (all admins) ── */}
         <TabsContent value="access-map">
           <RoleAccessMap />
         </TabsContent>
