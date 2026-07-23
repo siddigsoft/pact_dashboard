@@ -710,52 +710,42 @@ export function SuperAdminDataManagement() {
         }
       }
 
-      // Paginated site-count fetch — also grab created_at for synthetic MMP name derivation
-      const SC_PAGE = 1000;
-      let allSiteCounts: any[] = [];
-      let scFrom = 0;
-      while (true) {
-        const { data: scPage } = await supabase
-          .from('mmp_site_entries')
-          .select('mmp_file_id, status, created_at')
-          .range(scFrom, scFrom + SC_PAGE - 1);
-        allSiteCounts = [...allSiteCounts, ...(scPage || [])];
-        if ((scPage || []).length < SC_PAGE) break;
-        scFrom += SC_PAGE;
+      // IDs come from the fetched mmp_files rows (or from the fallback batch already in `data`)
+      const allMmpIds: string[] = (data || []).map((m: any) => m.id).filter(Boolean);
+
+      // Parallel COUNT queries per MMP — fast, avoids loading all 3000+ site-entry rows.
+      // Three HEAD queries per MMP (total / dispatched / completed), all fired concurrently.
+      const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
+      if (allMmpIds.length > 0) {
+        const countResults = await Promise.all(
+          allMmpIds.flatMap(id => [
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['dispatched', 'assigned']),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', id).in('status', ['completed', 'verified']),
+          ])
+        );
+        allMmpIds.forEach((id, i) => {
+          mmpStats[id] = {
+            total:      countResults[i * 3]?.count     ?? 0,
+            dispatched: countResults[i * 3 + 1]?.count ?? 0,
+            completed:  countResults[i * 3 + 2]?.count ?? 0,
+          };
+        });
       }
 
-      const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
-      const mmpEarliestDate: Record<string, Date> = {};
-      allSiteCounts.forEach((s: any) => {
-        const key = s.mmp_file_id;
-        if (!key) return;
-        if (!mmpStats[key]) mmpStats[key] = { total: 0, dispatched: 0, completed: 0 };
-        mmpStats[key].total++;
-        if (s.status === 'dispatched' || s.status === 'assigned') mmpStats[key].dispatched++;
-        if (s.status === 'completed' || s.status === 'verified') mmpStats[key].completed++;
-        if (s.created_at) {
-          const d = new Date(s.created_at);
-          if (!mmpEarliestDate[key] || d < mmpEarliestDate[key]) mmpEarliestDate[key] = d;
-        }
-      });
-
       // If mmp_files returned 0 rows (RLS blocks super_admin — apply fix_mmp_files_superadmin_access.sql),
-      // synthesize MMP entries using month/year derived from the earliest site entry date
+      // synthesize MMP entries from the known IDs (names will fall back to UUID short-form below).
       const mmpSource = (data && data.length > 0)
         ? data
-        : Object.keys(mmpStats).map(id => {
-            const d = mmpEarliestDate[id];
-            return {
-              id,
-              name: d ? `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()} MMP` : null,
-              month: d ? d.getMonth() + 1 : null,
-              year: d ? d.getFullYear() : null,
-              status: null,
-              project_name: null,
-              created_at: d ? d.toISOString() : null,
-            };
-          });
+        : Object.keys(mmpStats).map(id => ({
+            id,
+            name: null,
+            month: null,
+            year: null,
+            status: null,
+            project_name: null,
+            created_at: null,
+          }));
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
@@ -806,22 +796,15 @@ export function SuperAdminDataManagement() {
     else if (activeTab === 'mmps') loadMMPs();
   }, [activeTab, userMap]);
 
-  // Preload ALL tabs in parallel the moment we have user data — so every tab is instant on switch
+  // On mount: load quick stats cards + MMP list immediately (both are fast).
+  // All heavy tab data (site visits, claimed, dispatched, wallets, transactions)
+  // is loaded lazily per-tab via the on-demand useEffect below.
   const hasPreloadedRef = useRef(false);
   useEffect(() => {
     if (!isSuperAdmin || userMap.size === 0 || hasPreloadedRef.current) return;
     hasPreloadedRef.current = true;
-    loadQuickCounts(); // fast HEAD queries — populate stats cards immediately
-    loadSiteVisits();
-    loadClaimedSites();
-    loadDispatchedSites();
-    loadMMPs();
-    // Wallets & transactions are heavier — start them 400 ms later to avoid overwhelming
-    const t = setTimeout(() => {
-      loadWallets();
-      loadTransactions();
-    }, 400);
-    return () => clearTimeout(t);
+    loadQuickCounts(); // fast HEAD queries — populate stats card numbers immediately
+    loadMMPs();        // fast: mmp_files + parallel COUNT queries per MMP (9 MMPs ≈ 27 parallel HEAD requests)
   }, [isSuperAdmin, userMap]);
 
   // Fallback: load a tab on-demand if it was somehow missed
@@ -1570,19 +1553,15 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Unique MMPs across all claimed sites — deduplicated by LABEL so same-name MMPs
-    // (different IDs) collapse into one dropdown entry; filter matches by name not ID.
-    const seenLabels = new Map<string, string>(); // label → first mmp_id seen
-    claimedSites.filter(s => s.mmp_id).forEach(s => {
-      const label = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id!;
-      if (!seenLabels.has(label)) seenLabels.set(label, s.mmp_id!);
-    });
-    const mmpOptions = [...seenLabels.entries()]
-      .map(([label]) => ({ id: label, label }))   // use label as the filter key
+    // Show ALL MMPs in the filter so the admin can filter any cycle,
+    // even if it currently has no claimed sites.
+    // Use label as the filter key (consistent with the filter comparison at filteredClaimedSites).
+    const mmpOptions = mmps
+      .map(m => ({ id: m.name || m.id, label: m.name || m.id }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
-  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById]);
+  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps]);
 
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
@@ -1616,10 +1595,9 @@ export function SuperAdminDataManagement() {
     )].sort() as string[];
     const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort() as string[];
     const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort() as string[];
-    const mmpIds = new Set(dispatchedSites.map(s => s.mmp_file_id).filter(Boolean));
-    const mmpOptions = mmps
-      .filter(m => mmpIds.has(m.id))
-      .map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
+    // Show ALL MMPs in the filter (not just those with dispatched entries)
+    // so the admin can always filter by any cycle, even if it has none in this status.
+    const mmpOptions = mmps.map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
     return { states, localities, activities, hubs, mmpOptions };
   }, [dispatchedSites, dispatchedStateFilter, mmps]);
 
