@@ -112,7 +112,13 @@ function isRlsError(msg: string) {
   return msg.includes('row-level security') || msg.includes('permission denied') || msg.includes('violates');
 }
 function isColumnMissing(msg: string) {
-  return msg.includes('column') && msg.includes('does not exist');
+  // PostgreSQL error: "column X of relation Y does not exist"
+  // PostgREST error:  "Could not find the 'X' column of 'Y' in the schema cache"
+  return (
+    (msg.includes('column') && msg.includes('does not exist')) ||
+    msg.includes('schema cache') ||
+    (msg.includes('Could not find') && msg.includes('column'))
+  );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
