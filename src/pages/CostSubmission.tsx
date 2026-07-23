@@ -1101,7 +1101,7 @@ const CostSubmission = () => {
   };
 
   const handleGroupApproval = async () => {
-    const { action, tier, groupId, submissions } = groupApprovalDialog;
+    const { action, tier, groupId, groupTitle, submissions } = groupApprovalDialog;
     if (!submissions.length || !currentUser?.id || !groupId) return;
     setGroupApprovalProcessing(true);
     try {
