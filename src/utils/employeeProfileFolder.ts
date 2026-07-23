@@ -3,6 +3,37 @@ import { generateEmployeeCV, type CVContext } from './employeeCvExport';
 
 export const PROFILE_BUCKET = 'staff-contracts';
 
+/** Maps 2-letter ISO country prefix (from employee ID) → human folder name */
+const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+  SD: 'Sudan',
+  SS: 'South Sudan',
+  ET: 'Ethiopia',
+  KE: 'Kenya',
+  UG: 'Uganda',
+  SO: 'Somalia',
+  ER: 'Eritrea',
+  DJ: 'Djibouti',
+  CD: 'DR Congo',
+  CF: 'Central African Republic',
+  TD: 'Chad',
+  LY: 'Libya',
+  EG: 'Egypt',
+  NG: 'Nigeria',
+  GH: 'Ghana',
+  TZ: 'Tanzania',
+  RW: 'Rwanda',
+  ZM: 'Zambia',
+  ZW: 'Zimbabwe',
+  GB: 'United Kingdom',
+  US: 'United States',
+};
+
+/** Derives the country folder name from an employee ID prefix (e.g. "UG..." → "Uganda") */
+export function getCountryFolderName(employeeId: string | null | undefined): string {
+  const code = employeeId?.match(/^([A-Z]+)/)?.[1] ?? null;
+  return code ? (COUNTRY_CODE_TO_NAME[code] || code) : 'Other';
+}
+
 export function computeFolderName(
   user: { employeeId?: string | null; name?: string | null },
 ): string {
@@ -264,13 +295,17 @@ export async function syncProfileFolder(
       .getPublicUrl(wsSummaryPath);
     const publicUrl = urlData?.publicUrl ?? null;
 
-    // 4. Ensure Workspace Hub folder hierarchy: HR > Profiles > {folderName}
-    const hrFolderId       = await ensureWorkspaceFolder('HR',       null,         user.id).catch(() => null);
-    const profilesFolderId = hrFolderId
-      ? await ensureWorkspaceFolder('Profiles', hrFolderId,       user.id).catch(() => null)
+    // 4. Ensure Workspace Hub folder hierarchy: HR > Profiles > {Country} > {folderName}
+    const countryFolderName = getCountryFolderName(user.employeeId);
+    const hrFolderId        = await ensureWorkspaceFolder('HR',              null,              user.id).catch(() => null);
+    const profilesFolderId  = hrFolderId
+      ? await ensureWorkspaceFolder('Profiles',         hrFolderId,          user.id).catch(() => null)
       : null;
-    const empFolderId      = profilesFolderId
-      ? await ensureWorkspaceFolder(folderName, profilesFolderId, user.id).catch(() => null)
+    const countryFolderId   = profilesFolderId
+      ? await ensureWorkspaceFolder(countryFolderName,  profilesFolderId,    user.id).catch(() => null)
+      : null;
+    const empFolderId       = countryFolderId
+      ? await ensureWorkspaceFolder(folderName,         countryFolderId,     user.id).catch(() => null)
       : null;
 
     // 5. Register PROFILE_SUMMARY.pdf in workspace_files
@@ -339,6 +374,9 @@ async function findWorkspaceFolder(
  * explicit save / triggerFolderSync call (which calls syncProfileFolder) to
  * create it.  Without this guard every page load re-creates a stale folder
  * whenever the employee's ID has changed but Fix Prefix hasn't been applied yet.
+ *
+ * Supports both old flat structure (HR > Profiles > {emp}) and new
+ * country-grouped structure (HR > Profiles > {country} > {emp}).
  */
 export async function ensureWorkspaceHubFolders(
   user: { id: string; employeeId?: string | null; name?: string | null },
@@ -352,7 +390,12 @@ export async function ensureWorkspaceHubFolders(
     if (!hrFolderId) return;
     const profilesFolderId = await findWorkspaceFolder('Profiles', hrFolderId);
     if (!profilesFolderId) return;
-    const empFolderId = await findWorkspaceFolder(folderName, profilesFolderId);
+
+    // Try new country-grouped structure first, fall back to legacy flat structure
+    const countryFolderName = getCountryFolderName(user.employeeId);
+    const countryFolderId   = await findWorkspaceFolder(countryFolderName, profilesFolderId);
+    const searchParentId    = countryFolderId ?? profilesFolderId;
+    const empFolderId       = await findWorkspaceFolder(folderName, searchParentId);
     if (!empFolderId) return; // folder not yet created — triggerFolderSync will handle it on save
 
     // Auto-sync HR docs that aren't yet registered in the workspace folder
@@ -365,6 +408,53 @@ export async function ensureWorkspaceHubFolders(
     }
   } catch (e: any) {
     console.warn('[profileFolder] ensureWorkspaceHubFolders failed:', e.message);
+  }
+}
+
+/**
+ * Docs-only sync (no PDF regeneration). Finds the employee's workspace folder
+ * (supports both old flat and new country-grouped structures) and copies any
+ * HR profile documents that aren't yet registered there.
+ * Returns the number of newly synced documents or an error string.
+ */
+export async function syncDocsToWorkspaceOnly(
+  user: { id: string; employeeId?: string | null; name?: string | null },
+): Promise<{ synced: number; total: number; error: string | null }> {
+  if (!user?.id || !user.employeeId) {
+    return { synced: 0, total: 0, error: 'Employee ID not assigned yet' };
+  }
+  try {
+    const folderName = computeFolderName(user);
+
+    const hrFolderId = await findWorkspaceFolder('HR', null);
+    if (!hrFolderId) return { synced: 0, total: 0, error: 'Workspace HR folder not found — save Employment record first to create it' };
+    const profilesFolderId = await findWorkspaceFolder('Profiles', hrFolderId);
+    if (!profilesFolderId) return { synced: 0, total: 0, error: 'Workspace Profiles folder not found — save Employment record first' };
+
+    // Support both country-grouped (new) and flat (legacy) structures
+    const countryFolderName = getCountryFolderName(user.employeeId);
+    const countryFolderId   = await findWorkspaceFolder(countryFolderName, profilesFolderId);
+    const searchParentId    = countryFolderId ?? profilesFolderId;
+    const empFolderId       = await findWorkspaceFolder(folderName, searchParentId);
+    if (!empFolderId) return { synced: 0, total: 0, error: 'Employee workspace folder not found — save Employment record first to create it' };
+
+    // Count how many HR docs exist and how many are already registered
+    const [{ count: hrTotal }, { count: wsBefore }] = await Promise.all([
+      supabase.from('hr_employee_documents').select('id', { count: 'exact', head: true }).eq('profile_id', user.id),
+      supabase.from('workspace_files').select('id', { count: 'exact', head: true }).eq('folder_id', empFolderId),
+    ]);
+
+    await syncHrDocsToWorkspace(user, empFolderId);
+
+    const { count: wsAfter } = await supabase
+      .from('workspace_files')
+      .select('id', { count: 'exact', head: true })
+      .eq('folder_id', empFolderId);
+
+    const newlySynced = Math.max(0, (wsAfter ?? 0) - (wsBefore ?? 0));
+    return { synced: newlySynced, total: hrTotal ?? 0, error: null };
+  } catch (e: any) {
+    return { synced: 0, total: 0, error: e.message || 'Unknown error' };
   }
 }
 

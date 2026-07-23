@@ -52,7 +52,7 @@ import {
   CV_FORMAT_OPTIONS,
   type CvFormatId,
 } from "@/utils/cvFormats";
-import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName, ensureWorkspaceHubFolders } from "@/utils/employeeProfileFolder";
+import { syncProfileFolder, getProfileSummarySignedUrl, computeFolderName, ensureWorkspaceHubFolders, syncDocsToWorkspaceOnly } from "@/utils/employeeProfileFolder";
 import EmployeeBadgeDialog from "@/components/hr/EmployeeBadgeDialog";
 
 // Use centralized visible role codes (excludes superAdmin)
@@ -267,6 +267,7 @@ const UserDetail: FC = () => {
   const [empSummary, setEmpSummary] = useState<string>("");
   const [profileFolderPath, setProfileFolderPath] = useState<string | null>(null);
   const [folderSyncing, setFolderSyncing] = useState(false);
+  const [docsSyncing, setDocsSyncing] = useState(false);
   const [docsVerified, setDocsVerified] = useState<{ allVerified: boolean; verified: number; total: number }>({ allVerified: false, verified: 0, total: 0 });
   const [hasPersonalDetails, setHasPersonalDetails] = useState(false);
   const [contractPreview, setContractPreview] = useState<{ url: string; name: string; mime: string | null } | null>(null);
@@ -1002,6 +1003,26 @@ const UserDetail: FC = () => {
       }
     } finally {
       setFolderSyncing(false);
+    }
+  };
+
+  // ── Docs-only sync (no PDF regeneration) ────────────────────────────────────
+  const handleSyncDocsOnly = async () => {
+    if (!user) return;
+    setDocsSyncing(true);
+    try {
+      const { synced, total, error } = await syncDocsToWorkspaceOnly(user);
+      if (error) {
+        toast({ title: 'Sync failed', description: error, variant: 'destructive' });
+      } else if (synced > 0) {
+        toast({ title: `✅ ${synced} document${synced !== 1 ? 's' : ''} synced`, description: `All ${total} HR document${total !== 1 ? 's' : ''} now in your Workspace folder.` });
+      } else {
+        toast({ title: 'Already up to date', description: `${total} document${total !== 1 ? 's' : ''} are already in your Workspace folder.` });
+      }
+    } catch (e: any) {
+      toast({ title: 'Sync failed', description: e.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setDocsSyncing(false);
     }
   };
 
@@ -1877,11 +1898,15 @@ const UserDetail: FC = () => {
                           <FileText className="h-3.5 w-3.5" /> Open CV
                         </button>
                         <button
-                          onClick={() => void triggerFolderSync()}
-                          className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 transition-all"
+                          onClick={() => void handleSyncDocsOnly()}
+                          disabled={docsSyncing}
+                          className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                           title="Sync all HR documents into the Workspace Hub folder"
                         >
-                          <RefreshCw className="h-3.5 w-3.5" /> Sync Docs
+                          {docsSyncing
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <RefreshCw className="h-3.5 w-3.5" />}
+                          {docsSyncing ? 'Syncing…' : 'Sync Docs'}
                         </button>
                       </div>
                     )}
