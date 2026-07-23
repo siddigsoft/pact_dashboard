@@ -214,9 +214,12 @@ const UserDetail: FC = () => {
       const { data: rpcResult, error: rpcErr } = await supabase.rpc('update_profile_avatar', { p_user_id: user.id, p_url: url });
       if (rpcErr) throw rpcErr;
       if (rpcResult?.error) throw new Error(rpcResult.error);
-      setUser(prev => prev ? { ...prev, avatar: url, photoUploadCount: rpcResult?.count ?? ((prev.photoUploadCount ?? 0) + 1) } : prev);
+      const updatedUser = { ...user, avatar: url, photoUploadCount: rpcResult?.count ?? ((user.photoUploadCount ?? 0) + 1) };
+      setUser(prev => prev ? updatedUser : prev);
       setLocalPhotoCount(rpcResult?.count ?? ((localPhotoCount ?? (user.photoUploadCount ?? 0)) + 1));
       toast({ title: 'Photo updated', description: 'Profile picture saved successfully.' });
+      // Silently sync the new photo into the workspace folder (if folder already exists)
+      void syncDocsToWorkspaceOnly(updatedUser);
     } catch (err: any) {
       toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     } finally {

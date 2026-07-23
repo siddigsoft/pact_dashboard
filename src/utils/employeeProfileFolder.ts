@@ -249,6 +249,62 @@ export async function syncHrDocsToWorkspace(
   }
 }
 
+// ── Profile avatar → Workspace sync ──────────────────────────────────────────
+
+/**
+ * Downloads the user's avatar from the `avatars` bucket and registers it as
+ * PROFILE_PHOTO.{ext} in the employee's workspace folder.
+ * Called from syncProfileFolder and syncDocsToWorkspaceOnly.
+ */
+async function syncAvatarToWorkspace(
+  user: { id: string; avatar?: string | null; name?: string | null },
+  folderName: string,
+  folderId: string,
+): Promise<void> {
+  if (!user.avatar || !folderId) return;
+  try {
+    // Extract the storage path from the avatar public URL:
+    //   https://xxx.supabase.co/storage/v1/object/public/avatars/{storagePath}?t=...
+    const match = user.avatar.match(/\/object\/(?:public|sign)\/avatars\/(.+?)(\?|$)/);
+    if (!match) return;
+    const avatarStoragePath = decodeURIComponent(match[1]);
+    const ext = avatarStoragePath.split('.').pop()?.toLowerCase() || 'jpg';
+    const wsStoragePath = `${HR_ROOT}/${folderName}/PROFILE_PHOTO.${ext}`;
+
+    // Download from avatars bucket
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from('avatars')
+      .download(avatarStoragePath);
+    if (dlErr || !blob) {
+      console.warn('[profileFolder] avatar download failed:', dlErr?.message);
+      return;
+    }
+
+    // Upload to workspace-files bucket
+    await supabase.storage
+      .from('workspace-files')
+      .upload(wsStoragePath, blob, { contentType: `image/${ext}`, upsert: true });
+
+    const { data: urlData } = supabase.storage
+      .from('workspace-files')
+      .getPublicUrl(wsStoragePath);
+
+    await upsertWorkspaceFile(
+      folderId,
+      `PROFILE_PHOTO.${ext}`,
+      wsStoragePath,
+      urlData?.publicUrl ?? null,
+      blob.size,
+      user.id,
+      'Profile photo',
+      `image/${ext}`,
+      ['profile-photo'],
+    );
+  } catch (e: any) {
+    console.warn('[profileFolder] syncAvatarToWorkspace error:', e.message);
+  }
+}
+
 export async function syncProfileFolder(
   user: any,
   ctx: CVContext,
@@ -324,6 +380,9 @@ export async function syncProfileFolder(
 
       // 6. Also sync all HR profile documents into workspace
       await syncHrDocsToWorkspace(user, empFolderId);
+
+      // 7. Sync profile photo (avatar) into workspace folder
+      await syncAvatarToWorkspace(user, folderName, empFolderId);
     }
 
     // 7. Persist the folder path in hr_employee_personal
@@ -418,7 +477,7 @@ export async function ensureWorkspaceHubFolders(
  * Returns the number of newly synced documents or an error string.
  */
 export async function syncDocsToWorkspaceOnly(
-  user: { id: string; employeeId?: string | null; name?: string | null },
+  user: { id: string; employeeId?: string | null; name?: string | null; avatar?: string | null },
 ): Promise<{ synced: number; total: number; error: string | null }> {
   if (!user?.id || !user.employeeId) {
     return { synced: 0, total: 0, error: 'Employee ID not assigned yet' };
@@ -444,7 +503,11 @@ export async function syncDocsToWorkspaceOnly(
       supabase.from('workspace_files').select('id', { count: 'exact', head: true }).eq('folder_id', empFolderId),
     ]);
 
-    await syncHrDocsToWorkspace(user, empFolderId);
+    // Sync HR documents + profile photo in parallel
+    await Promise.all([
+      syncHrDocsToWorkspace(user, empFolderId),
+      syncAvatarToWorkspace(user, folderName, empFolderId),
+    ]);
 
     const { count: wsAfter } = await supabase
       .from('workspace_files')
