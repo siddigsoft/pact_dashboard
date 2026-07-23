@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, Trash2, Loader2, GraduationCap, Briefcase,
-  Edit, Save, X, Calendar, Building2, MapPin, Tag, AlertTriangle,
+  Plus, Trash2, Loader2, GraduationCap,
+  Edit, Save, X, Calendar, MapPin, AlertTriangle,
 } from "lucide-react";
 
 interface EduEntry {
@@ -17,18 +17,6 @@ interface EduEntry {
   graduation_year?: number | null;
   country?: string;
   grade?: string;
-}
-
-interface ExpEntry {
-  id?: string;
-  employer: string;
-  job_title: string;
-  start_date: string;
-  end_date?: string;
-  is_current: boolean;
-  description?: string;
-  location?: string;
-  sector?: string;
 }
 
 const DEGREE_LABELS: Record<string, string> = {
@@ -57,20 +45,8 @@ const DEGREE_COLORS: Record<string, string> = {
   other: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
-const SECTORS = [
-  'Health', 'Education', 'Finance & Accounting', 'Humanitarian / WASH',
-  'Food Security & Livelihoods', 'Protection', 'Shelter & NFI',
-  'Logistics & Supply Chain', 'IT & Technology', 'HR & Administration',
-  'Project Management', 'Monitoring & Evaluation', 'Legal & Compliance',
-  'Communications & Media', 'Engineering & Infrastructure',
-  'Research & Development', 'Other',
-];
-
 const EMPTY_EDU: EduEntry = {
   degree_level: 'bachelor', institution: '', field_of_study: '', graduation_year: null, country: '', grade: '',
-};
-const EMPTY_EXP: ExpEntry = {
-  employer: '', job_title: '', start_date: '', end_date: '', is_current: false, description: '', location: '', sector: '',
 };
 
 function SectionHeader({
@@ -153,32 +129,26 @@ function DbSetupBanner({ error }: { error: string }) {
 function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
   const { toast } = useToast();
   const [edu, setEdu] = useState<EduEntry[]>([]);
-  const [exp, setExp] = useState<ExpEntry[]>([]);
-  const [loading, setLoading]   = useState(false);
-  const [dbError, setDbError]   = useState<string | null>(null);
-  const [eduForm, setEduForm]   = useState<EduEntry | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [dbError, setDbError]     = useState<string | null>(null);
+  const [eduForm, setEduForm]     = useState<EduEntry | null>(null);
   const [eduSaving, setEduSaving] = useState(false);
-  const [expForm, setExpForm]   = useState<ExpEntry | null>(null);
-  const [expSaving, setExpSaving] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    // Reset open forms when switching to a different employee profile
     setEduForm(null);
-    setExpForm(null);
     const load = async () => {
       setLoading(true);
       setDbError(null);
-      const [{ data: e, error: eErr }, { data: x, error: xErr }] = await Promise.all([
-        supabase.from('hr_employee_education').select('*').eq('profile_id', userId).order('graduation_year', { ascending: false }),
-        supabase.from('hr_employee_experience').select('*').eq('profile_id', userId).order('start_date', { ascending: false }),
-      ]);
+      const { data: e, error: eErr } = await supabase
+        .from('hr_employee_education')
+        .select('*')
+        .eq('profile_id', userId)
+        .order('graduation_year', { ascending: false });
       if (cancelled) return;
-      const firstError = eErr || xErr;
-      if (firstError) setDbError(firstError.message);
+      if (eErr) setDbError(eErr.message);
       setEdu(e || []);
-      setExp(x || []);
       setLoading(false);
     };
     load();
@@ -186,23 +156,14 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
   }, [userId]);
 
   const openEduForm = (entry?: EduEntry) => setEduForm(entry ? { ...entry } : { ...EMPTY_EDU });
-  const openExpForm = (entry?: ExpEntry) => setExpForm(entry ? { ...entry } : { ...EMPTY_EXP });
 
   const handleSaveError = (e: any, what: string) => {
     const msg: string = e?.message || String(e);
     if (isTableMissing(msg)) {
-      toast({
-        title: `Cannot save ${what} — table missing`,
-        description: `Run the migration SQL first: ${SQL_HINT}`,
-        variant: 'destructive',
-      });
+      toast({ title: `Cannot save ${what} — table missing`, description: `Run the migration SQL first: ${SQL_HINT}`, variant: 'destructive' });
       setDbError(msg);
     } else if (isRlsError(msg)) {
-      toast({
-        title: `Cannot save ${what} — permission denied`,
-        description: `RLS policy is blocking this. Run: ${SQL_HINT}`,
-        variant: 'destructive',
-      });
+      toast({ title: `Cannot save ${what} — permission denied`, description: `RLS policy is blocking this. Run: ${SQL_HINT}`, variant: 'destructive' });
       setDbError(msg);
     } else {
       toast({ title: `Save failed`, description: msg, variant: 'destructive' });
@@ -243,41 +204,6 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
     const { error } = await supabase.from('hr_employee_education').delete().eq('id', id);
     if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
     setEdu(p => p.filter(r => r.id !== id));
-  };
-
-  const saveExp = async () => {
-    if (!expForm) return;
-    const missing: string[] = [];
-    if (!expForm.employer.trim()) missing.push('Employer / Organisation');
-    if (!expForm.job_title.trim()) missing.push('Job Title');
-    if (!expForm.start_date) missing.push('Start Date');
-    if (missing.length > 0) {
-      toast({ title: 'Required fields missing', description: `Please fill in: ${missing.join(', ')}`, variant: 'destructive' });
-      return;
-    }
-    setExpSaving(true);
-    try {
-      const payload = { ...expForm, profile_id: userId, end_date: expForm.is_current ? null : expForm.end_date || null };
-      if (expForm.id) {
-        const { error } = await supabase.from('hr_employee_experience').update(payload).eq('id', expForm.id);
-        if (error) throw error;
-        setExp(p => p.map(r => r.id === expForm.id ? { ...r, ...expForm } : r));
-      } else {
-        const { data: ins, error } = await supabase.from('hr_employee_experience').insert(payload).select().single();
-        if (error) throw error;
-        setExp(p => [ins, ...p]);
-      }
-      setExpForm(null);
-      toast({ title: 'Experience entry saved' });
-    } catch (e: any) {
-      handleSaveError(e, 'experience');
-    } finally { setExpSaving(false); }
-  };
-
-  const deleteExp = async (id: string) => {
-    const { error } = await supabase.from('hr_employee_experience').delete().eq('id', id);
-    if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
-    setExp(p => p.filter(r => r.id !== id));
   };
 
   if (loading) return (
@@ -395,134 +321,6 @@ function EmployeeEducationTab({ userId, isAdmin }: { userId: string; isAdmin: bo
         )}
       </div>
 
-      {/* ── Employment History ───────────────────────────────────────── */}
-      <div>
-        <SectionHeader
-          icon={<Briefcase className="h-5 w-5" />}
-          title="Employment History"
-          subtitle={`${exp.length} position${exp.length !== 1 ? 's' : ''} on record`}
-          action={isAdmin ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={expForm ? "ghost" : "outline"}
-              className={`h-8 gap-1.5 text-xs ${expForm ? 'text-muted-foreground hover:text-foreground' : ''}`}
-              onClick={() => expForm ? setExpForm(null) : openExpForm()}
-              data-testid="button-add-experience"
-            >
-              {expForm ? <><X className="h-3 w-3" /> Cancel</> : <><Plus className="h-3 w-3" /> Add Position</>}
-            </Button>
-          ) : undefined}
-        />
-
-        {expForm && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold">{expForm.id ? 'Edit Position' : 'Add New Position'}</h4>
-              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpForm(null)}><X className="h-3.5 w-3.5" /></Button>
-            </div>
-            <FormRow>
-              <FormField label="Employer / Organisation" required>
-                <Input value={expForm.employer} onChange={e => setExpForm(p => p ? { ...p, employer: e.target.value } : p)} placeholder="Organisation name" className="h-9 text-sm" />
-              </FormField>
-              <FormField label="Job Title / Position" required>
-                <Input value={expForm.job_title} onChange={e => setExpForm(p => p ? { ...p, job_title: e.target.value } : p)} placeholder="Position / Role" className="h-9 text-sm" />
-              </FormField>
-              <FormField label="Experience Area / Sector">
-                <Select value={expForm.sector || ''} onValueChange={v => setExpForm(p => p ? { ...p, sector: v } : p)}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select sector…" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">— None —</SelectItem>
-                    {SECTORS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </FormField>
-              <FormField label="Location">
-                <Input value={expForm.location || ''} onChange={e => setExpForm(p => p ? { ...p, location: e.target.value } : p)} placeholder="City, Country" className="h-9 text-sm" />
-              </FormField>
-              <FormField label="Start Date" required>
-                <Input type="date" value={expForm.start_date} onChange={e => setExpForm(p => p ? { ...p, start_date: e.target.value } : p)} className="h-9 text-sm" />
-              </FormField>
-              <FormField label="End Date">
-                <Input type="date" value={expForm.end_date || ''} disabled={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, end_date: e.target.value } : p)} className="h-9 text-sm disabled:opacity-40" />
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer mt-1.5">
-                  <input type="checkbox" checked={expForm.is_current} onChange={e => setExpForm(p => p ? { ...p, is_current: e.target.checked, end_date: e.target.checked ? '' : p.end_date } : p)} className="rounded" />
-                  Currently working here
-                </label>
-              </FormField>
-              <FormField label="Key Responsibilities / Description" span="full">
-                <textarea value={expForm.description || ''} onChange={e => setExpForm(p => p ? { ...p, description: e.target.value } : p)} placeholder="Describe key responsibilities and achievements…" rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
-              </FormField>
-            </FormRow>
-            <div className="flex gap-2 pt-1 border-t border-border/40">
-              <Button
-                type="button"
-                size="sm"
-                onClick={saveExp}
-                disabled={expSaving || !expForm.employer.trim() || !expForm.job_title.trim() || !expForm.start_date}
-                className="gap-1.5"
-                data-testid="button-save-experience"
-              >
-                {expSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setExpForm(null)}>Cancel</Button>
-            </div>
-          </div>
-        )}
-
-        {exp.length === 0 && !expForm ? (
-          <div className="text-center py-10 border rounded-xl border-dashed bg-muted/5">
-            <Briefcase className="h-7 w-7 mx-auto mb-2 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No employment history recorded yet.</p>
-            {isAdmin && (
-              <Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => openExpForm()} data-testid="button-add-experience-empty">
-                <Plus className="h-3 w-3" /> Add First Position
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {exp.map((e, i) => (
-              <div key={e.id || i} className="flex items-stretch gap-0 rounded-xl border border-border/40 overflow-hidden hover:border-border/70 hover:shadow-sm transition-all bg-background">
-                <div className={`w-1 shrink-0 ${e.is_current ? 'bg-green-500' : 'bg-muted-foreground/20'}`} />
-                <div className="flex items-start gap-4 px-4 py-3.5 flex-1 min-w-0">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-semibold text-sm">{e.job_title}</span>
-                      {e.is_current && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-green-100 text-green-700 border-green-200">
-                          Current
-                        </span>
-                      )}
-                      {e.sector && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-blue-50 text-blue-700 border-blue-200">
-                          <Tag className="h-2.5 w-2.5" />{e.sector}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                      <Building2 className="h-3.5 w-3.5 shrink-0" />
-                      <span className="font-medium text-foreground/80">{e.employer}</span>
-                      {e.location && <><span className="text-muted-foreground/40">·</span><MapPin className="h-3 w-3" />{e.location}</>}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {e.start_date} — {e.is_current ? <span className="text-green-600 font-medium">Present</span> : (e.end_date || 'N/A')}
-                    </p>
-                    {e.description && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 italic">{e.description}</p>}
-                  </div>
-                  {isAdmin && (
-                    <div className="flex gap-1 shrink-0">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => openExpForm(e)} data-testid={`button-edit-exp-${e.id}`}><Edit className="h-3 w-3" /></Button>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600" onClick={() => e.id && deleteExp(e.id)} data-testid={`button-delete-exp-${e.id}`}><Trash2 className="h-3 w-3" /></Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
