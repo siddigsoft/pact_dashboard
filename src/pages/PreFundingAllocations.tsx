@@ -194,8 +194,11 @@ export default function PreFundingAllocations() {
       const paidMap = new Map<string, number>();
       for (const f of fundsData as any[]) {
         const txnPaid = txnPaidMap.get(f.id as string) ?? 0;
-        // If no payment transactions exist yet, fall back to the DB column (updated by directLinkPayment)
-        paidMap.set(f.id as string, txnPaid > 0 ? txnPaid : Number(f.paid_amount ?? 0));
+        const dbPaid  = Number(f.paid_amount ?? 0);
+        // Use whichever is higher: txn-computed or the authoritative DB column.
+        // The DB column is updated by directLinkPayment / RPC paths that may not
+        // create a pre_fund_transactions row, so it can legitimately be higher.
+        paidMap.set(f.id as string, Math.max(txnPaid, dbPaid));
       }
 
       // Some transactions (esp. manually added via Reconciliation, or auto-linked
@@ -398,7 +401,7 @@ export default function PreFundingAllocations() {
             { label: 'Staff Allocated',   value: String(staff.length),                                   sub: 'unique people',           icon: Users,          accent: 'bg-violet-600' },
             { label: 'Total Allocated',   value: formatNumber(totalAllocated, 0),                        sub: 'across all funds',        icon: Wallet,         accent: 'bg-sky-600' },
             { label: 'Total Paid Out',    value: formatNumber(fundTotalPaid, 0),                         sub: 'from fund balance',       icon: TrendingDown,   accent: 'bg-emerald-600' },
-            { label: 'Total Remaining',   value: formatNumber(Math.max(0, totalAllocated - totalSpent), 0), sub: 'unspent allocation',   icon: CheckCircle2,   accent: totalAllocated - totalSpent < 0 ? 'bg-rose-600' : 'bg-teal-600' },
+            { label: 'Total Remaining',   value: formatNumber(Math.max(0, totalAllocated - fundTotalPaid), 0), sub: 'unspent allocation',   icon: CheckCircle2,   accent: totalAllocated - fundTotalPaid < 0 ? 'bg-rose-600' : 'bg-teal-600' },
             { label: 'Over Budget',       value: String(overUsed),                                       sub: 'staff exceeded limit',    icon: AlertTriangle,  accent: overUsed > 0 ? 'bg-rose-600' : 'bg-slate-400' },
           ] : [
             { label: 'My Allocation',   value: formatNumber(totalAllocated, 0),   sub: 'assigned to you',        icon: Wallet,         accent: 'bg-sky-600' },
