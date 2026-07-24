@@ -1510,7 +1510,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <span className="text-xs text-muted-foreground w-8 shrink-0">{wl}%</span>
                         </div>
                         <div className="text-xs text-muted-foreground shrink-0">
-                          Joined {format(parseISO(member.joinedAt), 'dd MMM yyyy')}
+                          {(() => {
+                            try { return member.joinedAt ? `Joined ${format(parseISO(member.joinedAt), 'dd MMM yyyy')}` : ''; } catch { return ''; }
+                          })()}
                         </div>
                       </div>
                     );
@@ -1556,7 +1558,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                               </div>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground text-xs">
-                              {format(parseISO(member.joinedAt), 'dd MMM yyyy')}
+                              {(() => { try { return member.joinedAt ? format(parseISO(member.joinedAt), 'dd MMM yyyy') : '—'; } catch { return '—'; } })()}
                             </td>
                           </tr>
                         );
