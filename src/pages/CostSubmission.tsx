@@ -2031,19 +2031,54 @@ const CostSubmission = () => {
     if (!revertPaidConfirm) return;
     setActionProcessing(true);
     try {
+      // Capture paid amount and submitted_by BEFORE clearing, for pre-fund reversal
+      const paidAmountForReversal = (revertPaidConfirm.amount_paid_cents ?? 0) / 100;
+      const submittedBy = revertPaidConfirm.submitted_by ?? null;
+
       const { error } = await supabase
         .from('operational_cost_submissions')
         .update({
           status: 'approved',
           paid_at: null,
           paid_by: null,
+          amount_paid_cents: 0,
+          payment_proof_url: null,
+          payment_proof_notes: null,
+          payment_proof_uploaded_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', revertPaidConfirm.id);
       if (error) {
         toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
       } else {
-        toast({ title: 'Payment Reverted / تم إرجاع الدفعة', description: 'Submission moved back to Approved status. / تم إعادة الطلب إلى حالة الموافقة.' });
+        // Reverse any pre-fund deduction — try atomic RPC first, fall back to direct reversal
+        try {
+          const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
+          const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', revertPaidConfirm.id);
+          if (!unlinkResult.unlinked) {
+            // RPC not deployed or no txn row found — check metadata for a direct-deduction marker
+            const { data: srcRow } = await (supabase as any)
+              .from('operational_cost_submissions')
+              .select('metadata')
+              .eq('id', revertPaidConfirm.id)
+              .maybeSingle();
+            if (srcRow?.metadata?.pre_fund_deducted && srcRow?.metadata?.pre_fund_id && paidAmountForReversal > 0) {
+              await reverseDirectDeduction(
+                srcRow.metadata.pre_fund_id,
+                paidAmountForReversal,
+                submittedBy,
+              );
+              // Clear the marker so a future payment doesn't skip the deduction
+              await (supabase as any)
+                .from('operational_cost_submissions')
+                .update({ metadata: { ...(srcRow.metadata || {}), pre_fund_deducted: false, pre_fund_id: null } })
+                .eq('id', revertPaidConfirm.id);
+            }
+          }
+        } catch (pfErr: any) {
+          console.warn('[Pre-Fund] Revert cleanup failed:', pfErr?.message);
+        }
+        toast({ title: 'Payment Reverted / تم إرجاع الدفعة', description: 'Submission reset to Approved. Payment proof and amount cleared. / تم إعادة الطلب إلى حالة الموافقة ومسح الإيصال والمبلغ المدفوع.' });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -2380,9 +2415,11 @@ const CostSubmission = () => {
       let successCount = 0;
       let failCount = 0;
       // When custom-amount mode, distribute fixed total proportionally across submissions
-      const totalRemainingCents = subs.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
+      const totalRemainingCents = subs.reduce((s, sub) => s + Math.max(0, sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
       for (const sub of subs) {
-        const remainingCents = sub.amount_cents - (sub.amount_paid_cents ?? 0);
+        const remainingCents = Math.max(0, sub.amount_cents - (sub.amount_paid_cents ?? 0));
+        // Skip submissions with nothing remaining — prevents 0-amount pre-fund charges
+        if (remainingCents <= 0) { failCount++; continue; }
         let payNowCents: number;
         if (isAmountMode) {
           // Distribute the fixed amount proportionally; cap at each sub's remaining
@@ -2391,6 +2428,8 @@ const CostSubmission = () => {
         } else {
           payNowCents = payMode === 'full' ? remainingCents : Math.round(remainingCents * payFraction);
         }
+        // Guard: skip if computed pay amount is still zero (e.g. rounding down)
+        if (payNowCents <= 0) { failCount++; continue; }
         const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
         const isFullyPaid = newPaidCents >= sub.amount_cents;
         const { error } = await supabase.from('operational_cost_submissions').update({
