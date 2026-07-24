@@ -47,6 +47,25 @@ const PATH_TO_SLUG: Record<string, string> = (() => {
   return m;
 })();
 
+/**
+ * Resolves any URL pathname to a PAGE_DEFS slug, handling dynamic route
+ * segments (e.g. "/mmp/abc123/edit" → slug of "/mmp") by walking
+ * progressively shorter prefix paths until a match is found.
+ * Returns null when no definition exists — callers decide whether to fail-open
+ * or fail-closed (the route guard fails-open so new pages work automatically).
+ */
+export function resolveSlug(pathname: string): string | null {
+  // Exact match first
+  if (PATH_TO_SLUG[pathname]) return PATH_TO_SLUG[pathname];
+  // Walk up the path, stripping dynamic segments one at a time
+  const segments = pathname.split('/').filter(Boolean);
+  for (let len = segments.length - 1; len >= 1; len--) {
+    const candidate = '/' + segments.slice(0, len).join('/');
+    if (PATH_TO_SLUG[candidate]) return PATH_TO_SLUG[candidate];
+  }
+  return null;
+}
+
 /** URL-based variant of canSeePage. Fail-closed: an unknown path returns
  *  `false` so an undeclared route never silently leaks to the sidebar. If a
  *  caller wants to OR with custom logic (e.g. `perms.X`), it must do so
@@ -55,6 +74,11 @@ export function canSeePath(path: string, role: string | null | undefined): boole
   const slug = PATH_TO_SLUG[path];
   if (!slug) return false;
   return canSeePage(slug, role);
+}
+
+/** Returns the human-readable label for a slug, or the slug itself if not found. */
+export function getPageLabel(slug: string): string {
+  return PAGE_DEFS.find(p => p.slug === slug)?.label ?? slug;
 }
 
 /** Pure check against PAGE_DEFS; does not consult overrides table. */

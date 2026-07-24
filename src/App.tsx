@@ -249,6 +249,7 @@ import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
+import { canSeePage, canSeePageWithOverrides, resolveSlug, getPageLabel } from './lib/page-roles';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
@@ -316,6 +317,74 @@ const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   const allowed = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   if (!allowed) return <PageRoleDenied pageLabel="Pre-Funding Management" />;
   return <>{children}</>;
+};
+
+// ── Universal Page Route Guard ────────────────────────────────────────────────
+// Single component that enforces PAGE_DEFS access rules for every protected
+// route.  Two enforcement layers:
+//   1. Synchronous role check via canSeePage()  (instant, no DB call)
+//   2. Async per-user override via canSeePageWithOverrides()  (DB override set
+//      by Security Panel — blocks even role-allowed users if admin blocked them)
+// SuperAdmin always bypasses both layers.
+//
+// Dynamic segments (e.g. /mmp/abc123/edit) are resolved to their parent slug
+// (/mmp) via resolveSlug(), so new sub-routes are automatically protected.
+//
+// New pages: add an entry to PAGE_DEFS in PageAccessControl.tsx — the guard
+// and the Security Panel both read from there automatically.
+const PageRouteGuardAsync = ({
+  slug,
+  role,
+  children,
+}: {
+  slug: string;
+  role: string | undefined;
+  children: React.ReactNode;
+}) => {
+  const { currentUser } = useAppContext();
+  const [blocked, setBlocked] = useState<boolean>(false);
+
+  useEffect(() => {
+    setBlocked(false);
+    if (!currentUser?.id) return;
+    canSeePageWithOverrides(slug, role, currentUser.id).then(allowed => {
+      if (!allowed) setBlocked(true);
+    });
+  }, [slug, role, currentUser?.id]);
+
+  if (blocked) {
+    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  }
+  return <>{children}</>;
+};
+
+const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const { currentUser } = useAppContext();
+  const { isSuperAdmin } = useAuthorization();
+
+  // SuperAdmin bypasses all page-level checks
+  if (isSuperAdmin()) return <>{children}</>;
+
+  const role = (currentUser as any)?.role as string | undefined;
+  const slug = resolveSlug(location.pathname);
+
+  // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
+  if (!slug) return <>{children}</>;
+
+  // Layer 1: instant role check — block immediately without a DB round-trip
+  if (!canSeePage(slug, role)) {
+    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  }
+
+  // Layer 2: async DB override (per-user block set from Security Panel)
+  // Children render immediately (role check passed); the async result replaces
+  // them only if an admin-set block is found.
+  return (
+    <PageRouteGuardAsync slug={slug} role={role}>
+      {children}
+    </PageRouteGuardAsync>
+  );
 };
 
 // Notification display component
@@ -428,7 +497,7 @@ const AppRoutes = () => {
       <Route path="/ext/:token" element={<ExternalContributorPage />} />
 
       {/* Protected routes */}
-  <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
+  <Route element={<AuthGuard><PageRouteGuard><MainLayout /></PageRouteGuard></AuthGuard>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />

@@ -2503,11 +2503,18 @@ const MMP = () => {
     loadMySitesForEnumerator();
   }, [canClaimSites, currentUser?.id, enumeratorRefreshTrigger]);
 
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector || isDataTeam;
-  // Only Admin and ICT accounts should see the Upload button on the MMP management page.
-  // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
-  // that may have broad permissions from seeing the upload control.
-  const canCreate = isAdmin || isICT;
+  // canRead: checkPermission is the primary gate (reads DEFAULT_ROLE_PERMISSIONS / DB toggles).
+  // Security Panel toggling mmp:read for a role will reflect here immediately.
+  const canRead = checkPermission('mmp', 'read');
+  // canCreate: intentionally more restrictive than DEFAULT_ROLE_PERMISSIONS — only Admin/ICT
+  // may upload on the main MMP list page (business rule). Security Panel can REVOKE this further.
+  const canCreate = (isAdmin || isICT) && checkPermission('mmp', 'create');
+  // Action-level permissions — Security Panel controls these via the permissions table.
+  // The role check is the default gate; checkPermission allows Security Panel to revoke.
+  const canApprove = (isFOM || isAdmin || isSuperAdmin || isICT) && checkPermission('mmp', 'approve');
+  const canAssign  = (isFOM || isAdmin || isICT) && checkPermission('mmp', 'assign');
+  const canDelete  = (isAdmin || isSuperAdmin) && checkPermission('mmp', 'delete');
+  const canExport  = checkPermission('mmp', 'export');
 
   const [hasClosingCycle, setHasClosingCycle] = useState(false);
   const [closingCycleName, setClosingCycleName] = useState<string | null>(null);
@@ -4680,7 +4687,7 @@ const MMP = () => {
       )}
 
       {/* ── Purple "Awaiting Your Approval" banner — FOM / Admin / Super Admin ── */}
-      {(isFOM || isAdmin || isSuperAdmin) && pendingApprovalMmps.length > 0 && (
+      {canApprove && pendingApprovalMmps.length > 0 && (
         <div className="flex flex-col gap-2 mb-2">
           {pendingApprovalMmps.map(mmp => (
             <div
@@ -5637,7 +5644,7 @@ const MMP = () => {
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
-                    showApproveButton={isAdmin || isICT || isFOM}
+                    showApproveButton={canApprove}
                     onFilteredSiteIdsChange={(ids, count, hasFilter, entries) => {
                       setTableFilteredSiteIds(ids);
                       setTableFilteredCount(hasFilter ? count : 0);
@@ -5727,7 +5734,7 @@ const MMP = () => {
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
                       </div>
-                      {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
+                      {canAssign && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
                             variant="default"
