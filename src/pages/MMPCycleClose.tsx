@@ -2351,6 +2351,16 @@ const MMPCycleClose = () => {
 
   useEffect(() => {
     const fetchQualityData = async () => {
+      // Only query active/closing MMPs — avoids pulling all historical closed-cycle
+      // entries and dramatically reduces query cost for large deployments.
+      const activeMmpIds = (mmpFiles || [])
+        .filter(m => {
+          const s = (m as any).cycle_status || 'active';
+          return s === 'active' || s === 'closing' || s === 'pending_approval';
+        })
+        .map(m => m.id);
+      if (activeMmpIds.length === 0) return;
+
       try {
         const PAGE = 1000;
         let allQuality: any[] = [];
@@ -2358,6 +2368,7 @@ const MMPCycleClose = () => {
           const { data: pageData } = await supabase
             .from('mmp_site_entries')
             .select('mmp_file_id, additional_data')
+            .in('mmp_file_id', activeMmpIds)
             .range(from, from + PAGE - 1);
           allQuality = [...allQuality, ...(pageData || [])];
           if (!pageData || pageData.length < PAGE) break;
@@ -3190,7 +3201,7 @@ const MMPCycleClose = () => {
 
   const handleAbortClose = async (mmpId: string) => {
     if (!canManageCycle) {
-      toast({ title: 'Access Denied', description: 'Only FOM, Admin, and Super Admin can abort a cycle close.', variant: 'destructive' });
+      toast({ title: 'Access Denied', description: 'Only Admins and Super Admins can abort a cycle close.', variant: 'destructive' });
       return;
     }
     setAbortingClose(true);
@@ -3207,6 +3218,22 @@ const MMPCycleClose = () => {
         } as any)
         .eq('id', mmpId);
       if (error) throw error;
+
+      // Clear not_covered_flag that was set on pending/active sites during
+      // handleStartClosingCycle. Without this, aborted sites remain permanently
+      // flagged as uncovered even though the cycle is back to active.
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          not_covered_flag: false,
+          not_covered_reason: null,
+          not_covered_reason_other: null,
+          not_covered_at: null,
+          not_covered_by: null,
+        } as any)
+        .eq('mmp_file_id', mmpId)
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+
       await logMMPAudit({
         mmpId,
         mmpName,
@@ -3218,6 +3245,7 @@ const MMPCycleClose = () => {
         metadata: { cycleAction: 'abort_close', abortedAt: new Date().toISOString() },
       });
       await refreshMMPFiles();
+      await fetchUncoveredSites();
       toast({ title: 'Close Aborted', description: `"${mmpName}" has been returned to Active status. You can restart closing at any time.` });
     } catch (err: any) {
       toast({ title: 'Abort Failed', description: err?.message || 'Could not abort the cycle close. Please try again.', variant: 'destructive' });
@@ -3248,6 +3276,7 @@ const MMPCycleClose = () => {
       }
     }
 
+    setFinalizingCycle(true);
     try {
       const mmpData = mmpFiles?.find(m => m.id === mmpId);
       const { error } = await approveCycleClose({
@@ -3281,6 +3310,8 @@ const MMPCycleClose = () => {
       await fetchClosedCycles();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to approve cycle', variant: 'destructive' });
+    } finally {
+      setFinalizingCycle(false);
     }
   };
 
@@ -3289,7 +3320,14 @@ const MMPCycleClose = () => {
       toast({ title: 'Access Denied', description: 'Only FOM, Admin, and Super Admin can reject a cycle.', variant: 'destructive' });
       return;
     }
+    setFinalizingCycle(true);
     try {
+      const mmp = mmpFiles?.find(m => m.id === mmpId) as any;
+      // Clear submitted_at so Step 8 doesn't show a stale timestamp when
+      // the admin re-enters the wizard and resubmits after making corrections.
+      const existingTracking = mmp?.payment_tracking || {};
+      const { submitted_at: _dropped, cycle_approval_note: _note, ...trackingWithoutSubmit } = existingTracking;
+
       const { error } = await supabase
         .from('mmp_files')
         .update({
@@ -3298,12 +3336,12 @@ const MMPCycleClose = () => {
           // Clear stale records so re-submission starts clean and doesn't
           // accumulate a growing list of rejected close snapshots.
           cycle_close_records: [],
+          payment_tracking: trackingWithoutSubmit,
         } as any)
         .eq('id', mmpId);
 
       if (error) throw error;
 
-      const mmp = mmpFiles?.find(m => m.id === mmpId);
       await logMMPAudit({
         mmpId,
         mmpName: mmp?.name || 'MMP',
@@ -3315,10 +3353,13 @@ const MMPCycleClose = () => {
         metadata: { cycleAction: 'reject_close', rejectionNote: note },
       });
 
+      setCycleSubmittedAt(null);
       toast({ title: 'Cycle Rejected', description: 'Cycle has been returned to closing status.' });
       await refreshMMPFiles();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to reject cycle', variant: 'destructive' });
+    } finally {
+      setFinalizingCycle(false);
     }
   };
 
