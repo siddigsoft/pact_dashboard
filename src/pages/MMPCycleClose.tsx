@@ -736,16 +736,24 @@ const MMPCycleClose = () => {
         return;
       }
 
-      // Bulk update mmp_site_entries fees to SDG equivalent
+      // Bulk update mmp_site_entries fees to SDG equivalent.
+      // Re-lock guard: if fees were already converted to SDG by a previous lock
+      // (feesLockedRate != null), reverse the old rate first so we always
+      // convert from the original USD base — avoids SDG × newRate double-conversion.
+      let feeUpdateFailed = 0;
       for (const site of sitesToUpdate) {
-        const newEnumFee = Math.round(site.enumeratorFee * rate);
-        const newTransFee = Math.round(site.transportFee * rate);
-        await supabase.from('mmp_site_entries').update({
+        const prevRate = feesLockedRate;
+        const baseEnum = prevRate ? site.enumeratorFee / prevRate : site.enumeratorFee;
+        const baseTrans = prevRate ? site.transportFee / prevRate : site.transportFee;
+        const newEnumFee = Math.round(baseEnum * rate);
+        const newTransFee = Math.round(baseTrans * rate);
+        const { error: feeErr } = await supabase.from('mmp_site_entries').update({
           enumerator_fee: newEnumFee,
           transport_fee: newTransFee,
           cost: newEnumFee + newTransFee,
           currency: 'SDG',
         }).eq('id', site.id);
+        if (feeErr) feeUpdateFailed++;
       }
 
       // Wallet updates — one transaction per site per enumerator
@@ -754,7 +762,10 @@ const MMPCycleClose = () => {
       if (updateWallets) {
         for (const site of sitesToUpdate) {
           if (!site.enumeratorId) continue;
-          const sdgTotal = Math.round((site.enumeratorFee + site.transportFee) * rate);
+          const prevRate = feesLockedRate;
+          const baseEnum = prevRate ? site.enumeratorFee / prevRate : site.enumeratorFee;
+          const baseTrans = prevRate ? site.transportFee / prevRate : site.transportFee;
+          const sdgTotal = Math.round((baseEnum + baseTrans) * rate);
           if (sdgTotal <= 0) continue;
           try {
             const { error } = await supabase.from('wallet_transactions').upsert({
@@ -839,11 +850,13 @@ const MMPCycleClose = () => {
       await fetchAllSiteDetails(mmpId);
 
       const walletMsg = updateWallets
-        ? walletSuccess > 0 ? ` Wallet updated for ${walletSuccess} enumerator${walletSuccess !== 1 ? 's' : ''}.` : ' Wallet update skipped (column may not exist).'
+        ? walletSuccess > 0 ? ` Wallet updated for ${walletSuccess} enumerator${walletSuccess !== 1 ? 's' : ''}.` : ' Wallet update skipped (no eligible wallets).'
         : '';
+      const feeFailMsg = feeUpdateFailed > 0 ? ` ⚠️ ${feeUpdateFailed} site fee update${feeUpdateFailed !== 1 ? 's' : ''} failed (RLS or DB error) — check those sites manually.` : '';
       toast({
         title: `✅ Fees Locked at 1 USD = ${rate.toLocaleString()} SDG`,
-        description: `${sitesToUpdate.length} site fees converted to SDG.${walletMsg}`,
+        description: `${sitesToUpdate.length - feeUpdateFailed} of ${sitesToUpdate.length} site fees converted to SDG.${walletMsg}${feeFailMsg}`,
+        variant: feeUpdateFailed > 0 ? 'destructive' : 'default',
       });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to lock fees', variant: 'destructive' });
@@ -3427,11 +3440,18 @@ const MMPCycleClose = () => {
     if (action === 'finalize') {
       setFinalizingCycle(true);
       try {
+        const submittedNow = new Date().toISOString();
+        const mmpForTracking = mmpFiles?.find(m => m.id === mmpId) as any;
+        const existingTracking = mmpForTracking?.payment_tracking || {};
         const { error } = await supabase
           .from('mmp_files')
-          .update({ cycle_status: 'pending_approval' } as any)
+          .update({
+            cycle_status: 'pending_approval',
+            payment_tracking: { ...existingTracking, submitted_at: submittedNow, cycle_approval_note: null },
+          } as any)
           .eq('id', mmpId);
         if (error) throw error;
+        setCycleSubmittedAt(submittedNow);
         await logMMPAudit({
           mmpId,
           mmpName: mmp?.name || 'MMP',
@@ -3442,6 +3462,40 @@ const MMPCycleClose = () => {
           newStatus: 'pending_approval',
           metadata: { cycleAction: 'submit_for_approval', superAdminOverride: true },
         });
+        // Notify FOM — same recipients as the non-override path
+        const mmpHubForNotify = (mmp as any)?.hub || (mmp as any)?.region || '';
+        const mmpNameForNotify = mmp?.name || 'MMP';
+        let fomApprovalQuery = supabase
+          .from('profiles')
+          .select('id')
+          .in('role', ['fom', 'Field Operation Manager (FOM)'])
+          .eq('status', 'approved');
+        if (mmpHubForNotify) {
+          const { data: hubRows } = await supabase.from('hubs').select('id').ilike('name', `%${mmpHubForNotify}%`).limit(1);
+          if (hubRows && hubRows.length > 0) fomApprovalQuery = fomApprovalQuery.eq('hub_id', hubRows[0].id);
+        }
+        const { data: fomApprovers } = await fomApprovalQuery;
+        if (fomApprovers && fomApprovers.length > 0) {
+          await Promise.allSettled(
+            fomApprovers.map(fom =>
+              NotificationTriggerService.send({
+                userId: fom.id,
+                title: `Action Required: Approve MMP Cycle Close`,
+                message: `MMP "${mmpNameForNotify}" cycle close has been submitted (finance gate bypassed by Super Admin) and is awaiting your approval.`,
+                titleAr: `إجراء مطلوب: الموافقة على إغلاق دورة MMP`,
+                messageAr: `تم تقديم إغلاق دورة MMP "${mmpNameForNotify}" (تجاوز البوابة المالية بواسطة المسؤول) وهو في انتظار موافقتك.`,
+                type: 'warning',
+                category: 'approvals',
+                priority: 'urgent',
+                link: '/mmp/cycle-close',
+                relatedEntityId: mmpId,
+                relatedEntityType: 'mmpFile',
+              })
+            )
+          ).catch(() => {});
+        }
+        setReconciliationAcknowledged(false);
+        setPendingScopedClose(null);
         toast({ title: 'Submitted for Approval (Override)', description: 'Finance gate bypassed by Super Admin and recorded to audit log.' });
         await refreshMMPFiles();
         await fetchUncoveredSites();
@@ -4945,8 +4999,11 @@ const MMPCycleClose = () => {
                                                 No dispatched or completed sites found. Sites will appear here once enumerators are assigned and dispatched.
                                               </p>
                                             );
-                                            const totalBaseEnum = previewRows.reduce((s, e) => s + e.enumeratorFee, 0);
-                                            const totalBaseTrans = previewRows.reduce((s, e) => s + e.transportFee, 0);
+                                            // Re-lock guard: if already locked, reverse old rate to get USD base
+                                            const prevRate = feesLockedRate;
+                                            const toUSD = (v: number) => prevRate ? v / prevRate : v;
+                                            const totalBaseEnum = previewRows.reduce((s, e) => s + toUSD(e.enumeratorFee), 0);
+                                            const totalBaseTrans = previewRows.reduce((s, e) => s + toUSD(e.transportFee), 0);
                                             const totalBaseAll = totalBaseEnum + totalBaseTrans;
                                             const totalSDGEnum = rate > 0 ? Math.round(totalBaseEnum * rate) : 0;
                                             const totalSDGTrans = rate > 0 ? Math.round(totalBaseTrans * rate) : 0;
@@ -4957,7 +5014,7 @@ const MMPCycleClose = () => {
                                                 {rate > 0 && (
                                                   <div className="grid grid-cols-3 gap-1.5">
                                                     <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
-                                                      <div className="text-[10px] text-muted-foreground">Total Base (USD)</div>
+                                                      <div className="text-[10px] text-muted-foreground">Total Base (USD){feesLockedAt ? ' ←derived' : ''}</div>
                                                       <div className="font-bold text-sm font-mono">${totalBaseAll.toLocaleString()}</div>
                                                     </div>
                                                     <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-center">
@@ -4983,17 +5040,19 @@ const MMPCycleClose = () => {
                                                         <tr className="bg-muted/60 border-b">
                                                           <th className="px-3 py-1.5 text-left font-semibold min-w-[110px]">Enumerator / Site</th>
                                                           <th className="px-3 py-1.5 text-center font-semibold">Status</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-blue-700">Enum (USD)</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-indigo-700">Transport (USD)</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Enum (SDG)</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Transport (SDG)</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-blue-700">Enum ({feesLockedAt ? 'SDG→' : 'USD'})</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-indigo-700">Transport ({feesLockedAt ? 'SDG→' : 'USD'})</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Enum (new SDG)</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Transport (new SDG)</th>
                                                           <th className="px-3 py-1.5 text-right font-bold text-green-700">Total SDG</th>
                                                         </tr>
                                                       </thead>
                                                       <tbody>
                                                         {previewRows.map(s => {
-                                                          const sdgEnum = rate > 0 ? Math.round(s.enumeratorFee * rate) : 0;
-                                                          const sdgTrans = rate > 0 ? Math.round(s.transportFee * rate) : 0;
+                                                          const baseEnum = toUSD(s.enumeratorFee);
+                                                          const baseTrans = toUSD(s.transportFee);
+                                                          const sdgEnum = rate > 0 ? Math.round(baseEnum * rate) : 0;
+                                                          const sdgTrans = rate > 0 ? Math.round(baseTrans * rate) : 0;
                                                           const sdgTotal = sdgEnum + sdgTrans;
                                                           return (
                                                             <tr key={s.id} className="border-b last:border-0 hover:bg-muted/10">
@@ -5082,7 +5141,7 @@ const MMPCycleClose = () => {
                                                 : <><CheckCircle2 className="h-3.5 w-3.5" /> Lock Fees & Apply Rate ({parseFloat(exchangeRateInput) > 0 ? `1 USD = ${parseFloat(exchangeRateInput).toLocaleString()} SDG` : 'enter rate above'})</>
                                             }
                                           </Button>
-                                          <p className="text-[10px] text-muted-foreground">This permanently updates <strong>enumerator_fee</strong> and <strong>transport_fee</strong> on all eligible site entries to SDG values. Wallet entries use <code>upsert</code> on the site entry ID — re-applying is safe.</p>
+                                          <p className="text-[10px] text-muted-foreground">This permanently updates <strong>enumerator_fee</strong> and <strong>transport_fee</strong> on all eligible site entries to SDG values. Wallet entries use <code>upsert</code> on the site entry ID. Re-locking derives the original USD base from the previous rate to avoid double-conversion.</p>
                                         </div>
                                       )}
 
