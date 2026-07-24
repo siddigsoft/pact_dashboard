@@ -537,8 +537,8 @@ const CostSubmission = () => {
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
     open: boolean;
     submissions: OperationalCostSubmission[];
-    proofFile: File | null;
-    proofPreviewUrl: string | null;
+    proofFiles: File[];
+    proofPreviewUrls: string[];
     notes: string;
     uploading: boolean;
     preFundId: string | null;
@@ -547,7 +547,7 @@ const CostSubmission = () => {
     payPercent: string;
     customInputType: 'pct' | 'amount';
     payCustomAmountStr: string;
-  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+  }>({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
 
   // In-page attachment/receipt viewer
   const [attachViewer, setAttachViewer] = useState<{ open: boolean; url: string; name: string }>({ open: false, url: '', name: '' });
@@ -2309,21 +2309,24 @@ const CostSubmission = () => {
         }));
       }
     } catch (_) {}
-    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+    setBatchCostPayDialog({ open: true, submissions: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
   };
 
   const handleBatchCostPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
-    setBatchCostPayDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setBatchCostPayDialog(prev => {
+      prev.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+      const previewUrls = files.map(f => f.type.startsWith('image/') ? URL.createObjectURL(f) : '');
+      return { ...prev, proofFiles: files, proofPreviewUrls: previewUrls };
+    });
   };
 
   const handleConfirmBatchCostPay = async () => {
-    const { submissions: subs, proofFile, notes, preFundId, payMode, payPercent, customInputType, payCustomAmountStr } = batchCostPayDialog;
+    const { submissions: subs, proofFiles, notes, preFundId, payMode, payPercent, customInputType, payCustomAmountStr } = batchCostPayDialog;
     if (!currentUser?.id || subs.length === 0) return;
-    if (!proofFile) {
-      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
+    if (!proofFiles.length) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt that covers all selected payments.", variant: "destructive" });
       return;
     }
     if (batchCostPayDialog.preFunds.length > 0 && !preFundId) {
@@ -2348,12 +2351,19 @@ const CostSubmission = () => {
     setBatchCostPayDialog(prev => ({ ...prev, uploading: true }));
     try {
       const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
-      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
-      const filePath = `payment-proofs/batch_cost_${timestamp}_${random}.${extension}`;
-      const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
-      if (uploadErr) throw new Error(uploadErr.message);
-      const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      // Upload all proof files and collect public URLs
+      const uploadedUrls: string[] = [];
+      for (let fi = 0; fi < proofFiles.length; fi++) {
+        const pf = proofFiles[fi];
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = pf.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/batch_cost_${timestamp}_${fi}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, pf, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        uploadedUrls.push(supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl);
+      }
+      // Store as JSON array if multiple, plain string if single (backwards compatible)
+      const proofUrl = uploadedUrls.length === 1 ? uploadedUrls[0] : JSON.stringify(uploadedUrls);
       const now = new Date().toISOString();
 
       let successCount = 0;
@@ -2461,7 +2471,7 @@ const CostSubmission = () => {
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
         description: `${successCount} submission${successCount > 1 ? 's' : ''} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+      setBatchCostPayDialog({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
       setSelectedCostIds(new Set());
       fetchOperationalCosts();
     } catch (err: any) {
@@ -6051,6 +6061,34 @@ const CostSubmission = () => {
                                 Mark Paid
                               </Button>
                             )}
+                            {oc.payment_proof_url && (() => {
+                              let urls: string[] = [];
+                              try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; }
+                              return (
+                                <div className="relative group/proof">
+                                  <Button size="sm" variant="outline"
+                                    className="h-7 px-2.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
+                                    onClick={() => openAttach(urls[0], urls.length > 1 ? `Receipt 1 of ${urls.length}` : 'Payment Proof')}
+                                    data-testid={`button-view-proof-${oc.id}`}>
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    Proof{urls.length > 1 ? ` (${urls.length})` : ''}
+                                  </Button>
+                                  {/* Hover preview */}
+                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[140px]">
+                                    {isImage(urls[0]) ? (
+                                      <img src={urls[0]} alt="Receipt preview" className="max-h-[120px] max-w-[180px] rounded object-contain mx-auto" />
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-1 px-2">
+                                        <FileText className="h-4 w-4 text-red-500" /> PDF Receipt
+                                      </div>
+                                    )}
+                                    {urls.length > 1 && (
+                                      <p className="text-[10px] text-center text-muted-foreground mt-1 border-t pt-1">{urls.length} receipts — click to view</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {canReconcile(oc) && (
                               <Button
                                 size="sm"
@@ -6946,6 +6984,33 @@ const CostSubmission = () => {
                                 <Wallet className="h-3.5 w-3.5" />Mark Paid
                               </button>
                             )}
+                            {oc.payment_proof_url && (() => {
+                              let urls: string[] = [];
+                              try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; }
+                              return (
+                                <div className="relative group/proof">
+                                  <button
+                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20 transition-colors"
+                                    onClick={() => openAttach(urls[0], urls.length > 1 ? `Receipt 1 of ${urls.length}` : 'Payment Proof')}
+                                    data-testid={`button-view-proof-${oc.id}`}>
+                                    <Eye className="h-3.5 w-3.5" />Proof{urls.length > 1 ? ` (${urls.length})` : ''}
+                                  </button>
+                                  {/* Hover preview */}
+                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[140px]">
+                                    {isImage(urls[0]) ? (
+                                      <img src={urls[0]} alt="Receipt preview" className="max-h-[120px] max-w-[180px] rounded object-contain mx-auto" />
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-1 px-2">
+                                        <FileText className="h-4 w-4 text-red-500" /> PDF Receipt
+                                      </div>
+                                    )}
+                                    {urls.length > 1 && (
+                                      <p className="text-[10px] text-center text-muted-foreground mt-1 border-t pt-1">{urls.length} receipts — click to view</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {canReconcile(oc) && (
                               <button className={btnGhost} onClick={() => { setActiveReconciliation(oc); setActiveTab("reconciliation"); }} data-testid={`button-reconcile-${oc.id}`}>
                                 <Receipt className="h-3.5 w-3.5" />Reconcile
@@ -9807,8 +9872,8 @@ const CostSubmission = () => {
         open={batchCostPayDialog.open}
         onOpenChange={(open) => {
           if (!open && !batchCostPayDialog.uploading) {
-            if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+            batchCostPayDialog.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+            setBatchCostPayDialog({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
           }
         }}
       >
@@ -10017,37 +10082,56 @@ const CostSubmission = () => {
                 </div>
               )}
 
-              {/* Receipt upload */}
+              {/* Receipt upload — multiple files allowed */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Shared Receipt / الإيصال المشترك <span className="text-red-500">*</span>
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  Shared Receipt(s) / الإيصالات المشتركة <span className="text-red-500">*</span>
+                  <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-semibold">Multi-file</span>
                 </Label>
-                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-emerald-400 transition-colors relative">
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg hover:border-emerald-400 transition-colors relative">
                   <input
                     type="file"
                     accept="image/*,application/pdf"
+                    multiple
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     onChange={handleBatchCostPayProofFileChange}
                     disabled={batchCostPayDialog.uploading}
                     data-testid="input-batch-cost-payment-proof"
                   />
-                  {batchCostPayDialog.proofFile ? (
-                    <div className="space-y-2">
-                      {batchCostPayDialog.proofPreviewUrl ? (
-                        <img src={batchCostPayDialog.proofPreviewUrl} alt="Receipt preview" className="max-h-32 mx-auto rounded object-contain" />
-                      ) : (
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <FileText className="h-8 w-8 text-red-500" />
-                          <span>{batchCostPayDialog.proofFile.name}</span>
+                  {batchCostPayDialog.proofFiles.length > 0 ? (
+                    <div className="p-3 space-y-2">
+                      {/* Image grid preview */}
+                      {batchCostPayDialog.proofPreviewUrls.some(u => u) && (
+                        <div className="flex flex-wrap gap-2 justify-center">
+                          {batchCostPayDialog.proofFiles.map((f, i) => (
+                            batchCostPayDialog.proofPreviewUrls[i] ? (
+                              <img key={i} src={batchCostPayDialog.proofPreviewUrls[i]} alt={`Receipt ${i + 1}`}
+                                className="h-20 max-w-[100px] rounded object-contain border border-muted" />
+                            ) : (
+                              <div key={i} className="h-20 w-20 flex flex-col items-center justify-center rounded border border-muted bg-muted/40">
+                                <FileText className="h-6 w-6 text-red-500" />
+                                <span className="text-[10px] text-muted-foreground mt-1 text-center px-1 truncate w-full">{f.name}</span>
+                              </div>
+                            )
+                          ))}
                         </div>
                       )}
-                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                      {/* File list for non-image files */}
+                      {batchCostPayDialog.proofFiles.map((f, i) => !batchCostPayDialog.proofPreviewUrls[i] && (
+                        <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                          <span className="truncate">{f.name}</span>
+                        </div>
+                      ))}
+                      <p className="text-xs text-center text-muted-foreground">
+                        {batchCostPayDialog.proofFiles.length} file{batchCostPayDialog.proofFiles.length > 1 ? 's' : ''} selected — click to change or add more
+                      </p>
                     </div>
                   ) : (
-                    <div className="text-muted-foreground">
+                    <div className="p-4 text-center text-muted-foreground">
                       <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
-                      <p className="text-sm">Upload the batch receipt (image or PDF)</p>
-                      <p className="text-xs opacity-60">This one file links to all {batchCostPayDialog.submissions.length} submissions</p>
+                      <p className="text-sm">Upload receipt(s) — images or PDFs</p>
+                      <p className="text-xs opacity-60 mt-0.5">You can select multiple files. All link to the {batchCostPayDialog.submissions.length} submissions.</p>
                     </div>
                   )}
                 </div>
@@ -10080,8 +10164,8 @@ const CostSubmission = () => {
               type="button"
               variant="outline"
               onClick={() => {
-                if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+                batchCostPayDialog.proofPreviewUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+                setBatchCostPayDialog({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
               }}
               disabled={batchCostPayDialog.uploading}
               data-testid="button-cancel-batch-cost-pay"
@@ -10091,7 +10175,7 @@ const CostSubmission = () => {
             <Button
               type="button"
               onClick={handleConfirmBatchCostPay}
-              disabled={batchCostPayDialog.uploading || !batchCostPayDialog.proofFile}
+              disabled={batchCostPayDialog.uploading || batchCostPayDialog.proofFiles.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
               data-testid="button-confirm-batch-cost-pay"
             >
@@ -10452,7 +10536,7 @@ const CostSubmission = () => {
       {/* ── In-page Attachment / Receipt Viewer ── */}
       {attachViewer.open && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={() => setAttachViewer({ open: false, url: '', name: '' })}
         >
           <div
