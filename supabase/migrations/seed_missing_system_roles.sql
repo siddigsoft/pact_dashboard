@@ -7,13 +7,38 @@
 -- Safe to re-run — all inserts use ON CONFLICT DO NOTHING.
 -- =============================================================================
 
+-- ── 0. Expand action + resource constraints to match full system usage ────────
+-- The original constraint only allowed 6-9 actions and 14 resources.
+-- We expand both to cover every value used in DEFAULT_ROLE_PERMISSIONS.
+
+ALTER TABLE public.permissions DROP CONSTRAINT IF EXISTS permissions_action_check;
+ALTER TABLE public.permissions ADD CONSTRAINT permissions_action_check
+  CHECK (action = ANY (ARRAY[
+    'create','read','update','delete',
+    'approve','assign','archive','restore','override',
+    'export','submit'
+  ]::text[]));
+
+ALTER TABLE public.permissions DROP CONSTRAINT IF EXISTS permissions_resource_check;
+ALTER TABLE public.permissions ADD CONSTRAINT permissions_resource_check
+  CHECK (resource = ANY (ARRAY[
+    'users','roles','permissions','settings','system','super_admins','audit_logs',
+    'projects','portfolio','analytics','mmp','site_visits','hub_operations',
+    'coverage_map','safety','incidents','equipment',
+    'finances','cost_submissions','wallets','down_payments','pre_funding',
+    'accounting','fixed_assets','procurement','transactions','signatures',
+    'reports','crm','surveys','tasks','notifications','calendar',
+    'hr','hr_analytics','payroll','benefits','leave',
+    'pulse_surveys','succession','integrations','broadcast','whatsapp'
+  ]::text[]));
+
 -- ── 1. Insert the 5 missing role rows ────────────────────────────────────────
 INSERT INTO public.roles (name, display_name, description, is_system_role, created_by) VALUES
-  ('countryDirector',     'Country Director',        'Senior leadership role with full read access across all hubs and high-level approval authority.',             true, NULL),
-  ('projectManager',      'Project Manager',         'Full project lifecycle management including budget oversight, task assignment, and delivery approvals.',      true, NULL),
-  ('seniorOperationsLead','Senior Operations Lead',  'Senior oversight of operational activities with financial override authority and cross-hub reporting access.', true, NULL),
-  ('dataTeam',            'Data Team',               'Data management and quality control. Can review, manage, and export site entry data and surveys across hubs.',true, NULL),
-  ('auditor',             'Auditor',                 'Read-only access to all financial, HR, and operational data for audit and compliance purposes.',              true, NULL)
+  ('countryDirector',     'Country Director',        'Senior leadership with full read access across all hubs and high-level approval authority.',              true, NULL),
+  ('projectManager',      'Project Manager',         'Full project lifecycle management including budget oversight, task assignment, and delivery approvals.',  true, NULL),
+  ('seniorOperationsLead','Senior Operations Lead',  'Senior oversight of operations with financial override authority and cross-hub reporting access.',        true, NULL),
+  ('dataTeam',            'Data Team',               'Data management and quality control. Can review, manage, and export site entry data and surveys.',       true, NULL),
+  ('auditor',             'Auditor',                 'Read-only access to all financial, HR, and operational data for audit and compliance purposes.',         true, NULL)
 ON CONFLICT (name) DO NOTHING;
 
 -- ── 2. Country Director permissions ──────────────────────────────────────────
@@ -22,8 +47,8 @@ SELECT r.id, p.resource, p.action
 FROM public.roles r,
 (VALUES
   ('mmp',              'read'),   ('mmp',              'export'),
-  ('finances',         'read'),   ('finances',         'create'),  ('finances',         'export'),
-  ('cost_submissions', 'submit'), ('cost_submissions', 'read'),
+  ('finances',         'read'),   ('finances',         'create'),  ('finances',    'export'),
+  ('cost_submissions', 'submit'), ('cost_submissions', 'read'),    ('cost_submissions','export'),
   ('wallets',          'read'),   ('wallets',          'update'),
   ('down_payments',    'read'),   ('down_payments',    'approve'),
   ('pre_funding',      'read'),   ('pre_funding',      'approve'),
