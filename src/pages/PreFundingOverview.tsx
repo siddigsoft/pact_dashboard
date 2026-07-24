@@ -233,19 +233,13 @@ export default function PreFundingOverview() {
     try {
       setError(null);
       setLoadingDetails(true);
-      // ── Phase 1: fund headers + payment sums — renders accurate balances immediately ─
-      const [fundsRes, ratesRes, settingsRes, paySumsRes] = await Promise.all([
+      // ── Phase 1: fund headers only — renders the page immediately ──────────────
+      const [fundsRes, ratesRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
-        // Lightweight aggregate: just fundId + amount for payment rows (2 columns, no filter needed).
-        // This runs in parallel with fund headers and gives the same unfiltered sum that
-        // PreFundingReconciliation uses — so Available is accurate from the very first render.
-        (supabase as any).from('pre_fund_transactions')
-          .select('pre_fund_request_id,amount')
-          .eq('transaction_type', 'payment'),
       ]);
 
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
@@ -257,15 +251,7 @@ export default function PreFundingOverview() {
         setSettings({ base_currency: s.base_currency ?? 'USD' });
         setBase(s.base_currency ?? 'USD');
       }
-      // Populate rawFundPaySums immediately so Available balance KPIs are accurate on first render.
-      if (!paySumsRes.error && paySumsRes.data) {
-        const m = new Map<string, number>();
-        for (const t of paySumsRes.data as Array<{ pre_fund_request_id: string; amount: number }>) {
-          m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
-        }
-        setRawFundPaySums(m);
-      }
-      // ← Show fund cards NOW with accurate balances; detail tables fill in during Phase 2
+      // ← Show fund cards NOW; rawFundPaySums fills in Phase 2 with accurate filtered sums
       setLoading(false);
 
       // ── Phase 2: allocation + transaction details (background) ─────────────────
@@ -330,16 +316,6 @@ export default function PreFundingOverview() {
             .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
-        // Compute raw payment sums BEFORE validation filtering — matches reconciliation's
-        // unfiltered transaction sum (the authoritative paid-out figure for each fund).
-        {
-          const m = new Map<string, number>();
-          for (const t of rawTxns) {
-            if (t.transaction_type !== 'payment') continue;
-            m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
-          }
-          setRawFundPaySums(m);
-        }
         const validTxns = rawTxns.filter(t => {
           if (t.source_table === 'down_payment_requests') {
             if (!t.source_id) return true;
@@ -361,6 +337,16 @@ export default function PreFundingOverview() {
           return true;
         });
         setTxns(validTxns);
+        // Compute payment sums from the FILTERED transaction set — identical logic to
+        // PreFundingReconciliation's effectivePaidAmount, so Balance Dashboard totals match.
+        {
+          const m = new Map<string, number>();
+          for (const t of validTxns) {
+            if (t.transaction_type !== 'payment') continue;
+            m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
+          }
+          setRawFundPaySums(m);
+        }
         // Build dpId → userId map so txnsByFundUser can credit the right staff member
         // when pre_fund_transactions.user_id is null (admin stored in created_by instead).
         // requested_by = the allocation holder (who the DP was raised for).
@@ -736,8 +722,8 @@ export default function PreFundingOverview() {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {[
             { label: 'Total Funded', labelAr: 'إجمالي التمويل', value: formatNumber(totalFunded, 0), sub: `${activeFunds.length} active fund${activeFunds.length !== 1 ? 's' : ''}`, icon: DollarSign, accent: 'bg-sky-600' },
-            { label: 'Available Balance', labelAr: 'الرصيد المتاح', value: formatNumber(totalAvail, 0), sub: `${baseCurrency} across all active funds`, icon: Banknote, accent: totalAvail < totalFunded * 0.2 ? 'bg-rose-600' : 'bg-emerald-600' },
-            { label: 'Paid Out', labelAr: 'المدفوع', value: formatNumber(totalPaidOut, 0), sub: `${baseCurrency} disbursed from active funds`, icon: TrendingDown, accent: 'bg-rose-600' },
+            { label: 'Available Balance', labelAr: 'الرصيد المتاح', value: formatNumber(totalAvail, 0), sub: loadingDetails ? 'Calculating…' : `${baseCurrency} across all active funds`, icon: Banknote, accent: totalAvail < totalFunded * 0.2 ? 'bg-rose-600' : 'bg-emerald-600', calculating: loadingDetails },
+            { label: 'Paid Out', labelAr: 'المدفوع', value: formatNumber(totalPaidOut, 0), sub: loadingDetails ? 'Calculating…' : `${baseCurrency} disbursed from active funds`, icon: TrendingDown, accent: 'bg-rose-600', calculating: loadingDetails },
             { label: 'Committed', labelAr: 'المرتبط', value: formatNumber(totalCommit, 0), sub: 'Reserved from active pre-funds', icon: Lock, accent: 'bg-violet-600' },
             { label: 'Needs Attention', labelAr: 'تحتاج انتباه', value: String(nearExhaustion + endingSoon), sub: `${nearExhaustion} low balance · ${endingSoon} ending soon`, icon: AlertTriangle, accent: (nearExhaustion + endingSoon) > 0 ? 'bg-amber-500' : 'bg-slate-500' },
           ].map(kpi => (
@@ -745,7 +731,10 @@ export default function PreFundingOverview() {
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">{kpi.label}</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">{kpi.label}</div>
+                      {(kpi as any).calculating && <div className="h-2.5 w-2.5 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin shrink-0" />}
+                    </div>
                     <div className="text-[9px] text-muted-foreground" dir="rtl">{kpi.labelAr}</div>
                     <div className="mt-1.5 text-2xl font-bold tabular-nums leading-none">{kpi.value}</div>
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{kpi.sub}</div>
