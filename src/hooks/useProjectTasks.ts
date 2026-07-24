@@ -80,7 +80,7 @@ async function notifyAssignee(
     sendEmail: true,
     triggeredByName: assignedByName,
     metadata: {
-      task_title: taskTitle,
+      task_name: taskTitle,
       project_name: projectName,
       actor: assignedByName,
     },
@@ -251,7 +251,7 @@ export function useProjectTasks(projectId: string) {
           actionUrl: `/projects/${projectId}?tab=field_tasks`,
           sendEmail: true,
           triggeredByName: currentUserName,
-          metadata: { task_title: task.title, project_name: projectName, actor: currentUserName },
+          metadata: { task_name: task.title, project_name: projectName, actor: currentUserName },
         }).catch(() => {});
       }
     },
