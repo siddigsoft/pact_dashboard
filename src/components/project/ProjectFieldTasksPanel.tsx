@@ -6,7 +6,7 @@ import {
   LayoutList, Columns, CalendarDays, BarChart2, ArrowRight,
   TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
-  Square,
+  Square, Users,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -210,6 +210,109 @@ function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProp
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ── Co-Assignee Multi-Picker ───────────────────────────────────────────────
+
+interface CoAssigneePickerProps {
+  value: string[];
+  excludeId: string | null;
+  onChange: (ids: string[]) => void;
+}
+
+function CoAssigneePicker({ value, excludeId, onChange }: CoAssigneePickerProps) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const { data: allProfiles = [] } = useAllProfiles();
+
+  const filtered = useMemo(() =>
+    allProfiles.filter(p => {
+      if (p.id === excludeId) return false;
+      if (q.trim()) return p.full_name?.toLowerCase().includes(q.toLowerCase());
+      return true;
+    }),
+    [allProfiles, q, excludeId],
+  );
+
+  const toggle = (id: string) => {
+    onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id]);
+  };
+
+  const getName = (id: string) => allProfiles.find(p => p.id === id)?.full_name ?? id.slice(0, 8);
+
+  return (
+    <div className="space-y-1.5">
+      {/* Selected chips */}
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {value.map(id => (
+            <span
+              key={id}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#1D3461]/10 text-[#1D3461] text-xs font-medium"
+            >
+              {getName(id)}
+              <button
+                type="button"
+                onClick={() => toggle(id)}
+                className="hover:text-red-500 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-muted-foreground border-dashed"
+          >
+            <Plus className="h-3 w-3" />
+            {value.length === 0 ? 'Add co-assignee' : 'Add another'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 p-2">
+          <div className="relative mb-2">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              autoFocus
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search staff…"
+              className="w-full h-8 pl-7 pr-2 text-xs border border-input rounded-md bg-background outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-0.5">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2 py-1">No staff found</p>
+            ) : filtered.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => { toggle(p.id); setQ(''); }}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted text-sm text-left',
+                  value.includes(p.id) && 'bg-[#1D3461]/10',
+                )}
+              >
+                <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                  {p.full_name?.charAt(0) ?? '?'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate text-xs">{p.full_name}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                </div>
+                {value.includes(p.id) && <CheckCircle2 className="h-3.5 w-3.5 text-[#1D3461] flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
@@ -445,6 +548,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [actCost,       setActCost]       = useState<string>(initial?.actualCost?.toString() ?? '');
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
+  const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
 
   // Only reset the form when the dialog actually transitions from closed to
   // open (or switches to editing a different task) — NOT on every re-render
@@ -469,6 +573,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setStatus(initial?.status ?? 'todo');
       setAssignedTo(initial?.assignedTo ?? null);
       setAssigneeName(initial?.assignedToName ?? '');
+      setCoAssigneeIds(initial?.coAssigneeIds ?? []);
       setDueDate(initial?.dueDate ?? '');
       setStartDate(initial?.startDate ?? '');
       setStateName(initial?.stateName ?? '');
@@ -547,6 +652,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       estimatedCost:  estCost  ? parseFloat(estCost)   : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
       dependencies:   deps,
+      coAssigneeIds:  coAssigneeIds.filter(id => id !== assignedTo),
     }, typedDeps);
   };
 
@@ -624,6 +730,18 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                   value={assignedTo}
                   displayName={assigneeName}
                   onChange={(id, name) => { setAssignedTo(id); setAssigneeName(name); }}
+                />
+              </div>
+
+              {/* Co-Assignees multi-picker */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Users className="h-3 w-3" /> Also Assign To
+                </Label>
+                <CoAssigneePicker
+                  value={coAssigneeIds}
+                  excludeId={assignedTo}
+                  onChange={setCoAssigneeIds}
                 />
               </div>
 

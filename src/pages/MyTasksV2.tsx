@@ -13,7 +13,7 @@ import {
   Inbox, Archive, Star, AlertTriangle, Flag,
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
   Share2, Globe, Shield, Folder, ExternalLink, FileText, FileImage, History,
-  Pause, Play,
+  Pause, Play, ClipboardList,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Link, useNavigate } from 'react-router-dom';
@@ -54,6 +54,7 @@ import {
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type TaskAttachment,
   type Dependency, type DependencyType, type CreatePersonalTask, type AssignedProjectTask,
 } from '@/hooks/usePersonalTasks';
+import { useMyProjectFieldTasks, type MyFieldTask } from '@/hooks/useProjectTasks';
 import type { AppRole } from '@/types/roles';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
@@ -5282,6 +5283,7 @@ export default function MyTasksV2() {
 
   const { data: projectTasks = [] } = useAssignedProjectTasks(userId);
   const updateProjectTaskStatus = useUpdateProjectTaskStatus();
+  const { data: fieldTasks = [] } = useMyProjectFieldTasks(userId);
 
   // Materialise daily recurring tasks on mount
   useEffect(() => {
@@ -5312,7 +5314,7 @@ export default function MyTasksV2() {
   };
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox' | 'planning'>('planning');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring' | 'field'>('all');
   const searchRef = useRef<HTMLInputElement>(null);
   // Stats
   const stats = useMemo(() => {
@@ -5323,6 +5325,11 @@ export default function MyTasksV2() {
         dueDate: pt.dueDate ? String(pt.dueDate) : null,
         priority: 'medium' as PersonalTaskPriority,
       })),
+      ...fieldTasks.map(ft => ({
+        status: ft.status as string,
+        dueDate: ft.dueDate,
+        priority: 'medium' as PersonalTaskPriority,
+      })),
     ];
     return {
       all:        allCombined.filter(t => t.status !== 'done' && t.status !== 'cancelled').length,
@@ -5331,7 +5338,7 @@ export default function MyTasksV2() {
       overdue:    allCombined.filter(t => isOverdue(t.dueDate, t.status)).length,
       done:       allCombined.filter(t => t.status === 'done').length,
     };
-  }, [tasks, projectTasks]);
+  }, [tasks, projectTasks, fieldTasks]);
 
   const FILTER_CHIPS = [
     { key: 'all' as FilterKey,        label: 'All',         count: stats.all },
@@ -5383,6 +5390,7 @@ export default function MyTasksV2() {
 
   // Category-filtered tasks (on top of status/search filter)
   const categoryFiltered = useMemo(() => {
+    if (categoryFilter === 'field') return []; // field tasks rendered separately
     if (categoryFilter === 'all') return filteredTasks;
     if (categoryFilter === 'personal') return filteredTasks.filter(t => !isRecurringTask(t) && t.category !== 'project-task');
     if (categoryFilter === 'project') return filteredTasks.filter(t => t.category === 'project-task');
@@ -5725,10 +5733,11 @@ export default function MyTasksV2() {
 
   // Category nav config
   const CATEGORY_NAV = [
-    { key: 'all' as const,       label: 'All Tasks',  icon: LayoutDashboard, count: tasks.filter(t => t.status !== 'cancelled').length },
-    { key: 'personal' as const,  label: 'Personal',   icon: User,            count: personalTasks.filter(t => t.status !== 'cancelled').length },
-    { key: 'project' as const,   label: 'Project',    icon: Briefcase,       count: projectTasks.filter(t => String(t.status) !== 'cancelled').length },
-    { key: 'recurring' as const, label: 'Recurring',  icon: RefreshCw,       count: recurringTasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'all' as const,       label: 'All Tasks',    icon: LayoutDashboard, count: tasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'personal' as const,  label: 'Personal',     icon: User,            count: personalTasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'project' as const,   label: 'Project',      icon: Briefcase,       count: projectTasks.filter(t => String(t.status) !== 'cancelled').length },
+    { key: 'recurring' as const, label: 'Recurring',    icon: RefreshCw,       count: recurringTasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'field' as const,     label: 'Field Tasks',  icon: ClipboardList,   count: fieldTasks.filter(t => t.status !== 'cancelled').length },
   ];
 
   return (
@@ -5904,7 +5913,7 @@ export default function MyTasksV2() {
                     <div className="flex items-center justify-center py-16">
                       <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
                     </div>
-                  ) : categoryFiltered.length === 0 ? (
+                  ) : categoryFiltered.length === 0 && !(categoryFilter === 'field') ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                       <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
                         <CheckCircle2 className="w-7 h-7 text-emerald-500" />
@@ -5984,6 +5993,77 @@ export default function MyTasksV2() {
                           </div>
                         </div>
                       )}
+                      {/* Field Tasks section (shown when 'all' or 'field' category is active) */}
+                      {(categoryFilter === 'all' || categoryFilter === 'field') && fieldTasks.length > 0 && (
+                        <div className="mt-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                              <ClipboardList className="w-3.5 h-3.5 text-indigo-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-700">Field Tasks from Projects</p>
+                              <p className="text-[10px] text-slate-400">Tasks you're assigned to across projects</p>
+                            </div>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
+                              {fieldTasks.filter(t => t.status !== 'done').length} open
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {fieldTasks.map(ft => {
+                              const isOverdueTask = ft.dueDate && ft.status !== 'done' && isBefore(parseISO(ft.dueDate), new Date());
+                              const statusColors: Record<string, string> = {
+                                todo: 'bg-slate-100 text-slate-600',
+                                inprogress: 'bg-blue-100 text-blue-700',
+                                done: 'bg-emerald-100 text-emerald-700',
+                                cancelled: 'bg-red-100 text-red-600',
+                              };
+                              const priorityBar: Record<string, string> = {
+                                critical: 'bg-red-500',
+                                high: 'bg-orange-400',
+                                medium: 'bg-amber-300',
+                                low: 'bg-slate-300',
+                              };
+                              return (
+                                <div
+                                  key={ft.id}
+                                  data-testid={`field-task-card-${ft.id}`}
+                                  className={`flex items-start gap-3 px-3.5 py-2.5 bg-white border rounded-xl transition-all ${isOverdueTask ? 'border-red-200' : 'border-slate-200 hover:border-indigo-300'}`}
+                                >
+                                  <div className={`w-1 h-full min-h-[2.5rem] rounded-full flex-shrink-0 ${priorityBar[ft.priority] ?? 'bg-slate-300'}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium truncate ${ft.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{ft.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      <span className="text-[10px] text-indigo-600 font-medium">{ft.projectName}</span>
+                                      {ft.dueDate && isValid(parseISO(ft.dueDate)) && (
+                                        <span className={`text-[10px] flex items-center gap-0.5 ${isOverdueTask ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                                          <Clock className="w-2.5 h-2.5" />
+                                          {format(parseISO(ft.dueDate), 'dd MMM')}
+                                          {isOverdueTask && ' · Overdue'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0 ${statusColors[ft.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                                    {ft.status === 'inprogress' ? 'In Progress' : ft.status}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dedicated "Field Tasks" view (only field category, no personal tasks) */}
+                      {categoryFilter === 'field' && fieldTasks.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                          <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mb-4">
+                            <ClipboardList className="w-7 h-7 text-indigo-400" />
+                          </div>
+                          <p className="text-sm font-semibold text-slate-700">No field tasks assigned</p>
+                          <p className="text-xs text-slate-400 mt-1">You haven't been assigned to any project field tasks yet.</p>
+                        </div>
+                      )}
+
                       <div className="h-6" />
                     </>
                   )}

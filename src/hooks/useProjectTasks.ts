@@ -17,6 +17,7 @@ export interface FieldTask {
   assignedTo: string | null;
   assignedToName: string | null;
   assignedToRole: string | null;
+  coAssigneeIds: string[];
   dueDate: string | null;
   startDate: string | null;
   stateName: string | null;
@@ -40,6 +41,7 @@ export interface CreateFieldTask {
   priority: FieldTaskPriority;
   status?: FieldTaskStatus;
   assignedTo?: string | null;
+  coAssigneeIds?: string[];
   dueDate?: string | null;
   startDate?: string | null;
   stateName?: string | null;
@@ -53,7 +55,23 @@ export interface CreateFieldTask {
   dependencies?: string[];
 }
 
-// ── Notification helper ────────────────────────────────────────────────────
+// Simplified type for the My Tasks page
+export interface MyFieldTask {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  title: string;
+  description: string | null;
+  priority: FieldTaskPriority;
+  status: FieldTaskStatus;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  coAssigneeIds: string[];
+  dueDate: string | null;
+  createdAt: string;
+}
+
+// ── Notification helpers ────────────────────────────────────────────────────
 
 async function notifyAssignee(
   assigneeId: string,
@@ -62,10 +80,6 @@ async function notifyAssignee(
   projectId: string,
   assignedByName: string,
 ) {
-  // Routed through the central dispatcher (event: 'project_task_assigned') so the
-  // assignee gets this in-app AND by email — matching stage-assignment behavior.
-  // 'project_field_task_assigned' has no template in dispatch-notification and
-  // was previously in-app only via a direct DB insert.
   await dispatchNotification({
     event: 'project_task_assigned',
     recipientIds: [assigneeId],
@@ -87,7 +101,40 @@ async function notifyAssignee(
   });
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────
+// Notify all co-assignees that were newly added
+async function notifyCoAssignees(
+  newIds: string[],
+  prevIds: string[],
+  currentUserId: string,
+  taskTitle: string,
+  projectName: string,
+  projectId: string,
+  assignedByName: string,
+) {
+  const added = newIds.filter(id => !prevIds.includes(id) && id !== currentUserId);
+  if (added.length === 0) return;
+  await dispatchNotification({
+    event: 'project_task_assigned',
+    recipientIds: added,
+    titleEn: 'Field task assigned to you',
+    titleAr: 'تم تعيين مهمة ميدانية لك',
+    messageEn: `${assignedByName} also assigned you to field task "${taskTitle}" in "${projectName}"`,
+    messageAr: `قام ${assignedByName} أيضاً بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
+    priority: 'normal',
+    entityType: 'project',
+    entityId: projectId,
+    actionUrl: `/projects/${projectId}?tab=field_tasks`,
+    sendEmail: true,
+    triggeredByName: assignedByName,
+    metadata: {
+      task_name: taskTitle,
+      project_name: projectName,
+      actor: assignedByName,
+    },
+  });
+}
+
+// ── Main hook ───────────────────────────────────────────────────────────────
 
 export function useProjectTasks(projectId: string) {
   const qc = useQueryClient();
@@ -100,7 +147,7 @@ export function useProjectTasks(projectId: string) {
         .from('project_field_tasks')
         .select(`
           id, project_id, title, description, priority, status,
-          assigned_to, due_date, start_date, state_name, locality_name,
+          assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
           estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies,
           assignee:profiles!assigned_to(full_name, role),
@@ -119,6 +166,7 @@ export function useProjectTasks(projectId: string) {
         assignedTo: r.assigned_to,
         assignedToName: r.assignee?.full_name ?? null,
         assignedToRole: r.assignee?.role ?? null,
+        coAssigneeIds: r.co_assignee_ids ?? [],
         dueDate: r.due_date,
         startDate: r.start_date,
         stateName: r.state_name,
@@ -152,6 +200,7 @@ export function useProjectTasks(projectId: string) {
       projectName: string;
       currentUserName: string;
     }) => {
+      const coIds = (task.coAssigneeIds ?? []).filter(id => id !== task.assignedTo);
       const { data, error } = await supabase
         .from('project_field_tasks')
         .insert({
@@ -161,6 +210,7 @@ export function useProjectTasks(projectId: string) {
           priority: task.priority,
           status: task.status ?? 'todo',
           assigned_to: task.assignedTo ?? null,
+          co_assignee_ids: coIds,
           due_date: task.dueDate ?? null,
           start_date: task.startDate ?? null,
           state_name: task.stateName ?? null,
@@ -181,6 +231,9 @@ export function useProjectTasks(projectId: string) {
       if (task.assignedTo && task.assignedTo !== currentUserId) {
         notifyAssignee(task.assignedTo, task.title, projectName, projectId, currentUserName).catch(() => {});
       }
+      if (coIds.length > 0) {
+        notifyCoAssignees(coIds, [], currentUserId, task.title, projectName, projectId, currentUserName).catch(() => {});
+      }
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
@@ -194,6 +247,7 @@ export function useProjectTasks(projectId: string) {
       projectName,
       currentUserName,
       prevAssignee,
+      prevCoAssigneeIds,
     }: {
       id: string;
       patch: Partial<CreateFieldTask & { status: FieldTaskStatus }>;
@@ -201,6 +255,7 @@ export function useProjectTasks(projectId: string) {
       projectName?: string;
       currentUserName?: string;
       prevAssignee?: string | null;
+      prevCoAssigneeIds?: string[];
     }) => {
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (patch.title          !== undefined) updates.title           = patch.title;
@@ -208,6 +263,7 @@ export function useProjectTasks(projectId: string) {
       if (patch.priority       !== undefined) updates.priority        = patch.priority;
       if (patch.status         !== undefined) updates.status          = patch.status;
       if (patch.assignedTo     !== undefined) updates.assigned_to     = patch.assignedTo;
+      if (patch.coAssigneeIds  !== undefined) updates.co_assignee_ids = (patch.coAssigneeIds ?? []).filter(id => id !== patch.assignedTo);
       if (patch.dueDate        !== undefined) updates.due_date        = patch.dueDate;
       if (patch.startDate      !== undefined) updates.start_date      = patch.startDate;
       if (patch.stateName      !== undefined) updates.state_name      = patch.stateName;
@@ -229,18 +285,31 @@ export function useProjectTasks(projectId: string) {
       const cached = qc.getQueryData<FieldTask[]>(key);
       const task = cached?.find(t => t.id === id);
 
-      // Notify new assignee when reassigned
+      // Notify new primary assignee when reassigned
       const newAssignee = patch.assignedTo;
       if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName && task) {
         notifyAssignee(newAssignee, task.title, projectName, projectId, currentUserName).catch(() => {});
       }
 
-      // Notify assignee when their task is marked done
+      // Notify newly added co-assignees
+      if (patch.coAssigneeIds !== undefined && currentUserId && currentUserName && projectName && task) {
+        notifyCoAssignees(
+          patch.coAssigneeIds,
+          prevCoAssigneeIds ?? task.coAssigneeIds,
+          currentUserId,
+          task.title,
+          projectName,
+          projectId,
+          currentUserName,
+        ).catch(() => {});
+      }
+
+      // Notify assignee when task is marked done
       if (patch.status === 'done' && task?.assignedTo && projectName && currentUserName) {
         const assigneeId = task.assignedTo;
         dispatchNotification({
           event: 'project_task_completed',
-          recipientIds: [assigneeId],
+          recipientIds: [assigneeId, ...task.coAssigneeIds].filter(id => id !== currentUserId),
           titleEn: 'Your field task was marked done',
           titleAr: 'تم تحديد مهمتك الميدانية كمنجزة',
           messageEn: `Field task "${task.title}" in "${projectName}" has been marked as completed.`,
@@ -274,11 +343,109 @@ export function useProjectTasks(projectId: string) {
     updateTask: (
       id: string,
       patch: Partial<CreateFieldTask & { status: FieldTaskStatus }>,
-      meta?: { currentUserId?: string; projectName?: string; currentUserName?: string; prevAssignee?: string | null },
+      meta?: { currentUserId?: string; projectName?: string; currentUserName?: string; prevAssignee?: string | null; prevCoAssigneeIds?: string[] },
     ) => updateMutation.mutateAsync({ id, patch, ...meta }),
     deleteTask: (id: string) => deleteMutation.mutateAsync(id),
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
   };
+}
+
+// ── My Tasks page hook — tasks assigned to me (primary or co-assignee) ──────
+
+export function useMyProjectFieldTasks(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['my_project_field_tasks', userId],
+    queryFn: async (): Promise<MyFieldTask[]> => {
+      if (!userId) return [];
+      // Fetch tasks where user is primary assignee
+      const { data: primary, error: e1 } = await supabase
+        .from('project_field_tasks')
+        .select(`
+          id, project_id, title, description, priority, status,
+          assigned_to, co_assignee_ids, due_date, created_at,
+          project:projects!project_id(name),
+          assignee:profiles!assigned_to(full_name)
+        `)
+        .eq('assigned_to', userId)
+        .neq('status', 'cancelled')
+        .order('due_date', { ascending: true, nullsFirst: false });
+      if (e1) throw e1;
+
+      // Fetch tasks where user is a co-assignee
+      const { data: coAssigned, error: e2 } = await supabase
+        .from('project_field_tasks')
+        .select(`
+          id, project_id, title, description, priority, status,
+          assigned_to, co_assignee_ids, due_date, created_at,
+          project:projects!project_id(name),
+          assignee:profiles!assigned_to(full_name)
+        `)
+        .contains('co_assignee_ids', [userId])
+        .neq('assigned_to', userId)
+        .neq('status', 'cancelled')
+        .order('due_date', { ascending: true, nullsFirst: false });
+      if (e2) throw e2;
+
+      const toRow = (r: any): MyFieldTask => ({
+        id: r.id,
+        projectId: r.project_id,
+        projectName: (r.project as any)?.name ?? null,
+        title: r.title,
+        description: r.description,
+        priority: r.priority as FieldTaskPriority,
+        status: r.status as FieldTaskStatus,
+        assignedTo: r.assigned_to,
+        assignedToName: (r.assignee as any)?.full_name ?? null,
+        coAssigneeIds: r.co_assignee_ids ?? [],
+        dueDate: r.due_date,
+        createdAt: r.created_at,
+      });
+
+      const seen = new Set<string>();
+      const rows: MyFieldTask[] = [];
+      for (const r of [...(primary ?? []), ...(coAssigned ?? [])]) {
+        if (!seen.has(r.id)) { seen.add(r.id); rows.push(toRow(r)); }
+      }
+      return rows;
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  });
+}
+
+// ── Admin hook — all project field tasks across all projects ─────────────────
+
+export function useAllProjectFieldTasks() {
+  return useQuery({
+    queryKey: ['all_project_field_tasks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_field_tasks')
+        .select(`
+          id, project_id, title, priority, status,
+          assigned_to, co_assignee_ids, due_date, created_at,
+          project:projects!project_id(name),
+          assignee:profiles!assigned_to(full_name, role)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        id: r.id as string,
+        projectId: r.project_id as string,
+        projectName: (r.project as any)?.name as string ?? 'Unknown Project',
+        title: r.title as string,
+        priority: r.priority as FieldTaskPriority,
+        status: r.status as FieldTaskStatus,
+        assignedTo: r.assigned_to as string | null,
+        assignedToName: (r.assignee as any)?.full_name as string ?? null,
+        assignedToRole: (r.assignee as any)?.role as string ?? null,
+        coAssigneeIds: (r.co_assignee_ids ?? []) as string[],
+        dueDate: r.due_date as string | null,
+        createdAt: r.created_at as string,
+      }));
+    },
+    staleTime: 30_000,
+  });
 }

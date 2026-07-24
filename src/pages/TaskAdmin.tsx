@@ -7,8 +7,9 @@ import {
   Plus, Trash2, Edit2, Loader2, ChevronDown, ChevronUp,
   Building2, DollarSign, FileDown, ListTodo, Users,
   RepeatIcon, CheckCircle2, Circle, AlertTriangle, RefreshCw,
-  XCircle, Award, Clock,
+  XCircle, Award, Clock, ClipboardList, Briefcase,
 } from 'lucide-react';
+import { useAllProjectFieldTasks, type FieldTaskStatus, type FieldTaskPriority } from '@/hooks/useProjectTasks';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
@@ -1063,6 +1064,7 @@ export default function TaskAdmin() {
           <TabsTrigger value="templates" className="text-xs gap-1.5"><RepeatIcon className="h-3.5 w-3.5" />Daily Templates</TabsTrigger>
           <TabsTrigger value="rewards" className="text-xs gap-1.5"><Award className="h-3.5 w-3.5" />Reward Approvals</TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs gap-1.5"><DollarSign className="h-3.5 w-3.5" />Payroll</TabsTrigger>
+          <TabsTrigger value="field_tasks" className="text-xs gap-1.5"><ClipboardList className="h-3.5 w-3.5" />Field Tasks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -1080,7 +1082,180 @@ export default function TaskAdmin() {
         <TabsContent value="payroll" className="mt-4">
           <PayrollPanel />
         </TabsContent>
+
+        <TabsContent value="field_tasks" className="mt-4">
+          <ProjectFieldTasksAdminPanel />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── Project Field Tasks Admin Panel ────────────────────────────────────────
+
+const FIELD_STATUS_CFG: Record<FieldTaskStatus, { label: string; cls: string }> = {
+  todo:       { label: 'To Do',       cls: 'bg-slate-100 text-slate-600' },
+  inprogress: { label: 'In Progress', cls: 'bg-blue-100 text-blue-700' },
+  done:       { label: 'Done',        cls: 'bg-emerald-100 text-emerald-700' },
+  cancelled:  { label: 'Cancelled',   cls: 'bg-red-100 text-red-600' },
+};
+
+const FIELD_PRIORITY_CFG: Record<FieldTaskPriority, { label: string; bar: string }> = {
+  critical: { label: 'Urgent',  bar: 'bg-red-500' },
+  high:     { label: 'High',    bar: 'bg-orange-400' },
+  medium:   { label: 'Medium',  bar: 'bg-amber-300' },
+  low:      { label: 'Low',     bar: 'bg-slate-300' },
+};
+
+function ProjectFieldTasksAdminPanel() {
+  const { data: allTasks = [], isLoading } = useAllProjectFieldTasks();
+  const [statusFilter, setStatusFilter] = useState<FieldTaskStatus | 'all'>('all');
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    let rows = allTasks;
+    if (statusFilter !== 'all') rows = rows.filter(t => t.status === statusFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        t.projectName.toLowerCase().includes(q) ||
+        t.assignedToName?.toLowerCase().includes(q),
+      );
+    }
+    return rows;
+  }, [allTasks, statusFilter, search]);
+
+  // Summary stats
+  const stats = useMemo(() => ({
+    total:      allTasks.length,
+    todo:       allTasks.filter(t => t.status === 'todo').length,
+    inprogress: allTasks.filter(t => t.status === 'inprogress').length,
+    done:       allTasks.filter(t => t.status === 'done').length,
+    overdue:    allTasks.filter(t => {
+      if (!t.dueDate || t.status === 'done' || t.status === 'cancelled') return false;
+      try { return new Date(t.dueDate) < new Date(); } catch { return false; }
+    }).length,
+  }), [allTasks]);
+
+  // Group by project
+  const byProject = useMemo(() => {
+    const map = new Map<string, { projectName: string; tasks: typeof filtered }>();
+    for (const t of filtered) {
+      if (!map.has(t.projectId)) map.set(t.projectId, { projectName: t.projectName, tasks: [] });
+      map.get(t.projectId)!.tasks.push(t);
+    }
+    return [...map.entries()].map(([projectId, v]) => ({ projectId, ...v }));
+  }, [filtered]);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total',       value: stats.total,      color: 'text-slate-700', bg: 'bg-slate-50' },
+          { label: 'In Progress', value: stats.inprogress, color: 'text-blue-700',  bg: 'bg-blue-50' },
+          { label: 'Done',        value: stats.done,       color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { label: 'Overdue',     value: stats.overdue,    color: 'text-red-700',   bg: 'bg-red-50' },
+        ].map(s => (
+          <Card key={s.label} className={`border-0 shadow-sm ${s.bg}`}>
+            <CardContent className="p-3">
+              <p className="text-[11px] font-medium text-slate-500">{s.label}</p>
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-40 max-w-xs">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search tasks or projects…"
+            className="w-full h-8 pl-8 pr-3 text-xs border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+          />
+          <ListTodo className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+        </div>
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as FieldTaskStatus | 'all')}>
+          <SelectTrigger className="h-8 text-xs w-36">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {(Object.keys(FIELD_STATUS_CFG) as FieldTaskStatus[]).map(s => (
+              <SelectItem key={s} value={s}>{FIELD_STATUS_CFG[s].label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-xs text-slate-500">{filtered.length} task{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Tasks grouped by project */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+        </div>
+      ) : byProject.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <ClipboardList className="h-10 w-10 text-slate-300 mb-3" />
+          <p className="text-sm font-medium text-slate-500">No field tasks found</p>
+          <p className="text-xs text-slate-400 mt-1">Try adjusting the filters or add tasks from a project page.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {byProject.map(({ projectId, projectName, tasks }) => (
+            <Card key={projectId} className="border border-slate-200 shadow-sm">
+              <CardHeader className="py-3 px-4 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <Briefcase className="h-3.5 w-3.5 text-indigo-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-800">{projectName}</CardTitle>
+                  <Badge variant="secondary" className="ml-auto text-[10px]">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-slate-100">
+                  {tasks.map(t => {
+                    const prCfg = FIELD_PRIORITY_CFG[t.priority] ?? FIELD_PRIORITY_CFG.medium;
+                    const stCfg = FIELD_STATUS_CFG[t.status] ?? FIELD_STATUS_CFG.todo;
+                    const isOverdue = t.dueDate && t.status !== 'done' && t.status !== 'cancelled';
+                    let overdueMark = false;
+                    try { overdueMark = !!isOverdue && new Date(t.dueDate!) < new Date(); } catch {}
+                    return (
+                      <div key={t.id} className="flex items-center gap-3 px-4 py-2.5" data-testid={`admin-field-task-${t.id}`}>
+                        <div className={`w-1 h-8 rounded-full flex-shrink-0 ${prCfg.bar}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-medium truncate ${t.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{t.title}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {t.assignedToName && (
+                              <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                                <Users className="h-2.5 w-2.5" />{t.assignedToName}
+                              </span>
+                            )}
+                            {t.coAssigneeIds.length > 0 && (
+                              <span className="text-[10px] text-slate-400">+{t.coAssigneeIds.length} co</span>
+                            )}
+                            {t.dueDate && (
+                              <span className={`text-[10px] flex items-center gap-0.5 ${overdueMark ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                                <Clock className="h-2.5 w-2.5" />{t.dueDate.slice(0, 10)}
+                                {overdueMark && ' · Overdue'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${stCfg.cls}`}>{stCfg.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
