@@ -5538,18 +5538,19 @@ const CostSubmission = () => {
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
                                 </Button>
                               )}
-                              {grpPaidCnt > 0 && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
+                              {(grpPaidCnt + grpPartialCnt) > 0 && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
                                 const grpPaidItems = groupItems.filter(o => {
                                   const ds = getOperationalDerivedStatus(o);
-                                  return ds === 'paid' || ds === 'reconciled';
+                                  return ds === 'paid' || ds === 'reconciled' || ds === 'partially_paid';
                                 });
+                                const revertCount = grpPaidItems.length;
                                 return (
                                   <Button size="sm"
                                     className="h-7 px-3 text-xs bg-orange-700 hover:bg-orange-600 text-white border border-orange-600/50"
                                     onClick={(e) => { e.stopPropagation(); setGroupRevertPaidItems(grpPaidItems); setGroupRevertPaidTitle(groupTitle); }}
                                     disabled={actionProcessing}
                                     data-testid={`button-group-revert-paid-${groupId}`}>
-                                    <RotateCcw className="h-3 w-3 mr-1" />Revert Paid ({grpPaidCnt})
+                                    <RotateCcw className="h-3 w-3 mr-1" />Revert Paid ({revertCount})
                                   </Button>
                                 );
                               })()}
