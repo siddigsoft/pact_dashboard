@@ -412,8 +412,11 @@ const Users = () => {
     if (!checkUsersWrite('write')) return;
     setIsLoadingApproval(userId);
     try {
-      await rejectUser(userId);
-      toast({ title: "User rejected", description: "User has been rejected" });
+      const ok = await rejectUser(userId);
+      if (ok) {
+        toast({ title: "User rejected", description: "User has been rejected." });
+      }
+      // If !ok, rejectUser already showed its own "Rejection blocked" toast
     } catch (error) {
       toast({ title: "Rejection failed", description: "Could not reject user", variant: "destructive" });
     } finally {

@@ -1349,10 +1349,13 @@ const UserDetail: FC = () => {
   const handleReject = async () => {
     if (!user || !rejectUser) return;
     setIsRejecting(true);
-    await rejectUser(user.id);
+    const ok = await rejectUser(user.id);
     setIsRejecting(false);
-    toast({ title: "User rejected", description: `${user.name} has been rejected.` });
-    navigate("/users");
+    if (ok) {
+      toast({ title: "User rejected", description: `${user.name} has been rejected.` });
+      navigate("/users");
+    }
+    // If !ok, rejectUser already showed its own "Rejection blocked" toast — no duplicate needed
   };
 
   const handleConfirmEmail = async () => {

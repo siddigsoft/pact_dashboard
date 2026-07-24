@@ -32,6 +32,18 @@ function getCurrentUserId(): string | undefined {
 }
 
 function toast({ variant, duration, action, ...props }: Toast) {
+  // Deduplication: if a toast with the same title is already visible, skip (prevents double-fire bugs)
+  if (props.title) {
+    const duplicate = memoryState.toasts.find(
+      t => t.open && t.title === props.title && t.variant === (variant ?? undefined)
+    );
+    if (duplicate) {
+      // Nudge the existing toast to reset its dismiss timer instead of creating a second one
+      dispatch({ type: "UPDATE_TOAST", toast: { ...duplicate } });
+      return { id: duplicate.id, dismiss: () => dispatch({ type: "DISMISS_TOAST", toastId: duplicate.id }), update: (p: ToasterToast) => dispatch({ type: "UPDATE_TOAST", toast: { ...p, id: duplicate.id } }) };
+    }
+  }
+
   const id = genId();
 
   // Get base duration from the variant or default

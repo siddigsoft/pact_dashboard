@@ -1300,10 +1300,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       localStorage.removeItem(`user-${userId}`);
 
-      toast({
-        title: "User rejected",
-        description: "The user has been removed from the system.",
-      });
       return true;
     } catch (error) {
       console.error("User rejection error:", error);
