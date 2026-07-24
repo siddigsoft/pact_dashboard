@@ -921,8 +921,10 @@ export default function UnifiedCostRequestForm({
 
           {/* MMP — required only when the selected project has MMPs linked to it via project_id */}
           {(() => {
-            const isSuperAdmin = currentUser?.role === 'super_admin';
-            const isAdmin = currentUser?.role === 'admin';
+            // Normalise role string — stored as 'Super Admin', 'super_admin', 'SuperAdmin', etc.
+            const _roleNorm = (currentUser?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+            const isSuperAdmin = _roleNorm === 'superadmin' || _roleNorm === 'superadministrator';
+            const isAdmin = _roleNorm === 'admin' || _roleNorm === 'administrator' || _roleNorm === 'ict';
             const canSeeAllMmps = isSuperAdmin || isAdmin;
 
             // Determine the "latest" MMP month so we can restrict regular users to current month only.

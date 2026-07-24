@@ -7237,16 +7237,29 @@ const CostSubmission = () => {
                                       {sub.paid_at ? format(parseISO(sub.paid_at), 'dd/MM/yyyy') : '—'}
                                     </TableCell>
                                     <TableCell>
-                                      {sub.payment_proof_url ? (
-                                        <div className="flex flex-col gap-0.5">
-                                          {(() => { let urls: string[] = []; try { const p = JSON.parse(sub.payment_proof_url!); urls = Array.isArray(p) ? p : [sub.payment_proof_url!]; } catch { urls = [sub.payment_proof_url!]; } return urls.map((u, i) => (
-                                            <button key={i} type="button" onClick={() => openAttach(u, urls.length > 1 ? `Receipt ${i + 1}` : 'Payment Receipt')}
-                                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                              <Eye className="h-3 w-3" />{urls.length > 1 ? `Receipt ${i + 1}` : 'View'}
-                                            </button>
-                                          )); })()}
-                                        </div>
-                                      ) : (
+                                      {sub.payment_proof_url ? (() => {
+                                        let urls: string[] = [];
+                                        try { const p = JSON.parse(sub.payment_proof_url!); urls = Array.isArray(p) ? p : [sub.payment_proof_url!]; }
+                                        catch { urls = [sub.payment_proof_url!]; }
+                                        const MAX_VISIBLE = 3;
+                                        const visible = urls.slice(0, MAX_VISIBLE);
+                                        const extra = urls.length - MAX_VISIBLE;
+                                        return (
+                                          <div className="flex flex-wrap items-center gap-1">
+                                            {visible.map((u, i) => (
+                                              <button key={i} type="button"
+                                                onClick={() => openAttach(u, urls.length > 1 ? `Receipt ${i + 1} of ${urls.length}` : 'Payment Receipt')}
+                                                className="inline-flex items-center gap-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors">
+                                                <Eye className="h-2.5 w-2.5" />
+                                                {urls.length > 1 ? `#${i + 1}` : 'View'}
+                                              </button>
+                                            ))}
+                                            {extra > 0 && (
+                                              <span className="text-[10px] text-muted-foreground font-medium">+{extra} more</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })() : (
                                         <span className="text-xs text-muted-foreground">—</span>
                                       )}
                                     </TableCell>
