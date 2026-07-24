@@ -54,6 +54,7 @@ interface PreFundRequest {
   source: string | null;
   amount: number;
   currency: string;
+  usd_to_sdg_rate: number | null;
   available_balance: number;
   committed_amount: number;
   paid_amount: number;
@@ -111,6 +112,7 @@ const RENEWAL_OPTIONS = [
 
 const EMPTY_FORM = {
   name: '', source: '', amount: '', currency: 'USD', period_type_id: '',
+  usd_to_sdg_rate: '',
   start_date: '', end_date: '', country_id: '', project_id: '', grant_id: '',
   matching_scope: 'country_project',
   cost_category: '',
@@ -461,7 +463,8 @@ export default function PreFundingRegistry() {
     const hasFixed = fa.threshold_amount != null;
     const tMode: 'pct' | 'fixed' | 'both' = hasPct && hasFixed ? 'both' : hasFixed ? 'fixed' : 'pct';
     setForm({
-      name: f.name, source: f.source ?? '', amount: String(f.amount), currency: f.currency,
+      name: f.name, source: f.source ?? '', amount: String(f.amount), currency: 'USD',
+      usd_to_sdg_rate: fa.usd_to_sdg_rate != null ? String(fa.usd_to_sdg_rate) : '',
       period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
       country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
       matching_scope: f.matching_scope,
@@ -508,7 +511,8 @@ export default function PreFundingRegistry() {
         name: form.name.trim(),
         source: form.source || null,
         amount: parseFloat(form.amount.replace(/,/g, '')),
-        currency: form.currency,
+        currency: 'USD',
+        usd_to_sdg_rate: form.usd_to_sdg_rate ? parseFloat(form.usd_to_sdg_rate) : null,
         period_type_id: (form.period_type_id && !form.period_type_id.startsWith('builtin-')) ? form.period_type_id : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -769,19 +773,46 @@ export default function PreFundingRegistry() {
     // with status='pending_approval' in useApprovalsData.ts; here we just
     // emit the notification so approvers are alerted.
     try {
+      // Notify finance admins via roles
       await supabase.from('notification_events' as any).insert({
         event_type: 'pre_fund_approval_requested',
         reference_id: f.id,
         reference_type: 'pre_fund_request',
         title: 'Pre-Fund Approval Required',
-        message: `Fund "${f.name}" (${f.currency} ${f.amount.toLocaleString()}) requires approval before activation.`,
+        message: `Fund "${f.name}" (USD ${f.amount.toLocaleString()}) requires approval before activation.`,
         target_roles: ['super_admin', 'admin', 'financialAdmin'],
         created_by: currentUser?.id ?? null,
-        metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: f.currency },
+        metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'USD', usd_to_sdg_rate: (f as any).usd_to_sdg_rate },
       });
-    } catch { /* notifications are non-blocking — main approval flow still works */ }
+    } catch { /* notifications are non-blocking */ }
 
-    toast({ title: 'Submitted for approval', description: 'Finance approvers have been notified via the Approvals Hub.' });
+    // Also notify specific users assigned to approval chain steps
+    try {
+      const { data: stepData } = await supabase
+        .from('pre_fund_approval_steps' as any)
+        .select('assigned_user_ids, step_label, step_order')
+        .eq('pre_fund_request_id', f.id)
+        .order('step_order');
+      const allStepUserIds: string[] = Array.from(new Set(
+        (stepData ?? []).flatMap((s: any) => Array.isArray(s.assigned_user_ids) ? s.assigned_user_ids : [])
+      )).filter(Boolean) as string[];
+      if (allStepUserIds.length > 0) {
+        const rate = (f as any).usd_to_sdg_rate;
+        const sdgNote = rate ? ` (≈ SDG ${(f.amount * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+        await supabase.from('notification_events' as any).insert({
+          event_type: 'pre_fund_approval_requested',
+          reference_id: f.id,
+          reference_type: 'pre_fund_request',
+          title: 'Pre-Fund Approval — Action Required',
+          message: `Pre-fund "${f.name}" (USD ${f.amount.toLocaleString()}${sdgNote}) has been submitted for approval and awaits your review in the approval chain.`,
+          target_user_ids: allStepUserIds,
+          created_by: currentUser?.id ?? null,
+          metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'USD', usd_to_sdg_rate: rate },
+        });
+      }
+    } catch { /* non-blocking */ }
+
+    toast({ title: 'Submitted for approval', description: 'Approval chain members and finance approvers have been notified.' });
     await load();
   };
 
@@ -891,11 +922,13 @@ export default function PreFundingRegistry() {
       doc.text('Fund Information', 15, 40);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
       let y = 48;
-      [['Fund', f.name], ['Donor / Source', f.source ?? '—'], ['Currency', f.currency],
+      const rate = (f as any).usd_to_sdg_rate;
+      [['Fund', f.name], ['Donor / Source', f.source ?? '—'], ['Currency', 'USD (disbursements in SDG)'],
+        ['Rate of Day (1 USD = ? SDG)', rate ? `${rate.toLocaleString()} SDG` : '—'],
         ['Period', f.start_date && f.end_date
           ? `${format(parseISO(f.start_date), 'MMM d, yyyy')} – ${format(parseISO(f.end_date), 'MMM d, yyyy')}`
           : '—'],
-      ].forEach(([k, v]) => { doc.text(`${k}:`, 15, y); doc.text(v, 60, y); y += 7; });
+      ].forEach(([k, v]) => { doc.text(`${k}:`, 15, y); doc.text(v, 90, y); y += 7; });
 
       y += 6;
       doc.setFontSize(12); doc.setFont('helvetica', 'bold');
@@ -904,9 +937,10 @@ export default function PreFundingRegistry() {
         startY: y,
         head: [['Description', 'Amount']],
         body: [
-          ['Amount Funded',   `${f.currency} ${formatNumber(f.amount, 0)}`],
-          ['Total Disbursed', `${f.currency} ${formatNumber(f.paid_amount, 0)}`],
-          ['Balance Available', `${f.currency} ${formatNumber(f.available_balance, 0)}`],
+          ['Amount Funded (USD)',   `USD ${formatNumber(f.amount, 0)}`],
+          ...(rate ? [['SDG Equivalent Funded', `SDG ${formatNumber(f.amount * rate, 0)}`]] : []),
+          ['Total Disbursed', `${formatNumber(f.paid_amount, 0)}`],
+          ['Balance Available (USD)', `USD ${formatNumber(f.available_balance, 0)}`],
         ],
         styles: { fontSize: 10 }, headStyles: { fillColor: [3, 105, 161] },
       });
@@ -1060,7 +1094,9 @@ export default function PreFundingRegistry() {
   const exportFunds = () => exportToExcel(
     filtered.map(f => ({
       'Fund Name': f.name, 'Source': (f as any).source ?? '', 'Status': f.status,
-      'Amount': f.amount, 'Currency': f.currency,
+      'Amount (USD)': f.amount, 'Currency': 'USD',
+      'Rate of Day (1 USD = SDG)': (f as any).usd_to_sdg_rate ?? '',
+      'SDG Equivalent': (f as any).usd_to_sdg_rate ? f.amount * (f as any).usd_to_sdg_rate : '',
       'Project': projects.find(p => p.id === (f as any).project_id)?.name ?? '',
       'Created At': (f as any).created_at ? format(new Date((f as any).created_at), 'yyyy-MM-dd') : '',
     })),
@@ -1213,13 +1249,16 @@ export default function PreFundingRegistry() {
                   {/* Amount */}
                   <TableCell className="py-3 text-right">
                     <div className="font-mono text-sm font-semibold">{formatNumber(f.amount, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">{f.currency}</div>
+                    <div className="text-[10px] text-muted-foreground">USD</div>
+                    {f.usd_to_sdg_rate && (
+                      <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">≈ SDG {formatNumber(f.amount * f.usd_to_sdg_rate, 0)}</div>
+                    )}
                   </TableCell>
 
                   {/* Available */}
                   <TableCell className="py-3 text-right">
                     <div className="font-mono text-sm font-semibold text-emerald-600">{formatNumber(f.available_balance, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">{f.currency}</div>
+                    <div className="text-[10px] text-muted-foreground">USD</div>
                   </TableCell>
 
                   {/* Committed */}
@@ -1522,7 +1561,7 @@ export default function PreFundingRegistry() {
                   <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
                 </div>
                 <div>
-                  <Label>Amount *</Label>
+                  <Label>Amount (USD) *</Label>
                   <Input
                     type="text"
                     inputMode="numeric"
@@ -1541,14 +1580,45 @@ export default function PreFundingRegistry() {
                   />
                 </div>
                 <div>
-                  <Label>Currency *</Label>
-                  <Select value={form.currency} onValueChange={v => setForm(p => ({ ...p, currency: v }))}>
-                    <SelectTrigger data-testid="select-fund-currency"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {dynamicCurrencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Currency</Label>
+                  <div className="flex h-10 items-center gap-2 rounded-md border bg-muted/40 px-3">
+                    <DollarSign className="h-4 w-4 text-sky-600 shrink-0" />
+                    <span className="font-semibold text-sky-700 dark:text-sky-400 text-sm">USD</span>
+                    <span className="text-[11px] text-muted-foreground ml-auto">Fixed — all pre-funds are in USD</span>
+                  </div>
                 </div>
+                <div>
+                  <Label>Rate of Day (1 USD = ? SDG) *</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={form.usd_to_sdg_rate}
+                    onChange={e => setForm(p => ({ ...p, usd_to_sdg_rate: e.target.value }))}
+                    placeholder="e.g. 2500"
+                    data-testid="input-usd-to-sdg-rate"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Exchange rate at time of request — used for SDG equivalent reporting only. Disbursements are made in SDG.
+                  </p>
+                </div>
+                {form.amount && form.usd_to_sdg_rate && (() => {
+                  const amtNum = parseFloat(form.amount.replace(/,/g, ''));
+                  const rateNum = parseFloat(form.usd_to_sdg_rate);
+                  if (!isNaN(amtNum) && !isNaN(rateNum) && amtNum > 0 && rateNum > 0) {
+                    return (
+                      <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-2.5">
+                        <DollarSign className="h-4 w-4 text-amber-600 shrink-0" />
+                        <div>
+                          <span className="text-xs text-amber-700 dark:text-amber-400">SDG Equivalent of this fund: </span>
+                          <span className="font-semibold text-amber-800 dark:text-amber-300 text-sm">SDG {(amtNum * rateNum).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                          <span className="text-[11px] text-amber-600 dark:text-amber-500 ml-2">({amtNum.toLocaleString()} USD × {rateNum.toLocaleString()} rate)</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <div>
                   <Label>Period Type</Label>
                   <Select value={form.period_type_id} onValueChange={v => setForm(p => ({ ...p, period_type_id: v }))}>

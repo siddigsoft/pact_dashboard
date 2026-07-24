@@ -257,6 +257,25 @@ export default function PreFundingApprovalFlow() {
         const { error: e } = await supabase.from('pre_fund_approval_steps').update(payload).eq('id', editingStep.id);
         if (e) throw e;
         toast({ title: 'Step updated' });
+        // Notify newly added users (not in previous assignment list)
+        const previousIds: string[] = Array.isArray(editingStep.assigned_user_ids) ? editingStep.assigned_user_ids : [];
+        const newlyAddedIds = stepForm.assigned_user_ids.filter(uid => !previousIds.includes(uid));
+        if (newlyAddedIds.length > 0) {
+          try {
+            const rate = (selectedFund as any).usd_to_sdg_rate;
+            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            await supabase.from('notification_events' as any).insert({
+              event_type: 'pre_fund_step_assigned',
+              reference_id: selectedFund.id,
+              reference_type: 'pre_fund_request',
+              title: 'Pre-Fund Approval — You Were Added',
+              message: `You have been added as an approver for pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
+              target_user_ids: newlyAddedIds,
+              created_by: currentUser?.id ?? null,
+              metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
+            });
+          } catch { /* non-blocking */ }
+        }
       } else {
         const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.step_order)) : 0;
         const { error: e } = await supabase.from('pre_fund_approval_steps').insert({
@@ -267,6 +286,23 @@ export default function PreFundingApprovalFlow() {
         });
         if (e) throw e;
         toast({ title: 'Step added' });
+        // Notify all assigned users for this new step
+        if (stepForm.assigned_user_ids.length > 0) {
+          try {
+            const rate = (selectedFund as any).usd_to_sdg_rate;
+            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            await supabase.from('notification_events' as any).insert({
+              event_type: 'pre_fund_step_assigned',
+              reference_id: selectedFund.id,
+              reference_type: 'pre_fund_request',
+              title: 'Pre-Fund Approval — Action Required',
+              message: `You have been assigned to approve pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
+              target_user_ids: stepForm.assigned_user_ids,
+              created_by: currentUser?.id ?? null,
+              metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
+            });
+          } catch { /* non-blocking */ }
+        }
       }
       setShowStepDialog(false);
       setEditingStep(null);
@@ -362,6 +398,47 @@ export default function PreFundingApprovalFlow() {
 
       setActionDialog(null);
       setActionNotes('');
+
+      // Notify the next pending step's assigned users when a step is approved
+      if (action === 'approve' && rpc?.step_resolved && newFundStatus !== 'awaiting_receipt') {
+        try {
+          const currentIdx = steps.findIndex(s => s.id === step.id);
+          const nextPendingStep = steps.slice(currentIdx + 1).find(s => s.status === 'pending');
+          if (nextPendingStep && (nextPendingStep.assigned_user_ids?.length ?? 0) > 0) {
+            const rate = (selectedFund as any).usd_to_sdg_rate;
+            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            await supabase.from('notification_events' as any).insert({
+              event_type: 'pre_fund_step_assigned',
+              reference_id: selectedFund.id,
+              reference_type: 'pre_fund_request',
+              title: 'Pre-Fund Approval — Your Turn',
+              message: `Step "${step.step_label}" has been approved for pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}). Step "${nextPendingStep.step_label}" now requires your review.`,
+              target_user_ids: nextPendingStep.assigned_user_ids,
+              created_by: currentUser?.id ?? null,
+              metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: nextPendingStep.step_label },
+            });
+          }
+        } catch { /* non-blocking */ }
+      }
+
+      // Notify finance admins when the fund is fully approved or rejected
+      if (newFundStatus === 'awaiting_receipt' || newFundStatus === 'rejected') {
+        try {
+          await supabase.from('notification_events' as any).insert({
+            event_type: newFundStatus === 'awaiting_receipt' ? 'pre_fund_approved' : 'pre_fund_rejected',
+            reference_id: selectedFund.id,
+            reference_type: 'pre_fund_request',
+            title: newFundStatus === 'awaiting_receipt' ? 'Pre-Fund Fully Approved' : 'Pre-Fund Rejected',
+            message: newFundStatus === 'awaiting_receipt'
+              ? `Pre-fund "${selectedFund.name}" has passed all approval steps and is now awaiting bank receipt upload to activate.`
+              : `Pre-fund "${selectedFund.name}" was rejected at step "${step.step_label}".`,
+            target_roles: ['super_admin', 'admin', 'financialAdmin'],
+            created_by: currentUser?.id ?? null,
+            metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, new_status: newFundStatus },
+          });
+        } catch { /* non-blocking */ }
+      }
+
       await Promise.all([loadSteps(selectedFund.id), loadFunds()]);
     } catch (e: any) { toast({ title: 'Action failed', description: e.message, variant: 'destructive' }); }
     finally { setProcessing(null); }
