@@ -113,6 +113,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
   );
 
   const roleMeta_ = roleMeta(selectedRole);
+  const [pagesOpen, setPagesOpen] = useState(false);
 
   // Use live DB role when available, fall back to defaults
   const liveRole = useMemo(() =>
@@ -184,7 +185,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
         </div>
         <div className="flex-1 overflow-y-auto">
           {filteredRoles.map(r => (
-            <button key={r.code} onClick={() => { setSelectedRole(r.code); setExpandedModules(new Set(['Administration'])); }}
+            <button key={r.code} onClick={() => { setSelectedRole(r.code); setExpandedModules(new Set(MODULE_REGISTRY.map(m => m.module))); setPagesOpen(false); }}
               data-testid={`role-select-${r.code}`}
               className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-all border-b border-transparent',
                 selectedRole === r.code ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-muted/60'
@@ -206,43 +207,59 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
         {!selectedRole ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8 py-16 text-muted-foreground">
             <Layers className="h-10 w-10 opacity-30" />
-            <p className="text-sm font-medium">Select a role to see its full access profile</p>
+            <p className="text-sm font-medium">Select a role from the left</p>
             <p className="text-xs opacity-60 max-w-xs">
-              Shows all users, accessible pages, and every module action.
-              {isSuperAdmin && ' Super Admin can click any action to grant or revoke it for the whole role.'}
+              See every action button per page. {isSuperAdmin ? 'Click Grant or Revoke on any action to change it for the whole role.' : 'Super Admin can grant or revoke individual actions.'}
             </p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
             {/* Role header */}
-            <div className="px-6 py-4 border-b bg-card sticky top-0 z-10">
+            <div className="px-5 py-3 border-b bg-card sticky top-0 z-10">
               <div className="flex items-center gap-3">
-                <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0', roleMeta_.color)}>
-                  <Shield className="h-5 w-5" />
+                <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', roleMeta_.color)}>
+                  <Shield className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-bold">{roleMeta_.label}</h3>
+                    <h3 className="text-sm font-bold">{roleMeta_.label}</h3>
                     {isSystemRole && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">System Role</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-medium">System</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{roleUsers.length} users</span>
                     <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" />{accessiblePages.length} pages</span>
                     <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-purple-500" />{permCount}/{totalActions} actions</span>
                   </div>
                 </div>
-                {isSuperAdmin && (
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground border rounded-lg px-2 py-1">
-                    <Pencil className="h-3 w-3" /> Edit mode
-                  </div>
+                {/* Edit mode badge — only when editing is actually possible */}
+                {isSuperAdmin && selectedRole !== 'superAdmin' && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/40 rounded-lg px-2 py-1 shrink-0">
+                    <Pencil className="h-3 w-3" /> Edit mode — Grant / Revoke below
+                  </span>
+                )}
+                {isSuperAdmin && selectedRole === 'superAdmin' && (
+                  <span className="flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/40 rounded-lg px-2 py-1 shrink-0">
+                    <Lock className="h-3 w-3" /> Protected role
+                  </span>
                 )}
               </div>
             </div>
 
-            <div className="p-5 space-y-6">
-              {/* Users in this role */}
+            {/* Super Admin locked notice */}
+            {selectedRole === 'superAdmin' && (
+              <div className="mx-5 mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/10 dark:border-amber-800/30 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                <Lock className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Super Admin cannot be edited</p>
+                  <p className="opacity-80 mt-0.5">This role always has full access to everything in the system. Select a different role (Admin, Country Director, etc.) to see Grant / Revoke buttons and edit its permissions.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="p-5 space-y-4">
+              {/* Users row */}
               <section>
                 <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" /> Users ({roleUsers.length})
@@ -263,43 +280,65 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                 )}
               </section>
 
-              {/* Pages */}
+              {/* Pages — collapsible to save space */}
               <section>
-                <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" /> Accessible Pages ({accessiblePages.length} of {PAGE_DEFS.length})
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-                  {PAGE_DEFS.map(p => {
-                    const ok = hasDefaultAccess(p, selectedRole);
-                    return (
-                      <div key={p.slug} className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-[11px]',
-                        ok ? 'bg-blue-50/50 border-blue-100 text-blue-800 dark:bg-blue-900/10 dark:border-blue-800/30 dark:text-blue-300'
-                           : 'bg-muted/20 border-transparent text-muted-foreground/50')}>
-                        {ok ? <CheckCircle2 className="h-3 w-3 shrink-0 text-blue-500" /> : <MinusCircle className="h-3 w-3 shrink-0 opacity-30" />}
-                        <span className="truncate">{p.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <button
+                  onClick={() => setPagesOpen(v => !v)}
+                  className="w-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="btn-toggle-pages-section">
+                  {pagesOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
+                  Accessible Pages ({accessiblePages.length} of {PAGE_DEFS.length})
+                  <span className="ml-auto text-[10px] font-normal normal-case text-muted-foreground/70">
+                    {pagesOpen ? 'Click to collapse' : 'Click to expand'}
+                  </span>
+                </button>
+                {pagesOpen && (
+                  <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                    {PAGE_DEFS.map(p => {
+                      const ok = hasDefaultAccess(p, selectedRole);
+                      return (
+                        <div key={p.slug} className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-[11px]',
+                          ok ? 'bg-blue-50/50 border-blue-100 text-blue-800 dark:bg-blue-900/10 dark:border-blue-800/30 dark:text-blue-300'
+                             : 'bg-muted/20 border-transparent text-muted-foreground/50')}>
+                          {ok ? <CheckCircle2 className="h-3 w-3 shrink-0 text-blue-500" /> : <MinusCircle className="h-3 w-3 shrink-0 opacity-30" />}
+                          <span className="truncate">{p.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
 
-              {/* Module actions — with edit support for Super Admin */}
+              {/* Module actions — immediately visible, all expanded by default */}
               <section>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3 mb-3">
                   <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5 text-purple-500" /> Module Permissions ({permCount}/{totalActions} granted)
+                    <Shield className="h-3.5 w-3.5 text-purple-500" />
+                    Module Permissions — Action Buttons Per Page
+                    <span className="text-purple-600 dark:text-purple-400 font-semibold">({permCount}/{totalActions})</span>
                   </h4>
-                  {isSuperAdmin && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <Pencil className="h-3 w-3" /> Click Grant / Revoke to edit role permissions
-                    </span>
-                  )}
-                  {!isSuperAdmin && (
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <Eye className="h-3 w-3" /> View only — Super Admin can edit
-                    </span>
-                  )}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <button
+                      onClick={() => setExpandedModules(new Set(MODULE_REGISTRY.map(m => m.module)))}
+                      className="text-[10px] text-muted-foreground hover:text-foreground border rounded px-2 py-0.5 transition-colors">
+                      Expand All
+                    </button>
+                    <button
+                      onClick={() => setExpandedModules(new Set())}
+                      className="text-[10px] text-muted-foreground hover:text-foreground border rounded px-2 py-0.5 transition-colors">
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
+
+                {isSuperAdmin && selectedRole !== 'superAdmin' && (
+                  <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800/20 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+                    <Pencil className="h-3.5 w-3.5 shrink-0" />
+                    You can <strong>Grant</strong> or <strong>Revoke</strong> any action below — changes apply to everyone in the <strong>{roleMeta_.label}</strong> role immediately.
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   {MODULE_REGISTRY.map(mod => {
                     const isOpen = expandedModules.has(mod.module);
@@ -321,10 +360,11 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                         {isOpen && (
                           <div className="divide-y">
                             {mod.pages.map(pg => (
-                              <div key={pg.page} className="px-4 py-2">
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                                  <Eye className="h-3 w-3" /> {pg.page}
-                                  <span className="text-[9px] font-normal normal-case opacity-60 ml-1">— action buttons on this page</span>
+                              <div key={pg.page} className="px-4 py-2.5">
+                                <p className="text-[11px] font-semibold text-foreground/70 mb-2 flex items-center gap-1.5">
+                                  <Eye className="h-3 w-3 text-blue-500" />
+                                  {pg.page}
+                                  <span className="text-[9px] font-normal text-muted-foreground/60">— buttons visible on this page</span>
                                 </p>
                                 <div className="space-y-1">
                                   {pg.actions.map(act => {
@@ -333,35 +373,37 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                                     const isSaving = savingKey === sKey;
                                     return (
                                       <div key={act.key}
-                                        className={cn('flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors',
-                                          has ? 'bg-purple-50/50 dark:bg-purple-900/5' : 'opacity-50')}>
+                                        className={cn('flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors',
+                                          has ? 'bg-purple-50/60 dark:bg-purple-900/5' : 'bg-muted/20 opacity-60')}>
                                         {has
-                                          ? <CheckCircle2 className="h-3 w-3 text-purple-500 shrink-0" />
-                                          : <XCircle className="h-3 w-3 text-slate-300 shrink-0" />}
+                                          ? <CheckCircle2 className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                                          : <XCircle className="h-3.5 w-3.5 text-slate-300 shrink-0" />}
                                         <div className="flex-1 min-w-0">
-                                          <span className="font-medium">{act.label}</span>
+                                          <span className="font-semibold">{act.label}</span>
                                           <span className="text-[10px] text-muted-foreground ml-2 hidden sm:inline">{act.description}</span>
                                         </div>
-                                        <span className="text-[9px] text-muted-foreground/50 font-mono hidden md:block shrink-0">
+                                        <span className="text-[9px] text-muted-foreground/40 font-mono hidden lg:block shrink-0">
                                           {act.resource}:{act.action}
                                         </span>
-                                        {/* Edit toggle — Super Admin only */}
-                                        {isSuperAdmin && selectedRole !== 'superAdmin' && (
+                                        {/* Grant / Revoke — Super Admin editing non-superAdmin roles */}
+                                        {isSuperAdmin && selectedRole !== 'superAdmin' ? (
                                           <button
                                             onClick={() => handleToggleRolePerm(act.resource, act.action, has)}
                                             disabled={isSaving}
                                             data-testid={`btn-role-perm-toggle-${act.key}`}
                                             className={cn(
-                                              'text-[10px] border rounded px-2 py-0.5 shrink-0 font-medium transition-colors disabled:opacity-50',
+                                              'text-[10px] border rounded px-2.5 py-1 shrink-0 font-semibold transition-colors disabled:opacity-50 min-w-[52px] text-center',
                                               has
                                                 ? 'text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/10'
                                                 : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/10'
                                             )}>
                                             {isSaving
-                                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                                              ? <Loader2 className="h-3 w-3 animate-spin mx-auto" />
                                               : has ? 'Revoke' : 'Grant'}
                                           </button>
-                                        )}
+                                        ) : !isSuperAdmin ? (
+                                          <span className="text-[9px] text-muted-foreground/50 shrink-0">view only</span>
+                                        ) : null}
                                       </div>
                                     );
                                   })}
