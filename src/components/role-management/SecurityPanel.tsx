@@ -95,9 +95,14 @@ function StatusPill({ eff, small }: { eff: Eff; small?: boolean }) {
 }
 
 // ─── By-Role view ─────────────────────────────────────────────────────────────
-function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAdmin: boolean }) {
+function ByRoleView({ users: allUsers }: { users: any[] }) {
   const { roles, updateRole, fetchRoles } = useRoleManagement();
+  const { currentUser } = useAppContext();
   const { toast } = useToast();
+
+  // Derive edit capability directly — never rely on a prop that may be stale
+  const rawMyRole: string = (currentUser as any)?.role ?? '';
+  const canEdit = rawMyRole === 'superAdmin';
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [search, setSearch] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['Administration']));
@@ -141,7 +146,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
 
   // ── Toggle role-level permission ──────────────────────────────────────────
   async function handleToggleRolePerm(resource: ResourceType, action: ActionType, currentlyHas: boolean) {
-    if (!liveRole || !isSuperAdmin || isAdminLocked) return;
+    if (!liveRole || !canEdit || isAdminLocked) return;
     const key = `${resource}:${action}`;
     setSavingKey(key);
     try {
@@ -210,7 +215,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
             <Layers className="h-10 w-10 opacity-30" />
             <p className="text-sm font-medium">Select a role from the left</p>
             <p className="text-xs opacity-60 max-w-xs">
-              See every action button per page. {isSuperAdmin ? 'Click Grant or Revoke on any action to change it for the whole role.' : 'Super Admin can grant or revoke individual actions.'}
+              See every action button per page. {canEdit ? 'Click Grant or Revoke on any action to change it for the whole role.' : 'Super Admin can grant or revoke individual actions.'}
             </p>
           </div>
         ) : (
@@ -235,12 +240,12 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                   </div>
                 </div>
                 {/* Edit mode badge — only when editing is actually possible */}
-                {isSuperAdmin && selectedRole !== 'superAdmin' && !isAdminLocked && (
+                {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked && (
                   <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/40 rounded-lg px-2 py-1 shrink-0">
                     <Pencil className="h-3 w-3" /> Edit mode — Grant / Revoke below
                   </span>
                 )}
-                {isSuperAdmin && (selectedRole === 'superAdmin' || isAdminLocked) && (
+                {canEdit && (selectedRole === 'superAdmin' || isAdminLocked) && (
                   <span className="flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/40 rounded-lg px-2 py-1 shrink-0">
                     <Lock className="h-3 w-3" /> Protected role
                   </span>
@@ -342,7 +347,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                   </div>
                 </div>
 
-                {isSuperAdmin && selectedRole !== 'superAdmin' && !isAdminLocked && (
+                {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked && (
                   <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800/20 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
                     <Pencil className="h-3.5 w-3.5 shrink-0" />
                     You can <strong>Grant</strong> or <strong>Revoke</strong> any action below — changes apply to everyone in the <strong>{roleMeta_.label}</strong> role immediately.
@@ -396,7 +401,7 @@ function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAd
                                           {act.resource}:{act.action}
                                         </span>
                                         {/* Grant / Revoke — Super Admin editing non-superAdmin, non-admin roles */}
-                                        {isSuperAdmin && selectedRole !== 'superAdmin' && !isAdminLocked ? (
+                                        {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked ? (
                                           <button
                                             onClick={() => handleToggleRolePerm(act.resource, act.action, has)}
                                             disabled={isSaving}
@@ -978,7 +983,7 @@ export function SecurityPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         <div className="border rounded-xl overflow-hidden bg-background">
           {view === 'user'
             ? <ByUserView users={users} isSuperAdmin={isSuperAdmin} />
-            : <ByRoleView users={users} isSuperAdmin={isSuperAdmin} />}
+            : <ByRoleView users={users} />}
         </div>
       </div>
     </TooltipProvider>
