@@ -503,23 +503,43 @@ export default function PreFundingOverview() {
     return m;
   }, [txns, dpUserMap, ocsUserMap, allocHoldersByFund]);
 
-  // Fund-level KPI cards and fund header cards read paid_amount / available_balance directly
-  // from the DB row — these columns are the single source of truth, maintained by Supabase
-  // triggers and directLinkPayment RPCs. A previous transaction-based override was removed
-  // because it could sum more than the DB recorded, making Available appear too low.
+  // Per-fund sum of 'payment' type transactions (the most accurate paid-out figure).
+  // This mirrors what PreFundingReconciliation uses as Priority-1 effectivePaidAmount.
+  // Available during Phase-2 load; Map is empty until txns arrive (safe — falls back to DB cols).
+  const fundPaymentSum = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of txns) {
+      if (t.transaction_type !== 'payment') continue;
+      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
+    }
+    return m;
+  }, [txns]);
+
+  // Effective paid amount for a fund — highest (most conservative) of:
+  //   1. Sum of validated payment transaction rows (most accurate, mirrors Reconciliation page)
+  //   2. paid_amount DB column  (updated by directLinkPayment even when txn insert is blocked)
+  // Falls back to 0 when neither is populated yet.
+  const effectivePaid = (f: { id: string; amount: number; paid_amount?: number }) => {
+    const fromTxns = fundPaymentSum.get(f.id) ?? 0;
+    const fromCol  = Number(f.paid_amount ?? 0);
+    return Math.max(fromTxns, fromCol);
+  };
+
+  // True available = amount − effectivePaid, further capped by available_balance DB column
+  // (take the lower/more-conservative of the two).
+  const conservativeAvail = (f: { id: string; amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
+    const paid = effectivePaid(f);
+    const fromPaid = Math.max(0, f.amount - paid);
+    return f.available_balance != null ? Math.min(Number(f.available_balance), fromPaid) : fromPaid;
+  };
+
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
   const totalFunded  = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
-  // Take the MINIMUM of available_balance (DB column) and amount−paid_amount.
-  // The two columns can drift when some payment paths update one but not the other;
-  // the lower (more conservative) value is always the correct available figure.
-  const conservativeAvail = (f: { amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
-    const fromPaid = Math.max(0, f.amount - Number(f.paid_amount ?? 0));
-    return f.available_balance != null ? Math.min(Number(f.available_balance), fromPaid) : fromPaid;
-  };
   const totalAvail   = activeFunds.reduce((s, f) => s + toBase(conservativeAvail(f), f.currency), 0);
   const totalCommit  = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
-  const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(Number(f.paid_amount ?? 0), f.currency), 0);
+  // Paid-out total also uses the transaction-accurate effectivePaid figure
+  const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(effectivePaid(f), f.currency), 0);
   const endingSoon  = activeFunds.filter(f => {
     if (!f.end_date) return false;
     return differenceInDays(parseISO(f.end_date), new Date()) >= 0 && differenceInDays(parseISO(f.end_date), new Date()) <= (f.warning_days ?? 14);
@@ -541,9 +561,9 @@ export default function PreFundingOverview() {
         'Source': f.source ?? '—',
         'Status': STATUS_CFG[f.status]?.label ?? f.status,
         'Amount': f.amount,
-        'Paid Out': f.paid_amount ?? 0,
+        'Paid Out': effectivePaid(f),
         'Committed': f.committed_amount,
-        'Available': f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0)),
+        'Available': conservativeAvail(f),
         'Currency': f.currency,
         'Start Date': f.start_date ?? '—',
         'End Date': f.end_date ?? '—',
@@ -762,12 +782,9 @@ export default function PreFundingOverview() {
       ) : (
         <div className="space-y-4">
           {filtered.map(f => {
-            // Use DB-authoritative columns so fund cards match the Reconciliation tab.
-            // paid_amount and available_balance are maintained by Supabase triggers and
-            // directLinkPayment RPCs — they are the single source of truth for fund totals.
-            const effPaid  = Number(f.paid_amount ?? 0);
-            // Use the more conservative of available_balance vs amount−paid_amount:
-            // the two DB columns can drift when a payment path updates only one of them.
+            // Use transaction-accurate figures — mirrors what Reconciliation page shows.
+            // effectivePaid = MAX(txn sum, paid_amount DB col); conservativeAvail uses MIN logic.
+            const effPaid  = effectivePaid(f);
             const effAvail = conservativeAvail(f);
             // ef is a corrected copy of f — all helper functions that accept f get right values
             const ef = { ...f, paid_amount: effPaid, available_balance: effAvail };
