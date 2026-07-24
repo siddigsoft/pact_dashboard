@@ -1556,10 +1556,19 @@ const MMPCycleClose = () => {
         return all;
       };
 
-      const [closingRaw, activeRaw] = await Promise.all([
-        fetchAllPagesForIds(closingIds),
-        fetchAllPagesForIds(activeOnlyIds),
-      ]);
+      // Race the combined fetch against a 20-second timeout so loading always
+      // clears even if Supabase stalls (fetch() has no built-in timeout).
+      const FETCH_TIMEOUT_MS = 20_000;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Site data load timed out — try refreshing')), FETCH_TIMEOUT_MS)
+      );
+      const [closingRaw, activeRaw] = await Promise.race([
+        Promise.all([
+          fetchAllPagesForIds(closingIds),
+          fetchAllPagesForIds(activeOnlyIds),
+        ]),
+        timeoutPromise,
+      ]) as [any[], any[]]; // eslint-disable-line @typescript-eslint/no-explicit-any
 
       // For closing MMPs: keep not_covered_flag=true OR any unresolved status
       const closingData = closingRaw.filter(s => {
@@ -2091,7 +2100,11 @@ const MMPCycleClose = () => {
         if (e.activity_at_site) activities.add(e.activity_at_site);
       });
 
-      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      // Use the ref so this callback never needs mmpFiles in its dep array.
+      // Adding mmpFiles as a dep would recreate the function on every mmpFiles
+      // reference change, which triggers the scope-options effect and cascades
+      // into extra renders and redundant network calls.
+      const mmp = mmpFilesRef.current?.find(m => m.id === mmpId);
       if (mmp?.hub) hubs.add(mmp.hub);
       if (mmp?.region) hubs.add(mmp.region);
 
@@ -2107,7 +2120,9 @@ const MMPCycleClose = () => {
       console.error('Error fetching scope options:', err);
       return { hubs: [], states: [], activities: [] };
     }
-  }, [mmpFiles]);
+  // mmpFiles accessed via mmpFilesRef.current — no dep needed; stable callback.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleScopedClose = async (mmpId: string, scope: CloseScope, scopeValue: string) => {
     if (!canManageCycle) return;
@@ -2267,18 +2282,24 @@ const MMPCycleClose = () => {
     }
   };
 
-  // Run on mount AND when activeMmps first populates (TanStack Query data arrival).
-  // Without the activeMmps.length dep, the effect fires at mount when refs are still
-  // empty (mmpFiles not loaded yet) → early-returns with no data → never re-runs →
-  // page opens but shows nothing. Adding the length re-triggers the fetch once when
-  // the MMP list arrives. fetchUncoveredSites/fetchClosedCycles are stable (deps [])
-  // so no loop — the effect only re-fires when the active-MMP count changes.
+  // Primary loading effect — only fetchUncoveredSites here so it can acquire
+  // HTTP connections immediately without competing with fetchClosedCycles.
+  // fetchClosedCycles fires N×4 parallel Supabase requests for closed cycles;
+  // keeping them in the same effect starves uncovered-site requests in Chrome's
+  // 6-connection-per-host pool and can leave loading=true indefinitely.
   const activeMmpsLength = activeMmps.length;
   useEffect(() => {
     fetchUncoveredSites();
-    fetchClosedCycles();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUncoveredSites, fetchClosedCycles, activeMmpsLength]);
+  }, [fetchUncoveredSites, activeMmpsLength]);
+
+  // Secondary effect — runs closed-cycle history after the primary data loads.
+  // Delayed 300 ms so fetchUncoveredSites gets its connection slots first.
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchClosedCycles(); }, 300);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchClosedCycles, activeMmpsLength]);
 
   useEffect(() => {
     activeMmps.forEach(mmp => {
