@@ -520,6 +520,8 @@ const CostSubmission = () => {
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [groupRevertPaidItems, setGroupRevertPaidItems] = useState<OperationalCostSubmission[]>([]);
+  const [groupRevertPaidTitle, setGroupRevertPaidTitle] = useState('');
   const [actionProcessing, setActionProcessing] = useState(false);
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
     open: boolean;
@@ -2089,6 +2091,67 @@ const CostSubmission = () => {
     }
   };
 
+  /** Revert ALL paid/reconciled items in a group back to Approved in one action */
+  const handleGroupRevertPaid = async () => {
+    if (groupRevertPaidItems.length === 0) return;
+    setActionProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    const now = new Date().toISOString();
+    try {
+      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
+      for (const oc of groupRevertPaidItems) {
+        const paidAmountForReversal = (oc.amount_paid_cents ?? 0) / 100;
+        const { error } = await supabase
+          .from('operational_cost_submissions')
+          .update({
+            status: 'approved',
+            paid_at: null,
+            paid_by: null,
+            amount_paid_cents: 0,
+            payment_proof_url: null,
+            payment_proof_notes: null,
+            payment_proof_uploaded_at: null,
+            updated_at: now,
+          })
+          .eq('id', oc.id);
+        if (error) { failCount++; continue; }
+        successCount++;
+        // Reverse pre-fund deduction (best-effort)
+        try {
+          const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', oc.id);
+          if (!unlinkResult.unlinked) {
+            const { data: srcRow } = await (supabase as any)
+              .from('operational_cost_submissions')
+              .select('metadata')
+              .eq('id', oc.id)
+              .maybeSingle();
+            if (srcRow?.metadata?.pre_fund_deducted && srcRow?.metadata?.pre_fund_id && paidAmountForReversal > 0) {
+              await reverseDirectDeduction(srcRow.metadata.pre_fund_id, paidAmountForReversal, oc.submitted_by ?? null);
+              await (supabase as any)
+                .from('operational_cost_submissions')
+                .update({ metadata: { ...(srcRow.metadata || {}), pre_fund_deducted: false, pre_fund_id: null } })
+                .eq('id', oc.id);
+            }
+          }
+        } catch (pfErr: any) {
+          console.warn('[Pre-Fund] Group revert cleanup failed for', oc.id, pfErr?.message);
+        }
+      }
+      toast({
+        title: `Group Reverted / تم إرجاع المجموعة`,
+        description: `${successCount} payment${successCount !== 1 ? 's' : ''} reset to Approved. Proof and amounts cleared.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+      });
+      fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Error / خطأ', description: 'Group revert failed.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setGroupRevertPaidItems([]);
+      setGroupRevertPaidTitle('');
+    }
+  };
+
   const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
     // Open dialog immediately — pre-fund list loads in the background while the user attaches a receipt
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
@@ -2326,8 +2389,18 @@ const CostSubmission = () => {
   const handleOpenBatchCostPay = (subs: OperationalCostSubmission[]) => {
     const eligible = subs.filter(s => canMarkAsPaid(s));
     if (eligible.length === 0) return;
+    // Normalize stale amount_paid_cents: if a submission is in 'approved' status but has
+    // amount_paid_cents >= amount_cents (leftover from a buggy revert), treat it as 0
+    // so the dialog shows the correct remaining amount.
+    const normalizedEligible = eligible.map(sub => {
+      const derivedSt = getOperationalDerivedStatus(sub);
+      if (derivedSt === 'approved' && (sub.amount_paid_cents ?? 0) >= sub.amount_cents && sub.amount_cents > 0) {
+        return { ...sub, amount_paid_cents: 0 };
+      }
+      return sub;
+    });
     // Open dialog immediately — pre-fund list loads in the background while the user attaches a receipt
-    setBatchCostPayDialog({ open: true, submissions: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+    setBatchCostPayDialog({ open: true, submissions: normalizedEligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
     // Async: load pre-funds and update dialog state once available
     (async () => {
       let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
@@ -5415,7 +5488,7 @@ const CostSubmission = () => {
                             </div>
                           )}
 
-                          {/* Send to Finance / Mark Paid All — visible when approved items exist */}
+                          {/* Send to Finance / Mark Paid All / Revert Paid All — visible when approved/paid items exist */}
                           {(grpDoneCnt > 0 || grpPartialCnt > 0) && (
                             <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30 flex-wrap">
                               <Mail className="h-3.5 w-3.5 text-blue-400 flex-none" />
@@ -5431,6 +5504,21 @@ const CostSubmission = () => {
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
                                 </Button>
                               )}
+                              {grpPaidCnt > 0 && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
+                                const grpPaidItems = groupItems.filter(o => {
+                                  const ds = getOperationalDerivedStatus(o);
+                                  return ds === 'paid' || ds === 'reconciled';
+                                });
+                                return (
+                                  <Button size="sm"
+                                    className="h-7 px-3 text-xs bg-orange-700 hover:bg-orange-600 text-white border border-orange-600/50"
+                                    onClick={(e) => { e.stopPropagation(); setGroupRevertPaidItems(grpPaidItems); setGroupRevertPaidTitle(groupTitle); }}
+                                    disabled={actionProcessing}
+                                    data-testid={`button-group-revert-paid-${groupId}`}>
+                                    <RotateCcw className="h-3 w-3 mr-1" />Revert Paid ({grpPaidCnt})
+                                  </Button>
+                                );
+                              })()}
                               {(isSuperAdmin || isAdmin) && !isFOM && (
                                 <Button size="sm"
                                   className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
@@ -8744,6 +8832,43 @@ const CostSubmission = () => {
               data-testid="button-revert-paid-confirm"
             >
               {actionProcessing ? 'Reverting... / جارٍ الإرجاع...' : 'Revert Payment / إرجاع الدفعة'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Group Revert Paid → Approved — reverts all paid items in a group */}
+      <AlertDialog open={groupRevertPaidItems.length > 0} onOpenChange={(open) => { if (!open && !actionProcessing) { setGroupRevertPaidItems([]); setGroupRevertPaidTitle(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-group-revert-paid-title">
+              Revert All Paid Items
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">إرجاع جميع المدفوعات إلى حالة الموافقة</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reset <strong>{groupRevertPaidItems.length} paid item{groupRevertPaidItems.length !== 1 ? 's' : ''}</strong> back to <strong>Approved</strong> status and clear all payment proofs and amounts. Any pre-fund deductions will be reversed.
+              <span dir="rtl" className="block text-xs mt-1">سيتم إعادة تحديد العناصر المدفوعة إلى حالة الموافقة ومسح جميع الإيصالات والمبالغ المدفوعة.</span>
+              {groupRevertPaidTitle && (
+                <span className="block mt-2 font-medium text-orange-700 dark:text-orange-400">
+                  Group: {groupRevertPaidTitle}
+                </span>
+              )}
+              {groupRevertPaidItems.length > 0 && (
+                <span className="block mt-1 text-xs text-muted-foreground">
+                  Total to reverse: {groupRevertPaidItems[0].currency} {(groupRevertPaidItems.reduce((s, o) => s + (o.amount_paid_cents ?? 0), 0) / 100).toLocaleString()}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-group-revert-paid-cancel">Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={(e) => { e.preventDefault(); handleGroupRevertPaid(); }}
+              disabled={actionProcessing}
+              data-testid="button-group-revert-paid-confirm"
+            >
+              {actionProcessing ? 'Reverting... / جارٍ الإرجاع...' : `Revert ${groupRevertPaidItems.length} Payment${groupRevertPaidItems.length !== 1 ? 's' : ''} / إرجاع الدفعات`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
