@@ -789,7 +789,10 @@ export default function PreFundingOverview() {
                       {(kpi as any).calculating && <div className="h-2.5 w-2.5 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin shrink-0" />}
                     </div>
                     <div className="text-[9px] text-muted-foreground" dir="rtl">{kpi.labelAr}</div>
-                    <div className="mt-1.5 text-2xl font-bold tabular-nums leading-none">{kpi.value}</div>
+                    {(kpi as any).calculating
+                      ? <div className="mt-1.5 h-8 w-36 rounded bg-muted animate-pulse" />
+                      : <div className="mt-1.5 text-2xl font-bold tabular-nums leading-none">{kpi.value}</div>
+                    }
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{kpi.sub}</div>
                   </div>
                   <div className={cn('flex items-center justify-center h-10 w-10 rounded-xl shrink-0 text-white', kpi.accent)}>

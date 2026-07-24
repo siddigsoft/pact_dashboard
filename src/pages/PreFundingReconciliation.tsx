@@ -601,6 +601,7 @@ export default function PreFundingReconciliation() {
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
+  const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());
   const [selectedFund, setSelected]   = useState<PreFundSummary | null>(null);
   const [transactions, setTxns]       = useState<PreFundTransaction[]>([]);
   const [reconciliations, setRecons]  = useState<Reconciliation[]>([]);
@@ -750,7 +751,50 @@ export default function PreFundingReconciliation() {
         .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
         .order('created_at', { ascending: false });
       if (e && !e.message.includes('does not exist')) throw e;
-      setFunds((data as any) ?? []);
+      const loaded: PreFundSummary[] = (data as any) ?? [];
+      setFunds(loaded);
+
+      // Compute accurate available balance per fund in the background (same DP-validation
+      // logic used by loadTxns) so the fund picker shows the correct figure, not the stale
+      // available_balance DB column.
+      const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
+      const avMap = new Map<string, number>();
+      await Promise.all(loaded.map(async fund => {
+        try {
+          const rawTxns: any[] = await fetchAll(() =>
+            supabase.from('pre_fund_transactions')
+              .select('id,transaction_type,amount,source_table,source_id')
+              .eq('pre_fund_request_id', fund.id)
+              .eq('transaction_type', 'payment'),
+          );
+          if (rawTxns.length === 0) {
+            avMap.set(fund.id, Math.max(0, fund.amount - Number(fund.paid_amount ?? 0)));
+            return;
+          }
+          const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
+          const txnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
+          const [validDpData, backLinked] = await Promise.all([
+            fetchAll(() => supabase.from('down_payment_requests').select('id,status,metadata').in('id', dpIds.length ? dpIds : ['_none'])),
+            fetchAll(() => supabase.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', txnIds.length ? txnIds : ['_none'])),
+          ]);
+          const paidDpSet = new Set<string>((validDpData as any[]).filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+          const nonPaidBackIds = new Set<string>((backLinked as any[]).filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true).map((d: any) => d.pre_fund_transaction_id as string));
+          let paid = 0;
+          for (const t of rawTxns) {
+            if (t.source_table === 'down_payment_requests') {
+              if (!t.source_id || paidDpSet.has(t.source_id)) paid += Number(t.amount ?? 0);
+            } else if (!t.source_table) {
+              if (!nonPaidBackIds.has(t.id)) paid += Number(t.amount ?? 0);
+            } else {
+              paid += Number(t.amount ?? 0);
+            }
+          }
+          avMap.set(fund.id, Math.max(0, fund.amount - paid));
+        } catch {
+          avMap.set(fund.id, Math.max(0, fund.amount - Number(fund.paid_amount ?? 0)));
+        }
+      }));
+      setFundsComputedAvail(new Map(avMap));
     } catch (e: any) { toast({ title: 'Load failed', description: e.message, variant: 'destructive' }); }
     finally { setLoading(false); }
   }, [toast]);
@@ -1814,7 +1858,9 @@ export default function PreFundingReconciliation() {
               {funds.map(f => (
                 <SelectItem key={f.id} value={f.id} data-testid={`option-fund-${f.id}`}>
                   <span className="font-medium">{f.name}</span>
-                  <span className="ml-2 text-muted-foreground text-xs">· {f.currency} {formatNumber(f.available_balance, 0)} avail.</span>
+                  <span className="ml-2 text-muted-foreground text-xs">
+                    · {f.currency} {formatNumber(fundsComputedAvail.has(f.id) ? fundsComputedAvail.get(f.id)! : f.available_balance, 0)} avail.
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
