@@ -1972,16 +1972,22 @@ const CostSubmission = () => {
 
   const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
     if (!isSuperAdmin && !isAdmin && !hasRevertTierOverride) return false;
-    // Block tier-revert when payment proof is already attached — user must Revert Paid first
-    // to clear the proof before reverting the approval chain.
-    if (oc.payment_proof_url) return false;
     return getRevertTierLabel(oc) !== null;
   };
 
   /** Compute the minimal DB update needed to step back one approval tier */
   const computeRevertUpdates = (oc: OperationalCostSubmission): Record<string, unknown> => {
     const tier = getRevertTierLabel(oc);
-    const base = { updated_at: new Date().toISOString() };
+    // Always clear payment proof and payment amounts when reverting any tier
+    const proofClear = {
+      payment_proof_url: null,
+      payment_proof_notes: null,
+      payment_proof_uploaded_at: null,
+      amount_paid_cents: 0,
+      paid_at: null,
+      paid_by: null,
+    };
+    const base = { updated_at: new Date().toISOString(), ...proofClear };
     if (tier === 'T4') return { ...base, tier4_status: 'pending', tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
     if (tier === 'T3') return { ...base, tier3_status: 'pending', tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
     if (tier === 'T2') return { ...base, tier2_status: 'pending', tier2_approved_by: null, tier2_approved_at: null, tier2_notes: null, tier3_status: null, tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
@@ -2002,7 +2008,7 @@ const CostSubmission = () => {
         toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
       } else {
         const tier = getRevertTierLabel(revertConfirm);
-        toast({ title: 'Reverted / تم الإرجاع', description: `Submission reverted one step (${tier} undone). / تم إرجاع الطلب خطوة واحدة للخلف.` });
+        toast({ title: 'Reverted / تم الإرجاع', description: `Submission reverted (${tier} undone). Payment proof and amount cleared. / تم إرجاع الطلب ومسح إيصال الدفع والمبلغ المدفوع.` });
         fetchOperationalCosts();
       }
     } catch (err) {
@@ -9003,6 +9009,12 @@ const CostSubmission = () => {
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will undo only the <strong>{revertConfirm ? getRevertTierLabel(revertConfirm) : ''}</strong> approval and return the submission to the previous step. All earlier approvals remain intact.
+              {revertConfirm?.payment_proof_url && (
+                <span className="block mt-1.5 text-amber-700 dark:text-amber-400 font-medium text-xs">
+                  ⚠ Payment proof attached — it will be removed along with any recorded payment amount.
+                  <span dir="rtl" className="block">⚠ يوجد إيصال دفع مرفق — سيتم حذفه مع المبلغ المدفوع المسجّل.</span>
+                </span>
+              )}
               <span dir="rtl" className="block text-xs mt-1">سيتم إلغاء موافقة {revertConfirm ? getRevertTierLabel(revertConfirm) : ''} فقط وإعادة الطلب إلى الخطوة السابقة. جميع الموافقات السابقة تبقى سارية.</span>
               {revertConfirm && (
                 <span className="block mt-2 font-medium text-amber-700">
