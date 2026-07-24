@@ -170,7 +170,11 @@ export default function PreFundingAllocations() {
         fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpSourceIds),
         fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsSourceIds),
       ]);
-      const validDpIds  = new Set(validDpData.filter((dp: any) => dp.status !== 'cancelled' && dp.metadata?.deleted !== true).map((dp: any) => dp.id as string));
+      // Use the same status exclusion set as the Balance Dashboard so both pages
+      // agree on what counts as "disbursed". pending/draft/rejected DPs have not
+      // actually been paid out and must not inflate the spent total.
+      const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
+      const validDpIds  = new Set(validDpData.filter((dp: any) => !DP_NO_DISBURSE.has(dp.status) && dp.metadata?.deleted !== true).map((dp: any) => dp.id as string));
       const validOcsIds = new Set(validOcsData.map((o: any) => o.id as string));
 
       const validTxns = rawTxns.filter(t => {
