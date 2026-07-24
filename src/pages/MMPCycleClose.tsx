@@ -3927,46 +3927,98 @@ const MMPCycleClose = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="mmp-cycle-close-page">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+    <div className="flex flex-col min-h-full" data-testid="mmp-cycle-close-page">
+      {/* ── Page Header — matches User Management style ── */}
+      <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-background to-muted/30">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-600 text-white shrink-0">
-            <RotateCcw className="h-5 w-5" />
+          <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+            <RotateCcw className="h-5 w-5 text-primary" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">MMP Cycle Close</h1>
-              {isSuperAdmin && <Badge variant="outline" className="border-purple-400 text-purple-700 dark:text-purple-300"><Shield className="h-3 w-3 mr-1" /> Super Admin View</Badge>}
-              {!isSuperAdmin && isAdmin && <Badge variant="outline"><Shield className="h-3 w-3 mr-1" /> Admin View</Badge>}
-              {!isAdmin && isFOM && <Badge variant="outline" className="border-blue-400 text-blue-700 dark:text-blue-300"><Shield className="h-3 w-3 mr-1" /> FOM View — Approval Only</Badge>}
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight" data-testid="text-page-title">MMP Cycle Close</h1>
+              {isSuperAdmin && <Badge variant="outline" className="border-purple-400 text-purple-700 dark:text-purple-300 text-[11px]"><Shield className="h-3 w-3 mr-1" /> Super Admin</Badge>}
+              {!isSuperAdmin && isAdmin && <Badge variant="outline" className="text-[11px]"><Shield className="h-3 w-3 mr-1" /> Admin</Badge>}
+              {!isAdmin && isFOM && <Badge variant="outline" className="border-blue-400 text-blue-700 dark:text-blue-300 text-[11px]"><Shield className="h-3 w-3 mr-1" /> FOM</Badge>}
             </div>
-            <p className="text-muted-foreground text-sm mt-0.5">
+            <p className="text-xs text-muted-foreground hidden sm:block mt-0.5">
               Manage MMP cycle lifecycle, track coverage gaps, and close monitoring periods
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
+            <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportCoverageReport()} data-testid="button-export">
-            <Download className="h-4 w-4 mr-1" /> Export Report
+          <Button variant="outline" size="sm" className="h-9 rounded-lg hidden sm:flex" onClick={() => exportCoverageReport()} data-testid="button-export">
+            <Download className="h-4 w-4 mr-1.5" /> Export PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportCoverageReportExcel()} data-testid="button-export-excel">
-            <FileSpreadsheet className="h-4 w-4 mr-1" /> Export Excel
+          <Button variant="outline" size="sm" className="h-9 rounded-lg hidden sm:flex" onClick={() => exportCoverageReportExcel()} data-testid="button-export-excel">
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Export Excel
           </Button>
           {isAdmin && (
             <Button
               variant="outline"
               size="sm"
+              className="h-9 rounded-lg"
               onClick={() => navigate(checklistMmpId ? `/reconciliation-dashboard?mmpId=${checklistMmpId}` : '/reconciliation-dashboard')}
               data-testid="button-goto-reconciliation"
             >
-              <BarChart3 className="h-4 w-4 mr-1" /> Reconciliation
+              <BarChart3 className="h-4 w-4 mr-1.5" /> Reconciliation
             </Button>
           )}
         </div>
       </div>
+
+      {/* ── Stats Cards — matches User Management style ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 sm:px-6 py-4">
+        <Card className="p-4 border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active Cycles</p>
+              <p className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">{activeMmps.length}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/30">
+              <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-l-4 border-l-amber-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">In Closing</p>
+              <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">{closingMmps.length}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-amber-100 dark:bg-amber-900/30">
+              <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-l-4 border-l-purple-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending Approval</p>
+              <p className="text-2xl font-bold mt-1 text-purple-600 dark:text-purple-400">{pendingApprovalMmps.length}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-purple-100 dark:bg-purple-900/30">
+              <CheckCircle2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Closed Cycles</p>
+              <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">{closedCycles.length}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-green-100 dark:bg-green-900/30">
+              <BookOpen className="h-4 w-4 text-green-600 dark:text-green-400" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="px-4 sm:px-6 pb-6 flex-1">
 
       {/* ── Persistent "Resume Closing" banner ── shown whenever at least one MMP is in closing state */}
       {closingMmps.length > 0 && (
@@ -4460,33 +4512,33 @@ const MMPCycleClose = () => {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className="flex-wrap gap-1 h-auto p-1">
-          <TabsTrigger value="active" data-testid="tab-active" className="gap-1.5 px-3 py-2">
+        <TabsList data-testid="tabs-cycle-close" className="h-auto p-1 bg-muted/60 rounded-lg flex-wrap gap-1">
+          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Activity className="h-3.5 w-3.5" />
             <span>Active Cycles</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
           </TabsTrigger>
-          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>Uncovered Sites</span>
             {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
             <span>Reports</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">التقارير</span>
           </TabsTrigger>
-          <TabsTrigger value="comparison" data-testid="tab-comparison" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Layers className="h-3.5 w-3.5" />
             <span>Comparison</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">المقارنة</span>
           </TabsTrigger>
-          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Star className="h-3.5 w-3.5" />
             <span>Scorecard</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
           </TabsTrigger>
-          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
             <span>Exceptions</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الاستثناءات</span>
@@ -4496,14 +4548,14 @@ const MMPCycleClose = () => {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="finance" data-testid="tab-finance" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <DollarSign className="h-3.5 w-3.5 text-amber-500" />
             <span>Pending Finance</span>
             {(financeCosts.length + financeAdvances.length) > 0 && (
               <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="wfp" data-testid="tab-wfp" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Shield className="h-3.5 w-3.5 text-blue-500" />
             <span>WFP Confirmation</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">تأكيد WFP</span>
@@ -4514,12 +4566,12 @@ const MMPCycleClose = () => {
               <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <MapPin className="h-3.5 w-3.5 text-emerald-500" />
             <span>Ad-hoc Visits</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الزيارات الطارئة</span>
           </TabsTrigger>
-          <TabsTrigger value="archive" data-testid="tab-archive" className="gap-1.5 px-3 py-2">
+          <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
             <span>Closed Cycles</span>
             {closedCycles.length > 0 && <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0">{closedCycles.length}</Badge>}
@@ -7728,6 +7780,7 @@ const MMPCycleClose = () => {
         </AlertDialog>
       )}
     </div>
+  </div>
   );
 };
 
