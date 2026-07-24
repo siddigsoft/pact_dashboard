@@ -523,6 +523,7 @@ const CostSubmission = () => {
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
   const [groupRevertPaidItems, setGroupRevertPaidItems] = useState<OperationalCostSubmission[]>([]);
   const [groupRevertPaidTitle, setGroupRevertPaidTitle] = useState('');
+  const [groupRevertTierConfirm, setGroupRevertTierConfirm] = useState<{ items: OperationalCostSubmission[]; tier: string; title: string } | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
     open: boolean;
@@ -2000,6 +2001,34 @@ const CostSubmission = () => {
     } finally {
       setActionProcessing(false);
       setRevertConfirm(null);
+    }
+  };
+
+  /** Batch-revert all revertable items in a group by one tier */
+  const handleGroupRevertTier = async () => {
+    if (!groupRevertTierConfirm || groupRevertTierConfirm.items.length === 0) return;
+    setActionProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    try {
+      for (const oc of groupRevertTierConfirm.items) {
+        const updates = computeRevertUpdates(oc);
+        const { error } = await supabase
+          .from('operational_cost_submissions')
+          .update(updates)
+          .eq('id', oc.id);
+        if (error) { failCount++; } else { successCount++; }
+      }
+      toast({
+        title: 'Group Reverted / تم إرجاع المجموعة',
+        description: `${successCount} item${successCount !== 1 ? 's' : ''} reverted (${groupRevertTierConfirm.tier} undone).${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+      });
+      fetchOperationalCosts();
+    } catch (err) {
+      toast({ title: 'Error / خطأ', description: 'Group tier revert failed.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setGroupRevertTierConfirm(null);
     }
   };
 
@@ -5535,30 +5564,60 @@ const CostSubmission = () => {
                             </div>
                           )}
 
-                          {/* Approve Remaining / Reject All — shown when expanded, only if there are actually pending items */}
-                          {isExpanded && groupApprovableTier !== null && groupId && grpApprovableItems.length > 0 && (
-                            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
-                              <span className="text-[11px] text-muted-foreground italic flex-1">
-                                {grpApprovableItems.length < groupItems.length
-                                  ? `${grpApprovableItems.length} of ${groupItems.length} items await Tier ${groupApprovableTier} — review individually or:`
-                                  : 'Review items individually below, or:'}
-                              </span>
-                              <Button size="sm" className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'approve', groupApprovableTier)}
-                                data-testid={`button-group-approve-all-${groupId}`}>
-                                <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                {grpApprovableItems.length < groupItems.length
-                                  ? `Approve Remaining (${grpApprovableItems.length}) T${groupApprovableTier}`
-                                  : `Approve All T${groupApprovableTier}`}
-                              </Button>
-                              <Button size="sm" variant="destructive" className="h-7 px-3 text-xs"
-                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'reject', groupApprovableTier)}
-                                data-testid={`button-group-reject-all-${groupId}`}>
-                                <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-                                {grpApprovableItems.length < groupItems.length ? `Reject Remaining (${grpApprovableItems.length})` : 'Reject All'}
-                              </Button>
-                            </div>
-                          )}
+                          {/* Approve Remaining / Reject All / Revert Tier — shown when expanded */}
+                          {isExpanded && groupId && (() => {
+                            // Revertable items: can be done independently of approvable items
+                            const grpRevertableItems = groupItems.filter(o => canRevertSubmission(o));
+                            // Determine the dominant revert tier (most items share the same tier)
+                            const tierCounts: Record<string, OperationalCostSubmission[]> = {};
+                            grpRevertableItems.forEach(o => {
+                              const t = getRevertTierLabel(o);
+                              if (t) { if (!tierCounts[t]) tierCounts[t] = []; tierCounts[t].push(o); }
+                            });
+                            const grpRevertTier = Object.entries(tierCounts).sort((a, b) => b[1].length - a[1].length)[0];
+                            const showApproveReject = groupApprovableTier !== null && grpApprovableItems.length > 0;
+                            const showRevert = grpRevertableItems.length > 0 && (isSuperAdmin || isAdmin || hasRevertTierOverride);
+                            if (!showApproveReject && !showRevert) return null;
+                            return (
+                              <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
+                                {showApproveReject && (
+                                  <span className="text-[11px] text-muted-foreground italic flex-1">
+                                    {grpApprovableItems.length < groupItems.length
+                                      ? `${grpApprovableItems.length} of ${groupItems.length} items await Tier ${groupApprovableTier} — review individually or:`
+                                      : 'Review items individually below, or:'}
+                                  </span>
+                                )}
+                                {showApproveReject && (
+                                  <Button size="sm" className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'approve', groupApprovableTier!)}
+                                    data-testid={`button-group-approve-all-${groupId}`}>
+                                    <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                    {grpApprovableItems.length < groupItems.length
+                                      ? `Approve Remaining (${grpApprovableItems.length}) T${groupApprovableTier}`
+                                      : `Approve All T${groupApprovableTier}`}
+                                  </Button>
+                                )}
+                                {showApproveReject && (
+                                  <Button size="sm" variant="destructive" className="h-7 px-3 text-xs"
+                                    onClick={() => openGroupApprovalDialog(groupId, groupTitle, grpApprovableItems, 'reject', groupApprovableTier!)}
+                                    data-testid={`button-group-reject-all-${groupId}`}>
+                                    <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                    {grpApprovableItems.length < groupItems.length ? `Reject Remaining (${grpApprovableItems.length})` : 'Reject All'}
+                                  </Button>
+                                )}
+                                {showRevert && grpRevertTier && (
+                                  <Button size="sm"
+                                    className="h-7 px-3 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                                    onClick={() => setGroupRevertTierConfirm({ items: grpRevertTier[1], tier: grpRevertTier[0], title: groupTitle })}
+                                    disabled={actionProcessing}
+                                    data-testid={`button-group-revert-tier-${groupId}`}>
+                                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                    Revert {grpRevertTier[0]}{grpRevertTier[1].length < groupItems.length ? ` (${grpRevertTier[1].length})` : ''}
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Add item to group — submitters can append a new line item */}
                           {isExpanded && groupId && grpDoneCnt === 0 && grpRejectedCnt < groupItems.length && (
@@ -8906,6 +8965,42 @@ const CostSubmission = () => {
               data-testid="button-revert-confirm"
             >
               {actionProcessing ? 'Reverting... / جارٍ الإرجاع...' : `Revert ${revertConfirm ? getRevertTierLabel(revertConfirm) : ''} / إرجاع`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Group Tier Revert — batch step-back one approval tier for all revertable items in a group */}
+      <AlertDialog open={!!groupRevertTierConfirm} onOpenChange={(open) => { if (!open && !actionProcessing) setGroupRevertTierConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-group-revert-tier-title">
+              Revert {groupRevertTierConfirm?.tier} — Group
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">إرجاع موافقة المجموعة خطوة للخلف</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will undo the <strong>{groupRevertTierConfirm?.tier}</strong> approval for{' '}
+              <strong>{groupRevertTierConfirm?.items.length} item{(groupRevertTierConfirm?.items.length ?? 0) !== 1 ? 's' : ''}</strong> in this group,
+              returning them to the previous approval step. All earlier approvals remain intact.
+              <span dir="rtl" className="block text-xs mt-1">سيتم إلغاء موافقة {groupRevertTierConfirm?.tier} لجميع العناصر في المجموعة وإعادتها إلى الخطوة السابقة. الموافقات السابقة تبقى سارية.</span>
+              {groupRevertTierConfirm?.title && (
+                <span className="block mt-2 font-medium text-amber-700 dark:text-amber-400">
+                  Group: {groupRevertTierConfirm.title}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-group-revert-tier-cancel">Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={(e) => { e.preventDefault(); handleGroupRevertTier(); }}
+              disabled={actionProcessing}
+              data-testid="button-group-revert-tier-confirm"
+            >
+              {actionProcessing
+                ? 'Reverting... / جارٍ الإرجاع...'
+                : `Revert ${groupRevertTierConfirm?.tier} for ${groupRevertTierConfirm?.items.length ?? 0} Item${(groupRevertTierConfirm?.items.length ?? 0) !== 1 ? 's' : ''} / إرجاع`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
