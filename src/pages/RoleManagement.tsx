@@ -147,12 +147,25 @@ const RoleManagement = () => {
   };
 
   const getAssignedUsers = (role: RoleWithPermissions) => {
+    // Normalize both sides to lowercase-alpha so PascalCase ('DataCollector')
+    // matches camelCase ('dataCollector') and snake_case ('data_collector').
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+    const roleNorm = norm(role.name);
+
     return users.filter(user => {
-      const userRoles = getUserRolesByUserId(user.id);
-      return userRoles.some(userRole =>
-        (role.is_system_role && userRole.role === role.name) ||
-        (!role.is_system_role && userRole.role_id === role.id)
+      // 1. Check user_roles table entries (case-insensitive role name match)
+      const uroles = getUserRolesByUserId(user.id);
+      const inUserRolesTable = uroles.some(ur =>
+        (role.is_system_role && norm(ur.role as string) === roleNorm) ||
+        (!role.is_system_role && ur.role_id === role.id)
       );
+      if (inUserRolesTable) return true;
+
+      // 2. Fallback: match via profiles.role for users with no user_roles row
+      if (role.is_system_role && user.role) {
+        return norm(user.role) === roleNorm;
+      }
+      return false;
     });
   };
 
