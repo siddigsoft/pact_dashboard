@@ -1296,83 +1296,86 @@ export default function PreFundingRegistry() {
                     </Badge>
                   </TableCell>
 
-                  {/* Actions */}
+                  {/* Actions — primary status action + ⋮ overflow menu */}
                   <TableCell className="py-3 pr-4">
-                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                      {f.status === 'draft' && (
-                        <Button size="sm" className="h-8 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white gap-1.5" onClick={() => handleSubmitForApproval(f)} data-testid={`button-submit-${f.id}`}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* Primary action: only shown when there is a clear next step */}
+                      {f.status === 'draft' && canManage && (
+                        <Button size="sm" className="h-8 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white gap-1.5 whitespace-nowrap" onClick={() => handleSubmitForApproval(f)} data-testid={`button-submit-${f.id}`}>
                           <Send className="h-3.5 w-3.5" />Submit
                         </Button>
                       )}
-                      {f.status === 'awaiting_receipt' && (
-                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-sky-600 border-sky-300 hover:bg-sky-50 gap-1.5" onClick={() => setReceiptDialog({ open: true, fundId: f.id, fundName: f.name })} data-testid={`button-receipt-${f.id}`}>
+                      {f.status === 'awaiting_receipt' && canManage && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-sky-600 border-sky-300 hover:bg-sky-50 gap-1.5 whitespace-nowrap" onClick={() => setReceiptDialog({ open: true, fundId: f.id, fundName: f.name })} data-testid={`button-receipt-${f.id}`}>
                           <Upload className="h-3.5 w-3.5" />Receipt
                         </Button>
                       )}
-                      {['active', 'low_balance', 'closed'].includes(f.status) && (
-                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-sky-600 border-sky-300 hover:bg-sky-50 gap-1.5" title="Donor Statement PDF" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`button-donor-pdf-${f.id}`}>
-                          <FileText className="h-3.5 w-3.5" />PDF
-                        </Button>
-                      )}
-                      {['active', 'low_balance'].includes(f.status) && (
-                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-violet-600 border-violet-300 hover:bg-violet-50 gap-1.5" title="Manage user allocations" onClick={() => openAllocDialog(f)} data-testid={`button-users-${f.id}`}>
-                          <Users className="h-3.5 w-3.5" />Users
-                        </Button>
-                      )}
-                      {['active', 'low_balance'].includes(f.status) && canManage && (
-                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50 gap-1.5" title="Request a top-up for this fund" onClick={() => openTopUp(f)} data-testid={`button-topup-${f.id}`}>
-                          <TrendingUp className="h-3.5 w-3.5" />Top-up
-                        </Button>
-                      )}
-                      {canManage && f.status !== 'draft' && f.status !== 'period_locked' && (
-                        <Button
-                          size="sm" variant="outline"
-                          className="h-8 px-3 text-xs text-amber-600 border-amber-300 hover:bg-amber-50 gap-1.5"
-                          title="Recalculate Available/Paid/Committed from actual transaction history"
-                          onClick={() => handleRecalcBalance(f)}
-                          disabled={recalcingId === f.id}
-                          data-testid={`button-recalc-${f.id}`}
-                        >
-                          {recalcingId === f.id
-                            ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            : <RefreshCw className="h-3.5 w-3.5" />}
-                          Recalc
-                        </Button>
-                      )}
-                      {canManage && f.status !== 'period_locked' && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1" title="Change fund status" data-testid={`button-status-menu-${f.id}`}>
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                              <ChevronDown className="h-3 w-3 opacity-60" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Set Status To</div>
-                            <DropdownMenuSeparator />
-                            {ADMIN_STATUS_OPTIONS.filter(opt => opt.value !== f.status).map(opt => (
-                              <DropdownMenuItem
-                                key={opt.value}
-                                className={cn('gap-2 text-xs cursor-pointer', opt.cls)}
-                                onClick={() => setStatusChangeDialog({ open: true, fundId: f.id, fundName: f.name, currentStatus: f.status, targetStatus: opt.value })}
-                                data-testid={`menu-status-${opt.value}-${f.id}`}
-                              >
-                                {opt.icon}{opt.label}
+
+                      {/* ⋮ overflow menu — all secondary actions */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="More actions" data-testid={`button-actions-menu-${f.id}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+
+                          {/* Fund-level actions */}
+                          {['active', 'low_balance', 'closed'].includes(f.status) && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`menu-pdf-${f.id}`}>
+                              <FileText className="h-3.5 w-3.5" />
+                              {generatingDonorPdf === f.id ? 'Generating…' : 'Donor Statement PDF'}
+                            </DropdownMenuItem>
+                          )}
+                          {['active', 'low_balance'].includes(f.status) && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-violet-700" onClick={() => openAllocDialog(f)} data-testid={`menu-users-${f.id}`}>
+                              <Users className="h-3.5 w-3.5" />Manage Allocations
+                            </DropdownMenuItem>
+                          )}
+                          {['active', 'low_balance'].includes(f.status) && canManage && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-emerald-700" onClick={() => openTopUp(f)} data-testid={`menu-topup-${f.id}`}>
+                              <TrendingUp className="h-3.5 w-3.5" />Request Top-up
+                            </DropdownMenuItem>
+                          )}
+                          {canManage && f.status !== 'draft' && f.status !== 'period_locked' && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-amber-700" onClick={() => handleRecalcBalance(f)} disabled={recalcingId === f.id} data-testid={`menu-recalc-${f.id}`}>
+                              <RefreshCw className={cn('h-3.5 w-3.5', recalcingId === f.id && 'animate-spin')} />
+                              {recalcingId === f.id ? 'Recalculating…' : 'Recalculate Balance'}
+                            </DropdownMenuItem>
+                          )}
+
+                          {/* Status change sub-section */}
+                          {canManage && f.status !== 'period_locked' && ADMIN_STATUS_OPTIONS.some(opt => opt.value !== f.status) && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Set Status</div>
+                              {ADMIN_STATUS_OPTIONS.filter(opt => opt.value !== f.status).map(opt => (
+                                <DropdownMenuItem
+                                  key={opt.value}
+                                  className={cn('gap-2 text-xs cursor-pointer', opt.cls)}
+                                  onClick={() => setStatusChangeDialog({ open: true, fundId: f.id, fundName: f.name, currentStatus: f.status, targetStatus: opt.value })}
+                                  data-testid={`menu-status-${opt.value}-${f.id}`}
+                                >
+                                  {opt.icon}{opt.label}
+                                </DropdownMenuItem>
+                              ))}
+                            </>
+                          )}
+
+                          {/* Edit / Delete */}
+                          {canManage && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => openEdit(f)} data-testid={`menu-edit-${f.id}`}>
+                                <Pencil className="h-3.5 w-3.5" />Edit Fund
                               </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                      {canManage && (
-                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Edit fund" onClick={() => openEdit(f)} data-testid={`button-edit-${f.id}`}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {canManage && (
-                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete fund" onClick={() => setDeleteId(f.id)} data-testid={`button-delete-${f.id}`}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                              <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(f.id)} data-testid={`menu-delete-${f.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />Delete Fund
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
 
