@@ -141,44 +141,42 @@ function RoleDot({
   const isInteractive = canEdit && onClick;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            disabled={!isInteractive || saving}
-            onClick={isInteractive ? onClick : undefined}
-            className={cn(
-              'w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold select-none transition-all',
-              hasPermission
-                ? 'bg-emerald-500 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600',
-              isInteractive && !saving && 'cursor-pointer hover:scale-125 hover:ring-2 ring-offset-1',
-              isInteractive && hasPermission && 'hover:bg-red-400 hover:ring-red-300',
-              isInteractive && !hasPermission && 'hover:bg-emerald-400 hover:text-white hover:ring-emerald-300',
-              saving && 'opacity-50 cursor-not-allowed',
-            )}
-            data-testid={`role-dot-${role.replace(/\s/g, '-').replace(/[()]/g, '')}`}
-          >
-            {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : ROLE_SHORT_LABELS[role]}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="font-medium">{role}</p>
-          <p className="text-xs text-muted-foreground">
-            {hasPermission ? '✅ Has permission' : '⛔ No permission'}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          disabled={!isInteractive || saving}
+          onClick={isInteractive ? onClick : undefined}
+          className={cn(
+            'w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold select-none transition-all',
+            hasPermission
+              ? 'bg-emerald-500 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600',
+            isInteractive && !saving && 'cursor-pointer hover:scale-125 hover:ring-2 ring-offset-1',
+            isInteractive && hasPermission && 'hover:bg-red-400 hover:ring-red-300',
+            isInteractive && !hasPermission && 'hover:bg-emerald-400 hover:text-white hover:ring-emerald-300',
+            saving && 'opacity-50 cursor-not-allowed',
+          )}
+          data-testid={`role-dot-${role.replace(/\s/g, '-').replace(/[()]/g, '')}`}
+        >
+          {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : ROLE_SHORT_LABELS[role]}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="font-medium">{role}</p>
+        <p className="text-xs text-muted-foreground">
+          {hasPermission ? '✅ Has permission' : '⛔ No permission'}
+        </p>
+        {isInteractive && (
+          <p className="text-xs text-primary mt-0.5">
+            Click to {hasPermission ? 'revoke' : 'grant'}
           </p>
-          {isInteractive && (
-            <p className="text-xs text-primary mt-0.5">
-              Click to {hasPermission ? 'revoke' : 'grant'}
-            </p>
-          )}
-          {!isInteractive && !canEdit && (
-            <p className="text-xs text-muted-foreground mt-0.5 italic">Super Admin only to edit</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        )}
+        {!isInteractive && !canEdit && (
+          <p className="text-xs text-muted-foreground mt-0.5 italic">Super Admin only to edit</p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -583,6 +581,7 @@ export function ModuleControlCenter({ roles: liveRoles, onTogglePermission, canE
   };
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       {/* Edit mode banner */}
       {effectiveCanEdit && (
@@ -799,6 +798,7 @@ export function ModuleControlCenter({ roles: liveRoles, onTogglePermission, canE
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }
 
