@@ -210,6 +210,9 @@ export default function PreFundingOverview() {
   const [funds, setFunds]         = useState<PreFundRow[]>([]);
   const [allocs, setAllocs]       = useState<AllocRow[]>([]);
   const [txns, setTxns]           = useState<TxnRow[]>([]);
+  // Raw (unfiltered) per-fund payment sums — mirrors what PreFundingReconciliation uses.
+  // Stored separately from txns so DP/OCS validation does not reduce the paid-out total.
+  const [rawFundPaySums, setRawFundPaySums] = useState<Map<string, number>>(new Map());
   const [profiles, setProfiles]   = useState<Map<string, string>>(new Map());
   // dpId → userId: built from validDpData.created_by so txnsByFundUser can attribute
   // spend correctly when pre_fund_transactions.user_id is null (officer stored in created_by).
@@ -313,6 +316,16 @@ export default function PreFundingOverview() {
             .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
             .map((d: any) => d.pre_fund_transaction_id as string)
         );
+        // Compute raw payment sums BEFORE validation filtering — matches reconciliation's
+        // unfiltered transaction sum (the authoritative paid-out figure for each fund).
+        {
+          const m = new Map<string, number>();
+          for (const t of rawTxns) {
+            if (t.transaction_type !== 'payment') continue;
+            m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
+          }
+          setRawFundPaySums(m);
+        }
         const validTxns = rawTxns.filter(t => {
           if (t.source_table === 'down_payment_requests') {
             if (!t.source_id) return true;
@@ -503,33 +516,22 @@ export default function PreFundingOverview() {
     return m;
   }, [txns, dpUserMap, ocsUserMap, allocHoldersByFund]);
 
-  // Per-fund sum of 'payment' type transactions (the most accurate paid-out figure).
-  // This mirrors what PreFundingReconciliation uses as Priority-1 effectivePaidAmount.
-  // Available during Phase-2 load; Map is empty until txns arrive (safe — falls back to DB cols).
-  const fundPaymentSum = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const t of txns) {
-      if (t.transaction_type !== 'payment') continue;
-      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
-    }
-    return m;
-  }, [txns]);
-
   // Effective paid amount for a fund — highest (most conservative) of:
-  //   1. Sum of validated payment transaction rows (most accurate, mirrors Reconciliation page)
-  //   2. paid_amount DB column  (updated by directLinkPayment even when txn insert is blocked)
-  // Falls back to 0 when neither is populated yet.
+  //   1. Raw (unfiltered) payment transaction sum — exact same source as Reconciliation page.
+  //      Stored in rawFundPaySums; populated at Phase-2 load before DP/OCS validation runs.
+  //   2. paid_amount DB column — updated by directLinkPayment even when txn insert is blocked.
+  // Falls back to 0 when Phase 2 has not completed yet (safe — transitions correctly once loaded).
   const effectivePaid = (f: { id: string; amount: number; paid_amount?: number }) => {
-    const fromTxns = fundPaymentSum.get(f.id) ?? 0;
-    const fromCol  = Number(f.paid_amount ?? 0);
-    return Math.max(fromTxns, fromCol);
+    const fromRawTxns = rawFundPaySums.get(f.id) ?? 0;
+    const fromCol     = Number(f.paid_amount ?? 0);
+    return Math.max(fromRawTxns, fromCol);
   };
 
-  // True available = amount − effectivePaid, further capped by available_balance DB column
-  // (take the lower/more-conservative of the two).
+  // True available = amount − effectivePaid, further capped by available_balance DB column.
+  // Taking the minimum ensures a stale-high available_balance never inflates the figure.
   const conservativeAvail = (f: { id: string; amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
-    const paid = effectivePaid(f);
-    const fromPaid = Math.max(0, f.amount - paid);
+    const paid      = effectivePaid(f);
+    const fromPaid  = Math.max(0, f.amount - paid);
     return f.available_balance != null ? Math.min(Number(f.available_balance), fromPaid) : fromPaid;
   };
 
