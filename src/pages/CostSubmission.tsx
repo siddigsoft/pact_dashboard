@@ -2128,50 +2128,83 @@ const CostSubmission = () => {
   /** Revert ALL paid/reconciled items in a group back to Approved in one action */
   const handleGroupRevertPaid = async () => {
     if (groupRevertPaidItems.length === 0) return;
+    // Snapshot immediately — avoids stale React closure if a re-render fires mid-loop
+    const itemsToRevert = [...groupRevertPaidItems];
     setActionProcessing(true);
     let successCount = 0;
     let failCount = 0;
     const now = new Date().toISOString();
     try {
       const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
-      for (const oc of groupRevertPaidItems) {
-        const paidAmountForReversal = (oc.amount_paid_cents ?? 0) / 100;
-        const { error } = await supabase
-          .from('operational_cost_submissions')
-          .update({
-            status: 'approved',
-            paid_at: null,
-            paid_by: null,
-            amount_paid_cents: 0,
-            payment_proof_url: null,
-            payment_proof_notes: null,
-            payment_proof_uploaded_at: null,
-            updated_at: now,
-          })
-          .eq('id', oc.id);
-        if (error) { failCount++; continue; }
-        successCount++;
-        // Reverse pre-fund deduction (best-effort)
-        try {
-          const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', oc.id);
-          if (!unlinkResult.unlinked) {
-            const { data: srcRow } = await (supabase as any)
-              .from('operational_cost_submissions')
-              .select('metadata')
-              .eq('id', oc.id)
-              .maybeSingle();
-            if (srcRow?.metadata?.pre_fund_deducted && srcRow?.metadata?.pre_fund_id && paidAmountForReversal > 0) {
-              await reverseDirectDeduction(srcRow.metadata.pre_fund_id, paidAmountForReversal, oc.submitted_by ?? null);
+
+      // Step 1 — read metadata for ALL items BEFORE any update so we don't lose pre-fund linkage
+      const metaMap: Record<string, { paidAmount: number; preFundId: string | null; preFundDeducted: boolean; rawMeta: any }> = {};
+      await Promise.allSettled(
+        itemsToRevert.map(async (oc) => {
+          const { data: row } = await (supabase as any)
+            .from('operational_cost_submissions')
+            .select('metadata, amount_paid_cents')
+            .eq('id', oc.id)
+            .maybeSingle();
+          metaMap[oc.id] = {
+            paidAmount: ((row?.amount_paid_cents ?? oc.amount_paid_cents) ?? 0) / 100,
+            preFundId: row?.metadata?.pre_fund_id ?? null,
+            preFundDeducted: !!(row?.metadata?.pre_fund_deducted),
+            rawMeta: row?.metadata ?? {},
+          };
+        })
+      );
+
+      // Step 2 — reset all items to Approved in parallel
+      const updateResults = await Promise.allSettled(
+        itemsToRevert.map((oc) =>
+          supabase
+            .from('operational_cost_submissions')
+            .update({
+              status: 'approved',
+              paid_at: null,
+              paid_by: null,
+              amount_paid_cents: 0,
+              payment_proof_url: null,
+              payment_proof_notes: null,
+              payment_proof_uploaded_at: null,
+              updated_at: now,
+            })
+            .eq('id', oc.id)
+        )
+      );
+      updateResults.forEach((r, i) => {
+        if (r.status === 'fulfilled' && !(r.value as any).error) {
+          successCount++;
+        } else {
+          failCount++;
+          console.warn('[GroupRevertPaid] Update failed for', itemsToRevert[i].id,
+            r.status === 'fulfilled' ? (r.value as any).error : r.reason);
+        }
+      });
+
+      // Step 3 — reverse pre-fund deductions for successfully updated items (best-effort)
+      await Promise.allSettled(
+        itemsToRevert.map(async (oc, i) => {
+          const updateOk = updateResults[i].status === 'fulfilled' && !(updateResults[i] as any).value?.error;
+          if (!updateOk) return;
+          const meta = metaMap[oc.id];
+          if (!meta) return;
+          try {
+            const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', oc.id);
+            if (!unlinkResult.unlinked && meta.preFundDeducted && meta.preFundId && meta.paidAmount > 0) {
+              await reverseDirectDeduction(meta.preFundId, meta.paidAmount, oc.submitted_by ?? null);
               await (supabase as any)
                 .from('operational_cost_submissions')
-                .update({ metadata: { ...(srcRow.metadata || {}), pre_fund_deducted: false, pre_fund_id: null } })
+                .update({ metadata: { ...meta.rawMeta, pre_fund_deducted: false, pre_fund_id: null } })
                 .eq('id', oc.id);
             }
+          } catch (pfErr: any) {
+            console.warn('[Pre-Fund] Group revert cleanup failed for', oc.id, pfErr?.message);
           }
-        } catch (pfErr: any) {
-          console.warn('[Pre-Fund] Group revert cleanup failed for', oc.id, pfErr?.message);
-        }
-      }
+        })
+      );
+
       toast({
         title: `Group Reverted / تم إرجاع المجموعة`,
         description: `${successCount} payment${successCount !== 1 ? 's' : ''} reset to Approved. Proof and amounts cleared.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
