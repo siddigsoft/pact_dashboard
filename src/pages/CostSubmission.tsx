@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
@@ -551,9 +552,13 @@ const CostSubmission = () => {
     payCustomAmountStr: string;
   }>({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
 
-  // In-page attachment/receipt viewer
-  const [attachViewer, setAttachViewer] = useState<{ open: boolean; url: string; name: string }>({ open: false, url: '', name: '' });
-  const openAttach = (url: string, name: string) => setAttachViewer({ open: true, url, name });
+  // In-page attachment/receipt viewer — supports multi-receipt navigation
+  const [attachViewer, setAttachViewer] = useState<{ open: boolean; urls: string[]; index: number; name: string }>({ open: false, urls: [], index: 0, name: '' });
+  const openAttach = (urlOrUrls: string | string[], name: string, index = 0) => {
+    const urls = Array.isArray(urlOrUrls) ? urlOrUrls : [urlOrUrls];
+    setAttachViewer({ open: true, urls, index: Math.max(0, Math.min(index, urls.length - 1)), name });
+  };
+  const closeAttach = () => setAttachViewer({ open: false, urls: [], index: 0, name: '' });
   const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(url);
   const isPdf   = (url: string) => /\.pdf(\?|$)/i.test(url);
 
@@ -6226,7 +6231,7 @@ const CostSubmission = () => {
                                 <div className="relative group/proof">
                                   <Button size="sm" variant="outline"
                                     className="h-7 px-2.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
-                                    onClick={() => openAttach(urls[0], urls.length > 1 ? `Receipt 1 of ${urls.length}` : 'Payment Proof')}
+                                    onClick={() => openAttach(urls, 'Payment Proof')}
                                     data-testid={`button-view-proof-${oc.id}`}>
                                     <Eye className="h-3 w-3 mr-1" />
                                     Proof{urls.length > 1 ? ` (${urls.length})` : ''}
@@ -7149,7 +7154,7 @@ const CostSubmission = () => {
                                 <div className="relative group/proof">
                                   <button
                                     className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20 transition-colors"
-                                    onClick={() => openAttach(urls[0], urls.length > 1 ? `Receipt 1 of ${urls.length}` : 'Payment Proof')}
+                                    onClick={() => openAttach(urls, 'Payment Proof')}
                                     data-testid={`button-view-proof-${oc.id}`}>
                                     <Eye className="h-3.5 w-3.5" />Proof{urls.length > 1 ? ` (${urls.length})` : ''}
                                   </button>
@@ -7471,7 +7476,7 @@ const CostSubmission = () => {
                                           <div className="flex flex-wrap items-center gap-1">
                                             {visible.map((u, i) => (
                                               <button key={i} type="button"
-                                                onClick={() => openAttach(u, urls.length > 1 ? `Receipt ${i + 1} of ${urls.length}` : 'Payment Receipt')}
+                                                onClick={() => openAttach(urls, 'Payment Receipt', i)}
                                                 className="inline-flex items-center gap-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors">
                                                 <Eye className="h-2.5 w-2.5" />
                                                 {urls.length > 1 ? `#${i + 1}` : 'View'}
@@ -7895,9 +7900,9 @@ const CostSubmission = () => {
                         {oc.payment_proof_url && (
                           <div className="px-3 py-2 flex flex-col gap-0.5">
                             {(() => { let urls: string[] = []; try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; } return urls.map((u, i) => (
-                              <button key={i} type="button" onClick={() => openAttach(u, urls.length > 1 ? `Receipt ${i + 1}` : 'Payment Proof')}
+                              <button key={i} type="button" onClick={() => openAttach(urls, 'Payment Proof', i)}
                                 className="text-blue-600 dark:text-blue-400 hover:underline text-xs flex items-center gap-1">
-                                <Eye className="h-3.5 w-3.5" /> {urls.length > 1 ? `Receipt ${i + 1}` : 'View Payment Proof'}
+                                <Eye className="h-3.5 w-3.5" /> {urls.length > 1 ? `Receipt ${i + 1} of ${urls.length}` : 'View Payment Proof'}
                               </button>
                             )); })()}
                           </div>
@@ -9605,16 +9610,16 @@ const CostSubmission = () => {
                             return (
                               <div className="flex flex-wrap gap-2">
                                 {urls.map((u, i) => u.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                                  <button key={i} type="button" onClick={() => openAttach(u, `Receipt ${i + 1}`)} className="block text-left">
+                                  <button key={i} type="button" onClick={() => openAttach(urls, 'Payment Receipt', i)} className="block text-left">
                                     <img src={u} alt={`Receipt ${i + 1}`}
                                       className="max-h-28 max-w-[120px] rounded border border-purple-200 object-contain cursor-pointer hover:opacity-90 transition-opacity" />
                                     {urls.length > 1 && <p className="text-[10px] text-center text-muted-foreground mt-0.5">Receipt {i + 1}</p>}
                                   </button>
                                 ) : (
-                                  <button key={i} type="button" onClick={() => openAttach(u, urls.length > 1 ? `Receipt ${i + 1}` : 'Payment Receipt')}
+                                  <button key={i} type="button" onClick={() => openAttach(urls, 'Payment Receipt', i)}
                                     className="inline-flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 underline hover:no-underline">
                                     <FileText className="h-3.5 w-3.5" />
-                                    {urls.length > 1 ? `Receipt ${i + 1}` : 'View Payment Receipt / عرض الإيصال'}
+                                    {urls.length > 1 ? `Receipt ${i + 1} of ${urls.length}` : 'View Payment Receipt / عرض الإيصال'}
                                   </button>
                                 ))}
                               </div>
@@ -10734,85 +10739,112 @@ const CostSubmission = () => {
       })()}
 
       {/* ── In-page Attachment / Receipt Viewer ── */}
-      {attachViewer.open && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => setAttachViewer({ open: false, url: '', name: '' })}
-        >
+      {/* Rendered via createPortal so it floats above Radix Sheets/Dialogs regardless of stacking context */}
+      {attachViewer.open && (() => {
+        const currentUrl = attachViewer.urls[attachViewer.index] ?? '';
+        const total = attachViewer.urls.length;
+        const hasPrev = attachViewer.index > 0;
+        const hasNext = attachViewer.index < total - 1;
+        const label = total > 1
+          ? `${attachViewer.name} (${attachViewer.index + 1} / ${total})`
+          : attachViewer.name;
+        return createPortal(
           <div
-            className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl flex flex-col overflow-hidden"
-            style={{ maxWidth: '92vw', maxHeight: '90vh', width: isImage(attachViewer.url) ? 'auto' : '92vw' }}
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+            style={{ zIndex: 99999 }}
+            onClick={closeAttach}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                {isImage(attachViewer.url)
-                  ? <FileText className="h-4 w-4 text-blue-500 shrink-0" />
-                  : isPdf(attachViewer.url)
-                  ? <FileText className="h-4 w-4 text-red-500 shrink-0" />
-                  : <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                }
-                <span className="font-medium text-sm truncate">{attachViewer.name}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-4">
-                <a
-                  href={attachViewer.url}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border hover:bg-muted transition-colors"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Download
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setAttachViewer({ open: false, url: '', name: '' })}
-                  className="p-1.5 rounded-md hover:bg-muted transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-auto flex items-center justify-center p-2 min-h-0" style={{ minHeight: '200px' }}>
-              {isImage(attachViewer.url) ? (
-                <img
-                  src={attachViewer.url}
-                  alt={attachViewer.name}
-                  className="max-w-full max-h-[75vh] object-contain rounded"
-                />
-              ) : isPdf(attachViewer.url) ? (
-                <iframe
-                  src={attachViewer.url}
-                  title={attachViewer.name}
-                  className="w-full rounded"
-                  style={{ height: '75vh', minWidth: 'min(80vw, 800px)' }}
-                />
-              ) : (
-                <div className="text-center py-12 space-y-3">
-                  <FileText className="h-16 w-16 text-muted-foreground/30 mx-auto" />
-                  <p className="text-sm text-muted-foreground">This file type cannot be previewed.</p>
-                  <a
-                    href={attachViewer.url}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download File
+            <div
+              className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+              style={{ maxWidth: '92vw', maxHeight: '90vh', width: isImage(currentUrl) ? 'auto' : '92vw' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b shrink-0 gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {isImage(currentUrl)
+                    ? <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />
+                    : isPdf(currentUrl)
+                    ? <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                    : <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  }
+                  <span className="font-medium text-sm truncate">{label}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Prev / Next navigation for multi-receipt */}
+                  {total > 1 && (
+                    <div className="flex items-center gap-1 border rounded-md overflow-hidden">
+                      <button type="button" disabled={!hasPrev}
+                        onClick={e => { e.stopPropagation(); setAttachViewer(v => ({ ...v, index: v.index - 1 })); }}
+                        className="px-2 py-1 text-xs hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Previous receipt">
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="px-2 py-1 text-xs font-mono border-x select-none">
+                        {attachViewer.index + 1} / {total}
+                      </span>
+                      <button type="button" disabled={!hasNext}
+                        onClick={e => { e.stopPropagation(); setAttachViewer(v => ({ ...v, index: v.index + 1 })); }}
+                        className="px-2 py-1 text-xs hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Next receipt">
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  <a href={currentUrl} download target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border hover:bg-muted transition-colors"
+                    onClick={e => e.stopPropagation()}>
+                    <Download className="h-3.5 w-3.5" />Download
                   </a>
+                  <button type="button" onClick={closeAttach}
+                    className="p-1.5 rounded-md hover:bg-muted transition-colors" aria-label="Close">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-auto flex items-center justify-center p-2 min-h-0" style={{ minHeight: '200px' }}>
+                {isImage(currentUrl) ? (
+                  <img src={currentUrl} alt={label} className="max-w-full max-h-[75vh] object-contain rounded" />
+                ) : isPdf(currentUrl) ? (
+                  <iframe src={currentUrl} title={label} className="w-full rounded"
+                    style={{ height: '75vh', minWidth: 'min(80vw, 800px)' }} />
+                ) : (
+                  <div className="text-center py-12 space-y-3">
+                    <FileText className="h-16 w-16 text-muted-foreground/30 mx-auto" />
+                    <p className="text-sm text-muted-foreground">This file type cannot be previewed.</p>
+                    <a href={currentUrl} download target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 transition-colors">
+                      <Download className="h-4 w-4" />Download File
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Thumbnail strip for multiple receipts */}
+              {total > 1 && (
+                <div className="shrink-0 border-t px-3 py-2 flex items-center gap-2 overflow-x-auto bg-muted/30">
+                  {attachViewer.urls.map((u, i) => (
+                    <button key={i} type="button"
+                      onClick={e => { e.stopPropagation(); setAttachViewer(v => ({ ...v, index: i })); }}
+                      className={`shrink-0 rounded border-2 transition-all ${i === attachViewer.index ? 'border-blue-500 opacity-100' : 'border-transparent opacity-50 hover:opacity-80'}`}>
+                      {isImage(u) ? (
+                        <img src={u} alt={`Receipt ${i + 1}`} className="h-12 w-16 object-cover rounded" />
+                      ) : (
+                        <div className="h-12 w-16 flex items-center justify-center bg-red-50 dark:bg-red-950/30 rounded">
+                          <FileText className="h-5 w-5 text-red-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        );
+      })()}
 
       </>)}
     </div>
