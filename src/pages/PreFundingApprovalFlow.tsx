@@ -263,13 +263,13 @@ export default function PreFundingApprovalFlow() {
         if (newlyAddedIds.length > 0) {
           try {
             const rate = (selectedFund as any).usd_to_sdg_rate;
-            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            const usdNote = rate && rate > 0 ? ` (≈ USD ${((selectedFund.amount ?? 0) / rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
             await supabase.from('notification_events' as any).insert({
               event_type: 'pre_fund_step_assigned',
               reference_id: selectedFund.id,
               reference_type: 'pre_fund_request',
               title: 'Pre-Fund Approval — You Were Added',
-              message: `You have been added as an approver for pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
+              message: `You have been added as an approver for pre-fund "${selectedFund.name}" (SDG ${(selectedFund.amount ?? 0).toLocaleString()}${usdNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
               target_user_ids: newlyAddedIds,
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
@@ -290,13 +290,13 @@ export default function PreFundingApprovalFlow() {
         if (stepForm.assigned_user_ids.length > 0) {
           try {
             const rate = (selectedFund as any).usd_to_sdg_rate;
-            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            const usdNote = rate && rate > 0 ? ` (≈ USD ${((selectedFund.amount ?? 0) / rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
             await supabase.from('notification_events' as any).insert({
               event_type: 'pre_fund_step_assigned',
               reference_id: selectedFund.id,
               reference_type: 'pre_fund_request',
               title: 'Pre-Fund Approval — Action Required',
-              message: `You have been assigned to approve pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
+              message: `You have been assigned to approve pre-fund "${selectedFund.name}" (SDG ${(selectedFund.amount ?? 0).toLocaleString()}${usdNote}) — Step: ${stepForm.step_label}. Please review and take action.`,
               target_user_ids: stepForm.assigned_user_ids,
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
@@ -406,13 +406,13 @@ export default function PreFundingApprovalFlow() {
           const nextPendingStep = steps.slice(currentIdx + 1).find(s => s.status === 'pending');
           if (nextPendingStep && (nextPendingStep.assigned_user_ids?.length ?? 0) > 0) {
             const rate = (selectedFund as any).usd_to_sdg_rate;
-            const sdgNote = rate ? ` (≈ SDG ${((selectedFund.amount ?? 0) * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+            const usdNote = rate && rate > 0 ? ` (≈ USD ${((selectedFund.amount ?? 0) / rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
             await supabase.from('notification_events' as any).insert({
               event_type: 'pre_fund_step_assigned',
               reference_id: selectedFund.id,
               reference_type: 'pre_fund_request',
               title: 'Pre-Fund Approval — Your Turn',
-              message: `Step "${step.step_label}" has been approved for pre-fund "${selectedFund.name}" (USD ${(selectedFund.amount ?? 0).toLocaleString()}${sdgNote}). Step "${nextPendingStep.step_label}" now requires your review.`,
+              message: `Step "${step.step_label}" has been approved for pre-fund "${selectedFund.name}" (SDG ${(selectedFund.amount ?? 0).toLocaleString()}${usdNote}). Step "${nextPendingStep.step_label}" now requires your review.`,
               target_user_ids: nextPendingStep.assigned_user_ids,
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: nextPendingStep.step_label },

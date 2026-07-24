@@ -334,13 +334,14 @@ export default function PreFundingReport() {
     const totalPaid      = filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0);
     const totalCommit    = filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0);
     const utilPct        = totalFunded > 0 ? Math.round((totalPaid / totalFunded) * 100) : 0;
-    // SDG equivalents: sum of (USD amount × rate) for funds that have a rate set
-    const totalSdgFunded = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate ? f.amount * f.usd_to_sdg_rate : 0), 0);
+    // Funds are recorded in SDG; USD equivalent = SDG ÷ rate
+    // USD equivalent: sum of (SDG amount ÷ rate) for funds that have a rate set
+    const totalUsdEquiv  = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 ? f.amount / f.usd_to_sdg_rate : 0), 0);
     // SDG actually paid: sum of payment transactions denominated in SDG
     const totalSdgPaid   = filteredTxns
       .filter(t => t.currency === 'SDG' && t.transaction_type === 'payment')
       .reduce((s, t) => s + t.amount, 0);
-    return { activeFunds, totalFunded, totalBalance, totalPaid, totalCommit, utilPct, totalSdgFunded, totalSdgPaid };
+    return { activeFunds, totalFunded, totalBalance, totalPaid, totalCommit, utilPct, totalUsdEquiv, totalSdgPaid };
   }, [filteredFunds, filteredTxns]);
 
   // ─── Charts data ─────────────────────────────────────────────────────────────
@@ -734,8 +735,8 @@ export default function PreFundingReport() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiCard('Total USD Funded', `USD ${formatNumber(kpis.totalFunded, 0)}`, kpis.totalSdgFunded > 0 ? `≈ SDG ${formatNumber(kpis.totalSdgFunded, 0)}` : `${filteredFunds.length} fund${filteredFunds.length !== 1 ? 's' : ''}`, Wallet, 'bg-sky-100 dark:bg-sky-900/30 text-sky-600')}
-          {kpiCard('Available Balance', `USD ${formatNumber(kpis.totalBalance, 0)}`, `${kpis.utilPct}% utilization`, DollarSign, 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600')}
+          {kpiCard('Total SDG Funded', `SDG ${formatNumber(kpis.totalFunded, 0)}`, kpis.totalUsdEquiv > 0 ? `≈ USD ${formatNumber(kpis.totalUsdEquiv, 0)}` : `${filteredFunds.length} fund${filteredFunds.length !== 1 ? 's' : ''}`, Wallet, 'bg-sky-100 dark:bg-sky-900/30 text-sky-600')}
+          {kpiCard('Available Balance', `SDG ${formatNumber(kpis.totalBalance, 0)}`, `${kpis.utilPct}% utilization`, DollarSign, 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600')}
           {kpiCard('Total SDG Paid', kpis.totalSdgPaid > 0 ? `SDG ${formatNumber(kpis.totalSdgPaid, 0)}` : `USD ${formatNumber(kpis.totalPaid, 0)}`, `${filteredTxns.filter(t => t.transaction_type === 'payment').length} payments (SDG)`, TrendingDown, 'bg-rose-100 dark:bg-rose-900/30 text-rose-600')}
           {kpiCard('Active Funds', String(kpis.activeFunds.length), `of ${filteredFunds.length} total`, CheckCircle2, 'bg-amber-100 dark:bg-amber-900/30 text-amber-600')}
         </div>
@@ -866,8 +867,8 @@ export default function PreFundingReport() {
                         <TableHead className="font-semibold pl-4">Fund Name</TableHead>
                         <TableHead className="font-semibold">Project</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
-                        <TableHead className="font-semibold text-right">USD Amount</TableHead>
-                        <TableHead className="font-semibold text-right">SDG Equiv.</TableHead>
+                        <TableHead className="font-semibold text-right">SDG Amount</TableHead>
+                        <TableHead className="font-semibold text-right">USD Equiv.</TableHead>
                         <TableHead className="font-semibold text-right">Disbursed</TableHead>
                         <TableHead className="font-semibold text-right">Balance</TableHead>
                         <TableHead className="font-semibold text-right">Util %</TableHead>
@@ -893,22 +894,22 @@ export default function PreFundingReport() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right text-sm font-medium tabular-nums">
-                              USD {formatNumber(f.amount, 0)}
+                              SDG {formatNumber(f.amount, 0)}
                             </TableCell>
-                            <TableCell className="text-right text-sm tabular-nums text-amber-600">
-                              {f.usd_to_sdg_rate
-                                ? `SDG ${formatNumber(f.amount * f.usd_to_sdg_rate, 0)}`
+                            <TableCell className="text-right text-sm tabular-nums text-sky-600">
+                              {f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0
+                                ? `USD ${formatNumber(f.amount / f.usd_to_sdg_rate, 2)}`
                                 : <span className="text-muted-foreground text-xs">—</span>
                               }
-                              {f.usd_to_sdg_rate && (
+                              {f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 && (
                                 <div className="text-[10px] text-muted-foreground">@ {f.usd_to_sdg_rate.toLocaleString()}</div>
                               )}
                             </TableCell>
                             <TableCell className="text-right text-sm tabular-nums text-rose-600">
-                              {formatNumber(f.paid_amount ?? 0, 0)}
+                              SDG {formatNumber(f.paid_amount ?? 0, 0)}
                             </TableCell>
                             <TableCell className="text-right text-sm tabular-nums text-emerald-600">
-                              USD {formatNumber(f.available_balance ?? 0, 0)}
+                              SDG {formatNumber(f.available_balance ?? 0, 0)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -944,19 +945,19 @@ export default function PreFundingReport() {
                             <TableCell />
                             <TableCell />
                             <TableCell className="text-right tabular-nums font-mono">
-                              USD {formatNumber(totAmount, 0)}
+                              SDG {formatNumber(totAmount, 0)}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-mono text-amber-600">
+                            <TableCell className="text-right tabular-nums font-mono text-sky-600">
                               {(() => {
-                                const totSdg = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate ? f.amount * f.usd_to_sdg_rate : 0), 0);
-                                return totSdg > 0 ? `SDG ${formatNumber(totSdg, 0)}` : '—';
+                                const totUsd = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 ? f.amount / f.usd_to_sdg_rate : 0), 0);
+                                return totUsd > 0 ? `USD ${formatNumber(totUsd, 0)}` : '—';
                               })()}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-rose-600">
-                              {formatNumber(totDisbursed, 0)}
+                              SDG {formatNumber(totDisbursed, 0)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-emerald-600">
-                              USD {formatNumber(totBalance, 0)}
+                              SDG {formatNumber(totBalance, 0)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1.5">

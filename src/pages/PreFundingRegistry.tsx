@@ -111,7 +111,7 @@ const RENEWAL_OPTIONS = [
 ];
 
 const EMPTY_FORM = {
-  name: '', source: '', amount: '', currency: 'USD', period_type_id: '',
+  name: '', source: '', amount: '', currency: 'SDG', period_type_id: '',
   usd_to_sdg_rate: '',
   start_date: '', end_date: '', country_id: '', project_id: '', grant_id: '',
   matching_scope: 'country_project',
@@ -463,7 +463,7 @@ export default function PreFundingRegistry() {
     const hasFixed = fa.threshold_amount != null;
     const tMode: 'pct' | 'fixed' | 'both' = hasPct && hasFixed ? 'both' : hasFixed ? 'fixed' : 'pct';
     setForm({
-      name: f.name, source: f.source ?? '', amount: String(f.amount), currency: 'USD',
+      name: f.name, source: f.source ?? '', amount: String(f.amount), currency: 'SDG',
       usd_to_sdg_rate: fa.usd_to_sdg_rate != null ? String(fa.usd_to_sdg_rate) : '',
       period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
       country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
@@ -511,7 +511,7 @@ export default function PreFundingRegistry() {
         name: form.name.trim(),
         source: form.source || null,
         amount: parseFloat(form.amount.replace(/,/g, '')),
-        currency: 'USD',
+        currency: 'SDG',
         usd_to_sdg_rate: form.usd_to_sdg_rate ? parseFloat(form.usd_to_sdg_rate) : null,
         period_type_id: (form.period_type_id && !form.period_type_id.startsWith('builtin-')) ? form.period_type_id : null,
         start_date: form.start_date || null,
@@ -773,16 +773,18 @@ export default function PreFundingRegistry() {
     // with status='pending_approval' in useApprovalsData.ts; here we just
     // emit the notification so approvers are alerted.
     try {
+      const _rate = (f as any).usd_to_sdg_rate;
+      const _usdEquivNote = _rate ? ` ≈ USD ${(f.amount / _rate).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '';
       // Notify finance admins via roles
       await supabase.from('notification_events' as any).insert({
         event_type: 'pre_fund_approval_requested',
         reference_id: f.id,
         reference_type: 'pre_fund_request',
         title: 'Pre-Fund Approval Required',
-        message: `Fund "${f.name}" (USD ${f.amount.toLocaleString()}) requires approval before activation.`,
+        message: `Fund "${f.name}" (SDG ${f.amount.toLocaleString()}${_usdEquivNote}) requires approval before activation.`,
         target_roles: ['super_admin', 'admin', 'financialAdmin'],
         created_by: currentUser?.id ?? null,
-        metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'USD', usd_to_sdg_rate: (f as any).usd_to_sdg_rate },
+        metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'SDG', usd_to_sdg_rate: _rate },
       });
     } catch { /* notifications are non-blocking */ }
 
@@ -798,16 +800,16 @@ export default function PreFundingRegistry() {
       )).filter(Boolean) as string[];
       if (allStepUserIds.length > 0) {
         const rate = (f as any).usd_to_sdg_rate;
-        const sdgNote = rate ? ` (≈ SDG ${(f.amount * rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
+        const usdNote = rate ? ` (≈ USD ${(f.amount / rate).toLocaleString('en-US', { maximumFractionDigits: 0 })})` : '';
         await supabase.from('notification_events' as any).insert({
           event_type: 'pre_fund_approval_requested',
           reference_id: f.id,
           reference_type: 'pre_fund_request',
           title: 'Pre-Fund Approval — Action Required',
-          message: `Pre-fund "${f.name}" (USD ${f.amount.toLocaleString()}${sdgNote}) has been submitted for approval and awaits your review in the approval chain.`,
+          message: `Pre-fund "${f.name}" (SDG ${f.amount.toLocaleString()}${usdNote}) has been submitted for approval and awaits your review in the approval chain.`,
           target_user_ids: allStepUserIds,
           created_by: currentUser?.id ?? null,
-          metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'USD', usd_to_sdg_rate: rate },
+          metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'SDG', usd_to_sdg_rate: rate },
         });
       }
     } catch { /* non-blocking */ }
@@ -923,8 +925,9 @@ export default function PreFundingRegistry() {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
       let y = 48;
       const rate = (f as any).usd_to_sdg_rate;
-      [['Fund', f.name], ['Donor / Source', f.source ?? '—'], ['Currency', 'USD (disbursements in SDG)'],
+      [['Fund', f.name], ['Donor / Source', f.source ?? '—'], ['Currency', 'SDG'],
         ['Rate of Day (1 USD = ? SDG)', rate ? `${rate.toLocaleString()} SDG` : '—'],
+        ...(rate ? [['USD Equivalent', `USD ${formatNumber(f.amount / rate, 2)}`]] : []),
         ['Period', f.start_date && f.end_date
           ? `${format(parseISO(f.start_date), 'MMM d, yyyy')} – ${format(parseISO(f.end_date), 'MMM d, yyyy')}`
           : '—'],
@@ -937,10 +940,10 @@ export default function PreFundingRegistry() {
         startY: y,
         head: [['Description', 'Amount']],
         body: [
-          ['Amount Funded (USD)',   `USD ${formatNumber(f.amount, 0)}`],
-          ...(rate ? [['SDG Equivalent Funded', `SDG ${formatNumber(f.amount * rate, 0)}`]] : []),
-          ['Total Disbursed', `${formatNumber(f.paid_amount, 0)}`],
-          ['Balance Available (USD)', `USD ${formatNumber(f.available_balance, 0)}`],
+          ['Amount Funded (SDG)',   `SDG ${formatNumber(f.amount, 0)}`],
+          ...(rate ? [['USD Equivalent', `USD ${formatNumber(f.amount / rate, 2)}`]] : []),
+          ['Total Disbursed', `SDG ${formatNumber(f.paid_amount, 0)}`],
+          ['Balance Available (SDG)', `SDG ${formatNumber(f.available_balance, 0)}`],
         ],
         styles: { fontSize: 10 }, headStyles: { fillColor: [3, 105, 161] },
       });
@@ -1094,9 +1097,9 @@ export default function PreFundingRegistry() {
   const exportFunds = () => exportToExcel(
     filtered.map(f => ({
       'Fund Name': f.name, 'Source': (f as any).source ?? '', 'Status': f.status,
-      'Amount (USD)': f.amount, 'Currency': 'USD',
+      'Amount (SDG)': f.amount, 'Currency': 'SDG',
       'Rate of Day (1 USD = SDG)': (f as any).usd_to_sdg_rate ?? '',
-      'SDG Equivalent': (f as any).usd_to_sdg_rate ? f.amount * (f as any).usd_to_sdg_rate : '',
+      'USD Equivalent': (f as any).usd_to_sdg_rate ? +(f.amount / (f as any).usd_to_sdg_rate).toFixed(2) : '',
       'Project': projects.find(p => p.id === (f as any).project_id)?.name ?? '',
       'Created At': (f as any).created_at ? format(new Date((f as any).created_at), 'yyyy-MM-dd') : '',
     })),
@@ -1249,16 +1252,16 @@ export default function PreFundingRegistry() {
                   {/* Amount */}
                   <TableCell className="py-3 text-right">
                     <div className="font-mono text-sm font-semibold">{formatNumber(f.amount, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">USD</div>
+                    <div className="text-[10px] text-muted-foreground">SDG</div>
                     {f.usd_to_sdg_rate && (
-                      <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">≈ SDG {formatNumber(f.amount * f.usd_to_sdg_rate, 0)}</div>
+                      <div className="text-[10px] text-sky-600 dark:text-sky-400 font-medium">≈ USD {formatNumber(f.amount / f.usd_to_sdg_rate, 2)}</div>
                     )}
                   </TableCell>
 
                   {/* Available */}
                   <TableCell className="py-3 text-right">
                     <div className="font-mono text-sm font-semibold text-emerald-600">{formatNumber(f.available_balance, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">USD</div>
+                    <div className="text-[10px] text-muted-foreground">SDG</div>
                   </TableCell>
 
                   {/* Committed */}
@@ -1382,7 +1385,7 @@ export default function PreFundingRegistry() {
 
       {/* Create/Edit Dialog — two-step wizard for new funds, single step for edits */}
       <Dialog open={showForm} onOpenChange={o => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[96vh] overflow-y-auto">
 
           {/* ── STEP 1: Project selection (new fund only) ──────────────────── */}
           {!editing && dialogStep === 1 && (() => {
@@ -1561,7 +1564,7 @@ export default function PreFundingRegistry() {
                   <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
                 </div>
                 <div>
-                  <Label>Amount (USD) *</Label>
+                  <Label>Amount (SDG) *</Label>
                   <Input
                     type="text"
                     inputMode="numeric"
@@ -1582,13 +1585,12 @@ export default function PreFundingRegistry() {
                 <div>
                   <Label>Currency</Label>
                   <div className="flex h-10 items-center gap-2 rounded-md border bg-muted/40 px-3">
-                    <DollarSign className="h-4 w-4 text-sky-600 shrink-0" />
-                    <span className="font-semibold text-sky-700 dark:text-sky-400 text-sm">USD</span>
-                    <span className="text-[11px] text-muted-foreground ml-auto">Fixed — all pre-funds are in USD</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-sm">SDG</span>
+                    <span className="text-[11px] text-muted-foreground ml-auto">Fixed — all pre-funds are in SDG</span>
                   </div>
                 </div>
                 <div>
-                  <Label>Rate of Day (1 USD = ? SDG) *</Label>
+                  <Label>Rate of Day (1 USD = ? SDG)</Label>
                   <Input
                     type="number"
                     min="0"
@@ -1599,20 +1601,21 @@ export default function PreFundingRegistry() {
                     data-testid="input-usd-to-sdg-rate"
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Exchange rate at time of request — used for SDG equivalent reporting only. Disbursements are made in SDG.
+                    Rate at time of request — used to compute the USD equivalent for reporting and the approval chain.
                   </p>
                 </div>
                 {form.amount && form.usd_to_sdg_rate && (() => {
-                  const amtNum = parseFloat(form.amount.replace(/,/g, ''));
+                  const amtNum  = parseFloat(form.amount.replace(/,/g, ''));
                   const rateNum = parseFloat(form.usd_to_sdg_rate);
                   if (!isNaN(amtNum) && !isNaN(rateNum) && amtNum > 0 && rateNum > 0) {
+                    const usdEquiv = amtNum / rateNum;
                     return (
-                      <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-2.5">
-                        <DollarSign className="h-4 w-4 text-amber-600 shrink-0" />
+                      <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 dark:border-sky-800 px-4 py-2.5">
+                        <DollarSign className="h-4 w-4 text-sky-600 shrink-0" />
                         <div>
-                          <span className="text-xs text-amber-700 dark:text-amber-400">SDG Equivalent of this fund: </span>
-                          <span className="font-semibold text-amber-800 dark:text-amber-300 text-sm">SDG {(amtNum * rateNum).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                          <span className="text-[11px] text-amber-600 dark:text-amber-500 ml-2">({amtNum.toLocaleString()} USD × {rateNum.toLocaleString()} rate)</span>
+                          <span className="text-xs text-sky-700 dark:text-sky-400">USD Equivalent: </span>
+                          <span className="font-semibold text-sky-800 dark:text-sky-300 text-sm">USD {usdEquiv.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                          <span className="text-[11px] text-sky-600 dark:text-sky-500 ml-2">(SDG {amtNum.toLocaleString()} ÷ {rateNum.toLocaleString()} rate)</span>
                         </div>
                       </div>
                     );
