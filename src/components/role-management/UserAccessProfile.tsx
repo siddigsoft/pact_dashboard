@@ -183,7 +183,7 @@ export function UserAccessProfile() {
     const ov = pageOvMap[p.slug];
     if (ov?.is_blocked) return false;
     if (ov && !ov.is_blocked) return true;
-    return hasDefaultAccess(p, userRole ?? null);
+    return hasDefaultAccess(p, rawRoleCode ?? null);
   });
   const blockedPages = pageOverrides.filter(o => o.is_blocked);
   const activePermOverrides = permOverrides.filter(o => !o.expires_at || new Date(o.expires_at) > new Date());
@@ -402,7 +402,7 @@ export function UserAccessProfile() {
                             const ov = pageOvMap[p.slug];
                             if (ov?.is_blocked) return false;
                             if (ov && !ov.is_blocked) return true;
-                            return hasDefaultAccess(p, userRole ?? null);
+                            return hasDefaultAccess(p, rawRoleCode ?? null);
                           }).length;
                           return (
                             <span className={cn('ml-auto text-[10px] font-normal normal-case px-1.5 py-0.5 rounded-full',
