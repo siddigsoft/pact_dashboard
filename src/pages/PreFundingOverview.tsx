@@ -50,6 +50,63 @@ async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: strin
   return results.flat();
 }
 
+const _DP_NO_DISBURSE_OV = new Set(['pending','pending_supervisor','pending_admin','draft','rejected','cancelled']);
+
+/**
+ * Per-fund effective paid amount — mirrors PreFundingReconciliation.loadTxns exactly.
+ * Runs one isolated query per fund (parallel) so cross-fund DP-set contamination
+ * cannot inflate any fund's paid-out total.
+ * Falls back to paid_amount DB column when no payment transactions exist.
+ */
+async function computePerFundEffectivePaid(
+  fundIds: string[],
+  fallbacks: Map<string, number>,
+  sb: any,
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  await Promise.all(fundIds.map(async fundId => {
+    try {
+      // Only need payment-type txns for the paid-amount total (mirrors Reconciliation)
+      const rawTxns: any[] = await fetchAll(() =>
+        sb.from('pre_fund_transactions')
+          .select('id,transaction_type,amount,source_table,source_id')
+          .eq('pre_fund_request_id', fundId)
+          .eq('transaction_type', 'payment'),
+      );
+      if (rawTxns.length === 0) {
+        result.set(fundId, fallbacks.get(fundId) ?? 0);
+        return;
+      }
+      const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
+      const txnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
+      const [validDpData, backLinked] = await Promise.all([
+        fetchAllIn((chunk: string[]) => sb.from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpIds),
+        fetchAllIn((chunk: string[]) => sb.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), txnIds),
+      ]);
+      const paidDpSet = new Set<string>(
+        (validDpData as any[]).filter(d => !_DP_NO_DISBURSE_OV.has(d.status) && d.metadata?.deleted !== true).map(d => d.id as string),
+      );
+      const nonPaidBackIds = new Set<string>(
+        (backLinked as any[]).filter(d => _DP_NO_DISBURSE_OV.has(d.status) || d.metadata?.deleted === true).map(d => d.pre_fund_transaction_id as string),
+      );
+      let sum = 0;
+      for (const t of rawTxns) {
+        if (t.source_table === 'down_payment_requests') {
+          if (!t.source_id || paidDpSet.has(t.source_id)) sum += Number(t.amount ?? 0);
+        } else if (!t.source_table) {
+          if (!nonPaidBackIds.has(t.id)) sum += Number(t.amount ?? 0);
+        } else {
+          sum += Number(t.amount ?? 0);
+        }
+      }
+      result.set(fundId, sum > 0 ? sum : (fallbacks.get(fundId) ?? 0));
+    } catch {
+      result.set(fundId, fallbacks.get(fundId) ?? 0);
+    }
+  }));
+  return result;
+}
+
 interface PreFundRow {
   id: string; name: string; source: string | null;
   amount: number; currency: string;
@@ -256,10 +313,16 @@ export default function PreFundingOverview() {
 
       // ── Phase 2: allocation + transaction details (background) ─────────────────
       const fundIds = loadedFunds.map((f: any) => f.id as string);
-      const [allocsData, rawTxns] = await Promise.all([
+      const fallbacks = new Map<string, number>(loadedFunds.map((f: any) => [f.id as string, Number(f.paid_amount ?? 0)]));
+      const [allocsData, rawTxns, perFundPaid] = await Promise.all([
         fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').in('pre_fund_request_id', chunk).order('allocated_amount', { ascending: false }), fundIds),
         fetchAllIn(chunk => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').in('pre_fund_request_id', chunk).order('transaction_date', { ascending: false }), fundIds),
+        // Per-fund isolated computation — same as Reconciliation's loadTxns — avoids cross-fund
+        // DP-set contamination that inflates paid-out totals in the global query.
+        computePerFundEffectivePaid(fundIds, fallbacks, supabase),
       ]);
+      // Update rawFundPaySums immediately so KPI cards reflect accurate paid/available totals.
+      setRawFundPaySums(perFundPaid);
 
       setAllocs(allocsData as any);
       {
@@ -337,16 +400,7 @@ export default function PreFundingOverview() {
           return true;
         });
         setTxns(validTxns);
-        // Compute payment sums from the FILTERED transaction set — identical logic to
-        // PreFundingReconciliation's effectivePaidAmount, so Balance Dashboard totals match.
-        {
-          const m = new Map<string, number>();
-          for (const t of validTxns) {
-            if (t.transaction_type !== 'payment') continue;
-            m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
-          }
-          setRawFundPaySums(m);
-        }
+        // rawFundPaySums already set from perFundPaid above (per-fund isolated computation).
         // Build dpId → userId map so txnsByFundUser can credit the right staff member
         // when pre_fund_transactions.user_id is null (admin stored in created_by instead).
         // requested_by = the allocation holder (who the DP was raised for).
