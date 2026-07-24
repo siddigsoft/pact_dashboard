@@ -291,18 +291,17 @@ export default function PreFundingOverview() {
       setError(null);
       setLoadingDetails(true);
       // ── Phase 1: fund headers only — renders the page immediately ──────────────
-      const [fundsRes, ratesRes, settingsRes] = await Promise.all([
-        supabase.from('pre_fund_requests')
+      // All three queries use fetchAll / maybeSingle — no row cap.
+      const [loadedFunds, loadedRates, settingsRes] = await Promise.all([
+        fetchAll(() => supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
-          .order('created_at', { ascending: false }),
-        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
+          .order('created_at', { ascending: false })),
+        fetchAll(() => (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false })),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
       ]);
 
-      if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
-      const loadedFunds = (fundsRes.data as any) ?? [];
       setFunds(loadedFunds);
-      if (!ratesRes.error) setRates((ratesRes.data as ExchangeRate[]) ?? []);
+      setRates(loadedRates as ExchangeRate[]);
       if (settingsRes.data) {
         const s = settingsRes.data as any;
         setSettings({ base_currency: s.base_currency ?? 'USD' });
