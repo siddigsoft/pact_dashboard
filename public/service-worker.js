@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pact-v5';
+const CACHE_NAME = 'pact-v6';
 const OFFLINE_URL = '/offline.html';
-const STATIC_CACHE = 'pact-static-v3';
-const API_CACHE = 'pact-api-v3';
-const DYNAMIC_CACHE = 'pact-dynamic-v2';
+const STATIC_CACHE = 'pact-static-v4';
+const API_CACHE = 'pact-api-v4';
+const DYNAMIC_CACHE = 'pact-dynamic-v3';
 
 const SW_DEBUG_HOSTS = ['localhost', '127.0.0.1'];
 const SW_DEBUG = SW_DEBUG_HOSTS.includes(self.location.hostname) || self.location.hostname.endsWith('.local');
@@ -448,8 +448,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // JS and CSS bundles change on every deploy — always fetch fresh from network.
+  // Using cacheFirst here would serve stale code after code changes, causing
+  // ReferenceErrors for functions that were added/removed between deployments.
+  const isJsOrCss = url.pathname.match(/\.(js|css)(\?.*)?$/);
+  if (isJsOrCss) {
+    event.respondWith(networkFirstWithCache(event.request, DYNAMIC_CACHE));
+    return;
+  }
+
+  // True immutable static assets (images, fonts, icons) — safe to cache-first.
   const isStaticAsset = STATIC_ASSETS.some(asset => url.pathname === asset) ||
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2?|ico)$/);
+    url.pathname.match(/\.(png|jpg|jpeg|svg|woff2?|ico|mp3|webp|gif)(\?.*)?$/);
   if (isStaticAsset) {
     event.respondWith(cacheFirst(event.request, STATIC_CACHE));
     return;
