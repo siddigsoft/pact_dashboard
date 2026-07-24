@@ -14,7 +14,7 @@ import { DEFAULT_ROLE_PERMISSIONS, AppRole, ResourceType, ActionType } from '@/t
 import {
   Search, Shield, Lock, Unlock, CheckCircle2, XCircle, MinusCircle,
   Users, ChevronRight, ChevronDown, RefreshCw, Loader2, UserCircle2,
-  Layers, AlertCircle,
+  Layers, AlertCircle, Pencil, Eye,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -95,10 +95,13 @@ function StatusPill({ eff, small }: { eff: Eff; small?: boolean }) {
 }
 
 // ─── By-Role view ─────────────────────────────────────────────────────────────
-function ByRoleView({ users: allUsers }: { users: any[] }) {
+function ByRoleView({ users: allUsers, isSuperAdmin }: { users: any[]; isSuperAdmin: boolean }) {
+  const { roles, updateRole } = useRoleManagement();
+  const { toast } = useToast();
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [search, setSearch] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['Administration']));
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const filteredRoles = ALL_ROLES.filter(r =>
     !search || r.label.toLowerCase().includes(search.toLowerCase())
@@ -110,10 +113,55 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
   );
 
   const roleMeta_ = roleMeta(selectedRole);
-  const appRole = ROLE_CODE_TO_APP_ROLE[selectedRole];
-  const rolePerms = appRole ? (DEFAULT_ROLE_PERMISSIONS[appRole] ?? []) : [];
 
+  // Use live DB role when available, fall back to defaults
+  const liveRole = useMemo(() =>
+    roles.find(r => r.name === selectedRole || r.code === selectedRole),
+    [roles, selectedRole]
+  );
+  const livePerms = liveRole?.permissions ?? [];
+
+  // Check if role has action: live DB first, then DEFAULT_ROLE_PERMISSIONS as fallback
+  function liveRoleHasAction(resource: ResourceType, action: ActionType): boolean {
+    if (selectedRole === 'superAdmin') return true;
+    if (liveRole) {
+      return livePerms.some(p => p.resource === resource && p.action === action);
+    }
+    return roleHasAction(selectedRole, resource, action);
+  }
+
+  const permCount = MODULE_REGISTRY.flatMap(m => m.pages.flatMap(p => p.actions))
+    .filter(a => liveRoleHasAction(a.resource, a.action)).length;
+  const totalActions = MODULE_REGISTRY.flatMap(m => m.pages.flatMap(p => p.actions)).length;
   const accessiblePages = PAGE_DEFS.filter(p => hasDefaultAccess(p, selectedRole));
+  const isSystemRole = liveRole?.is_system_role ?? true;
+
+  // ── Toggle role-level permission ──────────────────────────────────────────
+  async function handleToggleRolePerm(resource: ResourceType, action: ActionType, currentlyHas: boolean) {
+    if (!liveRole || !isSuperAdmin) return;
+    const key = `${resource}:${action}`;
+    setSavingKey(key);
+    try {
+      const currentPerms = livePerms.map(p => ({
+        resource: p.resource as ResourceType,
+        action: p.action as ActionType,
+      }));
+      const newPerms = currentlyHas
+        ? currentPerms.filter(p => !(p.resource === resource && p.action === action))
+        : [...currentPerms, { resource, action }];
+      const ok = await updateRole(liveRole.id, { permissions: newPerms });
+      if (ok) {
+        toast({
+          title: currentlyHas ? 'Permission revoked' : 'Permission granted',
+          description: `${liveRole.display_name || liveRole.name} — ${resource}:${action}`,
+        });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingKey(null);
+    }
+  }
 
   function toggleModule(mod: string) {
     setExpandedModules(prev => {
@@ -159,7 +207,10 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8 py-16 text-muted-foreground">
             <Layers className="h-10 w-10 opacity-30" />
             <p className="text-sm font-medium">Select a role to see its full access profile</p>
-            <p className="text-xs opacity-60">Shows all pages, module actions, and users assigned to that role</p>
+            <p className="text-xs opacity-60 max-w-xs">
+              Shows all users, accessible pages, and every module action.
+              {isSuperAdmin && ' Super Admin can click any action to grant or revoke it for the whole role.'}
+            </p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
@@ -170,13 +221,23 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                   <Shield className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold">{roleMeta_.label}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold">{roleMeta_.label}</h3>
+                    {isSystemRole && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">System Role</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{roleUsers.length} users</span>
                     <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-500" />{accessiblePages.length} pages</span>
-                    <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-purple-500" />{rolePerms.length} permissions</span>
+                    <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-purple-500" />{permCount}/{totalActions} actions</span>
                   </div>
                 </div>
+                {isSuperAdmin && (
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground border rounded-lg px-2 py-1">
+                    <Pencil className="h-3 w-3" /> Edit mode
+                  </div>
+                )}
               </div>
             </div>
 
@@ -222,16 +283,28 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                 </div>
               </section>
 
-              {/* Module actions */}
+              {/* Module actions — with edit support for Super Admin */}
               <section>
-                <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-purple-500" /> Module Permissions
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 text-purple-500" /> Module Permissions ({permCount}/{totalActions} granted)
+                  </h4>
+                  {isSuperAdmin && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Pencil className="h-3 w-3" /> Click Grant / Revoke to edit role permissions
+                    </span>
+                  )}
+                  {!isSuperAdmin && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Eye className="h-3 w-3" /> View only — Super Admin can edit
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {MODULE_REGISTRY.map(mod => {
                     const isOpen = expandedModules.has(mod.module);
                     const allActions = mod.pages.flatMap(pg => pg.actions);
-                    const granted = allActions.filter(a => roleHasAction(selectedRole, a.resource, a.action));
+                    const grantedCount = allActions.filter(a => liveRoleHasAction(a.resource, a.action)).length;
                     return (
                       <div key={mod.module} className="border rounded-xl overflow-hidden">
                         <button onClick={() => toggleModule(mod.module)}
@@ -240,25 +313,55 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                           {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                           <span className="text-sm font-semibold flex-1">{mod.module}</span>
                           <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                            granted.length > 0 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
-                                               : 'bg-slate-100 text-slate-400')}>
-                            {granted.length}/{allActions.length}
+                            grantedCount > 0 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                             : 'bg-slate-100 text-slate-400')}>
+                            {grantedCount}/{allActions.length}
                           </span>
                         </button>
                         {isOpen && (
                           <div className="divide-y">
                             {mod.pages.map(pg => (
                               <div key={pg.page} className="px-4 py-2">
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{pg.page}</p>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                  <Eye className="h-3 w-3" /> {pg.page}
+                                  <span className="text-[9px] font-normal normal-case opacity-60 ml-1">— action buttons on this page</span>
+                                </p>
                                 <div className="space-y-1">
                                   {pg.actions.map(act => {
-                                    const has = roleHasAction(selectedRole, act.resource, act.action);
+                                    const has = liveRoleHasAction(act.resource, act.action);
+                                    const sKey = `${act.resource}:${act.action}`;
+                                    const isSaving = savingKey === sKey;
                                     return (
-                                      <div key={act.key} className={cn('flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs',
-                                        has ? 'bg-purple-50/50 dark:bg-purple-900/5' : 'opacity-40')}>
-                                        {has ? <CheckCircle2 className="h-3 w-3 text-purple-500 shrink-0" /> : <XCircle className="h-3 w-3 text-slate-300 shrink-0" />}
-                                        <span className="flex-1 font-medium">{act.label}</span>
-                                        <span className="text-[10px] text-muted-foreground hidden sm:block">{act.description}</span>
+                                      <div key={act.key}
+                                        className={cn('flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors',
+                                          has ? 'bg-purple-50/50 dark:bg-purple-900/5' : 'opacity-50')}>
+                                        {has
+                                          ? <CheckCircle2 className="h-3 w-3 text-purple-500 shrink-0" />
+                                          : <XCircle className="h-3 w-3 text-slate-300 shrink-0" />}
+                                        <div className="flex-1 min-w-0">
+                                          <span className="font-medium">{act.label}</span>
+                                          <span className="text-[10px] text-muted-foreground ml-2 hidden sm:inline">{act.description}</span>
+                                        </div>
+                                        <span className="text-[9px] text-muted-foreground/50 font-mono hidden md:block shrink-0">
+                                          {act.resource}:{act.action}
+                                        </span>
+                                        {/* Edit toggle — Super Admin only */}
+                                        {isSuperAdmin && selectedRole !== 'superAdmin' && (
+                                          <button
+                                            onClick={() => handleToggleRolePerm(act.resource, act.action, has)}
+                                            disabled={isSaving}
+                                            data-testid={`btn-role-perm-toggle-${act.key}`}
+                                            className={cn(
+                                              'text-[10px] border rounded px-2 py-0.5 shrink-0 font-medium transition-colors disabled:opacity-50',
+                                              has
+                                                ? 'text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/10'
+                                                : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/10'
+                                            )}>
+                                            {isSaving
+                                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                                              : has ? 'Revoke' : 'Grant'}
+                                          </button>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -814,8 +917,10 @@ export function SecurityPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </div>
           <div className="text-xs text-muted-foreground">
             {view === 'user'
-              ? 'Select a user → see every page + button they can access → toggle any permission individually'
-              : 'Select a role → see all users in it, all pages it can access, and all module permissions'}
+              ? 'Select a user → expand a module → click any page row to see its action buttons → toggle any individually'
+              : isSuperAdmin
+                ? 'Select a role → expand a module → see every action button per page → click Grant/Revoke to edit'
+                : 'Select a role → expand a module → see every action button on each page (view only — Super Admin can edit)'}
           </div>
         </div>
 
@@ -823,7 +928,7 @@ export function SecurityPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         <div className="border rounded-xl overflow-hidden bg-background">
           {view === 'user'
             ? <ByUserView users={users} isSuperAdmin={isSuperAdmin} />
-            : <ByRoleView users={users} />}
+            : <ByRoleView users={users} isSuperAdmin={isSuperAdmin} />}
         </div>
       </div>
     </TooltipProvider>
