@@ -2054,35 +2054,40 @@ const CostSubmission = () => {
     }
   };
 
-  const openMarkAsPaidDialog = async (oc: OperationalCostSubmission) => {
-    // Load active pre-funds — super admins see all; others see only their allocated funds
-    let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
-    try {
-      let allowedFundIds: string[] | null = null;
-      if (!isSuperAdmin) {
-        const { data: allocData } = await supabase
-          .from('pre_fund_allocations' as any)
-          .select('pre_fund_request_id')
-          .eq('user_id', currentUser?.id);
-        allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
-      }
-      if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
-        let q = supabase
-          .from('pre_fund_requests' as any)
-          .select('id, name, currency, available_balance')
-          .in('status', ['active', 'low_balance'])
-          .order('name');
-        if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
-        const { data: pfData } = await q;
-        preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-        }));
-      }
-    } catch (_) {}
+  const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
+    // Open dialog immediately — pre-fund list loads in the background while the user attaches a receipt
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
     const remainingCents = oc.amount_cents - alreadyPaidCents;
     const remainingAmount = (remainingCents / 100).toFixed(2);
-    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds, payAmountStr: remainingAmount });
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: remainingAmount });
+    // Async: load pre-funds and update dialog state once available
+    (async () => {
+      let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
+      try {
+        let allowedFundIds: string[] | null = null;
+        if (!isSuperAdmin) {
+          const { data: allocData } = await supabase
+            .from('pre_fund_allocations' as any)
+            .select('pre_fund_request_id')
+            .eq('user_id', currentUser?.id);
+          allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
+        }
+        if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
+          let q = supabase
+            .from('pre_fund_requests' as any)
+            .select('id, name, currency, available_balance')
+            .in('status', ['active', 'low_balance'])
+            .order('name');
+          if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
+          const { data: pfData } = await q;
+          preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+            id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+          }));
+        }
+      } catch (_) {}
+      // Only update if this dialog is still open for the same submission
+      setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id) ? { ...prev, preFunds } : prev);
+    })();
   };
 
   const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2283,33 +2288,39 @@ const CostSubmission = () => {
     });
   };
 
-  const handleOpenBatchCostPay = async (subs: OperationalCostSubmission[]) => {
+  const handleOpenBatchCostPay = (subs: OperationalCostSubmission[]) => {
     const eligible = subs.filter(s => canMarkAsPaid(s));
     if (eligible.length === 0) return;
-    let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
-    try {
-      let allowedFundIds: string[] | null = null;
-      if (!isSuperAdmin) {
-        const { data: allocData } = await supabase
-          .from('pre_fund_allocations' as any)
-          .select('pre_fund_request_id')
-          .eq('user_id', currentUser?.id);
-        allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
-      }
-      if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
-        let q = supabase
-          .from('pre_fund_requests' as any)
-          .select('id, name, currency, available_balance')
-          .in('status', ['active', 'low_balance'])
-          .order('name');
-        if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
-        const { data: pfData } = await q;
-        preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-        }));
-      }
-    } catch (_) {}
-    setBatchCostPayDialog({ open: true, submissions: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+    // Open dialog immediately — pre-fund list loads in the background while the user attaches a receipt
+    setBatchCostPayDialog({ open: true, submissions: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+    // Async: load pre-funds and update dialog state once available
+    (async () => {
+      let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
+      try {
+        let allowedFundIds: string[] | null = null;
+        if (!isSuperAdmin) {
+          const { data: allocData } = await supabase
+            .from('pre_fund_allocations' as any)
+            .select('pre_fund_request_id')
+            .eq('user_id', currentUser?.id);
+          allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
+        }
+        if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
+          let q = supabase
+            .from('pre_fund_requests' as any)
+            .select('id, name, currency, available_balance')
+            .in('status', ['active', 'low_balance'])
+            .order('name');
+          if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
+          const { data: pfData } = await q;
+          preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+            id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+          }));
+        }
+      } catch (_) {}
+      // Only update if the dialog is still open
+      setBatchCostPayDialog(prev => prev.open ? { ...prev, preFunds } : prev);
+    })();
   };
 
   const handleBatchCostPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2394,24 +2405,44 @@ const CostSubmission = () => {
         }).eq('id', sub.id);
         if (error) { failCount++; } else {
           successCount++;
-          // Link to selected pre-fund or auto-link to active fund
+          // Link to selected pre-fund (explicit) or auto-link to active fund (fallback)
           try {
-            const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
-            const r = await linkPaymentToPreFund({
-              amount: payNowCents / 100,
-              currency: sub.currency,
-              countryId: (sub as any).country_id ?? null,
-              projectId: (sub as any).project_id ?? null,
-              costCategory: (sub as any).expense_category ?? null,
-              sourceTable: 'operational_cost_submissions',
-              sourceId: sub.id,
-              reference: sub.reference_number ?? null,
-              description: (sub as any).title ?? null,
-              paymentDate: now,
-              createdBy: currentUser.id,
-              userId: sub.submitted_by ?? null,
-              ...(preFundId ? { preFundId } : {}),
-            });
+            const { linkPaymentToPreFund, linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+            let r;
+            if (preFundId) {
+              // User explicitly chose a fund — charge it directly (same as single Mark Paid flow)
+              const selectedFundInfo = batchCostPayDialog.preFunds.find(f => f.id === preFundId);
+              r = await linkPaymentToKnownFund({
+                fundId: preFundId,
+                fundName: selectedFundInfo?.name ?? preFundId,
+                amount: payNowCents / 100,
+                currency: sub.currency,
+                sourceTable: 'operational_cost_submissions',
+                sourceId: sub.id,
+                reference: sub.reference_number ?? null,
+                description: (sub as any).title ?? null,
+                paymentDate: now,
+                createdBy: currentUser.id,
+                userId: sub.submitted_by ?? null,
+                receiptUrl: proofUrl,
+              });
+            } else {
+              r = await linkPaymentToPreFund({
+                amount: payNowCents / 100,
+                currency: sub.currency,
+                countryId: (sub as any).country_id ?? null,
+                projectId: (sub as any).project_id ?? null,
+                costCategory: (sub as any).expense_category ?? null,
+                sourceTable: 'operational_cost_submissions',
+                sourceId: sub.id,
+                reference: sub.reference_number ?? null,
+                description: (sub as any).title ?? null,
+                paymentDate: now,
+                createdBy: currentUser.id,
+                userId: sub.submitted_by ?? null,
+                receiptUrl: proofUrl,
+              });
+            }
             if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message);
           } catch (pfErr: any) {
             console.warn('[Pre-Fund] Bulk link error:', pfErr?.message);
@@ -10184,7 +10215,12 @@ const CostSubmission = () => {
               ) : (() => {
                 const total = batchCostPayDialog.submissions.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
                 const pct = parseFloat(batchCostPayDialog.payPercent || '0');
-                const payAmt = batchCostPayDialog.payMode === 'full' ? total : Math.round(total * Math.min(1, pct / 100));
+                const isAmtMode = batchCostPayDialog.payMode === 'custom' && batchCostPayDialog.customInputType === 'amount';
+                const payAmt = batchCostPayDialog.payMode === 'full'
+                  ? total
+                  : isAmtMode
+                  ? Math.min(total, Math.round(parseFloat(batchCostPayDialog.payCustomAmountStr || '0') * 100))
+                  : Math.round(total * Math.min(1, Math.max(0, pct / 100)));
                 const currency = batchCostPayDialog.submissions[0]?.currency || '';
                 return <><CheckCircle className="h-4 w-4 mr-1.5" /> Pay {batchCostPayDialog.submissions.length} — {currency} {(payAmt / 100).toLocaleString()}</>;
               })()}
