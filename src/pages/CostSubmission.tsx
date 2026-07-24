@@ -2099,9 +2099,14 @@ const CostSubmission = () => {
       return;
     }
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
-    const remainingCents = oc.amount_cents - alreadyPaidCents;
+    const totalCents = oc.amount_cents ?? 0;
+    const remainingCents = totalCents - alreadyPaidCents;
     const payAmountCents = Math.round(payAmountVal * 100);
-    if (payAmountCents > remainingCents) {
+    // Only enforce the cap when there IS a known remaining balance.
+    // When remainingCents ≤ 0 (null/zero amount_cents in DB, or amount matches
+    // what's already recorded), allow any positive amount so finance can correct
+    // the record rather than being permanently locked out.
+    if (remainingCents > 0 && payAmountCents > remainingCents) {
       toast({ title: "Amount Exceeds Remaining / المبلغ يتجاوز الباقي", description: `Payment amount cannot exceed the remaining balance of ${oc.currency} ${(remainingCents / 100).toLocaleString()}.`, variant: "destructive" });
       return;
     }
@@ -9486,37 +9491,49 @@ const CostSubmission = () => {
                 {/* Quick-pick % buttons */}
                 {markAsPaidDialog.submission && (() => {
                   const sub = markAsPaidDialog.submission!;
-                  const rem = (sub.amount_cents - (sub.amount_paid_cents ?? 0)) / 100;
-                  const setAmt = (pct: number) => setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: (rem * pct / 100).toFixed(2) }));
+                  const totalCents = sub.amount_cents ?? 0;
+                  const rem = (totalCents - (sub.amount_paid_cents ?? 0)) / 100;
+                  // When rem ≤ 0 (null/zero amount_cents in DB, or amounts are
+                  // already matched), fall back to the submission's total amount
+                  // so the % buttons still produce useful values.
+                  const basis = rem > 0 ? rem : totalCents / 100;
+                  const setAmt = (pct: number) => setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: (basis * pct / 100).toFixed(2) }));
                   const curVal = parseFloat(markAsPaidDialog.payAmountStr) || 0;
                   return (
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { label: 'Full / الكل', pct: 100 },
-                        { label: '75%', pct: 75 },
-                        { label: '50%', pct: 50 },
-                        { label: '25%', pct: 25 },
-                      ].map(opt => {
-                        const optAmt = parseFloat((rem * opt.pct / 100).toFixed(2));
-                        const isActive = Math.abs(curVal - optAmt) < 0.01;
-                        return (
-                          <button
-                            key={opt.label}
-                            type="button"
-                            disabled={markAsPaidDialog.uploading}
-                            onClick={() => setAmt(opt.pct)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              isActive
-                                ? 'bg-green-600 text-white border-green-600'
-                                : 'bg-background border-input text-foreground hover:bg-accent'
-                            }`}
-                            data-testid={`button-pay-quick-${opt.pct}`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <>
+                      {rem <= 0 && totalCents > 0 && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                          ⚠️ Remaining balance shows 0 — percentages are based on the total amount. Enter the correct amount manually if needed. / الرصيد المتبقي يظهر صفراً — النسب محسوبة من المبلغ الإجمالي. أدخل المبلغ الصحيح يدوياً إذا لزم.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: 'Full / الكل', pct: 100 },
+                          { label: '75%', pct: 75 },
+                          { label: '50%', pct: 50 },
+                          { label: '25%', pct: 25 },
+                        ].map(opt => {
+                          const optAmt = parseFloat((basis * opt.pct / 100).toFixed(2));
+                          const isActive = basis > 0 && Math.abs(curVal - optAmt) < 0.01;
+                          return (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              disabled={markAsPaidDialog.uploading || basis <= 0}
+                              onClick={() => setAmt(opt.pct)}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                isActive
+                                  ? 'bg-green-600 text-white border-green-600'
+                                  : 'bg-background border-input text-foreground hover:bg-accent disabled:opacity-40'
+                              }`}
+                              data-testid={`button-pay-quick-${opt.pct}`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   );
                 })()}
                 <div className="flex items-center gap-2">
@@ -9525,7 +9542,6 @@ const CostSubmission = () => {
                     type="number"
                     step="0.01"
                     min="0.01"
-                    max={((markAsPaidDialog.submission!.amount_cents - (markAsPaidDialog.submission!.amount_paid_cents ?? 0)) / 100).toFixed(2)}
                     value={markAsPaidDialog.payAmountStr}
                     onChange={e => setMarkAsPaidDialog(prev => ({ ...prev, payAmountStr: e.target.value }))}
                     disabled={markAsPaidDialog.uploading}
