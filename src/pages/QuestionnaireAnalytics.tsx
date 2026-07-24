@@ -3332,13 +3332,13 @@ const QuestionnaireAnalytics = () => {
         headers: ['Metric', 'Value'],
         rows: [
           ['Total Questionnaires', filteredData.length],
-          ['Unique Sites', siteDetails.length],
+          ['Unique Sites', siteDetailsWithActivity.length],
           ['Total Collectors', collectorDetails.length],
         ],
       },
       breakdownSheets,
     });
-  }, [hubSummary, stateSummary, localitySummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, filteredData, siteDetails]);
+  }, [hubSummary, stateSummary, localitySummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, filteredData]);
 
   const exportToPdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
