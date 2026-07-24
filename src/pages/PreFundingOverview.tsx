@@ -233,13 +233,19 @@ export default function PreFundingOverview() {
     try {
       setError(null);
       setLoadingDetails(true);
-      // ── Phase 1: fund headers only — renders the page immediately ──────────────
-      const [fundsRes, ratesRes, settingsRes] = await Promise.all([
+      // ── Phase 1: fund headers + payment sums — renders accurate balances immediately ─
+      const [fundsRes, ratesRes, settingsRes, paySumsRes] = await Promise.all([
         supabase.from('pre_fund_requests')
           .select('id,name,source,amount,currency,available_balance,committed_amount,paid_amount,status,period_type_name,start_date,end_date,country_id,project_id,threshold_pct,threshold_amount,warning_days,auto_renewal_mode,low_balance_alert,ending_soon_alert')
           .order('created_at', { ascending: false }),
         (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency,rate,effective_date').order('effective_date', { ascending: false }),
         supabase.from('pre_fund_settings').select('base_currency').maybeSingle(),
+        // Lightweight aggregate: just fundId + amount for payment rows (2 columns, no filter needed).
+        // This runs in parallel with fund headers and gives the same unfiltered sum that
+        // PreFundingReconciliation uses — so Available is accurate from the very first render.
+        (supabase as any).from('pre_fund_transactions')
+          .select('pre_fund_request_id,amount')
+          .eq('transaction_type', 'payment'),
       ]);
 
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
@@ -251,7 +257,15 @@ export default function PreFundingOverview() {
         setSettings({ base_currency: s.base_currency ?? 'USD' });
         setBase(s.base_currency ?? 'USD');
       }
-      // ← Show fund cards NOW; detail tables will fill in during Phase 2
+      // Populate rawFundPaySums immediately so Available balance KPIs are accurate on first render.
+      if (!paySumsRes.error && paySumsRes.data) {
+        const m = new Map<string, number>();
+        for (const t of paySumsRes.data as Array<{ pre_fund_request_id: string; amount: number }>) {
+          m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + Number(t.amount ?? 0));
+        }
+        setRawFundPaySums(m);
+      }
+      // ← Show fund cards NOW with accurate balances; detail tables fill in during Phase 2
       setLoading(false);
 
       // ── Phase 2: allocation + transaction details (background) ─────────────────
