@@ -2267,10 +2267,18 @@ const MMPCycleClose = () => {
     }
   };
 
+  // Run on mount AND when activeMmps first populates (TanStack Query data arrival).
+  // Without the activeMmps.length dep, the effect fires at mount when refs are still
+  // empty (mmpFiles not loaded yet) → early-returns with no data → never re-runs →
+  // page opens but shows nothing. Adding the length re-triggers the fetch once when
+  // the MMP list arrives. fetchUncoveredSites/fetchClosedCycles are stable (deps [])
+  // so no loop — the effect only re-fires when the active-MMP count changes.
+  const activeMmpsLength = activeMmps.length;
   useEffect(() => {
     fetchUncoveredSites();
     fetchClosedCycles();
-  }, [fetchUncoveredSites, fetchClosedCycles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUncoveredSites, fetchClosedCycles, activeMmpsLength]);
 
   useEffect(() => {
     activeMmps.forEach(mmp => {
