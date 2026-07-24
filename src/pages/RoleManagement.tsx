@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Settings, Sparkles, Award, UserCog, Lock, Grid3X3, FlaskConical, Globe, LayoutDashboard, Eye, KeyRound } from 'lucide-react';
+import { Plus, Users, Shield, Sparkles, Award, Lock, FlaskConical, KeyRound } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -12,15 +12,10 @@ import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog'
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
-import { UserPermissionOverrides } from '@/components/role-management/UserPermissionOverrides';
 import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
-import { RoleAccessMap } from '@/components/role-management/RoleAccessMap';
-import { PageAccessOverview } from '@/components/role-management/PageAccessOverview';
-import { ModuleControlCenter } from '@/components/role-management/ModuleControlCenter';
-import { UserAccessProfile } from '@/components/role-management/UserAccessProfile';
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole, ResourceType, ActionType } from '@/types/roles';
+import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
@@ -214,30 +209,6 @@ const RoleManagement = () => {
     await refreshUsers();
   };
 
-  // ── Module Control Center permission toggle ───────────────────────────────
-  const handleToggleModulePermission = async (
-    liveRole: RoleWithPermissions,
-    resource: ResourceType,
-    action: ActionType,
-    currentlyHas: boolean,
-  ): Promise<void> => {
-    const currentPerms = liveRole.permissions.map(p => ({
-      resource: p.resource as ResourceType,
-      action: p.action as ActionType,
-    }));
-    const newPerms = currentlyHas
-      ? currentPerms.filter(p => !(p.resource === resource && p.action === action))
-      : [...currentPerms, { resource, action }];
-
-    const ok = await updateRole(liveRole.id, { permissions: newPerms });
-    if (ok) {
-      toast({
-        title: currentlyHas ? 'Permission revoked' : 'Permission granted',
-        description: `${liveRole.display_name || liveRole.name} — ${resource}:${action}`,
-      });
-    }
-  };
-
   const handleCloneRole = (role: RoleWithPermissions) => {
     setCloneSourceRole(role);
     setShowCreateDialog(true);
@@ -326,75 +297,28 @@ const RoleManagement = () => {
         </Card>
       </div>
 
-      {/* Tabbed content */}
+      {/* Tabbed content — 3 tabs only */}
       <Tabs defaultValue="roles">
-        <TabsList className="mb-4 flex-wrap h-auto gap-1">
-          <TabsTrigger value="roles" className="gap-2">
+        <TabsList className="mb-4 h-auto gap-1">
+          {/* Tab 1: Roles */}
+          <TabsTrigger value="roles" className="gap-2" data-testid="tab-roles">
             <Shield className="h-4 w-4" />
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
 
-          {/* User Permission Overrides — Super Admin only */}
-          {isSuperAdmin && (
-            <TabsTrigger value="overrides" className="gap-2" data-testid="tab-user-overrides">
-              <UserCog className="h-4 w-4" />
-              <span>User Permission Overrides <span className="text-[10px] opacity-60">/ تجاوزات الصلاحيات</span></span>
-              <Badge variant="secondary" className="ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] px-1.5">
-                Super Admin
-              </Badge>
-            </TabsTrigger>
-          )}
-
-          {/* Cost Submission Access — Admin AND Super Admin */}
-          {isAdminOrAbove && (
-            <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
-              <Lock className="h-4 w-4" />
-              <span>Cost Submission Access <span className="text-[10px] opacity-60">/ صلاحيات التكاليف</span></span>
-              <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] px-1.5">
-                {isSuperAdmin ? 'Super Admin' : 'Admin'}
-              </Badge>
-            </TabsTrigger>
-          )}
-
-          {/* Page Access Overview — Admin AND Super Admin */}
-          {isAdminOrAbove && (
-            <TabsTrigger value="page-access" className="gap-2" data-testid="tab-page-access">
-              <Globe className="h-4 w-4" />
-              <span>Page Access <span className="text-[10px] opacity-60">/ صلاحيات الصفحات</span></span>
-              <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5">
-                {isSuperAdmin ? 'Super Admin' : 'Admin'}
-              </Badge>
-            </TabsTrigger>
-          )}
-
-          {/* Module Control Center — Admin AND Super Admin */}
-          {isAdminOrAbove && (
-            <TabsTrigger value="module-control" className="gap-2" data-testid="tab-module-control">
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Module Control <span className="text-[10px] opacity-60">/ التحكم في الوحدات</span></span>
-              <Badge variant="secondary" className="ml-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-[10px] px-1.5">
-                {isSuperAdmin ? 'Super Admin' : 'Admin'}
-              </Badge>
-            </TabsTrigger>
-          )}
-
-          {/* Security Panel — unified user+role view, visible to all who can manage roles */}
+          {/* Tab 2: Security Panel — unified everything */}
           <TabsTrigger value="security-panel" className="gap-2" data-testid="tab-security-panel">
             <KeyRound className="h-4 w-4" />
             <span>Security Panel <span className="text-[10px] opacity-60">/ لوحة الأمان</span></span>
           </TabsTrigger>
 
-          {/* User Access Profile — visible to all who can manage roles */}
-          <TabsTrigger value="user-profile" className="gap-2" data-testid="tab-user-access-profile">
-            <Eye className="h-4 w-4" />
-            <span>User Access Profile <span className="text-[10px] opacity-60">/ ملف صلاحيات المستخدم</span></span>
-          </TabsTrigger>
-
-          {/* Access Map — visible to all who can manage roles */}
-          <TabsTrigger value="access-map" className="gap-2" data-testid="tab-access-map">
-            <Grid3X3 className="h-4 w-4" />
-            <span>Access Map <span className="text-[10px] opacity-60">/ خريطة الصلاحيات</span></span>
-          </TabsTrigger>
+          {/* Tab 3: Cost Submission Access — Admin + Super Admin only */}
+          {isAdminOrAbove && (
+            <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
+              <Lock className="h-4 w-4" />
+              <span>Cost Submission Access <span className="text-[10px] opacity-60">/ صلاحيات التكاليف</span></span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Tab 1: Roles ── */}
@@ -459,53 +383,7 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-        {/* ── Tab 2: User Permission Overrides (Super Admin only) ── */}
-        {isSuperAdmin && (
-          <TabsContent value="overrides">
-            <UserPermissionOverrides />
-          </TabsContent>
-        )}
-
-        {/* ── Tab 3: Cost Submission Access Control (Admin + Super Admin) ── */}
-        {isAdminOrAbove && (
-          <TabsContent value="cost-submissions">
-            <CostSubmissionPermissions />
-          </TabsContent>
-        )}
-
-        {/* ── Tab 4: Page Access Overview (Admin + Super Admin) ── */}
-        {isAdminOrAbove && (
-          <TabsContent value="page-access">
-            <PageAccessOverview />
-          </TabsContent>
-        )}
-
-        {/* ── Tab 5: Module Control Center (Admin + Super Admin) ── */}
-        {isAdminOrAbove && (
-          <TabsContent value="module-control">
-            <div className="space-y-2 mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <LayoutDashboard className="h-5 w-5 text-emerald-600" />
-                Module Control Center <span className="text-base font-normal text-muted-foreground" dir="rtl">/ مركز التحكم في الوحدات</span>
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Every module, page, button, and report in the system — with role coverage indicators.
-                Click any action row to see exactly which roles can perform it.
-                {isSuperAdmin && ' Use User Permission Overrides to grant/block access for individual users.'}
-              </p>
-              <p className="text-xs text-muted-foreground/70" dir="rtl">
-                كل وحدة وصفحة وزر وتقرير في النظام — مع مؤشرات تغطية الأدوار. انقر على أي صف لرؤية الأدوار التي يمكنها تنفيذه.
-              </p>
-            </div>
-            <ModuleControlCenter
-              roles={roles}
-              onTogglePermission={handleToggleModulePermission}
-              canEdit={isSuperAdmin}
-            />
-          </TabsContent>
-        )}
-
-        {/* ── Tab 6: Security Panel ── */}
+        {/* ── Tab 2: Security Panel ── */}
         <TabsContent value="security-panel" className="mt-0">
           <div className="mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -513,36 +391,18 @@ const RoleManagement = () => {
               Security Panel <span className="text-base font-normal text-muted-foreground" dir="rtl">/ لوحة الأمان</span>
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Unified access control — view by role or by user. See every page, button, report and permission. Toggle any access individually per user.
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5" dir="rtl">
-              التحكم الموحد في الوصول — عرض حسب الدور أو المستخدم. كل صفحة وزر وتقرير وصلاحية. قم بتبديل أي وصول بشكل فردي لكل مستخدم.
+              View by role or by user — every page, button, report and permission in one place. Toggle any access individually per user.
             </p>
           </div>
           <SecurityPanel isSuperAdmin={isSuperAdmin} />
         </TabsContent>
 
-        {/* ── Tab 7: User Access Profile (all admins) ── */}
-        <TabsContent value="user-profile" className="mt-0">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Eye className="h-5 w-5 text-blue-600" />
-              User Access Profile <span className="text-base font-normal text-muted-foreground" dir="rtl">/ ملف صلاحيات المستخدم</span>
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Select any user to see exactly which pages they can access and what they can do on each module — combining their role permissions and any individual overrides.
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5" dir="rtl">
-              اختر أي مستخدم لرؤية الصفحات التي يمكنه الوصول إليها وما يمكنه فعله في كل وحدة — بما في ذلك صلاحيات دوره وأي تجاوزات فردية.
-            </p>
-          </div>
-          <UserAccessProfile />
-        </TabsContent>
-
-        {/* ── Tab 7: Access Map (all admins) ── */}
-        <TabsContent value="access-map">
-          <RoleAccessMap />
-        </TabsContent>
+        {/* ── Tab 3: Cost Submission Access (Admin + Super Admin) ── */}
+        {isAdminOrAbove && (
+          <TabsContent value="cost-submissions">
+            <CostSubmissionPermissions />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Dialogs */}
