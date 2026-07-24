@@ -545,7 +545,9 @@ const CostSubmission = () => {
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
     payMode: 'full' | 'percent' | 'custom';
     payPercent: string;
-  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
+    customInputType: 'pct' | 'amount';
+    payCustomAmountStr: string;
+  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
 
   // In-page attachment/receipt viewer
   const [attachViewer, setAttachViewer] = useState<{ open: boolean; url: string; name: string }>({ open: false, url: '', name: '' });
@@ -2053,17 +2055,29 @@ const CostSubmission = () => {
   };
 
   const openMarkAsPaidDialog = async (oc: OperationalCostSubmission) => {
-    // Load active pre-funds for the "Charge to Pre-Fund" selector
+    // Load active pre-funds — super admins see all; others see only their allocated funds
     let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
     try {
-      const { data: pfData } = await supabase
-        .from('pre_fund_requests' as any)
-        .select('id, name, currency, available_balance')
-        .in('status', ['active', 'low_balance'])
-        .order('name');
-      preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-        id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-      }));
+      let allowedFundIds: string[] | null = null;
+      if (!isSuperAdmin) {
+        const { data: allocData } = await supabase
+          .from('pre_fund_allocations' as any)
+          .select('pre_fund_request_id')
+          .eq('user_id', currentUser?.id);
+        allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
+      }
+      if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
+        let q = supabase
+          .from('pre_fund_requests' as any)
+          .select('id, name, currency, available_balance')
+          .in('status', ['active', 'low_balance'])
+          .order('name');
+        if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
+        const { data: pfData } = await q;
+        preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+        }));
+      }
     } catch (_) {}
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
     const remainingCents = oc.amount_cents - alreadyPaidCents;
@@ -2091,6 +2105,10 @@ const CostSubmission = () => {
     if (!oc || !currentUser?.id) return;
     if (!proofFiles.length) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach at least one payment receipt before confirming. / يرجى إرفاق إيصال دفع واحد على الأقل قبل التأكيد.", variant: "destructive" });
+      return;
+    }
+    if (markAsPaidDialog.preFunds.length > 0 && !markAsPaidDialog.preFundId) {
+      toast({ title: "Pre-Fund Required / التمويل المسبق مطلوب", description: "Please select a pre-fund to charge this payment to. / يرجى اختيار التمويل المسبق لخصم هذه الدفعة منه.", variant: "destructive" });
       return;
     }
     const payAmountVal = parseFloat(payAmountStr);
@@ -2270,16 +2288,28 @@ const CostSubmission = () => {
     if (eligible.length === 0) return;
     let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
     try {
-      const { data: pfData } = await supabase
-        .from('pre_fund_requests' as any)
-        .select('id, name, currency, available_balance')
-        .in('status', ['active', 'low_balance'])
-        .order('name');
-      preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-        id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-      }));
+      let allowedFundIds: string[] | null = null;
+      if (!isSuperAdmin) {
+        const { data: allocData } = await supabase
+          .from('pre_fund_allocations' as any)
+          .select('pre_fund_request_id')
+          .eq('user_id', currentUser?.id);
+        allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
+      }
+      if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
+        let q = supabase
+          .from('pre_fund_requests' as any)
+          .select('id, name, currency, available_balance')
+          .in('status', ['active', 'low_balance'])
+          .order('name');
+        if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
+        const { data: pfData } = await q;
+        preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
+        }));
+      }
     } catch (_) {}
-    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100' });
+    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds, payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
   };
 
   const handleBatchCostPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2290,18 +2320,28 @@ const CostSubmission = () => {
   };
 
   const handleConfirmBatchCostPay = async () => {
-    const { submissions: subs, proofFile, notes, preFundId, payMode, payPercent } = batchCostPayDialog;
+    const { submissions: subs, proofFile, notes, preFundId, payMode, payPercent, customInputType, payCustomAmountStr } = batchCostPayDialog;
     if (!currentUser?.id || subs.length === 0) return;
     if (!proofFile) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
       return;
     }
-    // Compute pay fraction
-    const payFraction = payMode === 'full' ? 1
-      : payMode === 'percent' ? Math.min(1, Math.max(0, parseFloat(payPercent || '0') / 100))
+    if (batchCostPayDialog.preFunds.length > 0 && !preFundId) {
+      toast({ title: "Pre-Fund Required / التمويل المسبق مطلوب", description: "Please select a pre-fund to charge these payments to. / يرجى اختيار التمويل المسبق لخصم هذه الدفعات منه.", variant: "destructive" });
+      return;
+    }
+    // Compute pay fraction (percent mode) or total amount (amount mode)
+    const isAmountMode = payMode === 'custom' && customInputType === 'amount';
+    const customFixedCents = isAmountMode ? Math.round(parseFloat(payCustomAmountStr || '0') * 100) : 0;
+    const payFraction = isAmountMode ? 1 /* applied per-sub below */
+      : payMode === 'full' ? 1
       : Math.min(1, Math.max(0, parseFloat(payPercent || '0') / 100));
-    if (payFraction <= 0) {
+    if (!isAmountMode && payFraction <= 0) {
       toast({ title: 'Invalid Amount / مبلغ غير صحيح', description: 'Enter a positive amount or percentage.', variant: 'destructive' });
+      return;
+    }
+    if (isAmountMode && customFixedCents <= 0) {
+      toast({ title: 'Invalid Amount / مبلغ غير صحيح', description: 'Enter a positive amount.', variant: 'destructive' });
       return;
     }
 
@@ -2318,9 +2358,18 @@ const CostSubmission = () => {
 
       let successCount = 0;
       let failCount = 0;
+      // When custom-amount mode, distribute fixed total proportionally across submissions
+      const totalRemainingCents = subs.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
       for (const sub of subs) {
         const remainingCents = sub.amount_cents - (sub.amount_paid_cents ?? 0);
-        const payNowCents = payMode === 'full' ? remainingCents : Math.round(remainingCents * payFraction);
+        let payNowCents: number;
+        if (isAmountMode) {
+          // Distribute the fixed amount proportionally; cap at each sub's remaining
+          const proportion = totalRemainingCents > 0 ? remainingCents / totalRemainingCents : 1 / subs.length;
+          payNowCents = Math.min(remainingCents, Math.round(customFixedCents * proportion));
+        } else {
+          payNowCents = payMode === 'full' ? remainingCents : Math.round(remainingCents * payFraction);
+        }
         const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
         const isFullyPaid = newPaidCents >= sub.amount_cents;
         const { error } = await supabase.from('operational_cost_submissions').update({
@@ -2412,7 +2461,7 @@ const CostSubmission = () => {
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
         description: `${successCount} submission${successCount > 1 ? 's' : ''} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
+      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
       setSelectedCostIds(new Set());
       fetchOperationalCosts();
     } catch (err: any) {
@@ -9644,26 +9693,26 @@ const CostSubmission = () => {
                 </label>
               </div>
 
-              {/* Charge to Pre-Fund */}
+              {/* Charge to Pre-Fund — mandatory when funds are available */}
               {markAsPaidDialog.preFunds.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Charge to Pre-Fund / خصم من التمويل المسبق
+                    Charge to Pre-Fund / خصم من التمويل المسبق{' '}
+                    <span className="text-red-500">*</span>
                     {markAsPaidDialog.preFundId
                       ? <span className="ml-1 text-xs font-normal text-emerald-600">✓ Selected</span>
-                      : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional — select to deduct from fund)</span>
+                      : <span className="ml-1 text-xs font-normal text-rose-500">(required / مطلوب)</span>
                     }
                   </Label>
                   <Select
-                    value={markAsPaidDialog.preFundId ?? 'none'}
-                    onValueChange={v => setMarkAsPaidDialog(prev => ({ ...prev, preFundId: v === 'none' ? null : v }))}
+                    value={markAsPaidDialog.preFundId ?? ''}
+                    onValueChange={v => setMarkAsPaidDialog(prev => ({ ...prev, preFundId: v || null }))}
                     disabled={markAsPaidDialog.uploading}
                   >
-                    <SelectTrigger className="h-9 text-sm" data-testid="select-mark-paid-pre-fund">
-                      <SelectValue placeholder="Select a pre-fund…" />
+                    <SelectTrigger className={`h-9 text-sm ${!markAsPaidDialog.preFundId ? 'border-rose-300 dark:border-rose-700' : ''}`} data-testid="select-mark-paid-pre-fund">
+                      <SelectValue placeholder="Select pre-fund… / اختر التمويل المسبق" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">— No pre-fund —</SelectItem>
                       {markAsPaidDialog.preFunds.map(f => (
                         <SelectItem key={f.id} value={f.id}>
                           {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
@@ -9673,8 +9722,8 @@ const CostSubmission = () => {
                   </Select>
                   {markAsPaidDialog.preFundId && (() => {
                     const f = markAsPaidDialog.preFunds.find(x => x.id === markAsPaidDialog.preFundId);
-                    const amt = markAsPaidDialog.submission ? markAsPaidDialog.submission.amount_cents / 100 : 0;
-                    const after = (f?.available_balance ?? 0) - amt;
+                    const payAmt = parseFloat(markAsPaidDialog.payAmountStr) || 0;
+                    const after = (f?.available_balance ?? 0) - payAmt;
                     return (
                       <p className={`text-xs ${after < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
                         After payment: {f?.currency} {after.toLocaleString()} remaining
@@ -9746,7 +9795,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !batchCostPayDialog.uploading) {
             if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
+            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
           }
         }}
       >
@@ -9765,7 +9814,12 @@ const CostSubmission = () => {
             const batchCurrency = batchCostPayDialog.submissions[0]?.currency || '';
             const totalRemaining = batchCostPayDialog.submissions.reduce((s, sub) => s + (sub.amount_cents - (sub.amount_paid_cents ?? 0)), 0);
             const pct = parseFloat(batchCostPayDialog.payPercent || '0');
-            const payNowCents = batchCostPayDialog.payMode === 'full' ? totalRemaining : Math.round(totalRemaining * Math.min(1, Math.max(0, pct / 100)));
+            const isAmountModeDisplay = batchCostPayDialog.payMode === 'custom' && batchCostPayDialog.customInputType === 'amount';
+            const payNowCents = batchCostPayDialog.payMode === 'full'
+              ? totalRemaining
+              : isAmountModeDisplay
+              ? Math.min(totalRemaining, Math.round(parseFloat(batchCostPayDialog.payCustomAmountStr || '0') * 100))
+              : Math.round(totalRemaining * Math.min(1, Math.max(0, pct / 100)));
             const isPartial = batchCostPayDialog.payMode !== 'full' && payNowCents < totalRemaining;
             const selectedFund = batchCostPayDialog.preFunds.find(f => f.id === batchCostPayDialog.preFundId);
             return (
@@ -9815,7 +9869,7 @@ const CostSubmission = () => {
                     { label: '75%', mode: 'percent' as const, pct: '75' },
                     { label: '50%', mode: 'percent' as const, pct: '50' },
                     { label: '25%', mode: 'percent' as const, pct: '25' },
-                    { label: 'Custom %', mode: 'custom' as const, pct: '' },
+                    { label: 'Custom', mode: 'custom' as const, pct: '' },
                   ].map(opt => {
                     const isActive = opt.mode === 'full'
                       ? batchCostPayDialog.payMode === 'full'
@@ -9842,22 +9896,64 @@ const CostSubmission = () => {
                     );
                   })}
                 </div>
-                {/* Custom % input */}
+                {/* Custom input — toggle between % and fixed Amount */}
                 {batchCostPayDialog.payMode !== 'full' && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="100"
-                      value={batchCostPayDialog.payPercent}
-                      onChange={e => setBatchCostPayDialog(prev => ({ ...prev, payPercent: e.target.value, payMode: 'percent' }))}
-                      disabled={batchCostPayDialog.uploading}
-                      placeholder="e.g. 60"
-                      className="w-24 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                      data-testid="input-batch-pay-percent"
-                    />
-                    <span className="text-sm text-muted-foreground">%  →  {batchCurrency} {(payNowCents / 100).toLocaleString()}</span>
+                  <div className="space-y-1.5">
+                    {/* % / Amount toggle tabs (only shown for custom mode) */}
+                    {batchCostPayDialog.payMode === 'custom' && (
+                      <div className="inline-flex rounded-md border border-input overflow-hidden">
+                        {(['pct', 'amount'] as const).map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            disabled={batchCostPayDialog.uploading}
+                            onClick={() => setBatchCostPayDialog(prev => ({ ...prev, customInputType: t }))}
+                            className={`px-3 py-1 text-xs font-medium transition-colors ${
+                              batchCostPayDialog.customInputType === t
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-background text-foreground hover:bg-accent'
+                            }`}
+                            data-testid={`button-batch-custom-type-${t}`}
+                          >
+                            {t === 'pct' ? '% Percentage' : 'Amount / مبلغ'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {/* Input row */}
+                    {batchCostPayDialog.payMode === 'custom' && batchCostPayDialog.customInputType === 'amount' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-muted-foreground shrink-0">{batchCurrency}</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={batchCostPayDialog.payCustomAmountStr}
+                          onChange={e => setBatchCostPayDialog(prev => ({ ...prev, payCustomAmountStr: e.target.value }))}
+                          disabled={batchCostPayDialog.uploading}
+                          placeholder="e.g. 5000.00"
+                          className="w-36 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                          data-testid="input-batch-pay-amount"
+                        />
+                        <span className="text-sm text-muted-foreground">→ {batchCurrency} {(payNowCents / 100).toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="1"
+                          min="1"
+                          max="100"
+                          value={batchCostPayDialog.payPercent}
+                          onChange={e => setBatchCostPayDialog(prev => ({ ...prev, payPercent: e.target.value, payMode: 'percent' }))}
+                          disabled={batchCostPayDialog.uploading}
+                          placeholder="e.g. 60"
+                          className="w-24 h-9 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                          data-testid="input-batch-pay-percent"
+                        />
+                        <span className="text-sm text-muted-foreground">%  →  {batchCurrency} {(payNowCents / 100).toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {/* Settlement info */}
@@ -9872,26 +9968,26 @@ const CostSubmission = () => {
                 )}
               </div>
 
-              {/* Charge to Pre-Fund */}
+              {/* Charge to Pre-Fund — mandatory when funds are available */}
               {batchCostPayDialog.preFunds.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Charge to Pre-Fund / خصم من التمويل المسبق
+                    Charge to Pre-Fund / خصم من التمويل المسبق{' '}
+                    <span className="text-red-500">*</span>
                     {batchCostPayDialog.preFundId
                       ? <span className="ml-1 text-xs font-normal text-emerald-600">✓ Selected</span>
-                      : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional — select to deduct from fund)</span>
+                      : <span className="ml-1 text-xs font-normal text-rose-500">(required / مطلوب)</span>
                     }
                   </Label>
                   <Select
-                    value={batchCostPayDialog.preFundId ?? 'none'}
-                    onValueChange={v => setBatchCostPayDialog(prev => ({ ...prev, preFundId: v === 'none' ? null : v }))}
+                    value={batchCostPayDialog.preFundId ?? ''}
+                    onValueChange={v => setBatchCostPayDialog(prev => ({ ...prev, preFundId: v || null }))}
                     disabled={batchCostPayDialog.uploading}
                   >
-                    <SelectTrigger className="h-9 text-sm" data-testid="select-batch-pay-pre-fund">
-                      <SelectValue placeholder="Select a pre-fund…" />
+                    <SelectTrigger className={`h-9 text-sm ${!batchCostPayDialog.preFundId ? 'border-rose-300 dark:border-rose-700' : ''}`} data-testid="select-batch-pay-pre-fund">
+                      <SelectValue placeholder="Select pre-fund… / اختر التمويل المسبق" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">— No pre-fund —</SelectItem>
                       {batchCostPayDialog.preFunds.map(f => (
                         <SelectItem key={f.id} value={f.id}>
                           {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
@@ -9972,7 +10068,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
-                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100' });
+                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
               }}
               disabled={batchCostPayDialog.uploading}
               data-testid="button-cancel-batch-cost-pay"
