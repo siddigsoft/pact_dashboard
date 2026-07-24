@@ -2293,24 +2293,27 @@ const MMPCycleClose = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchUncoveredSites, activeMmpsLength]);
 
-  // Secondary effect — runs closed-cycle history after the primary data loads.
-  // Delayed 300 ms so fetchUncoveredSites gets its connection slots first.
+  // Lazy — closed cycle history is only needed on the "archive" tab.
+  // Loading it at startup fired N×4 parallel Supabase requests (3 count queries
+  // + 1 paginated reason breakdown per closed cycle), which saturated Chrome's
+  // 6-connection-per-host pool and made the page unresponsive on mount.
+  // handleApproveCycle already calls fetchClosedCycles() directly when a cycle
+  // closes, so the list is always fresh when the archive tab opens.
   useEffect(() => {
-    const timer = setTimeout(() => { fetchClosedCycles(); }, 300);
-    return () => clearTimeout(timer);
+    if (activeTab !== 'archive') return;
+    fetchClosedCycles();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchClosedCycles, activeMmpsLength]);
+  }, [fetchClosedCycles, activeTab]);
 
+  // Lazy — only fetch scope options for the MMP currently being worked on.
+  // Previously this ran for every active MMP at startup, each loading up to
+  // 10,000 rows, which contributed heavily to the page-unresponsive hang.
   useEffect(() => {
-    activeMmps.forEach(mmp => {
-      // Use a ref to track which IDs are already fetched so mmpScopeOptions
-      // state does not need to be in deps (which would cause extra re-runs).
-      if (!fetchedScopeIdsRef.current.has(mmp.id)) {
-        fetchedScopeIdsRef.current.add(mmp.id);
-        fetchMmpScopeOptions(mmp.id);
-      }
-    });
-  }, [activeMmps, fetchMmpScopeOptions]);
+    if (!checklistMmpId) return;
+    if (fetchedScopeIdsRef.current.has(checklistMmpId)) return;
+    fetchedScopeIdsRef.current.add(checklistMmpId);
+    fetchMmpScopeOptions(checklistMmpId);
+  }, [checklistMmpId, fetchMmpScopeOptions]);
 
   useEffect(() => {
     const fetchSiteVisitCounts = async () => {
@@ -2371,6 +2374,9 @@ const MMPCycleClose = () => {
   }, [isAdmin]);
 
   useEffect(() => {
+    // Quality scores are only rendered on the "reports" tab — skip the full
+    // mmp_site_entries paginated scan on every other tab to avoid unnecessary load.
+    if (activeTab !== 'reports') return;
     const fetchQualityData = async () => {
       // Only query active/closing MMPs — avoids pulling all historical closed-cycle
       // entries and dramatically reduces query cost for large deployments.
@@ -2416,7 +2422,10 @@ const MMPCycleClose = () => {
       }
     };
     fetchQualityData();
-  }, [mmpFiles]);
+  // Lazy — quality scores are only shown on the "reports" tab.
+  // Previously this fired at startup downloading all site entries a third time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mmpFiles, activeTab]);
 
   const cycleStats = useMemo((): CycleStats => {
     const totalSites = uncoveredSites.length;
