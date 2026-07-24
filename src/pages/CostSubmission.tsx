@@ -10847,12 +10847,16 @@ const CostSubmission = () => {
           <div
             className="fixed inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
             style={{ zIndex: 99999 }}
+            tabIndex={-1}
             onClick={closeAttach}
+            onPointerDown={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeAttach(); } }}
           >
             <div
               className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl flex flex-col overflow-hidden"
               style={{ maxWidth: '92vw', maxHeight: '90vh', width: isImage(currentUrl) ? 'auto' : '92vw' }}
               onClick={e => e.stopPropagation()}
+              onPointerDown={e => e.stopPropagation()}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b shrink-0 gap-3">
