@@ -658,6 +658,7 @@ const MMPCycleClose = () => {
   const [archiveSearch, setArchiveSearch] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
+  const fetchedScopeIdsRef = useRef<Set<string>>(new Set());
   const [notCoveredAdvanceSites, setNotCoveredAdvanceSites] = useState<NotCoveredAdvanceSite[]>([]);
   const [loadingExceptions, setLoadingExceptions] = useState(false);
   const [costRecoveryDialogState, setCostRecoveryDialogState] = useState<{
@@ -1593,7 +1594,11 @@ const MMPCycleClose = () => {
     } finally {
       setLoading(false);
     }
-  }, [closingMmps, activeMmps, mmpFiles, toast]);
+  // toast is intentionally excluded from deps — it is a stable dispatch function
+  // from useToast(). Including it caused an infinite re-render loop because
+  // shadcn's useToast() returns a new object reference on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closingMmps, activeMmps, mmpFiles]);
 
   // Phase B: load not-covered sites that have approved advances + their recovery status
   const loadExceptionsData = useCallback(async (mmpId: string) => {
@@ -2247,11 +2252,14 @@ const MMPCycleClose = () => {
 
   useEffect(() => {
     activeMmps.forEach(mmp => {
-      if (!mmpScopeOptions[mmp.id]) {
+      // Use a ref to track which IDs are already fetched so mmpScopeOptions
+      // state does not need to be in deps (which would cause extra re-runs).
+      if (!fetchedScopeIdsRef.current.has(mmp.id)) {
+        fetchedScopeIdsRef.current.add(mmp.id);
         fetchMmpScopeOptions(mmp.id);
       }
     });
-  }, [activeMmps, fetchMmpScopeOptions, mmpScopeOptions]);
+  }, [activeMmps, fetchMmpScopeOptions]);
 
   useEffect(() => {
     const fetchSiteVisitCounts = async () => {
