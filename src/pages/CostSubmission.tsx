@@ -982,6 +982,12 @@ const CostSubmission = () => {
     if (oc.status === 'partially_paid') return 'partially_paid';
     // Derive partial payment from amount fields (DB constraint may not allow 'partially_paid' status)
     if ((oc.amount_paid_cents ?? 0) > 0 && (oc.amount_paid_cents ?? 0) < oc.amount_cents) return 'partially_paid';
+    // If proof uploaded AND amount_paid_cents covers the full cost, treat as paid.
+    // Handles edge-cases where the Mark Paid flow saved proof but failed to set status='paid'.
+    if (oc.status === 'approved' && oc.payment_proof_url &&
+        (oc.amount_paid_cents ?? 0) > 0 &&
+        (oc.amount_cents ?? 0) > 0 &&
+        (oc.amount_paid_cents ?? 0) >= (oc.amount_cents ?? 0)) return 'paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.tier4_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (oc.status === 'approved') return 'approved';
 
@@ -1966,6 +1972,9 @@ const CostSubmission = () => {
 
   const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
     if (!isSuperAdmin && !isAdmin && !hasRevertTierOverride) return false;
+    // Block tier-revert when payment proof is already attached — user must Revert Paid first
+    // to clear the proof before reverting the approval chain.
+    if (oc.payment_proof_url) return false;
     return getRevertTierLabel(oc) !== null;
   };
 
@@ -6320,17 +6329,23 @@ const CostSubmission = () => {
                             {oc.payment_proof_url && (() => {
                               let urls: string[] = [];
                               try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; }
+                              const proofUnconfirmed = derivedStatus !== 'paid' && derivedStatus !== 'reconciled';
                               return (
                                 <div className="relative group/proof">
                                   <Button size="sm" variant="outline"
-                                    className="h-7 px-2.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"
+                                    className={proofUnconfirmed
+                                      ? "h-7 px-2.5 text-xs border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400"
+                                      : "h-7 px-2.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400"}
                                     onClick={() => openAttach(urls, 'Payment Proof')}
                                     data-testid={`button-view-proof-${oc.id}`}>
                                     <Eye className="h-3 w-3 mr-1" />
-                                    Proof{urls.length > 1 ? ` (${urls.length})` : ''}
+                                    Proof{urls.length > 1 ? ` (${urls.length})` : ''}{proofUnconfirmed ? ' ⚠' : ''}
                                   </Button>
                                   {/* Hover preview */}
-                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[140px]">
+                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[160px]">
+                                    {proofUnconfirmed && (
+                                      <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5 mb-1.5">⚠ Proof uploaded — click Mark Paid to confirm payment</p>
+                                    )}
                                     {isImage(urls[0]) ? (
                                       <img src={urls[0]} alt="Receipt preview" className="max-h-[120px] max-w-[180px] rounded object-contain mx-auto" />
                                     ) : (
@@ -7243,16 +7258,22 @@ const CostSubmission = () => {
                             {oc.payment_proof_url && (() => {
                               let urls: string[] = [];
                               try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; }
+                              const proofUnconfirmed = derivedStatus !== 'paid' && derivedStatus !== 'reconciled';
                               return (
                                 <div className="relative group/proof">
                                   <button
-                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20 transition-colors"
+                                    className={proofUnconfirmed
+                                      ? "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/20 transition-colors"
+                                      : "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950/20 transition-colors"}
                                     onClick={() => openAttach(urls, 'Payment Proof')}
                                     data-testid={`button-view-proof-${oc.id}`}>
-                                    <Eye className="h-3.5 w-3.5" />Proof{urls.length > 1 ? ` (${urls.length})` : ''}
+                                    <Eye className="h-3.5 w-3.5" />Proof{urls.length > 1 ? ` (${urls.length})` : ''}{proofUnconfirmed ? ' ⚠' : ''}
                                   </button>
                                   {/* Hover preview */}
-                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[140px]">
+                                  <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover/proof:block z-[9998] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-muted p-2 pointer-events-none min-w-[160px]">
+                                    {proofUnconfirmed && (
+                                      <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5 mb-1.5">⚠ Proof uploaded — click Mark Paid to confirm payment</p>
+                                    )}
                                     {isImage(urls[0]) ? (
                                       <img src={urls[0]} alt="Receipt preview" className="max-h-[120px] max-w-[180px] rounded object-contain mx-auto" />
                                     ) : (
