@@ -20,6 +20,7 @@ export type RoleCode =
   | 'dataTeam'
   | 'dataCollector'
   | 'reviewer'
+  | 'auditor'
   | 'employee'
   | 'hr'
   | 'hrManager';
@@ -39,6 +40,7 @@ export type RoleLabel =
   | 'Data Team'
   | 'Data Collector'
   | 'Reviewer'
+  | 'Auditor'
   | 'Employee'
   | 'HR'
   | 'HR Manager';
@@ -146,6 +148,13 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     legacy: ['Reviewer', 'reviewer'],
     description: 'Read-only review access to submissions and reports. Cannot approve, edit, or create records.',
     affects: 'Submission review queue, Reports (read-only). No write access to any operational pages.',
+  },
+  auditor: {
+    code: 'auditor',
+    label: 'Auditor',
+    legacy: ['Auditor', 'auditor'],
+    description: 'Read-only access to all financial, HR, and operational data for audit and compliance purposes. Cannot approve, modify, or delete any data.',
+    affects: 'Finance Hub (read+export), Accounting, Wallets, HR payroll/benefits, Audit Logs — no write access anywhere.',
   },
   employee: {
     code: 'employee',

@@ -16,6 +16,25 @@ import {
   Users, FileText, Settings, ChevronRight, ChevronDown, Eye, BarChart2, Download,
 } from 'lucide-react';
 
+// ── Map profiles.role (camelCase code) → DEFAULT_ROLE_PERMISSIONS key (AppRole) ─
+// profiles.role stores e.g. 'countryDirector'; DEFAULT_ROLE_PERMISSIONS uses 'CountryDirector'
+const ROLE_CODE_TO_APP_ROLE: Record<string, AppRole> = {
+  superAdmin:            'SuperAdmin',
+  admin:                 'Admin',
+  countryDirector:       'CountryDirector',
+  ict:                   'ICT',
+  fom:                   'Field Operation Manager (FOM)',
+  financialAdmin:        'FinancialAdmin',
+  projectManager:        'ProjectManager',
+  seniorOperationsLead:  'SeniorOperationsLead',
+  supervisor:            'Supervisor',
+  coordinator:           'Coordinator',
+  dataTeam:              'DataTeam',
+  dataCollector:         'DataCollector',
+  reviewer:              'Reviewer',
+  auditor:               'Auditor',
+};
+
 // ── Resource groups ─────────────────────────────────────────────────────────
 const RESOURCE_GROUPS: { group: string; resources: ResourceType[] }[] = [
   { group: 'Administration',   resources: ['users','roles','permissions','settings','system','super_admins','audit_logs'] },
@@ -125,9 +144,11 @@ export function UserAccessProfile() {
     permOverrides.map(o => [`${o.resource}:${o.action}`, o.is_granted as boolean])
   );
 
-  const userRole = (selectedUser as any)?.role as AppRole | undefined;
-  const rolePerms = userRole ? (DEFAULT_ROLE_PERMISSIONS[userRole] ?? []) : [];
-  const isSuperAdmin = userRole === 'superAdmin';
+  // profiles.role stores camelCase codes ('countryDirector'), map to AppRole PascalCase key
+  const rawRoleCode = (selectedUser as any)?.role as string | undefined;
+  const appRole: AppRole | undefined = rawRoleCode ? ROLE_CODE_TO_APP_ROLE[rawRoleCode] : undefined;
+  const rolePerms = appRole ? (DEFAULT_ROLE_PERMISSIONS[appRole] ?? []) : [];
+  const isSuperAdmin = rawRoleCode === 'superAdmin';
 
   // Effective permission for a resource × action
   function effectivePerm(resource: ResourceType, action: ActionType): 'granted' | 'blocked' | 'role-yes' | 'role-no' {
