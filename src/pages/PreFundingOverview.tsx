@@ -510,7 +510,14 @@ export default function PreFundingOverview() {
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
   const activeFunds = funds.filter(f => ['active', 'low_balance'].includes(f.status));
   const totalFunded  = activeFunds.reduce((s, f) => s + toBase(f.amount, f.currency), 0);
-  const totalAvail   = activeFunds.reduce((s, f) => s + toBase(Number(f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0))), f.currency), 0);
+  // Take the MINIMUM of available_balance (DB column) and amount−paid_amount.
+  // The two columns can drift when some payment paths update one but not the other;
+  // the lower (more conservative) value is always the correct available figure.
+  const conservativeAvail = (f: { amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
+    const fromPaid = Math.max(0, f.amount - Number(f.paid_amount ?? 0));
+    return f.available_balance != null ? Math.min(Number(f.available_balance), fromPaid) : fromPaid;
+  };
+  const totalAvail   = activeFunds.reduce((s, f) => s + toBase(conservativeAvail(f), f.currency), 0);
   const totalCommit  = activeFunds.reduce((s, f) => s + toBase(f.committed_amount, f.currency), 0);
   const totalPaidOut = activeFunds.reduce((s, f) => s + toBase(Number(f.paid_amount ?? 0), f.currency), 0);
   const endingSoon  = activeFunds.filter(f => {
@@ -654,7 +661,7 @@ export default function PreFundingOverview() {
       {!loading && (() => {
         const expiring = activeFunds.filter(f => {
           if (!f.end_date) return false;
-          const effAvail = f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0));
+          const effAvail = conservativeAvail(f);
           if (effAvail <= 0) return false;
           const d = differenceInDays(parseISO(f.end_date), new Date());
           return d >= 0 && d <= 30;
@@ -670,7 +677,7 @@ export default function PreFundingOverview() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {expiring.map(f => {
                   const d = differenceInDays(parseISO(f.end_date!), new Date());
-                  const effAvail = f.available_balance ?? Math.max(0, f.amount - (f.paid_amount ?? 0));
+                  const effAvail = conservativeAvail(f);
                   const cls = d <= 7 ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
                   return (
                     <span key={f.id} className={cn('text-xs px-2 py-0.5 rounded-full font-medium', cls)}>
@@ -759,7 +766,9 @@ export default function PreFundingOverview() {
             // paid_amount and available_balance are maintained by Supabase triggers and
             // directLinkPayment RPCs — they are the single source of truth for fund totals.
             const effPaid  = Number(f.paid_amount ?? 0);
-            const effAvail = Number(f.available_balance ?? Math.max(0, f.amount - effPaid));
+            // Use the more conservative of available_balance vs amount−paid_amount:
+            // the two DB columns can drift when a payment path updates only one of them.
+            const effAvail = conservativeAvail(f);
             // ef is a corrected copy of f — all helper functions that accept f get right values
             const ef = { ...f, paid_amount: effPaid, available_balance: effAvail };
 
