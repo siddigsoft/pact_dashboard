@@ -78,50 +78,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         }));
         setRoles(formattedRoles);
 
-        // Self-heal: guarantee admin role has all permissions
-        const admin = formattedRoles.find(r => r.name === 'admin');
-        if (admin) {
-          let isPrivileged = false;
-          try {
-            const { data: authUser } = await supabase.auth.getUser();
-            const uid = authUser?.user?.id;
-            if (uid) {
-              const { data: prof } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', uid)
-                .single();
-              if (['super_admin', 'Super Admin', 'superadmin', 'SuperAdmin'].includes(prof?.role || '')) {
-                isPrivileged = true;
-              }
-            }
-          } catch {}
-
-          if (isPrivileged) {
-            const desired = new Set(
-              RESOURCES.flatMap(rsrc => ACTIONS.map(act => `${rsrc}:${act}`))
-            );
-            const existing = new Set(
-              (admin.permissions || []).map(p => `${p.resource}:${p.action}`)
-            );
-            const missing = Array.from(desired)
-              .filter(key => !existing.has(key))
-              .map(key => {
-                const [resource, action] = key.split(':') as [ResourceType, ActionType];
-                return { role_id: admin.id, resource, action, conditions: null as any };
-              });
-            if (missing.length > 0) {
-              try {
-                const session = await ensureValidSession();
-                if (!session.success) return;
-                await supabase.from('permissions').upsert(missing, { onConflict: 'role_id,resource,action' });
-              } catch {
-                // permissions table may not exist in some deployments
-                console.debug('[RoleManagement] permissions table not available');
-              }
-            }
-          }
-        }
+        // Note: Admin permissions are fully managed by Super Admin — no self-heal override
       }
     } catch (error: any) {
       // Log the full error for debugging but never expose raw network/DB error
@@ -265,11 +222,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         }
       }
 
-      const isAdminRole = roles.find(r => r.id === roleId)?.name === 'admin';
       // Ensure desiredPermissions always includes a `conditions` property
-      const desiredPermissions = isAdminRole
-        ? RESOURCES.flatMap(rsrc => ACTIONS.map(act => ({ resource: rsrc, action: act, conditions: null } as any)))
-        : roleData.permissions?.map(p => ({ ...p, conditions: (p as any).conditions ?? null }));
+      const desiredPermissions = roleData.permissions?.map(p => ({ ...p, conditions: (p as any).conditions ?? null }));
 
       if (desiredPermissions) {
         const { data: existing, error: existingErr } = await supabase

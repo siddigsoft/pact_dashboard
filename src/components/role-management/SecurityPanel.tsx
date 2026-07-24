@@ -141,12 +141,12 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
   const totalActions = MODULE_REGISTRY.flatMap(m => m.pages.flatMap(p => p.actions)).length;
   const accessiblePages = PAGE_DEFS.filter(p => hasDefaultAccess(p, selectedRole));
   const isSystemRole = liveRole?.is_system_role ?? true;
-  // Admin role self-heals all permissions after every fetchRoles — cannot be reduced
-  const isAdminLocked = liveRole?.name === 'admin';
+  // Only superAdmin role itself is fully protected (Super Admin cannot edit their own role)
+  const isProtected = selectedRole === 'superAdmin';
 
   // ── Toggle role-level permission ──────────────────────────────────────────
   async function handleToggleRolePerm(resource: ResourceType, action: ActionType, currentlyHas: boolean) {
-    if (!liveRole || !canEdit || isAdminLocked) return;
+    if (!liveRole || !canEdit || isProtected) return;
     const key = `${resource}:${action}`;
     setSavingKey(key);
     try {
@@ -240,12 +240,12 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                   </div>
                 </div>
                 {/* Edit mode badge — only when editing is actually possible */}
-                {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked && (
+                {canEdit && !isProtected && (
                   <span className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/40 rounded-lg px-2 py-1 shrink-0">
                     <Pencil className="h-3 w-3" /> Edit mode — Grant / Revoke below
                   </span>
                 )}
-                {canEdit && (selectedRole === 'superAdmin' || isAdminLocked) && (
+                {canEdit && isProtected && (
                   <span className="flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/40 rounded-lg px-2 py-1 shrink-0">
                     <Lock className="h-3 w-3" /> Protected role
                   </span>
@@ -260,15 +260,6 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                 <div>
                   <p className="font-semibold">Super Admin cannot be edited</p>
                   <p className="opacity-80 mt-0.5">This role always has full unrestricted access to everything. Select a different role to see Grant / Revoke buttons.</p>
-                </div>
-              </div>
-            )}
-            {isAdminLocked && (
-              <div className="mx-5 mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/10 dark:border-amber-800/30 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
-                <Lock className="h-4 w-4 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Admin role always has full permissions — cannot be reduced</p>
-                  <p className="opacity-80 mt-0.5">The Admin role is designed to have access to every action in the system. To restrict a specific person, use the <strong>By User</strong> view instead — select the user and block the specific pages or actions for that individual only.</p>
                 </div>
               </div>
             )}
@@ -347,7 +338,7 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                   </div>
                 </div>
 
-                {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked && (
+                {canEdit && !isProtected && (
                   <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800/20 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
                     <Pencil className="h-3.5 w-3.5 shrink-0" />
                     You can <strong>Grant</strong> or <strong>Revoke</strong> any action below — changes apply to everyone in the <strong>{roleMeta_.label}</strong> role immediately.
@@ -401,7 +392,7 @@ function ByRoleView({ users: allUsers }: { users: any[] }) {
                                           {act.resource}:{act.action}
                                         </span>
                                         {/* Grant / Revoke — Super Admin editing non-superAdmin, non-admin roles */}
-                                        {canEdit && selectedRole !== 'superAdmin' && !isAdminLocked ? (
+                                        {canEdit && !isProtected ? (
                                           <button
                                             onClick={() => handleToggleRolePerm(act.resource, act.action, has)}
                                             disabled={isSaving}
