@@ -543,6 +543,35 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [refreshUserPermissions]);
 
+  // When any role's permissions change (via SecurityPanel Grant/Revoke), refresh the
+  // current user's permission cache so their action buttons update immediately without
+  // requiring a page reload. All connected clients receive this event independently,
+  // so every online user in the affected role gets the update in real-time.
+  useEffect(() => {
+    const permChannel = supabase
+      .channel('rm_permissions_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'permissions',
+      }, async () => {
+        // Refresh roles so SecurityPanel UI is consistent
+        fetchRoles().catch(() => {});
+        // Refresh the current user's permission cache so checkPermission() sees the change
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user?.id) {
+            refreshUserPermissions(user.id).catch(() => {});
+          }
+        } catch { /* best-effort */ }
+      })
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(permChannel); } catch {}
+    };
+  }, [fetchRoles, refreshUserPermissions]);
+
   const contextValue: RoleManagementContextType = {
     roles,
     userRoles,

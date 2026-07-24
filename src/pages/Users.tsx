@@ -702,8 +702,18 @@ const Users = () => {
           toast({ title: "User deleted", description: "User account has been permanently deleted" });
         }
       } else {
-        const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', confirmDialog.userId);
+        const { data: deactivated, error } = await supabase
+          .from('profiles')
+          .update({ is_active: false })
+          .eq('id', confirmDialog.userId)
+          .select('id');
         if (error) throw error;
+        if (!deactivated || deactivated.length === 0) {
+          throw new Error(
+            'Deactivation was blocked by a database security rule. A Super Admin needs to ' +
+            'update the Row Level Security policy on the profiles table to allow administrators to deactivate users.'
+          );
+        }
         toast({ title: "User deactivated", description: "User has been deactivated" });
       }
       await refreshUsers();
