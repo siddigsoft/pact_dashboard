@@ -70,13 +70,13 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Programme Management ──────────────────────────────────────────────────
   { slug:'programme-hub',       label:'Programme Hub',          path:'/programme-hub',          icon:FolderKanban, group:'Programme Management',
-    roles:['superAdmin','admin','fom','projectManager','countryDirector'], note:'Unified hub for Projects, Portfolio & Analytics' },
+    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'], note:'Unified hub for Projects, Portfolio & Analytics' },
   { slug:'projects',            label:'Projects',               path:'/projects',               icon:FolderOpen, group:'Programme Management',
-    roles:['superAdmin','admin','fom','projectManager'] },
+    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'] },
   { slug:'portfolio',           label:'Portfolio Dashboard',    path:'/portfolio',              icon:LayoutDashboard, group:'Programme Management',
-    roles:['superAdmin','admin','fom','countryDirector'] },
+    roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead'] },
   { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
-    roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector'] },
+    roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector','projectManager','seniorOperationsLead'] },
   { slug:'mmp-full-report',     label:'MMP Full Report',        path:'/mmp#full-report',        icon:BarChart2, group:'Programme Management',
     roles:['superAdmin'], note:'Controls who can open the Full Report dialog on the MMP list page' },
   { slug:'hub-operations',      label:'Hub Operations',         path:'/hub-operations',         icon:Building2, group:'Programme Management',
@@ -84,9 +84,9 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Field Operations ──────────────────────────────────────────────────────
   { slug:'field-ops',           label:'Field Ops Hub',          path:'/field-ops',              icon:Compass, group:'Field Operations',
-    roles:['superAdmin','admin','fom','supervisor','coordinator'], note:'Unified hub: Field Team, Incidents, Equipment, Map' },
+    roles:['superAdmin','admin','fom','supervisor','coordinator','dataTeam','seniorOperationsLead'], note:'Unified hub: Field Team, Incidents, Equipment, Map' },
   { slug:'site-visits',         label:'Site Visits',            path:'/site-visits',            icon:ClipboardList, group:'Field Operations',
-    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector'] },
+    roles:['superAdmin','admin','ict','fom','coordinator','supervisor','dataCollector','dataTeam','seniorOperationsLead'] },
   { slug:'monitoring-form',     label:'Monitoring Form',        path:'/monitoring-form',        icon:ClipboardCheck, group:'Field Operations',
     roles:['superAdmin','admin','dataCollector','coordinator','supervisor','fom'] },
   { slug:'safety-hub',          label:'Safety Hub',             path:'/safety-hub',             icon:Siren, group:'Field Operations',
@@ -98,7 +98,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'field-operation-manager', label:'Field Operation Manager', path:'/field-operation-manager', icon:Compass, group:'Field Operations',
     roles:['superAdmin','admin','fom'] },
   { slug:'coverage-map',        label:'Coverage Map',           path:'/coverage-map',           icon:Map, group:'Field Operations',
-    roles:['superAdmin','admin','fom','countryDirector'] },
+    roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead'] },
 
   // ── Coordination & Oversight ──────────────────────────────────────────────
   { slug:'coordinator-sites',   label:'Site Verification',      path:'/coordinator/sites',      icon:CheckSquare, group:'Coordination',
@@ -122,7 +122,7 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Finance ───────────────────────────────────────────────────────────────
   { slug:'finance-hub',         label:'Finance Hub',            path:'/finance-hub',            icon:Landmark, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','auditor'], note:'Unified hub: financial ops, wallets admin, advances report' },
+    roles:['superAdmin','admin','financialAdmin','auditor','fom','countryDirector','seniorOperationsLead'], note:'Unified hub: financial ops, wallets admin, advances report' },
   { slug:'wallet',              label:'My Wallet',              path:'/wallet',                 icon:CreditCard, group:'Finance',
     roles:['financialAdmin','auditor','fom','supervisor','dataCollector','coordinator'] },
   { slug:'cost-submission',     label:'Cost Submission',        path:'/cost-submission',        icon:Receipt, group:'Finance',
@@ -134,7 +134,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'finance-processing',  label:'Finance Processing',     path:'/finance-approval',       icon:Banknote, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor'] },
   { slug:'approvals',           label:'Approvals Hub',          path:'/approvals',              icon:ListChecks, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','supervisor','fom','countryDirector'] },
+    roles:['superAdmin','admin','financialAdmin','auditor','supervisor','fom','countryDirector','seniorOperationsLead','projectManager'] },
   { slug:'approval-dashboard',  label:'Approval Dashboard',     path:'/approval-dashboard',     icon:ClipboardCheck, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','supervisor','fom'] },
   { slug:'down-payment-approval', label:'Down Payment Approval', path:'/down-payment-approval', icon:ClipboardCheck, group:'Finance',
@@ -278,11 +278,11 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── CRM ───────────────────────────────────────────────────────────────────
   { slug:'crm',                 label:'CRM Hub',                path:'/crm',                    icon:Handshake, group:'CRM',
-    roles:['superAdmin','admin','fom','projectManager','countryDirector'] },
+    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'] },
 
   // ── Analytics & Reports ───────────────────────────────────────────────────
   { slug:'analytics-hub',       label:'Analytics Hub',          path:'/analytics',              icon:BarChart3, group:'Analytics',
-    roles:['superAdmin','admin','fom','countryDirector'], note:'Unified hub: Data Visibility, Reports, Documents' },
+    roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead'], note:'Unified hub: Data Visibility, Reports, Documents' },
   { slug:'data-export-center',  label:'Data Export Center',     path:'/data-export-center',     icon:BarChart3, group:'Analytics',
     roles:['superAdmin','admin'] },
   { slug:'data-visibility',     label:'Data Visibility',        path:'/data-visibility',        icon:Eye, group:'Analytics',
@@ -379,7 +379,7 @@ export const PAGE_GROUPS = [
 export const PAGE_ROLE_ALL_OPTIONS = [
   'all', 'superAdmin', 'admin', 'ict', 'fom', 'financialAdmin', 'auditor',
   'supervisor', 'coordinator', 'dataCollector', 'dataTeam', 'reviewer',
-  'projectManager', 'countryDirector', '!dataCollector',
+  'projectManager', 'countryDirector', 'seniorOperationsLead', '!dataCollector',
 ];
 
 // ── Role display helpers ──────────────────────────────────────────────────────
@@ -389,6 +389,7 @@ export const ROLE_LABELS: Record<string, string> = {
   financialAdmin: 'Financial Admin', auditor: 'Auditor', supervisor: 'Supervisor',
   coordinator: 'Coordinator', dataCollector: 'Data Collector', dataTeam: 'Data Team',
   reviewer: 'Reviewer', projectManager: 'Project Manager', countryDirector: 'Country Director',
+  seniorOperationsLead: 'Senior Ops Lead',
   '!dataCollector': 'All except DC',
 };
 
@@ -406,6 +407,7 @@ export const ROLE_COLORS: Record<string, string> = {
   reviewer: 'bg-rose-100 text-rose-700',
   projectManager: 'bg-violet-100 text-violet-700',
   countryDirector: 'bg-sky-100 text-sky-700',
+  seniorOperationsLead: 'bg-amber-100 text-amber-700',
 };
 
 export function getRoleCode(rawRole: string | null): string | null {
