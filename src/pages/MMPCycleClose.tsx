@@ -65,6 +65,7 @@ import {
   type OperationalCostTierInput,
 } from '@/utils/operationalCostApproval';
 import { approveCycleClose } from '@/services/cycleCloseService';
+import { getLatestExchangeRate } from '@/utils/exchange-rate-service';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
