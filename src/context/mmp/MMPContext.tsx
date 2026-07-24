@@ -72,7 +72,13 @@ export const useMMPProvider = () => {
     }
   }, [currentUser?.id, queryClient]);
 
-  const mmpFiles = filesQuery.data ?? [];
+  // Stable fallback — useRef ensures the same [] reference is returned on every
+  // render while filesQuery.data is undefined (during initial load). Without this,
+  // filesQuery.data ?? [] creates a NEW array each render, making every useMemo
+  // and useCallback that depends on mmpFiles unstable → infinite render loops in
+  // pages like MMPCycleClose that chain mmpFiles through multiple hooks.
+  const emptyMmpFiles = useRef<MMPFile[]>([]);
+  const mmpFiles = filesQuery.data ?? emptyMmpFiles.current;
   const loading = filesQuery.isLoading;
   const error = filesQuery.error ? 'Failed to load MMP files' : null;
   const siteEntryCounts = countsQuery.data ?? defaultSiteEntryCounts;

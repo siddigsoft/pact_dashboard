@@ -1493,12 +1493,27 @@ const MMPCycleClose = () => {
     return (mmpFiles || []).filter(m => (m as any).cycle_status === 'pending_approval');
   }, [mmpFiles]);
 
+  // Stable refs — updated every render so fetchUncoveredSites can access
+  // the latest values without being in its useCallback dependency array.
+  // This prevents infinite loops caused by mmpFiles/activeMmps/closingMmps
+  // getting new references on every render (especially while TanStack Query
+  // is loading, filesQuery.data ?? [] creates a new array each render).
+  const mmpFilesRef = useRef(mmpFiles);
+  const activeMmpsRef = useRef(activeMmps);
+  const closingMmpsRef = useRef(closingMmps);
+  mmpFilesRef.current = mmpFiles;
+  activeMmpsRef.current = activeMmps;
+  closingMmpsRef.current = closingMmps;
+
   const fetchUncoveredSites = useCallback(async () => {
     setLoading(true);
     try {
-      const closingIds = closingMmps.map(m => m.id);
+      // Read from refs so this callback never needs mmpFiles/activeMmps/closingMmps
+      // in its dependency array (they are new references every render while TanStack
+      // Query is loading, which was causing an infinite re-render loop).
+      const closingIds = closingMmpsRef.current.map(m => m.id);
       // Active MMPs that are NOT already counted in the closing set
-      const activeOnlyIds = activeMmps
+      const activeOnlyIds = activeMmpsRef.current
         .map(m => m.id)
         .filter(id => !closingIds.includes(id));
 
@@ -1569,7 +1584,7 @@ const MMPCycleClose = () => {
 
       const sites: UncoveredSite[] = allData.map(s => {
         const mmpFileId = (s as any).mmp_file_id;
-        const mmp = mmpFiles?.find(m => m.id === mmpFileId);
+        const mmp = mmpFilesRef.current?.find(m => m.id === mmpFileId);
         return {
           id: s.id,
           site_name: s.site_name,
@@ -1594,11 +1609,13 @@ const MMPCycleClose = () => {
     } finally {
       setLoading(false);
     }
-  // toast is intentionally excluded from deps — it is a stable dispatch function
-  // from useToast(). Including it caused an infinite re-render loop because
-  // shadcn's useToast() returns a new object reference on every render.
+  // Empty deps: mmpFiles/activeMmps/closingMmps are accessed via refs (updated
+  // every render) so they never need to be in this array. Including them caused
+  // an infinite loop because filesQuery.data ?? [] creates a new array reference
+  // on every render while TanStack Query is loading. toast is also excluded
+  // (stable shadcn dispatch). This callback is intentionally created once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closingMmps, activeMmps, mmpFiles]);
+  }, []);
 
   // Phase B: load not-covered sites that have approved advances + their recovery status
   const loadExceptionsData = useCallback(async (mmpId: string) => {
@@ -1645,8 +1662,8 @@ const MMPCycleClose = () => {
         });
       }
 
-      // 5. Get MMP name
-      const mmpRow = mmpFiles?.find(m => m.id === mmpId);
+      // 5. Get MMP name (use ref so stale closure doesn't return undefined)
+      const mmpRow = mmpFilesRef.current?.find(m => m.id === mmpId);
       const mmpName = mmpRow?.name || null;
 
       // Aggregate by site entry
@@ -1696,7 +1713,10 @@ const MMPCycleClose = () => {
     } finally {
       setLoadingExceptions(false);
     }
-  }, [mmpFiles]);
+  // mmpFiles accessed via mmpFilesRef so it doesn't need to be in deps
+  // (including it caused a re-render loop via the loadExceptionsData useEffect).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Phase C: load existing WFP upload state for a MMP
   const loadWFPTab = useCallback(async (mmpId: string) => {
