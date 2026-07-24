@@ -82,15 +82,19 @@ export interface FinanceReadinessResult {
 }
 
 export async function checkFinanceReadinessForClose(mmpId: string): Promise<FinanceReadinessResult> {
+  // Paginate site entries — the default Supabase limit is 1000 rows.
+  // Missing rows would cause advances for those sites to be silently skipped.
   let siteEntryIds: string[] = [];
-
-  const { data: entries, error: entriesErr } = await supabase
-    .from('mmp_site_entries')
-    .select('id')
-    .eq('mmp_file_id', mmpId);
-
-  if (!entriesErr && entries) {
-    siteEntryIds = entries.map((e: { id: string }) => e.id);
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('mmp_site_entries')
+      .select('id')
+      .eq('mmp_file_id', mmpId)
+      .range(from, from + PAGE - 1);
+    if (error || !data) break;
+    siteEntryIds = [...siteEntryIds, ...data.map((e: { id: string }) => e.id)];
+    if (data.length < PAGE) break;
   }
 
   const costSubsQuery = supabase

@@ -689,8 +689,9 @@ const MMPCycleClose = () => {
       const { error } = await supabase.from('mmp_files').update({
         payment_tracking: { ...existing, payment_requested_at: now, payment_requested_by: currentUser?.id, payment_note: paymentRequestNote || null },
       } as any).eq('id', mmpId);
+      if (error) throw error;
       setPaymentRequestedAt(now);
-      if (!error) await refreshMMPFiles();
+      await refreshMMPFiles();
       toast({ title: '📤 Payment Request Sent', description: 'Payment request logged. Return here to confirm once finance processes all payments.' });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to request payments', variant: 'destructive' });
@@ -708,8 +709,9 @@ const MMPCycleClose = () => {
       const { error } = await supabase.from('mmp_files').update({
         payment_tracking: { ...existing, payments_confirmed_at: now, payments_confirmed_by: currentUser?.id },
       } as any).eq('id', mmpId);
+      if (error) throw error;
       setPaymentsConfirmedAt(now);
-      if (!error) await refreshMMPFiles();
+      await refreshMMPFiles();
       toast({ title: '✅ Payments Confirmed', description: 'All payments confirmed. You can now submit this cycle for approval.' });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to confirm payments', variant: 'destructive' });
@@ -3463,18 +3465,20 @@ const MMPCycleClose = () => {
 
   const exportCoverageReport = (mmpId?: string) => {
     const sites = mmpId ? uncoveredSites.filter(s => s.mmp_id === mmpId) : uncoveredSites;
+    // Quote every field so values containing commas or quotes don't break the CSV.
+    const q = (v: string | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [
-      ['Site Name', 'Site Code', 'State', 'Locality', 'Hub', 'Status', 'Reason', 'Other Details', 'Flagged At'].join(','),
+      ['Site Name', 'Site Code', 'State', 'Locality', 'Hub', 'Status', 'Reason', 'Other Details', 'Flagged At'].map(q).join(','),
       ...sites.map(s => [
-        `"${s.site_name}"`,
-        s.site_code,
-        s.state,
-        s.locality,
-        s.hub || '',
-        s.status,
-        getReasonLabel(s.not_covered_reason),
-        s.not_covered_reason_other || '',
-        s.not_covered_at || '',
+        q(s.site_name),
+        q(s.site_code),
+        q(s.state),
+        q(s.locality),
+        q(s.hub),
+        q(s.status),
+        q(getReasonLabel(s.not_covered_reason)),
+        q(s.not_covered_reason_other),
+        q(s.not_covered_at),
       ].join(','))
     ].join('\n');
 

@@ -56,7 +56,7 @@ export async function buildApproveCloseRecords(
     const [siteRes, opRes] = await Promise.all([
       supabase
         .from('mmp_site_entries')
-        .select('id, enumerator_fee, transport_fee, status')
+        .select('id, enumerator_fee, transport_fee, status, currency')
         .eq('mmp_file_id', mmpId),
       supabase
         .from('operational_cost_submissions')
@@ -80,7 +80,16 @@ export async function buildApproveCloseRecords(
       (s: number, c: { amount_cents?: number }) => s + ((c.amount_cents ?? 0) / 100),
       0,
     );
-    const currency = (opRes.data?.[0] as { currency?: string } | undefined)?.currency || 'SDG';
+    // Prefer the currency carried on site entries (locked fees are always in one
+    // currency), falling back to the first approved cost submission, then SDG.
+    // Previously this only looked at opRes.data?.[0]?.currency, which would give
+    // the wrong currency if the only approved cost sub happened to be in a different
+    // denomination than the field fees.
+    const siteCurrency = (siteRes.data as Array<{ currency?: string }> | null)
+      ?.find(e => e.currency)?.currency;
+    const currency = siteCurrency ||
+      (opRes.data?.[0] as { currency?: string } | undefined)?.currency ||
+      'SDG';
 
     const siteIds = (siteRes.data || []).map((e: { id: string }) => e.id).filter(Boolean);
     let advancesRecovered = 0;
