@@ -89,21 +89,21 @@ async function fetchSiteEntryCounts(): Promise<SiteEntryCounts> {
       costedRes,
       totalRes,
     ] = await Promise.all([
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .eq('status', 'dispatched').is('accepted_by', null),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .eq('status', 'accepted'),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .eq('status', 'assigned'),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .in('status', ['inprogress', 'in_progress', 'ongoing']),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .eq('status', 'completed'),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .in('status', ['rejected', 'declined']),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true })
         .in('status', ['approved and costed', 'costed']),
-      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }),
+      supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }),
     ]);
 
     return {

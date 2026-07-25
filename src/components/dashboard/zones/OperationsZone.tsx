@@ -42,6 +42,7 @@ import { getStateName, sudanStates } from '@/data/sudanStates';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
+import { MMP_SITE_ENTRY_METRIC_COLS } from '@/constants/mmpSiteEntryCols';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
@@ -276,7 +277,7 @@ export const OperationsZone: React.FC = () => {
         
         let sites: any[] = [];
         for (let _of = 0; ; _of += 1000) {
-          const { data: _op, error } = await supabase.from('mmp_site_entries').select('*').eq('status', 'Dispatched').is('accepted_by', null).ilike('state', `%${stateName}%`).range(_of, _of + 999);
+          const { data: _op, error } = await supabase.from('mmp_site_entries').select(MMP_SITE_ENTRY_METRIC_COLS).eq('status', 'Dispatched').is('accepted_by', null).ilike('state', `%${stateName}%`).range(_of, _of + 999);
           if (error) { console.error('[OperationsZone] Error loading dispatched sites:', error); break; }
           if (!_op) break;
           sites = [...sites, ..._op];
