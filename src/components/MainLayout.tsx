@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
 import Navbar from "@/components/Navbar";
 import { useAppContext } from "@/context/AppContext";
+import { ViewAsBanner } from "@/components/ViewAsBanner";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
@@ -80,6 +81,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
           <div className="min-h-screen max-h-screen flex w-full bg-[#f3f5f8] dark:bg-gray-950">
             <AppSidebar />
             <SidebarInset className="relative z-0 flex flex-col min-w-0 h-screen max-h-screen bg-transparent">
+              <ViewAsBanner />
               <RealtimeBanner
                 onRefresh={handleGlobalRefresh}
                 dismissible={true}

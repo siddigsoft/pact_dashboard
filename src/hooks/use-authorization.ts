@@ -3,6 +3,7 @@ import { useRoleManagement } from '@/context/role-management/RoleManagementConte
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { ResourceType, ActionType } from '@/types/roles';
 import { normalizeRole } from '@/utils/roleMapping';
+import { useViewAs } from '@/context/ViewAsContext';
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
@@ -14,6 +15,14 @@ export const useAuthorization = () => {
     isSuperAdminUser = superAdminContext?.isSuperAdmin ?? false;
   } catch {
     isSuperAdminUser = false;
+  }
+
+  let viewAsRole: string | null = null;
+  try {
+    const viewAsCtx = useViewAs();
+    viewAsRole = viewAsCtx?.viewAs?.role ?? null;
+  } catch {
+    viewAsRole = null;
   }
 
   /**
@@ -46,6 +55,12 @@ export const useAuthorization = () => {
    */
   const hasAnyRole = (roles: string[]): boolean => {
     if (!currentUser) return false;
+    // When previewing as another role, check against the viewAs role only
+    if (viewAsRole) {
+      const normalizedViewAs = normalizeRole(viewAsRole);
+      const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
+      return normalizedCheckRoles.some(r => r === normalizedViewAs);
+    }
     // Include primary role + user_roles table entries + additional JSONB roles from profiles
     const additionalRoleStrings = Array.isArray(currentUser.additionalRoles)
       ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)

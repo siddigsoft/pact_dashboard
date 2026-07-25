@@ -10,6 +10,7 @@ import { SessionGuard } from './components/SessionGuard';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
+import { ViewAsProvider } from './context/ViewAsContext';
 import { NavigationProvider } from './context/NavigationContext';
 
 // Lazy-loaded pages for better code splitting
@@ -869,6 +870,7 @@ function App() {
       {isMounted && (
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
+            <ViewAsProvider>
             <Router>
               <NavigationProvider>
                 <AppProviders>
@@ -909,6 +911,7 @@ function App() {
                 </AppProviders>
               </NavigationProvider>
             </Router>
+            </ViewAsProvider>
           </QueryClientProvider>
         </ErrorBoundary>
       )}
