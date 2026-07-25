@@ -1300,17 +1300,33 @@ export default function PreFundingRegistry() {
                   {/* Amount */}
                   <TableCell className="py-3 text-right">
                     <div className="font-mono text-sm font-semibold">{formatNumber(f.amount, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">SDG</div>
+                    <div className="text-[10px] text-muted-foreground">Funded · SDG</div>
                     {f.usd_to_sdg_rate && (
                       <div className="text-[10px] text-sky-600 dark:text-sky-400 font-medium">≈ USD {formatNumber(f.amount / f.usd_to_sdg_rate, 2)}</div>
                     )}
                   </TableCell>
 
-                  {/* Available */}
-                  <TableCell className="py-3 text-right">
-                    <div className="font-mono text-sm font-semibold text-emerald-600">{formatNumber(f.available_balance, 0)}</div>
-                    <div className="text-[10px] text-muted-foreground">SDG</div>
-                  </TableCell>
+                  {/* Available / Overspent */}
+                  {(() => {
+                    const isOverspent = Number(f.paid_amount ?? 0) > Number(f.amount ?? 0);
+                    const overspentBy = isOverspent ? Number(f.paid_amount) - Number(f.amount) : 0;
+                    return (
+                      <TableCell className="py-3 text-right">
+                        {isOverspent ? (
+                          <>
+                            <div className="font-mono text-sm font-semibold text-destructive">+{formatNumber(overspentBy, 0)}</div>
+                            <div className="text-[10px] text-destructive font-medium">⚠ Overpaid · SDG</div>
+                            <div className="text-[10px] text-muted-foreground">Paid: {formatNumber(f.paid_amount, 0)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-mono text-sm font-semibold text-emerald-600">{formatNumber(f.available_balance, 0)}</div>
+                            <div className="text-[10px] text-muted-foreground">Available · SDG</div>
+                          </>
+                        )}
+                      </TableCell>
+                    );
+                  })()}
 
                   {/* Committed */}
                   <TableCell className="py-3 text-right">
