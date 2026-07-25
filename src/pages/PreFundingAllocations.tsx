@@ -13,7 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Users, RefreshCw, AlertTriangle, Search, ChevronDown, ChevronRight,
-  Wallet, TrendingDown, CheckCircle2, Info, Download,
+  Wallet, TrendingDown, CheckCircle2, Info, Download, Pencil, Check, X,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -110,9 +110,13 @@ export default function PreFundingAllocations() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
-  // Finance/Admin can see everyone; other roles see only their own row
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canAccess = isFinanceAdmin || !!currentUser?.id;
+  // Finance/Admin can see everyone and do all actions
+  // Country Director can see everyone and edit allocated amounts only
+  // Other roles see only their own row
+  const isFinanceAdmin       = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const isCD                 = hasAnyRole(['countryDirector']);
+  const canManageAllocations = isFinanceAdmin || isCD;
+  const canAccess            = canManageAllocations || !!currentUser?.id;
 
   const [allAllocations, setAll] = useState<AllocRow[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -122,6 +126,9 @@ export default function PreFundingAllocations() {
   const [funds, setFunds]       = useState<{ id: string; name: string }[]>([]);
   // Fund-level paid_amount — source of truth for actual total spend
   const [fundPaidMap, setFundPaidMap] = useState<Map<string, number>>(new Map());
+  // Inline allocation editing — available to Finance Admin and Country Director
+  const [editingAllocId, setEditingAllocId] = useState<string | null>(null);
+  const [editAllocAmt, setEditAllocAmt]     = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,7 +139,7 @@ export default function PreFundingAllocations() {
           .from('pre_fund_allocations')
           .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
           .order('created_at', { ascending: false });
-        if (!isFinanceAdmin && currentUser?.id) q = q.eq('user_id', currentUser.id);
+        if (!canManageAllocations && currentUser?.id) q = q.eq('user_id', currentUser.id);
         return q;
       });
 
@@ -351,6 +358,19 @@ export default function PreFundingAllocations() {
   const toggleExpand = (uid: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(uid) ? n.delete(uid) : n.add(uid); return n; });
 
+  async function saveAllocAmount(allocId: string) {
+    const newAmt = parseFloat(editAllocAmt);
+    if (isNaN(newAmt) || newAmt < 0) return;
+    const { error } = await (supabase as any)
+      .from('pre_fund_allocations')
+      .update({ allocated_amount: newAmt, updated_at: new Date().toISOString() })
+      .eq('id', allocId);
+    if (error) { console.error('Allocation update failed:', error.message); return; }
+    setEditingAllocId(null);
+    setEditAllocAmt('');
+    load();
+  }
+
   function exportAllocations() {
     const rows = staff.flatMap(s => s.allocations.map(a => ({
       'Staff Name': s.user_name,
@@ -382,10 +402,10 @@ export default function PreFundingAllocations() {
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Users className="h-5 w-5 text-violet-600" />
-            {isFinanceAdmin ? 'Allocation Dashboard' : 'My Pre-Fund Allocation'}
+            {canManageAllocations ? 'Allocation Dashboard' : 'My Pre-Fund Allocation'}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isFinanceAdmin
+            {canManageAllocations
               ? 'Per-staff fund allocations — how much each person was assigned, spent, and has remaining'
               : 'Your personal fund allocation — what you were assigned, what has been spent, and what remains'}
           </p>
@@ -402,8 +422,8 @@ export default function PreFundingAllocations() {
 
       {/* KPI row */}
       {!loading && (
-        <div className={`grid gap-3 ${isFinanceAdmin ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2'}`}>
-          {(isFinanceAdmin ? [
+        <div className={`grid gap-3 ${canManageAllocations ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2'}`}>
+          {(canManageAllocations ? [
             { label: 'Staff Allocated',   value: String(staff.length),                                   sub: 'unique people',           icon: Users,          accent: 'bg-violet-600' },
             { label: 'Total Allocated',   value: formatNumber(totalAllocated, 0),                        sub: 'across all funds',        icon: Wallet,         accent: 'bg-sky-600' },
             { label: 'Total Paid Out',    value: formatNumber(fundTotalPaid, 0),                         sub: 'from fund balance',       icon: TrendingDown,   accent: 'bg-emerald-600' },
@@ -436,7 +456,7 @@ export default function PreFundingAllocations() {
       )}
 
       {/* Unattributed spend alert — shows when fund has paid out more than is tracked in allocations */}
-      {!loading && isFinanceAdmin && unattributedSpend > 0 && (
+      {!loading && isFinanceAdmin && unattributedSpend > 0 && ( // Unattributed alert is finance-only (requires Reconciliation access)
         <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
           <Info className="h-4 w-4 text-amber-600 mt-0.5" />
           <AlertDescription className="text-sm text-amber-800 dark:text-amber-300">
@@ -466,8 +486,8 @@ export default function PreFundingAllocations() {
         </Alert>
       )}
 
-      {/* Filters — only show for finance/admin who see all staff */}
-      {isFinanceAdmin && (
+      {/* Filters — show for anyone who sees all staff (finance admin or CD) */}
+      {canManageAllocations && (
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -497,8 +517,8 @@ export default function PreFundingAllocations() {
       ) : staff.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border rounded-xl">
           <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">{isFinanceAdmin ? 'No allocations found' : 'No allocation assigned to you yet'}</p>
-          <p className="text-sm mt-1">{isFinanceAdmin ? 'Allocate staff in the Fund Registry → User Allocations dialog' : 'Contact your finance team to set up your pre-fund allocation.'}</p>
+          <p className="font-medium">{canManageAllocations ? 'No allocations found' : 'No allocation assigned to you yet'}</p>
+          <p className="text-sm mt-1">{canManageAllocations ? 'Allocate staff in the Fund Registry → User Allocations dialog' : 'Contact your finance team to set up your pre-fund allocation.'}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -566,15 +586,43 @@ export default function PreFundingAllocations() {
                       {s.allocations.map(a => {
                         const fp = a.allocated_amount > 0 ? Math.min(100, Math.round((a.spent_amount / a.allocated_amount) * 100)) : 0;
                         const fRem = a.allocated_amount - a.spent_amount;
+                        const isEditing = editingAllocId === a.id;
                         return (
-                          <div key={a.id} className="flex items-center gap-2 text-[11px]" data-testid={`row-alloc-${a.id}`}>
+                          <div key={a.id} className="group/allocrow flex items-center gap-2 text-[11px]" data-testid={`row-alloc-${a.id}`}>
                             <div className={cn('h-2 w-2 rounded-full shrink-0',
                               a.fund_status === 'active' ? 'bg-emerald-500' :
                               a.fund_status === 'low_balance' ? 'bg-amber-500' :
                               a.fund_status === 'closed' ? 'bg-slate-400' : 'bg-sky-500'
                             )} />
                             <span className="flex-1 truncate font-medium">{a.fund_name}</span>
-                            <span className="font-mono text-muted-foreground">{a.currency} {formatNumber(a.allocated_amount, 0)} allocated</span>
+                            {/* Allocated amount — editable for Finance Admin and CD */}
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  value={editAllocAmt}
+                                  onChange={e => setEditAllocAmt(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') saveAllocAmount(a.id); if (e.key === 'Escape') { setEditingAllocId(null); setEditAllocAmt(''); } }}
+                                  className="h-5 w-28 text-[11px] px-1.5 py-0"
+                                  autoFocus
+                                  data-testid={`input-alloc-${a.id}`}
+                                />
+                                <button onClick={() => saveAllocAmount(a.id)} className="text-emerald-600 hover:text-emerald-700" data-testid={`button-save-alloc-${a.id}`}><Check className="h-3 w-3" /></button>
+                                <button onClick={() => { setEditingAllocId(null); setEditAllocAmt(''); }} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+                              </div>
+                            ) : (
+                              <span className="font-mono text-muted-foreground flex items-center gap-1">
+                                {a.currency} {formatNumber(a.allocated_amount, 0)} allocated
+                                {canManageAllocations && (
+                                  <button
+                                    onClick={() => { setEditingAllocId(a.id); setEditAllocAmt(String(a.allocated_amount)); }}
+                                    className="opacity-0 group-hover/allocrow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                                    title="Edit allocated amount"
+                                    data-testid={`button-edit-alloc-${a.id}`}
+                                  ><Pencil className="h-2.5 w-2.5" /></button>
+                                )}
+                              </span>
+                            )}
                             <span className={cn('font-mono', healthColor(fp))}>{formatNumber(a.spent_amount, 0)} spent</span>
                             <span className={cn('font-mono', fRem < 0 ? 'text-rose-600' : 'text-emerald-600')}>
                               {fRem >= 0 ? formatNumber(fRem, 0) : `−${formatNumber(-fRem, 0)}`} left

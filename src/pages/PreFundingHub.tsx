@@ -84,10 +84,12 @@ const DEFAULT_TAB: PFTab = 'overview';
 const LS_KEY = 'hub_last_tab_prefunding';
 
 // Tabs visible per role group:
-// Finance/Admin  → all tabs
+// Finance/Admin        → all tabs
+// Country Director     → overview (read-only), allocations (can set allocation amounts)
 // Coordinator/Supervisor/FOM → overview, approvals, allocations
 // Everyone else (data_collector, employee, dataTeam) → overview, allocations
 const FINANCE_TABS: PFTab[] = ['overview', 'registry', 'approvals', 'reconciliation', 'allocations', 'settings', 'report'];
+const CD_TABS: PFTab[]      = ['overview', 'allocations'];
 const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations'];
 const STAFF_TABS: PFTab[] = ['overview', 'allocations'];
 
@@ -96,13 +98,16 @@ export default function PreFundingHub() {
   const [params, setParams] = useSearchParams();
 
   const isFinanceAdmin   = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const isCD             = hasAnyRole(['countryDirector']);
   const isApproverRole   = hasAnyRole(['coordinator', 'supervisor', 'fom']);
 
   const allowedTabs: PFTab[] = isFinanceAdmin
     ? FINANCE_TABS
-    : isApproverRole
-      ? APPROVER_TABS
-      : STAFF_TABS;
+    : isCD
+      ? CD_TABS
+      : isApproverRole
+        ? APPROVER_TABS
+        : STAFF_TABS;
 
   // Build a filtered version of SECTIONS for the HubLayout sidebar
   const visibleSections = useMemo(() => SECTIONS.map(sec => ({

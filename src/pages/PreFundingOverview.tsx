@@ -262,7 +262,8 @@ export default function PreFundingOverview() {
   const navigate = useNavigate();
   // Finance/admin: full management; coordinators/supervisors/field staff: read-only balance view
   const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const canAccess = isFinanceAdmin || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee']);
+  // countryDirector gets read-only balance dashboard view (same as field staff — no write actions)
+  const canAccess = isFinanceAdmin || hasAnyRole(['coordinator', 'supervisor', 'fom', 'dataTeam', 'data_collector', 'employee', 'countryDirector']);
   const { status: gateStatus, allocatedFunds } = usePreFundPaymentGate();
 
   const [funds, setFunds]         = useState<PreFundRow[]>([]);
