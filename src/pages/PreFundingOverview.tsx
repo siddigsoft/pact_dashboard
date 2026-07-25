@@ -581,12 +581,16 @@ export default function PreFundingOverview() {
     return Math.max(fromRawTxns, fromCol);
   };
 
-  // True available = amount − effectivePaid, further capped by available_balance DB column.
-  // Taking the minimum ensures a stale-high available_balance never inflates the figure.
+  // True available = amount − effectivePaid.
+  // We do NOT cap with the DB available_balance column: a stale-low DB value (e.g. 0)
+  // would incorrectly collapse a correct positive available to 0 and make the hub's
+  // "AVAILABLE BALANCE" KPI show 0 even when funds have plenty of money left.
+  // effectivePaid already takes the max of txn-derived and DB paid_amount, so it is
+  // always at least as conservative as the DB column on the paid side.
+  // Negative return value = genuinely overspent fund; aggregate totals rely on this.
   const conservativeAvail = (f: { id: string; amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
-    const paid      = effectivePaid(f);
-    const fromPaid  = Math.max(0, f.amount - paid);
-    return f.available_balance != null ? Math.min(Number(f.available_balance), fromPaid) : fromPaid;
+    const paid = effectivePaid(f);
+    return f.amount - paid;
   };
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);
