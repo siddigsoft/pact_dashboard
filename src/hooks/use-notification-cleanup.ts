@@ -5,10 +5,6 @@ import { useSettings } from '@/context/settings/SettingsContext';
 const MAX_AGE_DAYS = 90;
 const BADGE_WINDOW_DAYS = 30;
 
-function userNotificationOrFilter(userId: string): string {
-  return `recipient_id.eq.${userId},user_id.eq.${userId}`;
-}
-
 export function useNotificationCleanup() {
   const { notificationSettings } = useSettings();
   const [lastAutoDeleteDays, setLastAutoDeleteDays] = useState(notificationSettings.autoDeleteDays);
@@ -26,10 +22,11 @@ export function useNotificationCleanup() {
       const maxAgeCutoff = new Date();
       maxAgeCutoff.setDate(maxAgeCutoff.getDate() - MAX_AGE_DAYS);
 
+      // recipient_id only — OR with user_id blocks idx_notifications_recipient_*
       const { error: readError } = await supabase
         .from('notifications')
         .delete()
-        .or(userNotificationOrFilter(userId))
+        .eq('recipient_id', userId)
         .eq('is_read', true)
         .lt('created_at', readCutoff.toISOString());
 
@@ -40,7 +37,7 @@ export function useNotificationCleanup() {
       const { error: maxAgeError } = await supabase
         .from('notifications')
         .delete()
-        .or(userNotificationOrFilter(userId))
+        .eq('recipient_id', userId)
         .lt('created_at', maxAgeCutoff.toISOString());
 
       if (maxAgeError) {
@@ -63,7 +60,7 @@ export function useNotificationCleanup() {
       const { error, count } = await supabase
         .from('notifications')
         .delete()
-        .or(userNotificationOrFilter(user.id))
+        .eq('recipient_id', user.id)
         .eq('event_type', category)
         .eq('is_read', true);
 
@@ -92,15 +89,15 @@ export function useNotificationCleanup() {
 
       const { count: readExpired } = await supabase
         .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .or(userNotificationOrFilter(userId))
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', userId)
         .eq('is_read', true)
         .lt('created_at', readCutoff.toISOString());
 
       const { count: maxAgeExpired } = await supabase
         .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .or(userNotificationOrFilter(userId))
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', userId)
         .lt('created_at', maxAgeCutoff.toISOString());
 
       const totalReadExpired = readExpired ?? 0;

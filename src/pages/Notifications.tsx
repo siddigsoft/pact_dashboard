@@ -442,21 +442,23 @@ const Notifications: FC = () => {
     setAnalyticsLoading(true);
     (async () => {
       try {
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const sinceIso = since.toISOString();
         const [totalRes, byEventRes, byPriorityRes, emailRes, readRes] = await Promise.allSettled([
-          supabase.from('notifications').select('id, status, is_read, email_sent, escalated_at', { count: 'exact', head: false }).limit(1000),
-          supabase.from('notifications').select('event_type').limit(5000),
-          supabase.from('notifications').select('priority').limit(5000),
-          supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('email_sent', true),
-          supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('is_read', true),
+          supabase.from('notifications').select('id', { count: 'exact', head: true }).gte('created_at', sinceIso),
+          supabase.from('notifications').select('event_type').gte('created_at', sinceIso).limit(2000),
+          supabase.from('notifications').select('priority').gte('created_at', sinceIso).limit(2000),
+          supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('email_sent', true).gte('created_at', sinceIso),
+          supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('is_read', true).gte('created_at', sinceIso),
         ]);
 
-        const rows = totalRes.status === 'fulfilled' ? (totalRes.value.data || []) : [];
-        const total = rows.length;
-        const sent  = rows.filter((r: any) => r.status === 'sent' || r.email_sent).length;
-        const read  = totalRes.status === 'fulfilled' ? (readRes.status === 'fulfilled' ? (readRes.value.count || 0) : 0) : 0;
-        const pending = rows.filter((r: any) => r.status === 'pending').length;
-        const emailSent = emailRes.status === 'fulfilled' ? (emailRes.value.count || 0) : 0;
-        const escalated = rows.filter((r: any) => r.escalated_at).length;
+        const total = totalRes.status === 'fulfilled' ? (totalRes.value.count || 0) : 0;
+        const sent  = emailRes.status === 'fulfilled' ? (emailRes.value.count || 0) : 0;
+        const read  = readRes.status === 'fulfilled' ? (readRes.value.count || 0) : 0;
+        const pending = Math.max(0, total - read);
+        const emailSent = sent;
+        const escalated = 0;
 
         // Aggregate event types
         const eventRows = byEventRes.status === 'fulfilled' ? (byEventRes.value.data || []) : [];

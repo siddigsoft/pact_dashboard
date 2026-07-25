@@ -307,23 +307,12 @@ export function useNavBadgeCounts({
           );
         }
 
-        const { data: reclaimRows } = await supabase
+        const { count: reclaimCount } = await supabase
           .from('down_payment_requests')
-          .select('id, metadata')
-          .neq('status', 'cancelled');
-        if (reclaimRows) {
-          next.pendingReclaimCount = reclaimRows.filter((r: { metadata?: unknown }) => {
-            try {
-              const meta =
-                typeof r.metadata === 'string'
-                  ? JSON.parse(r.metadata)
-                  : (r.metadata || {}) as Record<string, unknown>;
-              return meta?.manual_reconciliation_required === true;
-            } catch {
-              return false;
-            }
-          }).length;
-        }
+          .select('id', { count: 'exact', head: true })
+          .neq('status', 'cancelled')
+          .filter('metadata->>manual_reconciliation_required', 'eq', 'true');
+        next.pendingReclaimCount = reclaimCount ?? 0;
       }
 
       const unreadSince = new Date();
@@ -333,7 +322,7 @@ export function useNavBadgeCounts({
         supabase
           .from('notifications')
           .select('id', { count: 'exact', head: true })
-          .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
+          .eq('recipient_id', currentUserId)
           .eq('is_read', false)
           .gte('created_at', unreadSince.toISOString())
       );

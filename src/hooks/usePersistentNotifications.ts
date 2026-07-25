@@ -46,7 +46,7 @@ export function usePersistentNotifications() {
     try {
       const { data, error } = await supabase
         .from('notifications')
-        .select('*')
+        .select('id, event_type, entity_type, entity_id, priority, status, recipient_id, recipient_email, recipient_role, title_en, title_ar, message_en, message_ar, triggered_by, triggered_by_name, workflow_stage, action_url, metadata, email_sent, email_sent_at, created_at, read_at')
         .eq('recipient_id', currentUser.id)
         .order('created_at', { ascending: false })
         .limit(100);

@@ -254,7 +254,9 @@ const Finance: React.FC = () => {
       }
 
       if (csIncludeAdvances) {
-        let dpQuery = supabase.from('down_payment_requests').select('*');
+        let dpQuery = supabase
+          .from('down_payment_requests')
+          .select('id, status, requested_amount, amount, project_id, hub, created_at');
         if (fromDate) dpQuery = dpQuery.gte('created_at', fromDate);
         if (toDate) dpQuery = dpQuery.lte('created_at', toDate);
         const { data: dpData } = await dpQuery;
@@ -299,30 +301,35 @@ const Finance: React.FC = () => {
       // (vendor cash outflows) so the consolidated statement reflects the
       // full Procure-to-Pay cycle, not just field-operations cost types.
       if (csIncludeVendor) {
-        const { data: invoiceData } = await supabase
-          .from('acct_invoices' as any)
-          .select('id, total_amount, paid_amount, status, currency, invoice_date, vendor_id')
-          .gte('invoice_date', csStartDate || '1970-01-01')
-          .lte('invoice_date', csEndDate || '2999-12-31')
-          .catch((err: any) => {
-            console.warn('Consolidated statement: acct_invoices fetch failed (table may not be migrated yet):', err?.message || err);
-            return { data: [] } as any;
-          });
-        (invoiceData || []).forEach((inv: any) => {
+        let invoiceData: any[] = [];
+        try {
+          const invRes = await supabase
+            .from('acct_invoices' as any)
+            .select('id, total_amount, paid_amount, status, currency, invoice_date, vendor_id')
+            .gte('invoice_date', csStartDate || '1970-01-01')
+            .lte('invoice_date', csEndDate || '2999-12-31');
+          invoiceData = (invRes.data as any[]) || [];
+        } catch (err: any) {
+          console.warn('Consolidated statement: acct_invoices fetch failed (table may not be migrated yet):', err?.message || err);
+        }
+        invoiceData.forEach((inv: any) => {
           const outstanding = Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
           if (['approved', 'partial_paid', 'disputed'].includes(inv.status) && outstanding > 0) {
             totalLiabilities += outstanding;
           }
         });
 
-        let vpQuery = supabase.from('acct_payments' as any).select('id, amount, status, payment_date, vendor_id, currency');
-        if (fromDate) vpQuery = vpQuery.gte('payment_date', csStartDate || '1970-01-01');
-        if (toDate) vpQuery = vpQuery.lte('payment_date', csEndDate || '2999-12-31');
-        const { data: paymentData } = await vpQuery.catch((err: any) => {
+        let paymentData: any[] = [];
+        try {
+          let vpQuery = supabase.from('acct_payments' as any).select('id, amount, status, payment_date, vendor_id, currency');
+          if (fromDate) vpQuery = vpQuery.gte('payment_date', csStartDate || '1970-01-01');
+          if (toDate) vpQuery = vpQuery.lte('payment_date', csEndDate || '2999-12-31');
+          const pmtRes = await vpQuery;
+          paymentData = (pmtRes.data as any[]) || [];
+        } catch (err: any) {
           console.warn('Consolidated statement: acct_payments fetch failed (table may not be migrated yet):', err?.message || err);
-          return { data: [] } as any;
-        });
-        (paymentData || []).forEach((pmt: any) => {
+        }
+        paymentData.forEach((pmt: any) => {
           if (pmt.status !== 'processed') return;
           const amt = Math.abs(Number(pmt.amount) || 0);
           expenseMap['Vendor Payments'] = (expenseMap['Vendor Payments'] || 0) + amt;
