@@ -1015,7 +1015,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phone: userProfile.phone,
           employeeId: userProfile.employee_id,
           lastActive: new Date().toISOString(),
-          isApproved,
+          isApproved: profileData?.status === 'approved' || false,
           availability: profileData?.availability || 'online',
           location: locationData,
           performance: {
@@ -1666,7 +1666,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updatedUser.role) {
         await supabase
           .from('user_roles')
-          .upsert({ user_id: updatedUser.id, role: updatedUser.role }, { onConflict: 'user_id,role', ignoreDuplicates: true });
+          .upsert({ user_id: updatedUser.id, role: updatedUser.role, status: 'offline' }, { onConflict: 'user_id,role', ignoreDuplicates: true });
 
         const privilegedRoles = ['admin','superAdmin','ict','fom','supervisor','hubsupervisor','dataTeam','financialAdmin','countryDirector'];
         if (privilegedRoles.includes((updatedUser.role || '').toLowerCase().replace(/[\s_-]/g,'')) ||

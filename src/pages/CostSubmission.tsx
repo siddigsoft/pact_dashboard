@@ -2106,24 +2106,26 @@ const CostSubmission = () => {
         try {
           const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
           const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', revertPaidConfirm.id);
-          if (!unlinkResult.unlinked) {
-            // RPC not deployed or no txn row found — check metadata for a direct-deduction marker
+          if (!unlinkResult.unlinked && paidAmountForReversal > 0) {
+            // OCS has no metadata column — resolve fund via pre_fund_transaction_id back-link
             const { data: srcRow } = await (supabase as any)
               .from('operational_cost_submissions')
-              .select('metadata')
+              .select('pre_fund_transaction_id')
               .eq('id', revertPaidConfirm.id)
               .maybeSingle();
-            if (srcRow?.metadata?.pre_fund_deducted && srcRow?.metadata?.pre_fund_id && paidAmountForReversal > 0) {
-              await reverseDirectDeduction(
-                srcRow.metadata.pre_fund_id,
-                paidAmountForReversal,
-                submittedBy,
-              );
-              // Clear the marker so a future payment doesn't skip the deduction
-              await (supabase as any)
-                .from('operational_cost_submissions')
-                .update({ metadata: { ...(srcRow.metadata || {}), pre_fund_deducted: false, pre_fund_id: null } })
-                .eq('id', revertPaidConfirm.id);
+            if (srcRow?.pre_fund_transaction_id) {
+              const { data: txn } = await (supabase as any)
+                .from('pre_fund_transactions')
+                .select('pre_fund_request_id')
+                .eq('id', srcRow.pre_fund_transaction_id)
+                .maybeSingle();
+              if (txn?.pre_fund_request_id) {
+                await reverseDirectDeduction(
+                  txn.pre_fund_request_id,
+                  paidAmountForReversal,
+                  submittedBy,
+                );
+              }
             }
           }
         } catch (pfErr: any) {
@@ -2152,20 +2154,29 @@ const CostSubmission = () => {
     try {
       const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
 
-      // Step 1 — read metadata for ALL items BEFORE any update so we don't lose pre-fund linkage
-      const metaMap: Record<string, { paidAmount: number; preFundId: string | null; preFundDeducted: boolean; rawMeta: any }> = {};
+      // Step 1 — read pre-fund back-links for ALL items BEFORE any update
+      // OCS has no metadata column — use pre_fund_transaction_id + amount_paid_cents
+      const metaMap: Record<string, { paidAmount: number; preFundId: string | null; preFundDeducted: boolean }> = {};
       await Promise.allSettled(
         itemsToRevert.map(async (oc) => {
           const { data: row } = await (supabase as any)
             .from('operational_cost_submissions')
-            .select('metadata, amount_paid_cents')
+            .select('amount_paid_cents, pre_fund_transaction_id')
             .eq('id', oc.id)
             .maybeSingle();
+          let preFundId: string | null = null;
+          if (row?.pre_fund_transaction_id) {
+            const { data: txn } = await (supabase as any)
+              .from('pre_fund_transactions')
+              .select('pre_fund_request_id')
+              .eq('id', row.pre_fund_transaction_id)
+              .maybeSingle();
+            preFundId = txn?.pre_fund_request_id ?? null;
+          }
           metaMap[oc.id] = {
             paidAmount: ((row?.amount_paid_cents ?? oc.amount_paid_cents) ?? 0) / 100,
-            preFundId: row?.metadata?.pre_fund_id ?? null,
-            preFundDeducted: !!(row?.metadata?.pre_fund_deducted),
-            rawMeta: row?.metadata ?? {},
+            preFundId,
+            preFundDeducted: !!preFundId,
           };
         })
       );
@@ -2209,10 +2220,6 @@ const CostSubmission = () => {
             const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', oc.id);
             if (!unlinkResult.unlinked && meta.preFundDeducted && meta.preFundId && meta.paidAmount > 0) {
               await reverseDirectDeduction(meta.preFundId, meta.paidAmount, oc.submitted_by ?? null);
-              await (supabase as any)
-                .from('operational_cost_submissions')
-                .update({ metadata: { ...meta.rawMeta, pre_fund_deducted: false, pre_fund_id: null } })
-                .eq('id', oc.id);
             }
           } catch (pfErr: any) {
             console.warn('[Pre-Fund] Group revert cleanup failed for', oc.id, pfErr?.message);
@@ -3194,16 +3201,22 @@ const CostSubmission = () => {
       if (!unlinkResult.unlinked) {
         const { data: ocRow } = await (supabase as any)
           .from('operational_cost_submissions')
-          .select('amount_cents, submitted_by, metadata')
+          .select('amount_cents, submitted_by, pre_fund_transaction_id')
           .eq('id', deleteConfirm.id)
           .single();
-        const meta = (ocRow?.metadata ?? {}) as any;
-        if (meta.pre_fund_deducted === true && meta.pre_fund_id && ocRow?.amount_cents) {
-          await reverseDirectDeduction(
-            meta.pre_fund_id,
-            ocRow.amount_cents / 100,
-            ocRow.submitted_by ?? null,
-          );
+        if (ocRow?.pre_fund_transaction_id && ocRow?.amount_cents) {
+          const { data: txn } = await (supabase as any)
+            .from('pre_fund_transactions')
+            .select('pre_fund_request_id')
+            .eq('id', ocRow.pre_fund_transaction_id)
+            .maybeSingle();
+          if (txn?.pre_fund_request_id) {
+            await reverseDirectDeduction(
+              txn.pre_fund_request_id,
+              ocRow.amount_cents / 100,
+              ocRow.submitted_by ?? null,
+            );
+          }
         }
       }
 

@@ -527,7 +527,8 @@ class _LoginScreenState extends State<LoginScreen>
             try {
               await authService.supabase.from('user_roles').insert({
                 'user_id': userId,
-                'role': 'worker',
+                'role': 'dataCollector',
+                'status': 'offline',
               });
               if (mounted) {
                 // Haptic feedback for successful login

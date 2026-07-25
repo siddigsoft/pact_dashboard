@@ -470,17 +470,20 @@ class AdvanceReportService {
 
       final profile = await _supabase
           .from('profiles')
-          .select('hubs_assigned')
+          .select('hub_id, secondary_hub_id')
           .eq('id', user.id)
           .maybeSingle();
 
-      final hubsJson = profile?['hubs_assigned'];
-      if (hubsJson == null) return [];
-
-      if (hubsJson is List) {
-        return hubsJson.map((h) => h.toString()).toList();
+      final hubs = <String>[];
+      final hubId = profile?['hub_id'] as String?;
+      final secondaryHubId = profile?['secondary_hub_id'] as String?;
+      if (hubId != null && hubId.isNotEmpty) hubs.add(hubId);
+      if (secondaryHubId != null &&
+          secondaryHubId.isNotEmpty &&
+          secondaryHubId != hubId) {
+        hubs.add(secondaryHubId);
       }
-      return [];
+      return hubs;
     } catch (e) {
       developer.log('Error getting supervisor hubs: $e');
       return [];

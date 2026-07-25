@@ -812,16 +812,23 @@ class _DocumentsScreenState extends State<DocumentsScreen>
 
       final profile = await Supabase.instance.client
           .from('profiles')
-          .select('id, role, state_id, hubs_assigned')
+          .select('id, role, state_id, hub_id, secondary_hub_id')
           .eq('id', user.id)
           .single();
 
       _currentUserRole = profile['role'] as String?;
       _currentUserState = profile['state_id'] as String?;
 
-      if (profile['hubs_assigned'] is List) {
-        _currentUserHubs = List<String>.from(profile['hubs_assigned'] as List);
+      final hubs = <String>[];
+      final hubId = profile['hub_id'] as String?;
+      final secondaryHubId = profile['secondary_hub_id'] as String?;
+      if (hubId != null && hubId.isNotEmpty) hubs.add(hubId);
+      if (secondaryHubId != null &&
+          secondaryHubId.isNotEmpty &&
+          secondaryHubId != hubId) {
+        hubs.add(secondaryHubId);
       }
+      _currentUserHubs = hubs;
 
       debugPrint(
         'Current user role: $_currentUserRole, state: $_currentUserState',

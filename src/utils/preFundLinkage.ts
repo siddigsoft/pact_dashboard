@@ -46,11 +46,17 @@ async function directLinkPayment(params: {
   // 1b. Fetch source row metadata — needed for the secondary idempotency check below.
   //     When the pre_fund_transactions INSERT is blocked by RLS, we store a
   //     pre_fund_deducted marker in source metadata so retries don't double-deduct.
-  const { data: srcRow } = await (supabase as any)
-    .from(sourceTable)
-    .select('metadata')
-    .eq('id', sourceId)
-    .maybeSingle();
+  //     Only down_payment_requests has a metadata column; OCS uses pre_fund_transaction_id only.
+  const supportsMetadata = sourceTable === 'down_payment_requests';
+  let srcRow: { metadata?: Record<string, unknown> | null } | null = null;
+  if (supportsMetadata) {
+    const { data } = await (supabase as any)
+      .from(sourceTable)
+      .select('metadata')
+      .eq('id', sourceId)
+      .maybeSingle();
+    srcRow = data;
+  }
 
   if (srcRow?.metadata?.pre_fund_deducted === true) {
     return {
@@ -130,7 +136,7 @@ async function directLinkPayment(params: {
       .from(sourceTable)
       .update({ pre_fund_transaction_id: txnId })
       .eq('id', sourceId);
-  } else {
+  } else if (supportsMetadata) {
     // INSERT was blocked by RLS — no txn row created.
     // Store a metadata marker to prevent double-deduction on any retry.
     // Note: there is still a narrow SELECT→UPDATE race window under concurrent calls;

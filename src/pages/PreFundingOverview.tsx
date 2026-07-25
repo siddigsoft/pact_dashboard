@@ -129,6 +129,7 @@ interface TxnRow {
   amount: number; currency: string; user_id: string | null; created_by: string | null;
   description: string | null; transaction_date: string | null;
   reconciled: boolean | null;
+  source_table: string | null; source_id: string | null;
 }
 
 interface ExchangeRate { from_currency: string; to_currency: string; rate: number; effective_date: string }
@@ -343,10 +344,10 @@ export default function PreFundingOverview() {
         // Merged unique set — fetched all at once to avoid separate round-trips
         const allPreFetchUserIds = [...new Set([...allocUserIds, ...txnDirectUserIds])];
         // Fetch validation data + profiles in parallel
-        // requested_by = who the DP was raised FOR (allocation holder); created_by = disbursing officer fallback
-        // NOTE: down_payment_requests has NO submitted_by column — that field only exists on operational_cost_submissions
+        // requested_by = who the DP was raised FOR (allocation holder).
+        // NOTE: down_payment_requests has no created_by / submitted_by — only requested_by.
         const [validDpData, validOcsData, backLinkedDpData, profData] = await Promise.all([
-          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by,created_by').in('id', chunk), dpIds),
+          fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata,requested_by').in('id', chunk), dpIds),
           fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id,submitted_by').in('id', chunk), ocsIds),
           fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
           // Targeted profiles fetch for ALL users referenced (allocation holders + txn users)
@@ -401,12 +402,11 @@ export default function PreFundingOverview() {
         setTxns(validTxns);
         // rawFundPaySums already set from perFundPaid above (per-fund isolated computation).
         // Build dpId → userId map so txnsByFundUser can credit the right staff member
-        // when pre_fund_transactions.user_id is null (admin stored in created_by instead).
+        // when pre_fund_transactions.user_id is null.
         // requested_by = the allocation holder (who the DP was raised for).
-        // created_by = disbursing officer fallback (submitted_by does NOT exist on down_payment_requests).
         const dpMap = new Map<string, string>();
         for (const dp of validDpData) {
-          const uid = (dp as any).requested_by ?? (dp as any).created_by;
+          const uid = (dp as any).requested_by;
           if (uid) dpMap.set(dp.id as string, uid as string);
         }
         setDpUserMap(dpMap);
