@@ -166,7 +166,7 @@ export function transformDBToMMPFile(dbRecord: any): MMPFile {
     deletedAt: dbRecord.deleted_at || dbRecord.deletedat,
     deletedBy: dbRecord.deleted_by || dbRecord.deletedby,
     expiryDate: dbRecord.expiry_date || dbRecord.expirydate,
-    region: dbRecord.region,
+    region: dbRecord.region || dbRecord.hub,
     year: dbRecord.year,
     version: dbRecord.version,
     modificationHistory: dbRecord.modification_history || dbRecord.modificationhistory,

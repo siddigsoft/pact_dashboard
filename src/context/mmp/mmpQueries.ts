@@ -177,8 +177,8 @@ async function fetchCoordinatorSiteEntries(userId: string | null): Promise<Coord
 // Tighter stale times so data feels fresh on every page visit.
 // The counts query is now very cheap (8 HEAD requests), so we poll more aggressively.
 const MMP_FILES_STALE_MS  = 20 * 1000;   // 20 s — list metadata
-const COUNTS_STALE_MS     =  8 * 1000;   // 8 s  — status counts (very cheap HEAD queries)
-const COUNTS_REFETCH_MS   = 30 * 1000;   // background poll every 30 s while page is open
+const COUNTS_STALE_MS     =  60 * 1000;  // 1 min — status counts (cheap HEAD queries)
+const COUNTS_REFETCH_MS   = 5 * 60 * 1000; // background poll every 5 min while page is open
 
 /**
  * `fetchMMPFiles` intentionally returns each MMP with empty `siteEntries` (loaded on-demand).

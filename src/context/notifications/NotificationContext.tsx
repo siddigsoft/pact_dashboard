@@ -222,32 +222,20 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
         
         let allNotifications: any[] = [];
         
-        // First, fetch user's own notifications
-        const [recipientResult, userResult] = await Promise.all([
-          supabase
-            .from('notifications')
-            .select('*')
-            .eq('recipient_id', currentUserId)
-            .order('created_at', { ascending: false })
-            .limit(50),
-          supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', currentUserId)
-            .order('created_at', { ascending: false })
-            .limit(50),
-        ]);
+        // First, fetch user's own notifications (recipient_id only — user_id OR kills index)
+        const NOTIF_COLS =
+          'id, recipient_id, user_id, title, message, type, event_type, entity_type, entity_id, is_read, created_at, metadata, link';
+        const { data: recipientData, error: userError } = await supabase
+          .from('notifications')
+          .select(NOTIF_COLS)
+          .eq('recipient_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(50);
 
-        const userError = recipientResult.error || userResult.error;
         if (userError) {
           console.error('[NotificationContext] Error fetching notifications:', userError);
         } else {
-          const merged = [...(recipientResult.data || []), ...(userResult.data || [])];
-          const deduped = Array.from(
-            new Map(merged.map((n: any) => [n.id, n])).values()
-          );
-          deduped.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          allNotifications = deduped.slice(0, 50);
+          allNotifications = recipientData || [];
         }
         
         // If admin, also fetch system and assignment notifications related to MMPs and site visits
@@ -255,7 +243,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
         if (isAdmin) {
           const { data: adminNotifications, error: adminError } = await supabase
             .from('notifications')
-            .select('*')
+            .select(NOTIF_COLS)
             .in('entity_type', ['mmpFile', 'siteVisit', 'wallet', 'downPayment', 'costSubmission', 'retainer', 'transaction', 'account', 'recovery'])
             .in('event_type', ['system', 'assignments', 'approvals', 'financial', 'wallet', 'retainer', 'account', 'recall'])
             .order('created_at', { ascending: false })
@@ -421,8 +409,8 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     fetchNotifications();
     subscribeRealtime();
 
-    // Poll more frequently (every 15 seconds) as fallback for realtime
-    const interval = setInterval(fetchNotifications, 15000);
+    // Realtime is primary; poll infrequently as a safety net only
+    const interval = setInterval(fetchNotifications, 5 * 60_000);
     return () => {
       cancelled = true;
       try { if (channel) supabase.removeChannel(channel); } catch {}

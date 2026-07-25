@@ -769,17 +769,21 @@ const MMPCycleClose = () => {
           const sdgTotal = Math.round((baseEnum + baseTrans) * rate);
           if (sdgTotal <= 0) continue;
           try {
-            const { error } = await supabase.from('wallet_transactions').upsert({
+            const { error } = await supabase.from('wallet_transactions').insert({
               user_id: site.enumeratorId,
-              type: 'mmp_fee',
+              type: 'site_visit_fee',
               amount: sdgTotal,
               currency: 'SDG',
               description: `MMP Cycle Fee — ${site.siteName} (1 USD = ${rate.toLocaleString()} SDG)`,
-              reference_id: site.id,
-              reference_type: 'mmp_site_entry',
-              mmp_id: mmpId,
+              related_site_visit_id: site.id,
+              site_visit_id: site.id,
+              metadata: {
+                reference_type: 'mmp_site_entry',
+                mmp_id: mmpId,
+                site_entry_id: site.id,
+              },
               created_at: new Date().toISOString(),
-            } as any, { onConflict: 'reference_id' });
+            } as any);
             if (error) walletFailed++;
             else walletSuccess++;
           } catch {

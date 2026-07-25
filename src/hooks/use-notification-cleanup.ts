@@ -112,11 +112,17 @@ export function useNotificationCleanup() {
   }, [notificationSettings.autoDeleteDays]);
 
   useEffect(() => {
-    cleanupOldNotifications();
+    // Defer cleanup so it never races the badge/list hot path on login
+    const t = setTimeout(() => {
+      void cleanupOldNotifications();
+    }, 60_000);
 
     const interval = setInterval(cleanupOldNotifications, 24 * 60 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(t);
+      clearInterval(interval);
+    };
   }, [cleanupOldNotifications]);
 
   useEffect(() => {

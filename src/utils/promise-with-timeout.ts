@@ -3,8 +3,13 @@
  * does not resolve/reject within the given milliseconds.
  * Useful to prevent hanging when Supabase or other async operations freeze.
  */
+/**
+ * Wraps a promise in a timeout. Rejects with a descriptive error if the promise
+ * does not resolve/reject within the given milliseconds.
+ * Useful to prevent hanging when Supabase or other async operations freeze.
+ */
 export function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   ms: number,
   message: string = 'Operation timed out. Please try again or refresh the page.'
 ): Promise<T> {
@@ -13,7 +18,7 @@ export function withTimeout<T>(
       reject(new Error(message));
     }, ms);
 
-    promise
+    Promise.resolve(promise)
       .then((result) => {
         clearTimeout(timeoutId);
         resolve(result);
