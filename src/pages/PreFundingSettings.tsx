@@ -64,6 +64,7 @@ interface Settings {
   reconciliation_action_return_finance: boolean;
   reconciliation_action_carry_fwd: boolean;
   reconciliation_action_reserve: boolean;
+  allow_overpay_default: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -82,6 +83,7 @@ const DEFAULT_SETTINGS: Settings = {
   reconciliation_action_return_finance: true,
   reconciliation_action_carry_fwd: true,
   reconciliation_action_reserve: true,
+  allow_overpay_default: true,
 };
 
 const BUILTIN_PERIOD_TYPES = [
@@ -405,6 +407,30 @@ export default function PreFundingSettings() {
                   <Input type="number" value={settings.auto_renewal_grace_hours} onChange={e => set('auto_renewal_grace_hours', parseInt(e.target.value))} data-testid="input-grace-hours" />
                   <p className="text-[10px] text-muted-foreground mt-1">Finance can cancel auto-activation within this window</p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Payment Controls */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Shield className="h-4 w-4 text-rose-600" />Payment Controls</CardTitle>
+              <CardDescription className="text-[11px]">Control whether funds can be overpaid. Individual funds can override the global default.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Allow Overpay by Default</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    When <strong>ON</strong>: payments can exceed a fund's total funded amount (current behaviour).<br />
+                    When <strong>OFF</strong>: payments that would push a fund above its funded amount are blocked at submission.
+                    Individual funds can override this default in their Edit Fund form.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!settings.allow_overpay_default}
+                  onCheckedChange={v => set('allow_overpay_default', v)}
+                  data-testid="switch-allow-overpay-default"
+                />
               </div>
             </CardContent>
           </Card>

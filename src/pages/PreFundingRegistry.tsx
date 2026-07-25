@@ -21,7 +21,7 @@ import {
   Plus, Pencil, Trash2, Upload, FileText, RefreshCw, Search,
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
-  Users, UserPlus, Wallet, TrendingUp, Bell,
+  Users, UserPlus, Wallet, TrendingUp, Bell, ArrowLeftRight,
   PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, MoreHorizontal,
 } from 'lucide-react';
 import {
@@ -75,6 +75,7 @@ interface PreFundRequest {
   created_at: string;
   created_by: string | null;
   holder_user_id: string | null;
+  allow_overpay: boolean | null;
 }
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
@@ -126,6 +127,7 @@ const EMPTY_FORM = {
   notes: '',
   notification_recipients: [] as string[],
   holder_user_id: '',
+  allow_overpay: null as boolean | null,  // null = use global default
 };
 
 // ── GL auto-detection ────────────────────────────────────────────────────────
@@ -234,6 +236,12 @@ export default function PreFundingRegistry() {
     open: boolean; fund: PreFundRequest | null; amount: string; reason: string;
   }>({ open: false, fund: null, amount: '', reason: '' });
   const [topUpSubmitting, setTopUpSubmitting] = useState(false);
+
+  // Transfer Funds dialog
+  const [transferDialog, setTransferDialog] = useState<{
+    open: boolean; sourceFund: PreFundRequest | null; destFundId: string; amount: string; reason: string;
+  }>({ open: false, sourceFund: null, destFundId: '', amount: '', reason: '' });
+  const [transferring, setTransferring] = useState(false);
 
   // ── Allocations ────────────────────────────────────────────────────────────
   const [allocDialog, setAllocDialog] = useState<{ open: boolean; fund: PreFundRequest | null }>({ open: false, fund: null });
@@ -500,6 +508,76 @@ export default function PreFundingRegistry() {
       setTopUpSubmitting(false);
     }
   };
+  const handleTransferFunds = async () => {
+    const { sourceFund, destFundId, amount, reason } = transferDialog;
+    if (!sourceFund || !destFundId) return;
+    const parsedAmt = parseFloat(amount.replace(/,/g, ''));
+    if (!amount || isNaN(parsedAmt) || parsedAmt <= 0) {
+      toast({ title: 'Enter a valid transfer amount', variant: 'destructive' }); return;
+    }
+    if (parsedAmt > sourceFund.available_balance) {
+      toast({ title: 'Insufficient balance', description: `Max transferable: ${formatNumber(sourceFund.available_balance, 0)} ${sourceFund.currency}`, variant: 'destructive' }); return;
+    }
+    if (!reason.trim()) {
+      toast({ title: 'Please provide a reason for the transfer', variant: 'destructive' }); return;
+    }
+    const destFund = funds.find(f => f.id === destFundId);
+    if (!destFund) return;
+    setTransferring(true);
+    try {
+      const now = new Date().toISOString().slice(0, 10);
+      // Debit source fund — record as a 'return' transaction
+      await (supabase as any).from('pre_fund_transactions').insert({
+        pre_fund_request_id: sourceFund.id,
+        transaction_type: 'return',
+        amount: parsedAmt,
+        currency: sourceFund.currency,
+        description: `Transfer to "${destFund.name}" — ${reason.trim()}`,
+        transaction_date: now,
+        created_by: currentUser?.id ?? null,
+      });
+      await supabase.from('pre_fund_requests').update({
+        available_balance: Math.max(0, sourceFund.available_balance - parsedAmt),
+        paid_amount: (sourceFund.paid_amount ?? 0) + parsedAmt,
+      }).eq('id', sourceFund.id);
+
+      // Credit destination fund — record as a 'receipt' transaction
+      await (supabase as any).from('pre_fund_transactions').insert({
+        pre_fund_request_id: destFund.id,
+        transaction_type: 'receipt',
+        amount: parsedAmt,
+        currency: destFund.currency,
+        description: `Transfer from "${sourceFund.name}" — ${reason.trim()}`,
+        transaction_date: now,
+        created_by: currentUser?.id ?? null,
+      });
+      await supabase.from('pre_fund_requests').update({
+        available_balance: (destFund.available_balance ?? 0) + parsedAmt,
+        amount: (destFund.amount ?? 0) + parsedAmt,
+      }).eq('id', destFund.id);
+
+      // Notify Finance Admin
+      await supabase.from('notification_events' as any).insert({
+        event_type: 'pre_fund_topup_requested',
+        reference_id: destFund.id,
+        reference_type: 'pre_fund_request',
+        title: 'Fund Transfer Completed',
+        message: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} transferred from "${sourceFund.name}" to "${destFund.name}". Reason: ${reason.trim()}`,
+        target_roles: ['super_admin', 'admin', 'financialAdmin'],
+        created_by: currentUser?.id ?? null,
+        metadata: { source_fund: sourceFund.name, dest_fund: destFund.name, amount: parsedAmt, currency: sourceFund.currency },
+      });
+
+      toast({ title: 'Transfer complete', description: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} moved from "${sourceFund.name}" to "${destFund.name}".` });
+      setTransferDialog({ open: false, sourceFund: null, destFundId: '', amount: '', reason: '' });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Transfer failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   const openEdit = (f: PreFundRequest) => {
     setEditing(f);
     const fa = f as any;
@@ -527,6 +605,7 @@ export default function PreFundingRegistry() {
       notes: f.notes ?? '',
       notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
       holder_user_id: fa.holder_user_id ?? '',
+      allow_overpay: fa.allow_overpay ?? null,
     });
     setNotifRecipSearch('');
     setHolderSearch('');
@@ -582,6 +661,7 @@ export default function PreFundingRegistry() {
         notes: form.notes || null,
         notification_recipients: form.notification_recipients.length > 0 ? form.notification_recipients : [],
         holder_user_id: form.holder_user_id || null,
+        allow_overpay: form.allow_overpay,
       };
       if (editing) {
         // If the fund has already been activated (paid_amount/committed_amount tracked),
@@ -1401,6 +1481,11 @@ export default function PreFundingRegistry() {
                               <TrendingUp className="h-3.5 w-3.5" />Request Top-up
                             </DropdownMenuItem>
                           )}
+                          {['active', 'low_balance'].includes(f.status) && canManage && funds.filter(x => ['active','low_balance'].includes(x.status) && x.id !== f.id).length > 0 && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => setTransferDialog({ open: true, sourceFund: f, destFundId: '', amount: '', reason: '' })} data-testid={`menu-transfer-${f.id}`}>
+                              <ArrowLeftRight className="h-3.5 w-3.5" />Transfer Funds
+                            </DropdownMenuItem>
+                          )}
                           {canManage && f.status !== 'draft' && f.status !== 'period_locked' && (
                             <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-amber-700" onClick={() => handleRecalcBalance(f)} disabled={recalcingId === f.id} data-testid={`menu-recalc-${f.id}`}>
                               <RefreshCw className={cn('h-3.5 w-3.5', recalcingId === f.id && 'animate-spin')} />
@@ -1703,6 +1788,32 @@ export default function PreFundingRegistry() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* ── Allow Overpay ── */}
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 col-span-2">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">Allow Overpay</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      When <strong>OFF</strong>, payments that would push this fund's total above its funded amount will be blocked.
+                      Leave as "Use default" to follow the global setting in Pre-Funding Settings.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Select
+                      value={form.allow_overpay === null ? 'default' : form.allow_overpay ? 'yes' : 'no'}
+                      onValueChange={v => setForm(p => ({ ...p, allow_overpay: v === 'default' ? null : v === 'yes' }))}
+                    >
+                      <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-allow-overpay">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Use default</SelectItem>
+                        <SelectItem value="yes">Allow overpay</SelectItem>
+                        <SelectItem value="no">Block overpay</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
@@ -2160,6 +2271,92 @@ export default function PreFundingRegistry() {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Transfer Funds Dialog ──────────────────────────────────────────── */}
+      <Dialog open={transferDialog.open} onOpenChange={o => { if (!o) setTransferDialog(p => ({ ...p, open: false })); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sky-700 dark:text-sky-400">
+              <ArrowLeftRight className="h-5 w-5" />
+              Transfer Funds
+            </DialogTitle>
+          </DialogHeader>
+          {transferDialog.sourceFund && (
+            <div className="space-y-4 py-1">
+              <div className="rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-4 py-3 text-sm">
+                <span className="text-muted-foreground">Source fund: </span>
+                <span className="font-semibold">{transferDialog.sourceFund.name}</span>
+                <span className="ml-2 text-muted-foreground">
+                  — Available: <span className="font-medium text-foreground">{formatNumber(transferDialog.sourceFund.available_balance, 0)} {transferDialog.sourceFund.currency}</span>
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Destination Fund *</Label>
+                <Select
+                  value={transferDialog.destFundId}
+                  onValueChange={v => setTransferDialog(p => ({ ...p, destFundId: v }))}
+                >
+                  <SelectTrigger data-testid="select-transfer-dest">
+                    <SelectValue placeholder="Select destination fund…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {funds
+                      .filter(f => ['active', 'low_balance'].includes(f.status) && f.id !== transferDialog.sourceFund?.id)
+                      .map(f => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name} ({f.currency})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Amount ({transferDialog.sourceFund.currency}) *</Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={transferDialog.amount}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, '');
+                    setTransferDialog(p => ({ ...p, amount: raw }));
+                  }}
+                  data-testid="input-transfer-amount"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Max: {formatNumber(transferDialog.sourceFund.available_balance, 0)} {transferDialog.sourceFund.currency}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Reason *</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="Reason for transfer…"
+                  value={transferDialog.reason}
+                  onChange={e => setTransferDialog(p => ({ ...p, reason: e.target.value }))}
+                  data-testid="input-transfer-reason"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferDialog(p => ({ ...p, open: false }))} data-testid="button-cancel-transfer">
+              Cancel
+            </Button>
+            <Button
+              className="bg-sky-600 hover:bg-sky-700 text-white"
+              onClick={handleTransferFunds}
+              disabled={transferring}
+              data-testid="button-confirm-transfer"
+            >
+              {transferring ? 'Transferring…' : 'Confirm Transfer'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
