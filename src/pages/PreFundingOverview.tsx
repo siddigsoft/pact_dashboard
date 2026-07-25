@@ -860,6 +860,9 @@ export default function PreFundingOverview() {
             const baseCommit = toBase(f.committed_amount, f.currency);
             const burnDays    = calcBurnDaysLeft(ef);
 
+            const isOverspent = effPaid > f.amount;
+            const overspentBy = isOverspent ? effPaid - f.amount : 0;
+
             const fundAllocs = allocsByFund.get(f.id) ?? [];
             const fundTxnsByUser = txnsByFundUser.get(f.id) ?? new Map();
             const isOpen = expanded.has(f.id);
@@ -880,7 +883,7 @@ export default function PreFundingOverview() {
             return (
               <Card
                 key={f.id}
-                className={cn('transition-shadow hover:shadow-md border w-full', isAlert && 'ring-1 ring-amber-400')}
+                className={cn('transition-shadow hover:shadow-md border w-full', isOverspent ? 'ring-2 ring-destructive' : isAlert && 'ring-1 ring-amber-400')}
                 data-testid={`card-fund-${f.id}`}
               >
                 {/* ── Card Header ─────────────────────────────────────── */}
@@ -893,6 +896,15 @@ export default function PreFundingOverview() {
                     <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                       {statusBadge(f.status)}
                       {renewalBadge(f.auto_renewal_mode)}
+                      {isOverspent && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 bg-destructive/10 text-destructive border-destructive/40 font-semibold animate-pulse"
+                          title={`Paid out exceeds funded amount by ${f.currency} ${formatNumber(overspentBy, 0)}`}
+                        >
+                          ⚠ Overspent
+                        </Badge>
+                      )}
                       {unreconciledCount > 0 && (
                         <Badge
                           variant="outline"
@@ -918,14 +930,22 @@ export default function PreFundingOverview() {
                     {/* Col 1 — Balance bar + spend rate sparkline */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-end">
-                        <span className="text-[11px] text-muted-foreground">Used {pct}%</span>
-                        <span className="text-sm font-bold font-mono">{f.currency} {formatNumber(ef.available_balance, 0)}</span>
+                        <span className={cn('text-[11px]', isOverspent ? 'text-destructive font-semibold' : 'text-muted-foreground')}>
+                          {isOverspent ? '⚠ Overspent' : `Used ${pct}%`}
+                        </span>
+                        <span className={cn('text-sm font-bold font-mono', isOverspent ? 'text-destructive' : '')}>
+                          {isOverspent
+                            ? `+${f.currency} ${formatNumber(overspentBy, 0)}`
+                            : `${f.currency} ${formatNumber(ef.available_balance, 0)}`}
+                        </span>
                       </div>
                       <Progress
-                        value={pct}
-                        className={cn('h-3 rounded-full', pct >= 90 ? '[&>div]:bg-rose-500' : pct >= 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500')}
+                        value={isOverspent ? 100 : pct}
+                        className={cn('h-3 rounded-full', isOverspent ? '[&>div]:bg-destructive' : pct >= 90 ? '[&>div]:bg-rose-500' : pct >= 70 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500')}
                       />
-                      <p className="text-[10px] text-muted-foreground">Available balance</p>
+                      <p className={cn('text-[10px]', isOverspent ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+                        {isOverspent ? `Paid out exceeds funded by ${f.currency} ${formatNumber(overspentBy, 0)}` : 'Available balance'}
+                      </p>
                       {f.currency !== baseCurrency && (
                         <div className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <ArrowUpDown className="h-3 w-3" />
@@ -942,16 +962,31 @@ export default function PreFundingOverview() {
                         <p className="font-mono font-semibold text-sm">{f.currency} {formatNumber(f.amount, 0)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Available</p>
-                        <p className="font-mono font-semibold text-sm text-emerald-600">{f.currency} {formatNumber(ef.available_balance, 0)}</p>
+                        <p className={cn('text-muted-foreground', isOverspent && 'text-destructive font-semibold')}>
+                          {isOverspent ? 'Overspent by' : 'Available'}
+                        </p>
+                        <p className={cn('font-mono font-semibold text-sm', isOverspent ? 'text-destructive' : 'text-emerald-600')}>
+                          {isOverspent
+                            ? `+${f.currency} ${formatNumber(overspentBy, 0)}`
+                            : `${f.currency} ${formatNumber(ef.available_balance, 0)}`}
+                        </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Committed</p>
                         <p className="font-mono font-medium text-violet-600">{f.currency} {formatNumber(f.committed_amount, 0)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Paid Out</p>
-                        <p className="font-mono font-medium text-rose-600">{f.currency} {formatNumber(ef.paid_amount, 0)}</p>
+                        <p className={cn('text-muted-foreground', isOverspent && 'text-destructive font-semibold')}>
+                          Paid Out{isOverspent ? ' ⚠' : ''}
+                        </p>
+                        <p className={cn('font-mono font-medium', isOverspent ? 'text-destructive font-semibold' : 'text-rose-600')}>
+                          {f.currency} {formatNumber(ef.paid_amount, 0)}
+                        </p>
+                        {isOverspent && (
+                          <p className="text-[10px] text-destructive mt-0.5">
+                            {formatNumber(overspentBy, 0)} over funded
+                          </p>
+                        )}
                       </div>
                       {f.currency !== baseCurrency && (
                         <div className="col-span-2 text-[10px] text-muted-foreground">
