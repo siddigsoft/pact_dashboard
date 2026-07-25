@@ -638,30 +638,9 @@ export default function PreFundingReconciliation() {
     // even when the pre_fund_transactions INSERT is blocked by RLS
     return Number(selectedFund?.paid_amount ?? 0);
   }, [transactions, selectedFund]);
-  const effectiveAvailableBalance = useMemo(() => {
-    if (!selectedFund) return 0;
-    // Full balance = fund amount + carry-forward bonus
-    //              - net expense payments (effectivePaidAmount, minus any reversals)
-    //              - transfer-outs ('return' type, e.g. Transfer Funds)
-    //              - outstanding commitments
-    // We compute carry_forward/return/reversal from the loaded transactions so the
-    // KPI is always transaction-accurate, matching the Recalculate Balance formula.
-    const sum = (types: string[]) =>
-      transactions
-        .filter(t => types.includes(t.transaction_type))
-        .reduce((s, t) => s + Number(t.amount ?? 0), 0);
-    const carryForward  = sum(['carry_forward']);
-    const transfersOut  = sum(['return']);
-    const reversals     = sum(['reversal']);
-    return (
-      selectedFund.amount
-      + carryForward
-      - effectivePaidAmount   // expense payments (already net, no reversals included yet)
-      + reversals             // reversed payments restore balance
-      - transfersOut          // money sent to another fund
-      - (selectedFund.committed_amount ?? 0)
-    );
-  }, [selectedFund, effectivePaidAmount, transactions]);
+  const effectiveAvailableBalance = useMemo(() =>
+    selectedFund ? selectedFund.amount - effectivePaidAmount : 0,
+  [selectedFund, effectivePaidAmount]);
 
   // True when paid_amount DB column is stale (no txn rows back it up).
   // Suppressed while txnLoading=true so we don't flash a false warning
@@ -809,9 +788,9 @@ export default function PreFundingReconciliation() {
               paid += Number(t.amount ?? 0);
             }
           }
-          avMap.set(fund.id, fund.amount - paid);
+          avMap.set(fund.id, Math.max(0, fund.amount - paid));
         } catch {
-          avMap.set(fund.id, fund.amount - Number(fund.paid_amount ?? 0));
+          avMap.set(fund.id, Math.max(0, fund.amount - Number(fund.paid_amount ?? 0)));
         }
       }));
       setFundsComputedAvail(new Map(avMap));

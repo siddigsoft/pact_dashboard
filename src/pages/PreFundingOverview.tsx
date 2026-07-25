@@ -590,7 +590,14 @@ export default function PreFundingOverview() {
   // Negative return value = genuinely overspent fund; aggregate totals rely on this.
   const conservativeAvail = (f: { id: string; amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
     const paid = effectivePaid(f);
-    return f.amount - paid;
+    const fromPaid = Math.max(0, f.amount - paid);
+    // Use the DB's available_balance as a ceiling so stale-high DB values don't over-report,
+    // but only when available_balance is set (non-null). If it's 0 and fromPaid is higher,
+    // the DB value is likely stale — trust fromPaid in that case.
+    if (f.available_balance != null && Number(f.available_balance) > 0) {
+      return Math.min(Number(f.available_balance), fromPaid);
+    }
+    return fromPaid;
   };
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);

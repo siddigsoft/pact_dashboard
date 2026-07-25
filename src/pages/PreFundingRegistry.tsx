@@ -802,24 +802,26 @@ export default function PreFundingRegistry() {
           .filter((t: any) => types.includes(t.transaction_type))
           .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
 
-      // Net paid = expense payments + transfer-outs ('return') − reversed payments.
-      // 'return' transactions are created by the Transfer Funds action on the source fund
-      // and are also added to paid_amount there, so they must be included here.
-      const newPaid      = sum(['payment', 'return']) - sum(['reversal']);
+      // Ledger approach: totalIn = money received into the fund (receipts + carry-forwards + reversals)
+      //                  totalOut = money that left the fund (payments + commitments + transfer-outs)
+      // This is correct because fund.amount is the planned/total allocation, but only the portion
+      // captured by receipt transactions was actually deposited and is therefore spendable.
+      // paid_amount tracks expense payments only (not transfer-outs, which are captured in the
+      // available ledger balance via the 'return' type in totalOut).
+      const totalIn      = sum(['receipt', 'carry_forward', 'reversal']);
+      const totalOut     = sum(['payment', 'commitment', 'return']);
+      const newPaid      = sum(['payment']);
       const newCommitted = sum(['commitment']);
-      // Extra cash injected into the fund beyond its original amount (period-close carry-forward).
-      const carryForward = sum(['carry_forward']);
-      // Authoritative formula: start from the fund's stated amount, add carry-forward bonus,
-      // deduct net payments and outstanding commitments.
-      // fund.amount is the ground truth — receipt transaction totals can differ from it
-      // (e.g. partial receipt uploads, bank-feed activations) and must NOT be used as the base.
-      // Negative result = genuinely overspent; do NOT clamp so aggregate totals stay accurate.
-      const newBalance = f.amount + carryForward - newPaid - newCommitted;
+      // Prefer ledger-derived balance when the fund has transaction history; otherwise
+      // fall back to the amount-based invariant for funds with no txn rows yet.
+      const ledgerBalance    = totalIn - totalOut;
+      const invariantBalance = f.amount - newPaid - newCommitted;
+      const newBalance = (txns ?? []).length > 0 ? ledgerBalance : invariantBalance;
 
       const { error: upErr } = await supabase
         .from('pre_fund_requests')
         .update({
-          available_balance: newBalance,
+          available_balance: Math.max(0, newBalance),
           paid_amount: newPaid,
           committed_amount: newCommitted,
         })
@@ -867,19 +869,16 @@ export default function PreFundingRegistry() {
               .filter((t: any) => types.includes(t.transaction_type))
               .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
 
-          // Same authoritative formula as handleRecalcBalance: fund.amount is the base.
-          // Look up the fund's amount from loaded state; fall back to 0 if not found.
-          const fundRecord = funds.find((f: PreFundRequest) => f.id === fundId);
-          const fundAmount = Number(fundRecord?.amount ?? 0);
-          const newPaid      = sum(['payment', 'return']) - sum(['reversal']);
+          const totalIn  = sum(['receipt', 'carry_forward', 'reversal']);
+          const totalOut = sum(['payment', 'commitment', 'return']);
+          const newBalance  = totalIn - totalOut;
+          const newPaid     = sum(['payment']);
           const newCommitted = sum(['commitment']);
-          const carryForward = sum(['carry_forward']);
-          const newBalance   = fundAmount + carryForward - newPaid - newCommitted;
 
           await (supabase as any)
             .from('pre_fund_requests')
             .update({
-              available_balance: newBalance,
+              available_balance: Math.max(0, newBalance),
               paid_amount:       newPaid,
               committed_amount:  newCommitted,
             })
