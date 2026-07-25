@@ -250,15 +250,41 @@ export default function PreFundingRegistry() {
   const [notifRecipSearch, setNotifRecipSearch] = useState('');
   const [holderSearch, setHolderSearch] = useState('');
 
+  // Tracks whether form-only data (accounts, profiles) has been loaded
+  const [formDataLoaded, setFormDataLoaded] = useState(false);
+
+  // Heavy queries only needed when the create/edit form is open — lazy-loaded on first open
+  const loadFormData = useCallback(async () => {
+    if (formDataLoaded) return;
+    const [acctRes, ratesRes, profRes] = await Promise.all([
+      (supabase as any).from('acct_accounts').select('id,code,name_en,is_active,is_postable').order('code'),
+      (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }).limit(200),
+      supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
+    ]);
+    if (!acctRes.error) {
+      const seen = new Set<string>();
+      const deduped = ((acctRes.data as any[]) ?? [])
+        .filter((a: any) => a.is_active && a.is_postable)
+        .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
+      setAcctAccounts(deduped);
+    }
+    if (!ratesRes.error) {
+      const rows: any[] = ratesRes.data ?? [];
+      const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
+      rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
+      setDynamicCurrencies([...seen].sort());
+    }
+    if (!profRes.error) setStaffProfiles((profRes.data as any) ?? []);
+    setFormDataLoaded(true);
+  }, [formDataLoaded]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fundsRes, ptRes, projRes, acctRes, ratesRes, settingsRes] = await Promise.all([
+      const [fundsRes, ptRes, projRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
-        (supabase as any).from('acct_accounts').select('id,code,name_en,is_active,is_postable').order('code'),
-        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
         (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
@@ -266,23 +292,7 @@ export default function PreFundingRegistry() {
       setProjects((projRes.data as any) ?? []);
       const dbTypes = (ptRes.data as any[]) ?? [];
       setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
-      if (!acctRes.error) {
-        const seen = new Set<string>();
-        const deduped = ((acctRes.data as any[]) ?? [])
-          .filter((a: any) => a.is_active && a.is_postable)
-          .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
-        setAcctAccounts(deduped);
-      }
-      if (!ratesRes.error) {
-        const rows: any[] = ratesRes.data ?? [];
-        const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
-        rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
-        setDynamicCurrencies([...seen].sort());
-      }
       if (!settingsRes.error && settingsRes.data) setPfSettings(settingsRes.data as any);
-      // Load staff profiles for notification recipients picker
-      const profRes = await supabase.from('profiles').select('id,full_name,email,role').order('full_name');
-      if (!profRes.error) setStaffProfiles((profRes.data as any) ?? []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -433,6 +443,7 @@ export default function PreFundingRegistry() {
     setProjectSearch('');
     setNotifRecipSearch('');
     setShowForm(true);
+    loadFormData();
   };
 
   const openTopUp = (f: PreFundRequest) => {
@@ -520,6 +531,7 @@ export default function PreFundingRegistry() {
     setNotifRecipSearch('');
     setHolderSearch('');
     setShowForm(true);
+    loadFormData();
   };
 
   const handleSave = async () => {
@@ -2029,7 +2041,7 @@ export default function PreFundingRegistry() {
                       onClick={() => {
                         setReceiptDialog({ open: false, fundId: '', fundName: '' });
                         setReceiptFiles([]);
-                        if (receiptFund) { setEditing(receiptFund as any); setDialogStep(2); setShowForm(true); }
+                        if (receiptFund) { setEditing(receiptFund as any); setDialogStep(2); setShowForm(true); loadFormData(); }
                       }}
                     >
                       Configure GL Accounts in Edit Fund →
