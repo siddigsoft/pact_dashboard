@@ -229,6 +229,12 @@ export default function PreFundingRegistry() {
   }>({ open: false, fundId: '', fundName: '', currentStatus: '', targetStatus: '' });
   const [statusChanging, setStatusChanging] = useState(false);
 
+  // Top-up request dialog
+  const [topUpReqDialog, setTopUpReqDialog] = useState<{
+    open: boolean; fund: PreFundRequest | null; amount: string; reason: string;
+  }>({ open: false, fund: null, amount: '', reason: '' });
+  const [topUpSubmitting, setTopUpSubmitting] = useState(false);
+
   // ── Allocations ────────────────────────────────────────────────────────────
   const [allocDialog, setAllocDialog] = useState<{ open: boolean; fund: PreFundRequest | null }>({ open: false, fund: null });
   const [allocations, setAllocations] = useState<any[]>([]);
@@ -430,34 +436,58 @@ export default function PreFundingRegistry() {
   };
 
   const openTopUp = (f: PreFundRequest) => {
-    setEditing(null);
-    const fa = f as any;
-    setForm({
-      ...EMPTY_FORM,
-      name: `Top-up — ${f.name}`,
-      source: f.source ?? '',
-      currency: f.currency,
-      country_id: f.country_id ?? '',
-      project_id: f.project_id ?? '',
-      grant_id: f.grant_id ?? '',
-      matching_scope: f.matching_scope,
-      cost_category: f.cost_category ?? '',
-      period_type_id: f.period_type_id ?? '',
-      threshold_mode: fa.threshold_pct != null ? 'pct' : 'fixed',
-      threshold_pct: fa.threshold_pct != null ? String(fa.threshold_pct) : (pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : ''),
-      warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
-      auto_renewal_mode: f.auto_renewal_mode,
-      gl_receipt_account:      fa.gl_receipt_account      ?? '',
-      gl_liability_account:    fa.gl_liability_account    ?? '',
-      gl_expense_account:      fa.gl_expense_account      ?? '',
-      gl_cf_account:           fa.gl_cf_account           ?? '',
-      gl_encumbrance_account:  fa.gl_encumbrance_account  ?? '',
-      notes: `Top-up request for fund: ${f.name}`,
-    });
-    setDialogStep(1);
-    setProjectSearch('');
-    setNotifRecipSearch('');
-    setShowForm(true);
+    setTopUpReqDialog({ open: true, fund: f, amount: '', reason: '' });
+  };
+
+  const handleSubmitTopUp = async () => {
+    const { fund, amount, reason } = topUpReqDialog;
+    if (!fund) return;
+    const parsedAmt = parseFloat(amount.replace(/,/g, ''));
+    if (!amount || isNaN(parsedAmt) || parsedAmt <= 0) {
+      toast({ title: 'Enter a valid top-up amount', variant: 'destructive' }); return;
+    }
+    if (!reason.trim()) {
+      toast({ title: 'Please provide a reason for the top-up', variant: 'destructive' }); return;
+    }
+    setTopUpSubmitting(true);
+    try {
+      const fa = fund as any;
+      const recipientIds: string[] = [
+        ...(Array.isArray(fa.notification_recipients) ? fa.notification_recipients : []),
+        ...(fund.created_by ? [fund.created_by] : []),
+      ];
+      const uniqueRecipients = [...new Set(recipientIds)];
+
+      await supabase.from('notification_events' as any).insert({
+        event_type: 'pre_fund_topup_requested',
+        reference_id: fund.id,
+        reference_type: 'pre_fund_request',
+        title: 'Top-up Requested',
+        message: `A top-up of ${fund.currency} ${formatNumber(parsedAmt, 0)} has been requested for fund "${fund.name}". Reason: ${reason.trim()}`,
+        target_roles: ['super_admin', 'admin', 'financialAdmin'],
+        target_user_ids: uniqueRecipients.length > 0 ? uniqueRecipients : null,
+        created_by: currentUser?.id ?? null,
+        metadata: {
+          fund_name: fund.name,
+          fund_id: fund.id,
+          requested_amount: parsedAmt,
+          currency: fund.currency,
+          current_balance: fund.available_balance,
+          reason: reason.trim(),
+          requested_by: currentUser?.id ?? null,
+        },
+      });
+
+      toast({
+        title: 'Top-up request sent',
+        description: `Finance Admin has been notified of the ${fund.currency} ${formatNumber(parsedAmt, 0)} top-up request for "${fund.name}".`,
+      });
+      setTopUpReqDialog({ open: false, fund: null, amount: '', reason: '' });
+    } catch (e: any) {
+      toast({ title: 'Failed to send top-up request', description: e.message, variant: 'destructive' });
+    } finally {
+      setTopUpSubmitting(false);
+    }
   };
   const openEdit = (f: PreFundRequest) => {
     setEditing(f);
@@ -2102,6 +2132,71 @@ export default function PreFundingRegistry() {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Top-up Request Dialog ──────────────────────────────────────────── */}
+      <Dialog open={topUpReqDialog.open} onOpenChange={o => { if (!o) setTopUpReqDialog(p => ({ ...p, open: false })); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <TrendingUp className="h-5 w-5" />
+              Request Top-up
+            </DialogTitle>
+          </DialogHeader>
+          {topUpReqDialog.fund && (
+            <div className="space-y-4 py-1">
+              <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm space-y-1">
+                <p className="font-medium">{topUpReqDialog.fund.name}</p>
+                <p className="text-muted-foreground text-xs">
+                  Current balance: <span className={cn('font-semibold', topUpReqDialog.fund.available_balance <= 0 ? 'text-destructive' : 'text-emerald-600')}>
+                    {topUpReqDialog.fund.currency} {formatNumber(topUpReqDialog.fund.available_balance, 0)}
+                  </span>
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="topup-amount">Top-up Amount ({topUpReqDialog.fund.currency}) <span className="text-destructive">*</span></Label>
+                <Input
+                  id="topup-amount"
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 5,000,000"
+                  value={topUpReqDialog.amount}
+                  onChange={e => setTopUpReqDialog(p => ({ ...p, amount: e.target.value }))}
+                  data-testid="input-topup-amount"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="topup-reason">Reason <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="topup-reason"
+                  placeholder="Explain why the top-up is needed…"
+                  rows={3}
+                  value={topUpReqDialog.reason}
+                  onChange={e => setTopUpReqDialog(p => ({ ...p, reason: e.target.value }))}
+                  data-testid="textarea-topup-reason"
+                />
+              </div>
+              <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-900/20 dark:border-sky-800 px-3 py-2 flex items-start gap-2 text-xs text-sky-700 dark:text-sky-300">
+                <Bell className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Finance Admin and any fund notification recipients will be alerted immediately.</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setTopUpReqDialog(p => ({ ...p, open: false }))} disabled={topUpSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleSubmitTopUp}
+              disabled={topUpSubmitting}
+              data-testid="button-submit-topup"
+            >
+              {topUpSubmitting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              {topUpSubmitting ? 'Sending…' : 'Send Request'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
