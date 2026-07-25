@@ -97,7 +97,7 @@ interface PersonalExpenseFlowProps {
  */
 export const PersonalExpenseFlow = forwardRef<PersonalExpenseFlowHandle, PersonalExpenseFlowProps>(
 function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, embeddedDescription }, ref) {
-  const { user, profile } = useUser();
+  const { currentUser } = useUser();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -108,11 +108,11 @@ function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, e
   ]);
 
   const { data: claims = [], isLoading, refetch } = useQuery<ExpenseClaim[]>({
-    queryKey: ['my-expenses', user?.id],
-    enabled: !!user?.id,
+    queryKey: ['my-expenses', currentUser?.id],
+    enabled: !!currentUser?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('expense_claims').select('*').eq('user_id', user!.id)
+        .from('expense_claims').select('*').eq('user_id', currentUser!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []) as ExpenseClaim[];
@@ -183,8 +183,11 @@ function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, e
   }, [claims, filter]);
 
   const uploadReceipt = async (file: File, idx: number) => {
-    if (!user?.id) return;
-    const path = `expense-receipts/${user.id}/${Date.now()}-${file.name}`;
+    if (!currentUser?.id) {
+      toast({ title: 'Not signed in / غير مسجل', variant: 'destructive' });
+      return;
+    }
+    const path = `expense-receipts/${currentUser.id}/${Date.now()}-${file.name}`;
     const { error: upErr } = await supabase.storage.from('attachments').upload(path, file, { upsert: false });
     if (upErr) { toast({ title: 'Upload failed', description: upErr.message, variant: 'destructive' }); return; }
     const { data: pub } = supabase.storage.from('attachments').getPublicUrl(path);
@@ -193,37 +196,47 @@ function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, e
   };
 
   const submit = async () => {
-    if (!user?.id) return;
+    if (!currentUser?.id) {
+      toast({ title: 'Not signed in / غير مسجل', description: 'Please refresh and try again.', variant: 'destructive' });
+      return;
+    }
     if (!header.title.trim()) { toast({ title: 'Title required / العنوان مطلوب', variant: 'destructive' }); return; }
     if (lines.length === 0 || total <= 0) { toast({ title: 'Add at least one line item / أضف بندًا واحدًا على الأقل', variant: 'destructive' }); return; }
+    const incomplete = lines.find(l => !(l.description || '').trim() || !(Number(l.amount) > 0) || !l.date);
+    if (incomplete) {
+      toast({ title: 'Complete each line / أكمل كل بند', description: 'Date, description, and amount > 0 are required.', variant: 'destructive' });
+      return;
+    }
     setSubmitting(true);
     try {
+      const managerId = currentUser.reportsTo ?? null;
+      const submitterName = currentUser.fullName || currentUser.name || 'A team member';
       const { data: claim, error: cErr } = await supabase.from('expense_claims').insert({
-        user_id: user.id,
+        user_id: currentUser.id,
         title: header.title.trim(),
         description: header.description.trim() || null,
         currency: header.currency,
         total_amount: total,
         status: 'submitted',
-        manager_id: (profile as any)?.reports_to ?? null,
+        manager_id: managerId,
       }).select('id, claim_number').single();
       if (cErr) throw cErr;
 
       const linesPayload = lines.map(l => ({
         claim_id: claim.id, date: l.date, category: l.category,
-        description: l.description, amount: Number(l.amount), receipt_url: l.receipt_url,
+        description: l.description.trim(), amount: Number(l.amount), receipt_url: l.receipt_url,
       }));
       const { error: lErr } = await supabase.from('expense_claim_lines').insert(linesPayload);
       if (lErr) throw lErr;
 
-      if ((profile as any)?.reports_to) {
+      if (managerId) {
         try {
           await NotificationTriggerService.send({
-            userId: (profile as any).reports_to,
+            userId: managerId,
             title: `New expense claim ${claim.claim_number ?? ''}`.trim(),
             titleAr: `مطالبة مصاريف جديدة ${claim.claim_number ?? ''}`.trim(),
-            message: `${profile?.full_name ?? 'A team member'} submitted "${header.title}" for ${total.toLocaleString()} ${header.currency}.`,
-            messageAr: `قدّم ${profile?.full_name ?? 'أحد أعضاء الفريق'} "${header.title}" بمبلغ ${total.toLocaleString()} ${header.currency}.`,
+            message: `${submitterName} submitted "${header.title}" for ${total.toLocaleString()} ${header.currency}.`,
+            messageAr: `قدّم ${submitterName} "${header.title}" بمبلغ ${total.toLocaleString()} ${header.currency}.`,
             type: 'info',
             category: 'approvals',
             priority: 'normal',
@@ -694,7 +707,7 @@ function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, e
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
-            <Button onClick={submit} disabled={submitting} data-testid="button-personal-submit-claim">
+            <Button type="button" onClick={submit} disabled={submitting} data-testid="button-personal-submit-claim">
               <Send className="w-4 h-4 mr-2" />
               {submitting ? 'Submitting…' : 'Submit Claim / إرسال'}
             </Button>
