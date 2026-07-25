@@ -138,7 +138,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'approval-dashboard',  label:'Approval Dashboard',     path:'/approval-dashboard',     icon:ClipboardCheck, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','supervisor','fom'] },
   { slug:'down-payment-approval', label:'Down Payment Approval', path:'/down-payment-approval', icon:ClipboardCheck, group:'Finance',
-    roles:['superAdmin','admin','financialAdmin','auditor','countryDirector'] },
+    roles:['superAdmin','admin','financialAdmin','auditor','countryDirector','fom','supervisor','hubsupervisor'] },
   { slug:'cost-submission-reports', label:'Cost Submission Reports', path:'/cost-submission/reports', icon:BarChart3, group:'Finance',
     roles:['superAdmin','admin','financialAdmin','auditor'] },
   { slug:'wallet-reports',      label:'Wallet Reports',         path:'/wallet-reports',         icon:CreditCard, group:'Finance',
