@@ -74,6 +74,7 @@ interface PreFundRequest {
   notes: string | null;
   created_at: string;
   created_by: string | null;
+  holder_user_id: string | null;
 }
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
@@ -124,6 +125,7 @@ const EMPTY_FORM = {
   gl_expense_account: '', gl_cf_account: '', gl_encumbrance_account: '',
   notes: '',
   notification_recipients: [] as string[],
+  holder_user_id: '',
 };
 
 // ── GL auto-detection ────────────────────────────────────────────────────────
@@ -240,6 +242,7 @@ export default function PreFundingRegistry() {
   const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
   const [staffProfiles, setStaffProfiles] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
   const [notifRecipSearch, setNotifRecipSearch] = useState('');
+  const [holderSearch, setHolderSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -482,8 +485,10 @@ export default function PreFundingRegistry() {
       gl_encumbrance_account: fa.gl_encumbrance_account ?? '',
       notes: f.notes ?? '',
       notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
+      holder_user_id: fa.holder_user_id ?? '',
     });
     setNotifRecipSearch('');
+    setHolderSearch('');
     setShowForm(true);
   };
 
@@ -534,6 +539,7 @@ export default function PreFundingRegistry() {
         gl_encumbrance_account: form.gl_encumbrance_account || null,
         notes: form.notes || null,
         notification_recipients: form.notification_recipients.length > 0 ? form.notification_recipients : [],
+        holder_user_id: form.holder_user_id || null,
       };
       if (editing) {
         // If the fund has already been activated (paid_amount/committed_amount tracked),
@@ -1566,6 +1572,81 @@ export default function PreFundingRegistry() {
                   <Label>Source / Donor</Label>
                   <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
                 </div>
+
+                {/* Fund Holder — single-user picker */}
+                <div className="sm:col-span-2">
+                  <Label className="flex items-center gap-1.5">
+                    Fund Holder
+                    <span className="text-[10px] font-normal text-muted-foreground">(optional — assigned user can distribute to staff from the Distribute Funds tab)</span>
+                  </Label>
+                  {form.holder_user_id ? (
+                    <div className="flex items-center justify-between border rounded-md px-3 py-2 bg-muted/30 mt-1">
+                      {(() => {
+                        const hp = staffProfiles.find(p => p.id === form.holder_user_id);
+                        return hp ? (
+                          <div>
+                            <div className="text-sm font-medium">{hp.full_name}</div>
+                            <div className="text-[11px] text-muted-foreground">{hp.email} · {hp.role}</div>
+                          </div>
+                        ) : <span className="text-sm text-muted-foreground">User ID: {form.holder_user_id}</span>;
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => { setForm(p => ({ ...p, holder_user_id: '' })); setHolderSearch(''); }}
+                        className="text-muted-foreground hover:text-foreground ml-2"
+                        data-testid="button-clear-holder"
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <div className="relative mb-1">
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          value={holderSearch}
+                          onChange={e => setHolderSearch(e.target.value)}
+                          placeholder="Search staff to assign as fund holder…"
+                          className="pl-8 h-8 text-sm"
+                          data-testid="input-holder-search"
+                        />
+                      </div>
+                      {holderSearch.trim() && (
+                        <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
+                          {staffProfiles
+                            .filter(p =>
+                              p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
+                              p.email?.toLowerCase().includes(holderSearch.toLowerCase())
+                            )
+                            .slice(0, 8)
+                            .map(p => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                                onClick={() => { setForm(prev => ({ ...prev, holder_user_id: p.id })); setHolderSearch(''); }}
+                                data-testid={`button-select-holder-${p.id}`}
+                              >
+                                <div>
+                                  <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                                  <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                                </div>
+                                <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                              </button>
+                            ))}
+                          {staffProfiles.filter(p =>
+                            p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
+                            p.email?.toLowerCase().includes(holderSearch.toLowerCase())
+                          ).length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
+                          )}
+                        </div>
+                      )}
+                      {!holderSearch && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">No holder set — type to search</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <Label>Amount (SDG) *</Label>
                   <Input

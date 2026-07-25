@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2, Users } from 'lucide-react';
+import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2, Users, SendHorizonal } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
 
@@ -11,8 +11,9 @@ const ReconciliationPanel  = lazy(() => import('./PreFundingReconciliation'));
 const SettingsPanel        = lazy(() => import('./PreFundingSettings'));
 const ReportPanel          = lazy(() => import('./PreFundingReport'));
 const AllocationsPanel     = lazy(() => import('./PreFundingAllocations'));
+const DistributePanel      = lazy(() => import('./PreFundingDistribute'));
 
-type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'allocations' | 'settings' | 'report';
+type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'allocations' | 'settings' | 'report' | 'distribute';
 
 type SectionDef = { id: string; label: string; icon: React.ElementType; color: string; description: string; tabs: { id: string; label: string; icon: React.ElementType; description: string }[] };
 
@@ -66,6 +67,12 @@ const SECTIONS: SectionDef[] = [
         icon: FileBarChart2,
         description: 'Comprehensive pre-funding report with KPI cards, utilization charts, fund-by-fund breakdown, transaction history, approval chain status, and PDF/Excel export.',
       },
+      {
+        id: 'distribute',
+        label: 'Distribute Funds',
+        icon: SendHorizonal,
+        description: 'Fund holders distribute portions of their assigned fund to selected staff. Finance Admin can view all fund holders and their distributions.',
+      },
     ],
   },
 ];
@@ -84,14 +91,14 @@ const DEFAULT_TAB: PFTab = 'overview';
 const LS_KEY = 'hub_last_tab_prefunding';
 
 // Tabs visible per role group:
-// Finance/Admin        → all tabs
-// Country Director     → overview (read-only), allocations (can set allocation amounts)
-// Coordinator/Supervisor/FOM → overview, approvals, allocations
-// Everyone else (data_collector, employee, dataTeam) → overview, allocations
-const FINANCE_TABS: PFTab[] = ['overview', 'registry', 'approvals', 'reconciliation', 'allocations', 'settings', 'report'];
-const CD_TABS: PFTab[]      = ['overview', 'allocations'];
-const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations'];
-const STAFF_TABS: PFTab[] = ['overview', 'allocations'];
+// Finance/Admin        → all tabs (including distribute for managing all holders)
+// Country Director     → overview (read-only), allocations, distribute (if assigned as holder)
+// Coordinator/Supervisor/FOM → overview, approvals, allocations, distribute
+// Everyone else → overview, allocations, distribute (content adapts: only shown if assigned as holder)
+const FINANCE_TABS: PFTab[] = ['overview', 'registry', 'approvals', 'reconciliation', 'allocations', 'settings', 'report', 'distribute'];
+const CD_TABS: PFTab[]       = ['overview', 'allocations', 'distribute'];
+const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations', 'distribute'];
+const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute'];
 
 export default function PreFundingHub() {
   const { hasAnyRole } = useAuthorization();
@@ -158,6 +165,7 @@ export default function PreFundingHub() {
         {tab === 'allocations'     && <Suspense fallback={<PanelLoader />}><AllocationsPanel /></Suspense>}
         {tab === 'settings'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
         {tab === 'report'          && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}
+        {tab === 'distribute'      && <Suspense fallback={<PanelLoader />}><DistributePanel /></Suspense>}
       </div>
     </HubLayout>
   );
