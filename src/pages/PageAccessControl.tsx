@@ -303,6 +303,8 @@ export const PAGE_DEFS: PageDef[] = [
   // ── Surveys ───────────────────────────────────────────────────────────────
   { slug:'surveys',             label:'Surveys',                path:'/surveys',                icon:ClipboardEdit, group:'Surveys',
     roles:['all'] },
+  { slug:'data-quality',        label:'Data Quality Control',   path:'/data-quality',           icon:PieChart, group:'Surveys',
+    roles:['superAdmin','admin','ict','fom','dataTeam','countryDirector'] },
   { slug:'questionnaire-analytics', label:'Questionnaire Analytics', path:'/questionnaire-analytics', icon:PieChart, group:'Surveys',
     roles:['superAdmin','admin','fom','dataTeam'] },
 

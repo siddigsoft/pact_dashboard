@@ -134,6 +134,9 @@ export default function DataQualityPage() {
   const [loading, setLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [showColMapper, setShowColMapper] = useState(false);
+  const [colOverrides, setColOverrides] = useState<Partial<DetectedColumns>>({});
+  const reUploadRef = useRef<HTMLInputElement>(null);
 
   // Filters
   const [filterEnumerator, setFilterEnumerator] = useState('__all__');
@@ -382,13 +385,82 @@ export default function DataQualityPage() {
                 Loaded {dataset.uploadedAt.toLocaleTimeString()} · {dataset.rows.length.toLocaleString()} submissions
               </p>
             </div>
-            <label className="cursor-pointer">
-              <Button variant="outline" size="sm" asChild>
-                <span><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Upload new data</span>
-              </Button>
-              <input type="file" accept=".csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleCSV(f); }} />
-            </label>
+            <Button variant="outline" size="sm" onClick={() => setShowColMapper(v => !v)}>
+              <Layers className="w-3.5 h-3.5 mr-1.5" /> Column Map
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => reUploadRef.current?.click()}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Upload new data
+            </Button>
+            <input ref={reUploadRef} type="file" accept=".csv" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) { e.target.value = ''; handleCSV(f); } }} />
           </div>
+
+          {/* ── Column Mapper ─────────────────────────────────────────── */}
+          {showColMapper && (
+            <div className="bg-card border rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Auto-detected Columns
+                </h3>
+                <p className="text-xs text-muted-foreground">Override any column if auto-detection missed it</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {(Object.entries({
+                  enumerator: 'Enumerator Name',
+                  supervisor: 'Supervisor Name',
+                  start: 'Start Time',
+                  end: 'End Time',
+                  today: 'Survey Date',
+                  deviceId: 'Device ID',
+                  gpsLat: 'GPS Latitude',
+                  gpsLon: 'GPS Longitude',
+                  gpsPrecision: 'GPS Precision',
+                  admin1: 'Admin Level 1',
+                  admin2: 'Admin Level 2',
+                  admin3: 'Admin Level 3',
+                  admin3Code: 'Admin 3 Code',
+                  questionnaireNo: 'Questionnaire No.',
+                  householdNo: 'Household No.',
+                  consent: 'Consent',
+                  phone: 'Phone Number',
+                }) as [keyof DetectedColumns, string][]).map(([key, label]) => {
+                  const detected = dataset.cols[key];
+                  const override = colOverrides[key] ?? detected;
+                  return (
+                    <div key={key} className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-medium">{label}</p>
+                      <Select
+                        value={override || '__none__'}
+                        onValueChange={val => {
+                          const newOverrides = { ...colOverrides, [key]: val === '__none__' ? '' : val };
+                          setColOverrides(newOverrides);
+                          // Re-run QC with updated column mapping
+                          const merged = { ...dataset.cols, ...newOverrides } as DetectedColumns;
+                          const { rows: parsed, summary, byEnumerator } = runQC(dataset.rawRows, merged);
+                          setDataset(d => d ? { ...d, cols: merged, rows: parsed, summary, byEnumerator } : d);
+                        }}
+                      >
+                        <SelectTrigger className={cn('h-8 text-xs', !override ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20' : detected !== override ? 'border-blue-300 bg-blue-50 dark:bg-blue-900/20' : '')}>
+                          <SelectValue placeholder="Not detected" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">(none)</SelectItem>
+                          {dataset.headers.map(h => (
+                            <SelectItem key={h} value={h} className="text-xs">{h.split('/').pop()}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!override && <p className="text-xs text-orange-600">Not detected</p>}
+                      {override && override !== detected && <p className="text-xs text-blue-600">Overridden</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Changes apply immediately. Green = auto-detected · Orange = not found · Blue = manually set.
+              </p>
+            </div>
+          )}
 
           {/* ── Global Filters ─────────────────────────────────────────── */}
           <div className="bg-card border rounded-xl p-4">

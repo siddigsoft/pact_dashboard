@@ -234,6 +234,8 @@ const getWorkflowMenuGroups = (
   const surveyItems: MenuGroup["items"] = [];
   if (!isHidden("/surveys"))
     surveyItems.push({ id: "surveys", title: "Surveys", url: "/surveys", icon: ClipboardList, priority: 1 });
+  if (!isHidden("/data-quality") && (isSuperAdmin || isAdmin || isICT || isDataTeam || isFOM || isCountryDirector))
+    surveyItems.push({ id: "data-quality", title: "Data Quality Control", url: "/data-quality", icon: ShieldCheck, priority: 2 });
   if (surveyItems.length) groups.push({ id: "surveys", label: "Surveys", order: 8, items: surveyItems });
 
   // 11. Analytics & Reports Hub
