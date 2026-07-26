@@ -530,14 +530,13 @@
 
     // â”€â”€ Surveys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!isHidden('/surveys')) {
-      groups.push({
-        id: 'surveys',
-        label: 'Surveys',
-        order: 5.9,
-        items: [
-          { id: 'surveys', title: 'Surveys', url: '/surveys', icon: ClipboardList, priority: 1, isPinned: isPinned('/surveys') },
-        ],
-      });
+      const surveyItems: MenuGroup['items'] = [
+        { id: 'surveys', title: 'Surveys', url: '/surveys', icon: ClipboardList, priority: 1, isPinned: isPinned('/surveys') },
+      ];
+      if (isSuperAdmin || isAdmin || isICT || isDataTeam || isFOM || isCountryDirector) {
+        surveyItems.push({ id: 'data-quality', title: 'Data Quality Control', url: '/data-quality', icon: ShieldCheck, priority: 2, isPinned: isPinned('/data-quality') });
+      }
+      groups.push({ id: 'surveys', label: 'Surveys', order: 5.9, items: surveyItems });
     }
 
     // â”€â”€ 9. Analytics & Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -149,6 +149,7 @@ const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const SurveysPage = lazy(() => import('./pages/SurveysPage'));
 const SurveyDetail = lazy(() => import('./pages/SurveyDetail'));
 const SurveyFill = lazy(() => import('./pages/SurveyFill'));
+const DataQualityPage = lazy(() => import('./pages/DataQualityPage'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksV2'));
 const TaskDetail = lazy(() => import('./pages/TaskDetail'));
@@ -671,6 +672,7 @@ const AppRoutes = () => {
         <Route path="/field-data/:id" element={<PageWrapper><FieldDataFormDetail /></PageWrapper>} />
         <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
         <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
+        <Route path="/data-quality" element={<PageWrapper><DataQualityPage /></PageWrapper>} />
         {/* WorkspaceHub moved to its own full-screen route (see below) */}
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
