@@ -1,4 +1,5 @@
 // Data Quality Control utilities — works with any ODK/KoBoCollect CSV export
+import * as XLSX from 'xlsx';
 
 export type QCFlagType =
   | 'SHORT_DURATION'
@@ -92,12 +93,201 @@ export interface DatasetSummary {
   flagCounts: Partial<Record<QCFlagType, number>>;
 }
 
+// ── XLSForm types ──────────────────────────────────────────────────────────
+export interface XLSFormQuestion {
+  name: string;
+  type: string;
+  label: string;
+  required: boolean;
+  constraint: string;
+  relevant: string;
+}
+
+export interface XLSFormGroup {
+  name: string;
+  label: string;
+  type: 'group' | 'repeat';
+  questions: XLSFormQuestion[];
+}
+
+export interface XLSFormSchema {
+  formTitle: string;
+  groups: XLSFormGroup[];
+  topLevelQuestions: XLSFormQuestion[];
+  allQuestions: XLSFormQuestion[];
+}
+
+export interface CoverageRow {
+  qName: string;
+  label: string;
+  type: string;
+  groupName: string;
+  groupLabel: string;
+  found: boolean;
+  csvCol: string | null;
+}
+
+// ── XLSForm parser ─────────────────────────────────────────────────────────
+const SKIP_QUESTION_TYPES = new Set([
+  'note', 'calculate', 'hidden', 'deviceid', 'start', 'end', 'today',
+  'phonenumber', 'username', 'audit', 'xml-external',
+]);
+
+export function parseXLSForm(buffer: ArrayBuffer): XLSFormSchema {
+  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+
+  // Form title from settings sheet
+  let formTitle = 'Untitled Form';
+  const settingsSheet = wb.Sheets['settings'];
+  if (settingsSheet) {
+    const sr = XLSX.utils.sheet_to_json<Record<string, string>>(settingsSheet, { defval: '' });
+    if (sr[0]) formTitle = sr[0]['form_title'] || sr[0]['title'] || formTitle;
+  }
+
+  const surveySheet = wb.Sheets['survey'];
+  if (!surveySheet) throw new Error('No "survey" sheet found. Please upload a valid XLSForm (.xlsx).');
+
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(surveySheet, { defval: '' });
+  if (rows.length === 0) throw new Error('"survey" sheet is empty.');
+
+  // Find the label column (handles multilingual: 'label', 'label::English (en)', etc.)
+  const firstRow = rows[0] ?? {};
+  const allKeys = Object.keys(firstRow);
+  const labelCol =
+    allKeys.find(k => k === 'label') ||
+    allKeys.find(k => k.startsWith('label::English')) ||
+    allKeys.find(k => k.startsWith('label::')) ||
+    'label';
+
+  const groups: XLSFormGroup[] = [];
+  const topLevelQuestions: XLSFormQuestion[] = [];
+  const allQuestions: XLSFormQuestion[] = [];
+
+  // Stack tracks open groups; we only expose TOP-LEVEL groups in the UI
+  const groupStack: XLSFormGroup[] = [];
+
+  for (const row of rows) {
+    const rawType = (row['type'] ?? '').trim();
+    const type = rawType.toLowerCase();
+    const name = (row['name'] ?? '').trim();
+    const label = (row[labelCol] ?? row['label'] ?? '').trim() || name;
+
+    if (type.startsWith('begin_group') || type.startsWith('begin repeat') || type.startsWith('begin_repeat')) {
+      const grpType: 'group' | 'repeat' =
+        type.startsWith('begin repeat') || type.startsWith('begin_repeat') ? 'repeat' : 'group';
+      groupStack.push({
+        name: name || `section_${groups.length + 1}`,
+        label: label || `Section ${groups.length + 1}`,
+        type: grpType,
+        questions: [],
+      });
+    } else if (type.startsWith('end_group') || type.startsWith('end group') || type.startsWith('end_repeat') || type.startsWith('end repeat')) {
+      const finished = groupStack.pop();
+      if (finished) {
+        if (groupStack.length === 0) {
+          // Top-level group — expose to UI
+          groups.push(finished);
+        } else {
+          // Nested group — flatten questions into parent
+          groupStack[groupStack.length - 1].questions.push(...finished.questions);
+        }
+      }
+    } else if (name && rawType && !SKIP_QUESTION_TYPES.has(type)) {
+      const q: XLSFormQuestion = {
+        name,
+        type: rawType,
+        label,
+        required: ['yes', 'true', '1'].includes((row['required'] ?? '').trim().toLowerCase()),
+        constraint: row['constraint'] ?? '',
+        relevant: row['relevant'] ?? '',
+      };
+      allQuestions.push(q);
+      if (groupStack.length > 0) {
+        groupStack[groupStack.length - 1].questions.push(q);
+      } else {
+        topLevelQuestions.push(q);
+      }
+    }
+  }
+
+  // Flush any unclosed groups (malformed XLSForm)
+  while (groupStack.length > 0) {
+    const g = groupStack.pop()!;
+    groups.unshift(g);
+  }
+
+  // If no groups were found, wrap everything in a single "Full Form" pseudo-group
+  if (groups.length === 0 && topLevelQuestions.length > 0) {
+    groups.push({
+      name: '__full_form__',
+      label: 'Full Form',
+      type: 'group',
+      questions: [...topLevelQuestions],
+    });
+  }
+
+  return { formTitle, groups, topLevelQuestions, allQuestions };
+}
+
+// ── Section coverage checker ───────────────────────────────────────────────
+export function checkSectionCoverage(
+  headers: string[],
+  schema: XLSFormSchema,
+  selectedGroups: Set<string>,
+): CoverageRow[] {
+  const headerSet = new Set(headers.map(h => h.toLowerCase()));
+  const results: CoverageRow[] = [];
+
+  const groups = schema.groups.filter(g => selectedGroups.has(g.name));
+
+  for (const group of groups) {
+    for (const q of group.questions) {
+      // Try multiple column name patterns ODK exports use
+      const candidates = [
+        q.name,
+        `${group.name}/${q.name}`,
+        `N/${q.name}`,
+        `N/${group.name}/${q.name}`,
+      ];
+      // Also try header that ends with /q.name (any group prefix)
+      const exactMatch = headers.find(h =>
+        candidates.some(c => h.toLowerCase() === c.toLowerCase())
+      );
+      const suffixMatch = exactMatch ?? headers.find(h =>
+        h.toLowerCase().endsWith(`/${q.name.toLowerCase()}`) ||
+        h.toLowerCase() === q.name.toLowerCase()
+      );
+
+      results.push({
+        qName: q.name,
+        label: q.label,
+        type: q.type,
+        groupName: group.name,
+        groupLabel: group.label,
+        found: !!suffixMatch,
+        csvCol: suffixMatch ?? null,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ── XLSForm label lookup ───────────────────────────────────────────────────
+export function getXLSFormLabel(schema: XLSFormSchema | null, colName: string): string {
+  if (!schema) return colName;
+  const bare = colName.split('/').pop() ?? colName;
+  const q = schema.allQuestions.find(
+    q => q.name.toLowerCase() === bare.toLowerCase() || q.name.toLowerCase() === colName.toLowerCase()
+  );
+  return q?.label || colName;
+}
+
 // ── CSV parsing ────────────────────────────────────────────────────────────
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.split(/\r?\n/);
   if (lines.length < 2) return { headers: [], rows: [] };
 
-  // Handle quoted fields
   function splitLine(line: string): string[] {
     const result: string[] = [];
     let current = '';
@@ -191,9 +381,8 @@ export function runQC(
   cols: DetectedColumns
 ): { rows: ParsedRow[]; summary: DatasetSummary; byEnumerator: Map<string, EnumeratorStats> } {
 
-  // First pass: compute basic fields and find duplicates
   const qnCounts: Record<string, number> = {};
-  const admin3Map: Record<string, Set<string>> = {}; // code -> set of names
+  const admin3Map: Record<string, Set<string>> = {};
 
   rawRows.forEach(r => {
     const qn = cols.questionnaireNo ? r[cols.questionnaireNo] : '';
@@ -207,7 +396,6 @@ export function runQC(
     }
   });
 
-  // Sort by enumerator + start for sequence checking
   const sorted = [...rawRows].map((r, i) => ({ r, origIdx: i })).sort((a, b) => {
     const eA = cols.enumerator ? a.r[cols.enumerator] ?? '' : '';
     const eB = cols.enumerator ? b.r[cols.enumerator] ?? '' : '';
@@ -219,14 +407,11 @@ export function runQC(
   });
 
   const parsedRows: ParsedRow[] = new Array(rawRows.length);
-
-  // Track previous submission per enumerator for fast-sequence check
   const lastSubmission: Record<string, Date> = {};
 
   sorted.forEach(({ r, origIdx }) => {
     const flags: QCFlagType[] = [];
 
-    // Duration
     const durMin = durationMin(
       cols.start ? r[cols.start] : '',
       cols.end ? r[cols.end] : ''
@@ -236,7 +421,6 @@ export function runQC(
       if (durMin > 240) flags.push('LONG_DURATION');
     }
 
-    // GPS
     const lat = cols.gpsLat ? r[cols.gpsLat] : '';
     const prec = cols.gpsPrecision ? r[cols.gpsPrecision] : '';
     if (isNA(lat)) {
@@ -246,38 +430,31 @@ export function runQC(
       if (!isNaN(precVal) && precVal > 10) flags.push('POOR_GPS');
     }
 
-    // Consent
     if (cols.consent && !isNA(r[cols.consent]) && r[cols.consent].trim() !== '1') {
       flags.push('NO_CONSENT');
     }
 
-    // Missing phone
     if (cols.phone && isNA(r[cols.phone])) flags.push('MISSING_PHONE');
 
-    // High n/a rate
     const allVals = Object.values(r);
     const naCount = allVals.filter(v => isNA(v)).length;
     const naRate = allVals.length > 0 ? naCount / allVals.length : 0;
     if (naRate > 0.5) flags.push('HIGH_NA_RATE');
 
-    // Duplicate QN
     const qn = cols.questionnaireNo ? r[cols.questionnaireNo] : '';
     if (qn && !isNA(qn) && (qnCounts[qn] ?? 0) > 1) flags.push('DUPLICATE_QN');
 
-    // Test submission
     const isTestQN = qn && /^(1234567|0000|9999|test|demo)/i.test(qn.trim());
     const admin3Name = cols.admin3 ? r[cols.admin3]?.trim() : '';
     const isTestAdmin = admin3Name && /^(r|test|demo|x|y|z)$/i.test(admin3Name);
     if (isTestQN || isTestAdmin) flags.push('TEST_SUBMISSION');
 
-    // Night submission
     const startDate = toDate(cols.start ? r[cols.start] : '');
     if (startDate) {
       const hour = startDate.getHours();
       if (hour < 6 || hour >= 19) flags.push('NIGHT_SUBMISSION');
     }
 
-    // Fast sequence
     const enu = cols.enumerator ? r[cols.enumerator] ?? 'Unknown' : 'Unknown';
     if (startDate && lastSubmission[enu]) {
       const gapMin = (startDate.getTime() - lastSubmission[enu].getTime()) / 60000;
@@ -285,7 +462,6 @@ export function runQC(
     }
     if (startDate) lastSubmission[enu] = startDate;
 
-    // Admin3 mismatch
     const a3code = cols.admin3Code ? r[cols.admin3Code] : '';
     if (a3code && !isNA(a3code) && (admin3Map[a3code]?.size ?? 0) > 1) {
       flags.push('ADMIN_MISMATCH');
@@ -300,45 +476,30 @@ export function runQC(
     };
   });
 
-  // ── By-enumerator aggregation ──────────────────────────────────────────
+  // By-enumerator aggregation
   const byEnumerator = new Map<string, EnumeratorStats>();
-
   parsedRows.forEach(row => {
     const name = cols.enumerator ? String(row[cols.enumerator] ?? 'Unknown') : 'Unknown';
     if (!byEnumerator.has(name)) {
       byEnumerator.set(name, {
-        name,
-        total: 0,
-        flagged: 0,
-        cleanRate: 0,
-        avgDurationMin: null,
-        missingGps: 0,
-        noConsent: 0,
-        shortDuration: 0,
-        longDuration: 0,
-        highNaRate: 0,
-        duplicateQn: 0,
-        testSubmissions: 0,
-        nightSubmissions: 0,
-        fastSequence: 0,
-        flagsByType: {},
-        activeDates: [],
-        admin3Areas: new Set(),
-        submissions: [],
+        name, total: 0, flagged: 0, cleanRate: 0, avgDurationMin: null,
+        missingGps: 0, noConsent: 0, shortDuration: 0, longDuration: 0,
+        highNaRate: 0, duplicateQn: 0, testSubmissions: 0, nightSubmissions: 0,
+        fastSequence: 0, flagsByType: {}, activeDates: [], admin3Areas: new Set(), submissions: [],
       });
     }
     const st = byEnumerator.get(name)!;
     st.total++;
     if (row._flags.length > 0) st.flagged++;
-    if (row._flags.includes('MISSING_GPS'))   st.missingGps++;
-    if (row._flags.includes('NO_CONSENT'))    st.noConsent++;
+    if (row._flags.includes('MISSING_GPS'))    st.missingGps++;
+    if (row._flags.includes('NO_CONSENT'))     st.noConsent++;
     if (row._flags.includes('SHORT_DURATION')) st.shortDuration++;
-    if (row._flags.includes('LONG_DURATION')) st.longDuration++;
-    if (row._flags.includes('HIGH_NA_RATE'))  st.highNaRate++;
-    if (row._flags.includes('DUPLICATE_QN'))  st.duplicateQn++;
+    if (row._flags.includes('LONG_DURATION'))  st.longDuration++;
+    if (row._flags.includes('HIGH_NA_RATE'))   st.highNaRate++;
+    if (row._flags.includes('DUPLICATE_QN'))   st.duplicateQn++;
     if (row._flags.includes('TEST_SUBMISSION')) st.testSubmissions++;
     if (row._flags.includes('NIGHT_SUBMISSION')) st.nightSubmissions++;
-    if (row._flags.includes('FAST_SEQUENCE')) st.fastSequence++;
+    if (row._flags.includes('FAST_SEQUENCE'))  st.fastSequence++;
     row._flags.forEach(f => { st.flagsByType[f] = (st.flagsByType[f] ?? 0) + 1; });
     const dateStr = cols.today ? String(row[cols.today] ?? '') : '';
     if (dateStr && !st.activeDates.includes(dateStr)) st.activeDates.push(dateStr);
@@ -347,14 +508,13 @@ export function runQC(
     st.submissions.push(row);
   });
 
-  // Compute averages
   byEnumerator.forEach(st => {
     st.cleanRate = st.total > 0 ? Math.round(((st.total - st.flagged) / st.total) * 100) : 100;
     const durs = st.submissions.map(s => s._durationMin).filter((d): d is number => d !== null);
     st.avgDurationMin = durs.length > 0 ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : null;
   });
 
-  // ── Global summary ─────────────────────────────────────────────────────
+  // Global summary
   const flaggedRows = parsedRows.filter(r => r._flags.length > 0).length;
   const flagCounts: Partial<Record<QCFlagType, number>> = {};
   parsedRows.forEach(r => r._flags.forEach(f => { flagCounts[f] = (flagCounts[f] ?? 0) + 1; }));
