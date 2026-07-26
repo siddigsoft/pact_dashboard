@@ -825,9 +825,14 @@ const CostSubmission = () => {
   
   const teamMemberIds = getTeamMemberIds();
   
-  // Filter submissions for supervisors to show only their team's submissions
+  // Filter submissions for supervisors to show only their team's submissions.
+  // FOM and CountryDirector bypass this filter — their visibility scope covers
+  // all hubs/states and is handled by the role-specific filter in filteredOperationalCosts.
+  // A FOM who also holds a Supervisor role must NOT be pre-filtered by the supervisor's
+  // hub/state team list, or they would silently lose cross-state submissions.
   const filterSubmissionsForSupervisor = (allSubs: typeof allSubmissionsQuery.submissions) => {
-    if (isAdmin || isSuperAdmin || isAdminOrSuperUser) return allSubs; // Admins & Super Admins see all
+    if (isAdmin || isSuperAdmin || isAdminOrSuperUser) return allSubs;
+    if (isFOM || isCountryDirector) return allSubs; // approval-chain roles: no pre-filter
     if (isSupervisor && teamMemberIds.length > 0) {
       return allSubs?.filter(s => teamMemberIds.includes(s.submittedBy)) || [];
     }
@@ -3636,7 +3641,7 @@ const CostSubmission = () => {
                     {isSuperAdmin ? 'Super Admin View' : 'Admin View'}
                   </Badge>
                 )}
-                {isSupervisor && !isAdmin && !isSuperAdmin && (
+                {isSupervisor && !isFOM && !isCountryDirector && !isAdmin && !isSuperAdmin && (
                   <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300">
                     <Users className="h-3 w-3 mr-1" />
                     Supervisor View
@@ -3646,9 +3651,11 @@ const CostSubmission = () => {
               <p className="text-muted-foreground mt-1">
                 {isAdmin || isSuperAdmin
                   ? "Review, approve, and track cost submissions from all team members"
-                  : isSupervisor
-                    ? "Review and approve cost submissions from your team members"
-                    : "Submit actual costs for completed site visits and track approval status"
+                  : isFOM || isCountryDirector
+                    ? "Review and approve cost submissions from Supervisors and Coordinators. Your approval is required before Finance can process payment."
+                    : isSupervisor
+                      ? "Review and approve cost submissions from your team members"
+                      : "Submit actual costs for completed site visits and track approval status"
                 }
               </p>
             </div>
