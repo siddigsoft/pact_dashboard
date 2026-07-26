@@ -167,10 +167,10 @@ export function parseXLSForm(buffer: ArrayBuffer): XLSFormSchema {
   const groupStack: XLSFormGroup[] = [];
 
   for (const row of rows) {
-    const rawType = (row['type'] ?? '').trim();
+    const rawType = String(row['type'] ?? '').trim();
     const type = rawType.toLowerCase();
-    const name = (row['name'] ?? '').trim();
-    const label = (row[labelCol] ?? row['label'] ?? '').trim() || name;
+    const name = String(row['name'] ?? '').trim();
+    const label = String(row[labelCol] ?? row['label'] ?? '').trim() || name;
 
     if (type.startsWith('begin_group') || type.startsWith('begin repeat') || type.startsWith('begin_repeat')) {
       const grpType: 'group' | 'repeat' =
@@ -197,7 +197,7 @@ export function parseXLSForm(buffer: ArrayBuffer): XLSFormSchema {
         name,
         type: rawType,
         label,
-        required: ['yes', 'true', '1'].includes((row['required'] ?? '').trim().toLowerCase()),
+        required: ['yes', 'true', '1'].includes(String(row['required'] ?? '').trim().toLowerCase()),
         constraint: row['constraint'] ?? '',
         relevant: row['relevant'] ?? '',
       };
