@@ -196,6 +196,13 @@ interface OperationalCostSubmission {
   request_group_id?: string | null;
   request_title?: string | null;
   amount_paid_cents?: number | null;
+  delete_requested_at?: string | null;
+  delete_requested_by?: string | null;
+  delete_request_reason?: string | null;
+  delete_request_status?: 'pending' | 'approved' | 'rejected' | null;
+  delete_request_notes?: string | null;
+  delete_request_reviewed_by?: string | null;
+  delete_request_reviewed_at?: string | null;
 }
 
 const CostSubmission = () => {
@@ -518,6 +525,8 @@ const CostSubmission = () => {
 
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [deleteRequestDialog, setDeleteRequestDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; reason: string }>({ open: false, submission: null, reason: '' });
+  const [deleteReviewDialog, setDeleteReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; notes: string; action: 'approve' | 'reject' }>({ open: false, submission: null, notes: '', action: 'approve' });
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -1841,14 +1850,27 @@ const CostSubmission = () => {
   };
 
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
-    // Delete is restricted to Admin / SuperAdmin / FinancialAdmin only.
-    // FOM, CD, Supervisor, Coordinator, DataCollector, and regular staff cannot delete — not even their own.
-    if (!isSuperAdmin && !isAdmin && !isFinanceAdmin) return false;
+    // Direct delete: Admin and SuperAdmin only. FinancialAdmin uses the approve/reject workflow.
+    if (!isSuperAdmin && !isAdmin) return false;
     const derivedStatus = getOperationalDerivedStatus(oc);
-    if (derivedStatus === 'reconciled') return false; // Reconciled submissions are locked
-    // Per-user override (already restricted to admin-tier users above, but honour the override flag)
-    if (hasDeleteOverride) return true;
+    if (derivedStatus === 'reconciled') return false;
     return true;
+  };
+
+  // Any user who can see a submission can request its deletion (with a reason).
+  // Admins who can directly delete don't need this — they already have the Delete button.
+  const canRequestDeletion = (oc: OperationalCostSubmission): boolean => {
+    if (canDeleteSubmission(oc)) return false; // Admins just delete directly
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus === 'reconciled') return false;
+    // Already has a pending request from this user — show status instead
+    if (oc.delete_request_status === 'pending') return false;
+    return true;
+  };
+
+  // FinancialAdmin, Admin, SuperAdmin can approve or reject pending delete requests
+  const canApproveDeleteRequest = (oc: OperationalCostSubmission): boolean => {
+    return oc.delete_request_status === 'pending' && (isSuperAdmin || isAdmin || isFinanceAdmin);
   };
 
   const openEditItem = (item: OperationalCostSubmission) => {
@@ -3289,6 +3311,140 @@ const CostSubmission = () => {
     } finally {
       setActionProcessing(false);
       setDeleteConfirm(null);
+    }
+  };
+
+  // Submit a deletion request — any user, any status, with a required reason
+  const handleRequestDeletion = async () => {
+    const { submission, reason } = deleteRequestDialog;
+    if (!submission || !reason.trim()) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          delete_requested_at: new Date().toISOString(),
+          delete_requested_by: currentUser?.id,
+          delete_request_reason: reason.trim(),
+          delete_request_status: 'pending',
+          delete_request_notes: null,
+          delete_request_reviewed_by: null,
+          delete_request_reviewed_at: null,
+        })
+        .eq('id', submission.id);
+      if (error) {
+        toast({ title: 'Request Failed', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Deletion Requested', description: 'Your request has been sent to the admin for review.' });
+        // Notify all Admin/SuperAdmin/FinancialAdmin
+        void notifyMgmtOfCostEvent(
+          '🗑 Deletion Request',
+          `${currentUser?.name || 'A user'} requested deletion of: ${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'} — Reason: ${reason.trim()}`,
+          submission.id,
+          currentUser?.id,
+        );
+        fetchOperationalCosts();
+        setDeleteRequestDialog({ open: false, submission: null, reason: '' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to submit deletion request.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+    }
+  };
+
+  // Admin/FinancialAdmin approves a delete request — actually deletes the row
+  const handleApproveDeleteRequest = async () => {
+    const { submission } = deleteReviewDialog;
+    if (!submission) return;
+    setActionProcessing(true);
+    try {
+      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
+      const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', submission.id);
+      if (!unlinkResult.unlinked) {
+        const { data: ocRow } = await (supabase as any)
+          .from('operational_cost_submissions')
+          .select('amount_cents, submitted_by, pre_fund_transaction_id')
+          .eq('id', submission.id)
+          .single();
+        if (ocRow?.pre_fund_transaction_id && ocRow?.amount_cents) {
+          const { data: txn } = await (supabase as any)
+            .from('pre_fund_transactions')
+            .select('pre_fund_request_id')
+            .eq('id', ocRow.pre_fund_transaction_id)
+            .maybeSingle();
+          if (txn?.pre_fund_request_id) {
+            await reverseDirectDeduction(txn.pre_fund_request_id, ocRow.amount_cents / 100, ocRow.submitted_by ?? null);
+          }
+        }
+      }
+      const { error } = await supabase.from('operational_cost_submissions').delete().eq('id', submission.id);
+      if (error) {
+        toast({ title: 'Approve Failed', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Deletion Approved', description: 'The submission has been deleted.' });
+        // Notify the original requester
+        if (submission.delete_requested_by) {
+          dispatchNotification({
+            userId: submission.delete_requested_by,
+            title: '✅ Deletion Request Approved',
+            message: `Your request to delete "${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}" was approved and the submission has been removed.`,
+            type: 'success',
+            category: 'financial',
+            priority: 'normal',
+            link: '/cost-submission',
+            sendEmail: true,
+          });
+        }
+        fetchOperationalCosts();
+        setDeleteReviewDialog({ open: false, submission: null, notes: '', action: 'approve' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to approve deletion.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+    }
+  };
+
+  // Admin/FinancialAdmin rejects a delete request — clears the request and notifies the requester
+  const handleRejectDeleteRequest = async () => {
+    const { submission, notes } = deleteReviewDialog;
+    if (!submission) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          delete_request_status: 'rejected',
+          delete_request_notes: notes.trim() || null,
+          delete_request_reviewed_by: currentUser?.id,
+          delete_request_reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', submission.id);
+      if (error) {
+        toast({ title: 'Reject Failed', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Request Rejected', description: 'The deletion request has been rejected and the submitter notified.' });
+        // Notify the requester with feedback
+        if (submission.delete_requested_by) {
+          dispatchNotification({
+            userId: submission.delete_requested_by,
+            title: '❌ Deletion Request Rejected',
+            message: `Your request to delete "${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}" was rejected.${notes.trim() ? ` Feedback: ${notes.trim()}` : ' Please make the required corrections and resubmit.'}`,
+            type: 'warning',
+            category: 'financial',
+            priority: 'normal',
+            link: `/cost-submission?open=${submission.id}`,
+            sendEmail: true,
+          });
+        }
+        fetchOperationalCosts();
+        setDeleteReviewDialog({ open: false, submission: null, notes: '', action: 'approve' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to reject request.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
     }
   };
 
@@ -6547,6 +6703,50 @@ const CostSubmission = () => {
                                 Delete
                               </Button>
                             )}
+                            {canRequestDeletion(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                                onClick={() => setDeleteRequestDialog({ open: true, submission: oc, reason: '' })}
+                                data-testid={`button-request-delete-${oc.id}`}
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Request Deletion
+                              </Button>
+                            )}
+                            {oc.delete_request_status === 'pending' && !canApproveDeleteRequest(oc) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-orange-100 text-orange-700 border border-orange-300">
+                                <Trash2 className="h-3 w-3" />Deletion Pending
+                              </span>
+                            )}
+                            {oc.delete_request_status === 'rejected' && !canDeleteSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                                onClick={() => setDeleteRequestDialog({ open: true, submission: oc, reason: '' })}
+                                data-testid={`button-request-delete-again-${oc.id}`}
+                                title={oc.delete_request_notes ? `Rejected: ${oc.delete_request_notes}` : 'Request rejected — click to request again'}
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Request Again
+                              </Button>
+                            )}
+                            {canApproveDeleteRequest(oc) && (
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="destructive" className="h-7 px-2.5 text-xs"
+                                  onClick={() => setDeleteReviewDialog({ open: true, submission: oc, notes: '', action: 'approve' })}
+                                  data-testid={`button-approve-delete-${oc.id}`}>
+                                  <Trash2 className="h-3 w-3 mr-1" />Approve Delete
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs"
+                                  onClick={() => setDeleteReviewDialog({ open: true, submission: oc, notes: '', action: 'reject' })}
+                                  data-testid={`button-reject-delete-${oc.id}`}>
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
                             {canRecallSubmission(oc) && (
                               <Button
                                 size="sm"
@@ -7406,6 +7606,43 @@ const CostSubmission = () => {
                               <button className={btnDanger} onClick={() => setDeleteConfirm(oc)} data-testid={`button-delete-submission-${oc.id}`}>
                                 <Trash2 className="h-3.5 w-3.5" />Delete
                               </button>
+                            )}
+                            {canRequestDeletion(oc) && (
+                              <button
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-red-300 text-red-700 hover:bg-red-50 transition-colors"
+                                onClick={() => setDeleteRequestDialog({ open: true, submission: oc, reason: '' })}
+                                data-testid={`button-request-delete-${oc.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />Request Deletion
+                              </button>
+                            )}
+                            {oc.delete_request_status === 'pending' && !canApproveDeleteRequest(oc) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-orange-100 text-orange-700 border border-orange-300">
+                                <Trash2 className="h-3.5 w-3.5" />Deletion Pending
+                              </span>
+                            )}
+                            {oc.delete_request_status === 'rejected' && !canDeleteSubmission(oc) && (
+                              <button
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-red-300 text-red-700 hover:bg-red-50 transition-colors"
+                                onClick={() => setDeleteRequestDialog({ open: true, submission: oc, reason: '' })}
+                                title={oc.delete_request_notes ? `Rejected: ${oc.delete_request_notes}` : 'Request rejected — click to request again'}
+                                data-testid={`button-request-delete-again-${oc.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />Request Again
+                              </button>
+                            )}
+                            {canApproveDeleteRequest(oc) && (
+                              <div className="flex gap-1">
+                                <button className={btnDanger}
+                                  onClick={() => setDeleteReviewDialog({ open: true, submission: oc, notes: '', action: 'approve' })}
+                                  data-testid={`button-approve-delete-${oc.id}`}>
+                                  <Trash2 className="h-3.5 w-3.5" />Approve Delete
+                                </button>
+                                <button
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                                  onClick={() => setDeleteReviewDialog({ open: true, submission: oc, notes: '', action: 'reject' })}
+                                  data-testid={`button-reject-delete-${oc.id}`}>
+                                  Reject
+                                </button>
+                              </div>
                             )}
                           </div>
                             );
@@ -8952,6 +9189,98 @@ const CostSubmission = () => {
               data-testid="button-delete-confirm"
             >
               {actionProcessing ? 'Deleting... / جارٍ الحذف...' : 'Delete / حذف'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Request Deletion dialog (any user) ─────────────────────────── */}
+      <AlertDialog open={deleteRequestDialog.open} onOpenChange={(open) => !open && setDeleteRequestDialog({ open: false, submission: null, reason: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Request Deletion / طلب الحذف</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your request will be reviewed by an admin. Provide a clear reason below.
+              {deleteRequestDialog.submission && (
+                <span className="block mt-2 font-medium text-foreground">
+                  {deleteRequestDialog.submission.currency} {(deleteRequestDialog.submission.amount_cents / 100).toLocaleString()} — {deleteRequestDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 pb-2">
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Reason for deletion (required) / سبب الحذف (مطلوب)"
+              value={deleteRequestDialog.reason}
+              onChange={(e) => setDeleteRequestDialog(prev => ({ ...prev, reason: e.target.value }))}
+              data-testid="input-delete-request-reason"
+            />
+            {deleteRequestDialog.submission?.delete_request_status === 'rejected' && deleteRequestDialog.submission.delete_request_notes && (
+              <p className="mt-2 text-xs text-destructive">Previous rejection feedback: {deleteRequestDialog.submission.delete_request_notes}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionProcessing || !deleteRequestDialog.reason.trim()}
+              onClick={(e) => { e.preventDefault(); handleRequestDeletion(); }}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-submit-delete-request"
+            >
+              {actionProcessing ? 'Sending…' : 'Submit Request'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Review Delete Request dialog (Admin / FinancialAdmin) ───────── */}
+      <AlertDialog open={deleteReviewDialog.open} onOpenChange={(open) => !open && setDeleteReviewDialog({ open: false, submission: null, notes: '', action: 'approve' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteReviewDialog.action === 'approve' ? '🗑 Approve Deletion Request' : '❌ Reject Deletion Request'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteReviewDialog.submission && (
+                <>
+                  <span className="block font-medium text-foreground">
+                    {deleteReviewDialog.submission.currency} {(deleteReviewDialog.submission.amount_cents / 100).toLocaleString()} — {deleteReviewDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                  </span>
+                  {deleteReviewDialog.submission.delete_request_reason && (
+                    <span className="block mt-1 text-xs">Reason: {deleteReviewDialog.submission.delete_request_reason}</span>
+                  )}
+                </>
+              )}
+              {deleteReviewDialog.action === 'approve'
+                ? 'This will permanently delete the submission and notify the requester.'
+                : 'The requester will be notified with your feedback so they can make corrections.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteReviewDialog.action === 'reject' && (
+            <div className="px-6 pb-2">
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[70px] focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Feedback to requester (optional but recommended)"
+                value={deleteReviewDialog.notes}
+                onChange={(e) => setDeleteReviewDialog(prev => ({ ...prev, notes: e.target.value }))}
+                data-testid="input-delete-reject-notes"
+              />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionProcessing}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteReviewDialog.action === 'approve') handleApproveDeleteRequest();
+                else handleRejectDeleteRequest();
+              }}
+              className={deleteReviewDialog.action === 'approve' ? 'bg-destructive text-destructive-foreground' : ''}
+              data-testid="button-confirm-delete-review"
+            >
+              {actionProcessing ? 'Processing…' : deleteReviewDialog.action === 'approve' ? 'Approve & Delete' : 'Reject & Notify'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
