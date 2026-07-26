@@ -1841,13 +1841,14 @@ const CostSubmission = () => {
   };
 
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
-    if (isSuperAdmin) return true;
+    // Delete is restricted to Admin / SuperAdmin / FinancialAdmin only.
+    // FOM, CD, Supervisor, Coordinator, DataCollector, and regular staff cannot delete — not even their own.
+    if (!isSuperAdmin && !isAdmin && !isFinanceAdmin) return false;
     const derivedStatus = getOperationalDerivedStatus(oc);
-    // Per-user override: can delete any non-reconciled submission
-    if (hasDeleteOverride && derivedStatus !== 'reconciled') return true;
-    if (derivedStatus !== 'pending') return false;
-    if (isAdmin) return true;
-    return oc.submitted_by === currentUser?.id;
+    if (derivedStatus === 'reconciled') return false; // Reconciled submissions are locked
+    // Per-user override (already restricted to admin-tier users above, but honour the override flag)
+    if (hasDeleteOverride) return true;
+    return true;
   };
 
   const openEditItem = (item: OperationalCostSubmission) => {
@@ -5645,7 +5646,7 @@ const CostSubmission = () => {
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
                                 </Button>
                               )}
-                              {(grpPaidCnt + grpPartialCnt) > 0 && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
+                              {(grpPaidCnt + grpPartialCnt) > 0 && !isCountryDirector && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
                                 const grpPaidItems = groupItems.filter(o => {
                                   const ds = getOperationalDerivedStatus(o);
                                   return ds === 'paid' || ds === 'reconciled' || ds === 'partially_paid';
