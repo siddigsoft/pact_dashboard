@@ -922,18 +922,23 @@ const CostSubmission = () => {
           return false;
         });
       } else if (isSupervisor) {
+        const myHubId = (currentUser as any)?.hubId;
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
-          if (teamMemberIds.length > 0 && teamMemberIds.includes(o.submitted_by)) return true;
-          // Show submissions this Supervisor has already actioned (T1 approved/rejected)
+          // Already actioned by this Supervisor (T1 approved or rejected)
           if (o.tier1_approved_by === currentUser?.id) return true;
-          // Show Coordinator/Enumerator/DataCollector submissions — but only from the same hub
-          const submitterRole = (o.submitter_role || '').toLowerCase();
-          const isCoordEnumSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator') || submitterRole.includes('datacollector');
+          const submitterRole = (o.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+          // Never show other Supervisors' submissions — each Supervisor only sees their own hub's Coordinators
+          const isOtherSupervisorSub = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
+          if (isOtherSupervisorSub) return false;
+          // Coordinator/DataCollector submissions: strict hub match required
+          const isCoordEnumSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
+            || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
+            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
           if (isCoordEnumSub) {
-            const myHubId = (currentUser as any)?.hubId;
-            const sameHub = !o.hub_id || !myHubId || o.hub_id === myHubId;
-            if (sameHub) return true;
+            if (!myHubId) return false; // Supervisor with no hub assigned cannot see coordinator submissions
+            if (!o.hub_id) return teamMemberIds.includes(o.submitted_by); // Fallback: accept if confirmed team member
+            return o.hub_id === myHubId; // Strict hub match
           }
           return false;
         });
@@ -1065,8 +1070,9 @@ const CostSubmission = () => {
     if (hasFourTiers(oc)) {
       if (!isPrimaryRoleSupervisor) return false;
       const myHubId = (currentUser as any)?.hubId;
-      if (!oc.hub_id || !myHubId) return true;
-      return oc.hub_id === myHubId;
+      if (!myHubId) return false; // Supervisor with no hub assigned cannot approve
+      if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by); // No hub on submission → team membership fallback
+      return oc.hub_id === myHubId; // Strict hub match
     }
     // Supervisor: T1 = FOM (hub-scoped if FOM has additional supervisor roles)
     if (hasThreeTiers(oc)) {
