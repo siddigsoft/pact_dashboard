@@ -619,87 +619,171 @@ export default function DataQualityPage() {
   }, []);
 
   // ── AI Report Download (text) ────────────────────────────────────────────
-  const downloadAiReport = useCallback(() => {
-    if (!aiInsights || !dataset) return;
-    const date = new Date().toLocaleDateString('en-GB');
-    const lines: string[] = [
-      '═══════════════════════════════════════════════════════════════',
-      '         PACT DATA QUALITY CONTROL — AI ANALYSIS REPORT',
-      '═══════════════════════════════════════════════════════════════',
-      `Form   : ${xlsSchema?.formTitle ?? 'N/A'}`,
-      `Dataset: ${dataset.name}`,
-      `Date   : ${date}`,
-      `Total  : ${dataset.rows.length.toLocaleString()} submissions · ${dataset.summary.flaggedRows} flagged · ${dataset.summary.cleanRate}% clean`,
+  // Build the full combined report text (AI narrative + real data points)
+  const buildFullReportText = useCallback((): string => {
+    if (!aiInsights || !dataset) return '';
+    const { summary, byEnumerator, cols } = dataset;
+    const total = dataset.rows.length;
+    const pct = (n: number) => total > 0 ? ` (${Math.round((n / total) * 100)}%)` : '';
+    const sep  = '═══════════════════════════════════════════════════════════════';
+    const dash = '───────────────────────────────────────────────────────────────';
+
+    // Flag counts
+    const fc = summary.flagCounts;
+    const flagLines = [
+      fc.MISSING_GPS      ? `  Missing GPS              : ${fc.MISSING_GPS}${pct(fc.MISSING_GPS)}` : '',
+      fc.POOR_GPS         ? `  Poor GPS precision (>10m): ${fc.POOR_GPS}${pct(fc.POOR_GPS)}` : '',
+      fc.SHORT_DURATION   ? `  Short interview (<10 min) : ${fc.SHORT_DURATION}${pct(fc.SHORT_DURATION)}` : '',
+      fc.LONG_DURATION    ? `  Long interview (>4 hrs)   : ${fc.LONG_DURATION}${pct(fc.LONG_DURATION)}` : '',
+      fc.HIGH_NA_RATE     ? `  High N/A rate (>50%)      : ${fc.HIGH_NA_RATE}${pct(fc.HIGH_NA_RATE)}` : '',
+      fc.DUPLICATE_QN     ? `  Duplicate questionnaire # : ${fc.DUPLICATE_QN}${pct(fc.DUPLICATE_QN)}` : '',
+      fc.NO_CONSENT       ? `  No consent recorded       : ${fc.NO_CONSENT}${pct(fc.NO_CONSENT)}` : '',
+      fc.TEST_SUBMISSION  ? `  Test/demo submissions     : ${fc.TEST_SUBMISSION}${pct(fc.TEST_SUBMISSION)}` : '',
+      fc.NIGHT_SUBMISSION ? `  Night submissions          : ${fc.NIGHT_SUBMISSION}${pct(fc.NIGHT_SUBMISSION)}` : '',
+      fc.FAST_SEQUENCE    ? `  Fast sequence (<5 min gap): ${fc.FAST_SEQUENCE}${pct(fc.FAST_SEQUENCE)}` : '',
+      fc.ADMIN_MISMATCH   ? `  Admin area mismatch       : ${fc.ADMIN_MISMATCH}${pct(fc.ADMIN_MISMATCH)}` : '',
+    ].filter(Boolean);
+
+    // Enumerator rows (sorted by flagged desc)
+    const enumRows = [...byEnumerator.values()]
+      .sort((a, b) => b.flagged - a.flagged)
+      .map(e => {
+        const pads = (s: string, n: number) => s.length > n ? s.slice(0, n - 1) + '…' : s.padEnd(n);
+        return (
+          `  ${pads(e.name, 30)} Total:${String(e.total).padStart(5)}  Flagged:${String(e.flagged).padStart(5)}  Clean:${String(e.cleanRate).padStart(4)}%` +
+          (e.missingGps   ? `  GPS:${e.missingGps}` : '') +
+          (e.shortDuration ? `  Short:${e.shortDuration}` : '') +
+          (e.noConsent    ? `  NoConsent:${e.noConsent}` : '')
+        );
+      });
+
+    // Section coverage
+    const covLines = coverageRows.length > 0 ? [
+      dash,
+      'SECTION / FORM COVERAGE',
+      dash,
+      `  Questions in selected scope : ${coverageRows.length}`,
+      `  Found in CSV                : ${coverageRows.filter(r => r.found).length}`,
+      `  Missing from CSV            : ${coverageRows.filter(r => !r.found).length}`,
       '',
-      '───────────────────────────────────────────────────────────────',
-      'FORM PURPOSE',
-      '───────────────────────────────────────────────────────────────',
+      ...coverageRows.filter(r => !r.found).map(r => `  ✗ MISSING  [${r.groupLabel}] ${r.label} (${r.type})`),
+      ...coverageRows.filter(r => r.found).map(r => `  ✓ found    [${r.groupLabel}] ${r.label} → ${r.csvCol}`),
+    ] : [];
+
+    const lines = [
+      sep,
+      '     PACT DATA QUALITY CONTROL — FULL COMBINED REPORT',
+      sep,
+      `Form          : ${xlsSchema?.formTitle ?? 'N/A'}`,
+      `Dataset       : ${dataset.name}`,
+      `Generated     : ${new Date().toLocaleString()}`,
+      `Date range    : ${summary.dateRange.min || 'N/A'} → ${summary.dateRange.max || 'N/A'}`,
+      `Enumerators   : ${summary.enumerators.length}`,
+      `Admin areas   : ${summary.admin3Values.length} localities`,
+      '',
+      dash,
+      'DATASET SUMMARY',
+      dash,
+      `  Total submissions : ${total.toLocaleString()}`,
+      `  Flagged           : ${summary.flaggedRows.toLocaleString()}${pct(summary.flaggedRows)}`,
+      `  Clean             : ${(total - summary.flaggedRows).toLocaleString()} (${summary.cleanRate}%)`,
+      `  Avg duration      : ${summary.avgDurationMin != null ? summary.avgDurationMin + ' min' : 'N/A'}`,
+      `  Missing GPS       : ${summary.missingGpsPct}%`,
+      '',
+      dash,
+      'QC FLAG BREAKDOWN',
+      dash,
+      ...flagLines,
+      '',
+      dash,
+      'ENUMERATOR PERFORMANCE',
+      dash,
+      `  ${'Enumerator'.padEnd(30)} ${'Total'.padStart(5)}   ${'Flagged'.padStart(7)}   ${'Clean'.padStart(5)}%`,
+      `  ${'-'.repeat(62)}`,
+      ...enumRows,
+      '',
+      dash,
+      'AI ANALYSIS — FORM PURPOSE',
+      dash,
       aiInsights.formPurpose,
       '',
-      'KEY INDICATORS: ' + aiInsights.keyIndicators.join(' · '),
+      `Key Indicators: ${aiInsights.keyIndicators.join(' · ')}`,
       '',
-      '───────────────────────────────────────────────────────────────',
-      'QC FOCUS AREAS',
-      '───────────────────────────────────────────────────────────────',
-      ...aiInsights.focusAreas.flatMap(fa => [
-        `[${fa.priority.toUpperCase()}] ${fa.title}`,
-        `  ${fa.description}`,
-        fa.sections.length ? `  Sections: ${fa.sections.join(', ')}` : '',
-        '',
-      ]),
-      '───────────────────────────────────────────────────────────────',
-      'CROSS-SECTION CHECKS',
-      '───────────────────────────────────────────────────────────────',
+      dash,
+      'AI ANALYSIS — QC FOCUS AREAS',
+      dash,
+      ...aiInsights.focusAreas.flatMap(fa => {
+        // Try to attach a real count for this focus area based on matching flag
+        const relevantCount = Object.entries(fc)
+          .filter(([k]) => fa.title.toLowerCase().includes(k.toLowerCase().replace(/_/g, ' '))
+            || fa.description.toLowerCase().includes(k.toLowerCase().replace(/_/g, ' ')))
+          .reduce((s, [, v]) => s + (v ?? 0), 0);
+        return [
+          `[${fa.priority.toUpperCase()}] ${fa.title}${relevantCount > 0 ? ` — ${relevantCount} submission(s) affected` : ''}`,
+          `  ${fa.description}`,
+          fa.sections.length ? `  Form sections: ${fa.sections.join(', ')}` : '',
+          '',
+        ].filter(l => l !== undefined) as string[];
+      }),
+      dash,
+      'AI ANALYSIS — CROSS-SECTION CHECKS',
+      dash,
       ...aiInsights.crossChecks.flatMap(cc => [
         `• ${cc.title}`,
         `  ${cc.description}`,
         cc.sections.length ? `  Involves: ${cc.sections.join(', ')}` : '',
         '',
       ]),
-      '───────────────────────────────────────────────────────────────',
-      'RECOMMENDED REPORT STRUCTURE',
-      '───────────────────────────────────────────────────────────────',
+      ...covLines,
+      '',
+      dash,
+      'AI ANALYSIS — RECOMMENDED REPORT STRUCTURE',
+      dash,
       ...aiInsights.reportSections.map((s, i) => `  ${i + 1}. ${s}`),
       '',
-      '───────────────────────────────────────────────────────────────',
-      'RED FLAGS TO WATCH',
-      '───────────────────────────────────────────────────────────────',
-      ...aiInsights.redFlags.map(rf => `  ⚑ ${rf}`),
+      dash,
+      'AI ANALYSIS — RED FLAGS TO WATCH  (with data)',
+      dash,
+      ...aiInsights.redFlags.map(rf => {
+        // Try to find a matching real count
+        const matchCount = Object.entries(fc).find(([k]) =>
+          rf.toLowerCase().includes(k.toLowerCase().replace(/_/g, ' '))
+          || rf.toLowerCase().includes(k.toLowerCase().replace(/_/g,' ').split(' ').slice(0,2).join(' '))
+        );
+        const note = matchCount && matchCount[1] ? ` [${matchCount[1]} rows affected${pct(matchCount[1])}]` : '';
+        return `  ⚑ ${rf}${note}`;
+      }),
       '',
-      '═══════════════════════════════════════════════════════════════',
-      `Generated by PACT Command Center — ${new Date().toLocaleString()}`,
-      '═══════════════════════════════════════════════════════════════',
+      sep,
+      'ENUMERATORS LISTED IN THIS DATASET',
+      sep,
+      ...summary.enumerators.map((e, i) => {
+        const st = byEnumerator.get(e);
+        return `  ${String(i + 1).padStart(3)}. ${e}${st ? `  (${st.total} submissions, ${st.flagged} flagged, ${st.cleanRate}% clean)` : ''}`;
+      }),
+      '',
+      sep,
+      `PACT Command Center — ${new Date().toLocaleString()}`,
+      sep,
     ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    return lines.join('\n');
+  }, [aiInsights, dataset, xlsSchema, coverageRows]);
+
+  const downloadAiReport = useCallback(() => {
+    if (!aiInsights || !dataset) return;
+    const text = buildFullReportText();
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `AI_QC_Report_${dataset.name.replace(/\.[^.]+$/, '')}_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `QC_Full_Report_${dataset.name.replace(/\.[^.]+$/, '')}_${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
-  }, [aiInsights, dataset, xlsSchema]);
+  }, [aiInsights, dataset, buildFullReportText]);
 
   const copyAiReport = useCallback(async () => {
     if (!aiInsights || !dataset) return;
-    const lines = [
-      `PACT DQC AI Report — ${xlsSchema?.formTitle ?? dataset.name} — ${new Date().toLocaleDateString()}`,
-      '',
-      `Form Purpose: ${aiInsights.formPurpose}`,
-      `Key Indicators: ${aiInsights.keyIndicators.join(', ')}`,
-      '',
-      'QC FOCUS AREAS:',
-      ...aiInsights.focusAreas.map(fa => `  [${fa.priority}] ${fa.title}: ${fa.description}`),
-      '',
-      'CROSS-CHECKS:',
-      ...aiInsights.crossChecks.map(cc => `  • ${cc.title}: ${cc.description}`),
-      '',
-      'RECOMMENDED REPORT STRUCTURE:',
-      ...aiInsights.reportSections.map((s, i) => `  ${i + 1}. ${s}`),
-      '',
-      'RED FLAGS:',
-      ...aiInsights.redFlags.map(rf => `  ⚑ ${rf}`),
-    ];
-    await navigator.clipboard.writeText(lines.join('\n'));
-  }, [aiInsights, dataset, xlsSchema]);
+    await navigator.clipboard.writeText(buildFullReportText());
+  }, [aiInsights, dataset, buildFullReportText]);
 
   // ── Excel Report Export ──────────────────────────────────────────────────
   const exportFullReport = useCallback(async () => {
@@ -2107,20 +2191,38 @@ export default function DataQualityPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t">
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={downloadAiReport}>
-                          <Download className="w-3.5 h-3.5 mr-1.5" /> Download Report
+                    {/* ── Export toolbar ── */}
+                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Export this analysis</p>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Text report — AI narrative + all real data points */}
+                        <Button size="sm" onClick={downloadAiReport}
+                          className="bg-purple-600 hover:bg-purple-700 text-white gap-1.5">
+                          <Download className="w-3.5 h-3.5" />
+                          Download Full Report (.txt)
                         </Button>
-                        <Button variant="outline" size="sm" onClick={async () => {
+                        {/* Excel — all 6 sheets including AI Analysis sheet */}
+                        <Button size="sm" variant="outline" onClick={exportFullReport}
+                          className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400">
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                          Export Excel (all sheets)
+                        </Button>
+                        {/* Copy to clipboard */}
+                        <Button size="sm" variant="outline" onClick={async () => {
                           await copyAiReport();
                           const btn = document.getElementById('ai-copy-btn');
-                          if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Copy Text'; }, 2000); }
-                        }}>
-                          <Copy className="w-3.5 h-3.5 mr-1.5" /><span id="ai-copy-btn">Copy Text</span>
+                          if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if (btn) btn.textContent = 'Copy to Clipboard'; }, 2000); }
+                        }} className="gap-1.5">
+                          <Copy className="w-3.5 h-3.5" /><span id="ai-copy-btn">Copy to Clipboard</span>
                         </Button>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => fetchAiInsights(xlsSchema)}>
+                      <p className="text-xs text-muted-foreground">
+                        Full Report includes: AI narrative + flag counts + enumerator stats + section coverage + all enumerator names.
+                        Excel includes 6 sheets: Summary, By Enumerator, QC Flags, Section Coverage, GPS Data, AI Analysis.
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button variant="ghost" size="sm" onClick={() => fetchAiInsights(xlsSchema)} className="text-muted-foreground">
                         <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh Analysis
                       </Button>
                     </div>
