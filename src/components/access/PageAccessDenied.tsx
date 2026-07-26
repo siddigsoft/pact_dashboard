@@ -18,10 +18,10 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function PageAccessDenied({ pageLabel, reason = 'blocked' }: PageAccessDeniedProps) {
   const navigate = useNavigate();
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
 
-  const roleDisplay = currentUser?.role
-    ? (ROLE_LABELS[currentUser.role] ?? currentUser.role)
+  const roleDisplay = effectiveCurrentUser?.role
+    ? (ROLE_LABELS[effectiveCurrentUser.role] ?? effectiveCurrentUser.role)
     : 'Unknown';
 
   return (

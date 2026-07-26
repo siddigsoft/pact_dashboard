@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -508,10 +509,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId, mmpName = '
 
   const { createRequest, editRequest } = useDownPayment();
   const { currentUser } = useUser();
+  const { effectiveRole } = useAuthorization();
 
   // Roles that may open the Operational Report
   const REPORT_ROLES = new Set(['admin','Admin','superAdmin','super_admin','superadmin','SuperAdmin','fom','FOM','ict','ICT']);
-  const canAccessReport = REPORT_ROLES.has(currentUser?.role || '');
+  const canAccessReport = REPORT_ROLES.has(effectiveRole || '');
 
   const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null; editMode: boolean; existingAdvance: AdvanceInfo | null }>({ open: false, site: null, editMode: false, existingAdvance: null });
   const [fundAmount, setFundAmount] = useState('');

@@ -60,7 +60,7 @@ interface Filters {
 export const OperationsZone: React.FC = () => {
   const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const { users, currentUser } = useUser();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, effectiveRole } = useAuthorization();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
@@ -73,19 +73,19 @@ export const OperationsZone: React.FC = () => {
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
     if (!currentUser) return false;
-    const role = (currentUser.role || '').toLowerCase();
+    const role = (effectiveRole || currentUser.role || '').toLowerCase();
     const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
     return (hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor') && !isAdmin;
-  }, [currentUser, hasAnyRole]);
+  }, [currentUser, effectiveRole, hasAnyRole]);
 
   // Check if user is a coordinator (not admin/ict/supervisor)
   const isCoordinator = useMemo(() => {
     if (!currentUser) return false;
-    const role = (currentUser.role || '').toLowerCase();
+    const role = (effectiveRole || currentUser.role || '').toLowerCase();
     const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
     const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor';
     return (hasAnyRole(['coordinator', 'Coordinator']) || role === 'coordinator') && !isAdmin && !isSupervisorRole;
-  }, [currentUser, hasAnyRole]);
+  }, [currentUser, effectiveRole, hasAnyRole]);
 
   // State for coordinator's state name
   const [coordinatorStateName, setCoordinatorStateName] = useState<string | null>(null);

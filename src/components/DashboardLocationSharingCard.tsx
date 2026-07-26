@@ -15,7 +15,7 @@ interface LocationData {
 }
 
 const DashboardLocationSharingCard = () => {
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
   const [locationEnabled, setLocationEnabled] = useState<boolean>(false);
   const [locationData, setLocationData] = useState<LocationData | null>(null);
   
@@ -46,7 +46,7 @@ const DashboardLocationSharingCard = () => {
   }, [currentUser]);
   
   const isDataCollector = currentUser && 
-    ['dataCollector', 'datacollector', 'coordinator'].includes((currentUser.role || '').toLowerCase());
+    ['dataCollector', 'datacollector', 'coordinator'].includes((effectiveCurrentUser?.role || '').toLowerCase());
   
   if (!isDataCollector) {
     return null;

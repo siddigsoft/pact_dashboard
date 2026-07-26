@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow, parseISO, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 
 export function EmployeeZone() {
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
   const userId = currentUser?.id;
   const today = new Date();
 
@@ -110,7 +110,7 @@ export function EmployeeZone() {
         <div className="flex-1 min-w-0">
           <p className="text-blue-200 text-xs font-medium">Welcome back</p>
           <h1 className="text-xl font-bold truncate">{currentUser?.name ?? 'Employee'}</h1>
-          <p className="text-blue-300 text-xs capitalize">{currentUser?.role ?? 'Employee'} · {today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <p className="text-blue-300 text-xs capitalize">{effectiveCurrentUser?.role ?? 'Employee'} · {today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
         <div className="text-right shrink-0">
           <p className="text-blue-200 text-[10px] font-medium">Annual Leave Left</p>

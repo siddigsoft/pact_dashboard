@@ -1,4 +1,5 @@
 import { useCallback, useMemo, type FC, type ReactNode } from 'react';
+import { useViewAs } from './ViewAsContext';
 import { createContext, useContext, useContextSelector } from 'use-context-selector';
 import { calculateDistanceFee as _calculateDistanceFee } from '@/utils/distanceFee';
 import { UserProvider, useUser } from './user/UserContext';
@@ -32,6 +33,10 @@ import { LocationProvider } from './location/LocationContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
+  /** Same as currentUser but with `.role` overridden by the viewAs role when preview is active.
+   *  Use this for role-based display labels and show/hide logic.
+   *  Never use for DB writes — those must record the real user's role. */
+  effectiveCurrentUser: ReturnType<typeof useUser>['currentUser'];
   authReady: boolean;
   users: ReturnType<typeof useUser>['users'];
   refreshUsers: ReturnType<typeof useUser>['refreshUsers'];
@@ -90,6 +95,7 @@ const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => 
   const siteVisitContext = useSiteVisitContext();
   const notificationContext = useNotifications();
   const roleManagement = useRoleManagement();
+  const { viewAs } = useViewAs();
   
   // Memoized utility functions to prevent recreation on each render
   const hasGranularPermission = useCallback((resource: ResourceType, action: ActionType): boolean => {
@@ -102,9 +108,17 @@ const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => 
     [],
   );
   
+  // Effective currentUser: same object but .role overridden by viewAs when preview is active
+  const effectiveCurrentUser = useMemo(() => {
+    const cu = userContext.currentUser;
+    if (!cu || !viewAs?.role) return cu;
+    return { ...cu, role: viewAs.role };
+  }, [userContext.currentUser, viewAs?.role]);
+
   // Memoized context value to prevent unnecessary re-renders
   const contextValue = useMemo<CompositeContextType>(() => ({
     ...userContext,
+    effectiveCurrentUser,
     ...mmpContext,
     ...siteVisitContext,
     ...notificationContext,
@@ -127,6 +141,7 @@ const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => 
     notificationContext,
     hasGranularPermission,
     calculateDistanceFee,
+    effectiveCurrentUser,
   ]);
   
   return (

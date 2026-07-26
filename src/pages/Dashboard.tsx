@@ -34,14 +34,14 @@ const normalizeRole = (role: string): string => {
 
 const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
-  const { roles, currentUser } = useAppContext();
+  const { roles, currentUser, effectiveCurrentUser } = useAppContext();
   const { dashboardPreferences, getDefaultZoneForRole, userSettings } = useSettings();
   const { showWalkthrough, dismissWalkthrough } = useWalkthrough(currentUser?.id, currentUser?.role);
 
   // Dashboard stays as-is — super admin landing redirect is handled at login time in AuthForm
 
   const defaultZone = useMemo((): DashboardZone => {
-    const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;
+    const normalizedCurrentRole = effectiveCurrentUser?.role ? normalizeRole(effectiveCurrentUser.role) : undefined;
 
     // Admin and SuperAdmin always take highest priority — checked first so that
     // a user who has admin as their primary role is never overridden by a
@@ -107,8 +107,8 @@ const Dashboard = () => {
   useEffect(() => {
     if (fallbackToastShown.current) return;
     if (defaultZone !== 'operations') return;
-    if (!currentUser?.role && (!roles || roles.length === 0)) return;
-    const role = currentUser?.role ? normalizeRole(currentUser.role) : '';
+    if (!effectiveCurrentUser?.role && (!roles || roles.length === 0)) return;
+    const role = effectiveCurrentUser?.role ? normalizeRole(effectiveCurrentUser.role) : '';
     const allRoles = [role, ...(roles ?? []).map(r => normalizeRole(r))].filter(Boolean);
     const matchedAnything = allRoles.some(r =>
       r === 'admin' || r === 'superadmin'
@@ -169,7 +169,7 @@ const Dashboard = () => {
           <WelcomeWalkthrough
             userId={currentUser.id}
             userName={currentUser.name || currentUser.email || ''}
-            userRole={currentUser.role || ''}
+            userRole={effectiveCurrentUser?.role || ''}
             open={showWalkthrough}
             onClose={dismissWalkthrough}
           />
@@ -178,7 +178,7 @@ const Dashboard = () => {
         {currentUser && (
           <MobileAppDownloadCard
             userId={currentUser.id}
-            userRole={currentUser.role || ''}
+            userRole={effectiveCurrentUser?.role || ''}
           />
         )}
         

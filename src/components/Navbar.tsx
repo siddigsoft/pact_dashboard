@@ -13,6 +13,7 @@ import { MoonIcon, SunIcon, Settings, LogOut, UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/context/user/UserContext';
+import { useViewAs } from '@/context/ViewAsContext';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -53,6 +54,7 @@ const Navbar = () => {
         const { setTheme, theme } = useTheme();
         const navigate = useNavigate();
         const { currentUser, logout } = useUser();
+        const { viewAs } = useViewAs();
         const [globalSearch, setGlobalSearch] = useState('');
         const [showDropdown, setShowDropdown] = useState(false);
 
@@ -72,6 +74,11 @@ const Navbar = () => {
             projectmanager: 'Project Manager', reviewer: 'Reviewer',
             senioroperationslead: 'Senior Ops Lead',
           };
+          // When viewAs is active, show the previewed role label directly
+          if (viewAs?.role) {
+            const n = viewAs.role.toLowerCase().replace(/[\s_-]/g, '');
+            return ROLE_LABEL[n] || viewAs.role.charAt(0).toUpperCase() + viewAs.role.slice(1);
+          }
           const roleList: string[] = Array.isArray(currentUser.roles) && (currentUser.roles as string[]).length > 0
             ? (currentUser.roles as string[])
             : currentUser.role ? [currentUser.role] : [];

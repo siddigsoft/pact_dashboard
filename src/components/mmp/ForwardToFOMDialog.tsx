@@ -36,7 +36,7 @@ export const ForwardToFOMDialog: FC<ForwardToFOMDialogProps> = ({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { refreshMMPFiles } = useMMP();
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +48,7 @@ export const ForwardToFOMDialog: FC<ForwardToFOMDialogProps> = ({
         let fomList = data as FOMUser[];
         
         // If current user is admin/super_admin, add them to the list so they can forward to themselves
-        if (currentUser && ['admin', 'super_admin', 'ict'].includes(currentUser.role || '')) {
+        if (currentUser && ['admin', 'super_admin', 'ict'].includes(effectiveCurrentUser?.role || '')) {
           const selfExists = fomList.some(f => f.id === currentUser.id);
           if (!selfExists) {
             fomList = [

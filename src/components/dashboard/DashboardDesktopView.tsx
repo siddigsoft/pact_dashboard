@@ -24,7 +24,7 @@ const LazyLoadingCard = ({ children }: { children: ReactNode }) => (
 
 export const DashboardDesktopView = () => {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const { currentUser, roles } = useAppContext();
+  const { currentUser, effectiveCurrentUser, roles } = useAppContext();
   
   const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({
@@ -91,7 +91,7 @@ export const DashboardDesktopView = () => {
         <motion.div variants={itemVariants} className="w-full md:w-1/4 flex justify-end items-center">
           <Badge variant="outline" className="flex items-center gap-1 px-3 py-1 text-sm border-primary">
             <span className="h-2 w-2 rounded-full bg-green-400"></span>
-            {currentUser?.role || 'Team Member'}
+            {effectiveCurrentUser?.role || 'Team Member'}
           </Badge>
         </motion.div>
       </div>

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import FloatingToggle from './common/FloatingToggle';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,6 +12,7 @@ const LOCATION_UPDATE_INTERVAL = 30000; // 30 seconds
 
 const LocationSharingControl = () => {
   const { currentUser, updateUserLocation, updateUserAvailability, toggleLocationSharing } = useUser();
+  const { effectiveRole } = useAuthorization();
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +300,7 @@ const LocationSharingControl = () => {
   }, [isSharing, currentUser, startLocationTracking]);
 
   // Only show for field team roles
-  if (!currentUser || !['dataCollector', 'datacollector', 'coordinator', 'supervisor'].includes(currentUser.role?.toLowerCase() || '')) {
+  if (!currentUser || !['dataCollector', 'datacollector', 'coordinator', 'supervisor'].includes((effectiveRole ?? '').toLowerCase())) {
     return null;
   }
 

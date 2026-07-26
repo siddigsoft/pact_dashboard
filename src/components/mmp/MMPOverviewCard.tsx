@@ -33,9 +33,9 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
   const [isForwarded, setIsForwarded] = useState(false);
   const [recallDialogOpen, setRecallDialogOpen] = useState(false);
   const { refreshMMPFiles } = useMMP();
-  const { currentUser } = useAuthorization();
+  const { currentUser, effectiveRole } = useAuthorization();
 
-  const userRole = currentUser?.role || '';
+  const userRole = effectiveRole || '';
   const canRecall = getRecallTierForRole(userRole) !== null;
 
   useEffect(() => {

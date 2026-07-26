@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ export function OnlineOfflineToggle({
   mobileBottomOffset = true
 }: OnlineOfflineToggleProps) {
   const { currentUser, updateUserAvailability } = useUser();
+  const { effectiveRole } = useAuthorization();
   const [isOnline, setIsOnline] = useState<boolean>(currentUser?.availability === 'online');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -84,7 +86,7 @@ export function OnlineOfflineToggle({
   if (!currentUser) return null;
 
   const isDataCollectorOrCoordinator = ['datacollector', 'dataCollector', 'coordinator', 'enumerator'].includes(
-    (currentUser.role || '').toLowerCase()
+    (effectiveRole || '').toLowerCase()
   );
 
   if (!isDataCollectorOrCoordinator) return null;

@@ -681,12 +681,16 @@
     // even after an admin assigned a higher role via user_roles only.
     // Using currentUser.role unconditionally caused the sidebar to flip to
     // data-collector mode on any profiles UPDATE realtime event.
-    const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
-                            roles?.includes('dataCollector' as AppRole) || 
-                            ((!roles || roles.length === 0) && (
-                              currentUser?.role?.toLowerCase() === 'datacollector' ||
-                              currentUser?.role?.toLowerCase() === 'data collector'
-                            ));
+    // When viewAs is active, determine isDataCollector purely from the previewed role
+    const effectiveRoleForSidebar = viewAs?.role ?? currentUser?.role ?? '';
+    const isDataCollector = viewAs
+      ? (effectiveRoleForSidebar.toLowerCase() === 'datacollector' || effectiveRoleForSidebar.toLowerCase() === 'data_collector' || effectiveRoleForSidebar.toLowerCase() === 'data collector')
+      : (roles?.includes('DataCollector' as AppRole) || 
+         roles?.includes('dataCollector' as AppRole) || 
+         ((!roles || roles.length === 0) && (
+           currentUser?.role?.toLowerCase() === 'datacollector' ||
+           currentUser?.role?.toLowerCase() === 'data collector'
+         )));
 
     // Pre-compute stable role booleans so they can be used as useEffect deps
     // (the hasAnyRole function reference changes every render â€” never put it in deps)
@@ -728,7 +732,7 @@
     const pendingVerificationCount = counts.pendingVerification;
     const pendingWalletCount = counts.pendingWallet;
     const myTasksOverdueCount = counts.myTasksOverdue;
-    const changelogUnreadCount = getChangelogUnreadCount(currentUser?.id ?? '', currentUser?.role ?? '');
+    const changelogUnreadCount = getChangelogUnreadCount(currentUser?.id ?? '', (viewAs?.role ?? currentUser?.role) ?? '');
 
     // Aggregate approvals hub badge â€” mirrors useApprovalsData status-scope exactly.
     // Uses the same role gates and status filters as the useApprovalsData hook sections:
@@ -962,9 +966,6 @@
       if (!currentUser) return "";
       // isSuperAdmin from context (may still be loading async)
       if (isSuperAdmin) return "Super Admin";
-      // Guard: if profile role itself says superAdmin, trust it even if context hasn't resolved yet
-      const profileRoleNorm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
-      if (profileRoleNorm === 'superadmin') return "Super Admin";
       // Canonical role label map (keys are normalised: lowercase, no spaces/underscores/dashes)
       const ROLE_LABEL: Record<string, string> = {
         superadmin:          "Super Admin",
@@ -987,12 +988,20 @@
         hr:                  "HR",
         hrmanager:           "HR Manager",
       };
+      // When viewAs is active, show the previewed role — ignore SA's own role/roles array
+      if (viewAs?.role) {
+        const viewAsNorm = viewAs.role.toLowerCase().replace(/[\s_-]/g, '');
+        return ROLE_LABEL[viewAsNorm] || viewAs.role.charAt(0).toUpperCase() + viewAs.role.slice(1);
+      }
+      // Guard: if profile role itself says superAdmin, trust it even if context hasn't resolved yet
+      const profileRoleNorm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
+      if (profileRoleNorm === 'superadmin') return "Super Admin";
       if (roles && roles.length > 0) {
         if (roles.includes("admin" as AppRole)) return "Admin";
         const norm0 = (roles[0] as string).toLowerCase().replace(/[\s_-]/g, '');
         return ROLE_LABEL[norm0] || (roles[0] as string).charAt(0).toUpperCase() + (roles[0] as string).slice(1);
       }
-      return ROLE_LABEL[profileRoleNorm] || currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+      return ROLE_LABEL[profileRoleNorm ?? ''] || (currentUser.role ?? '').charAt(0).toUpperCase() + (currentUser.role ?? '').slice(1);
     };
 
     const handleLogout = () => {

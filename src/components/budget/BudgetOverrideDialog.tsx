@@ -41,12 +41,12 @@ export function BudgetOverrideDialog({
   onApproved,
   onRejected,
 }: BudgetOverrideDialogProps) {
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
   const { toast } = useToast();
   const [overrideReason, setOverrideReason] = useState('');
   const [processing, setProcessing] = useState(false);
 
-  const userRole = (currentUser?.role as AppRole) || 'DataCollector';
+  const userRole = (effectiveCurrentUser?.role as AppRole) || 'DataCollector';
   const hasOverridePermission = canOverrideBudgetRestriction(userRole);
 
   const formatCurrency = (amount: number) => {

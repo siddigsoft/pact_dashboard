@@ -58,7 +58,7 @@ export const ForwardToCoordinatorsDialog: FC<ForwardToCoordinatorsDialogProps> =
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { toast } = useToast();
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
   const { refreshMMPFiles } = useMMP();
 
   // For grouped sites, track selections per group
@@ -74,7 +74,7 @@ export const ForwardToCoordinatorsDialog: FC<ForwardToCoordinatorsDialogProps> =
         let coordList = data as CoordinatorUser[];
         
         // If current user is admin/super_admin, add them to the list so they can forward to themselves
-        if (currentUser && ['admin', 'super_admin', 'ict'].includes(currentUser.role || '')) {
+        if (currentUser && ['admin', 'super_admin', 'ict'].includes(effectiveCurrentUser?.role || '')) {
           const selfExists = coordList.some(c => c.id === currentUser.id);
           if (!selfExists) {
             coordList = [

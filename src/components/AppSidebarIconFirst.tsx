@@ -284,7 +284,7 @@ const GROUP_COLORS: Record<string, { icon: string; bg: string }> = {
 const AppSidebarIconFirst = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { currentUser, logout, roles } = useAppContext();
+  const { currentUser, effectiveCurrentUser, logout, roles } = useAppContext();
   const { showDueReminders } = useSiteVisitReminders();
   const { state } = useSidebar();
   const isSidebarCollapsed = state === "collapsed";
@@ -308,8 +308,8 @@ const AppSidebarIconFirst = () => {
   const isDataCollector =
     roles?.includes("DataCollector" as AppRole) ||
     roles?.includes("dataCollector" as AppRole) ||
-    currentUser?.role?.toLowerCase() === "datacollector" ||
-    currentUser?.role?.toLowerCase() === "data collector";
+    effectiveCurrentUser?.role?.toLowerCase() === "datacollector" ||
+    effectiveCurrentUser?.role?.toLowerCase() === "data collector";
 
   const roleIsCoordinator = hasAnyRole(["coordinator", "Coordinator"]);
   const roleIsSupervisor  = hasAnyRole(["supervisor", "Supervisor", "hubSupervisor", "hub_supervisor"]);
@@ -329,7 +329,7 @@ const AppSidebarIconFirst = () => {
   const pendingVerificationCount = counts.pendingVerification;
   const pendingWalletCount     = counts.pendingWallet;
   const myTasksOverdueCount    = counts.myTasksOverdue;
-  const changelogUnreadCount   = getChangelogUnreadCount(currentUser?.id ?? "", currentUser?.role ?? "");
+  const changelogUnreadCount   = getChangelogUnreadCount(currentUser?.id ?? "", effectiveCurrentUser?.role ?? "");
 
   const approvalsHubCount =
     ((roleIsSupervisor || roleIsFomOrAdmin) ? counts.pendingWithdrawals : 0)
@@ -374,7 +374,7 @@ const AppSidebarIconFirst = () => {
   };
 
   const menuGroups = currentUser
-    ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess)
+    ? getWorkflowMenuGroups(roles || [], effectiveCurrentUser?.role ?? currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess)
     : [];
 
   // Flatten all items for badge-count lookups
@@ -403,16 +403,18 @@ const AppSidebarIconFirst = () => {
   const getPrimaryRole = (): string => {
     if (!currentUser) return "";
     if (isSuperAdmin) return "Super Admin";
-    const norm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, "");
+    const displayRole = effectiveCurrentUser?.role ?? currentUser.role;
+    const norm = displayRole?.toLowerCase().replace(/[\s_-]/g, "");
     if (norm === "superadmin") return "Super Admin";
-    if (roles?.includes("admin" as AppRole)) return "Admin";
+    if (roles?.includes("admin" as AppRole) && !effectiveCurrentUser?.role) return "Admin";
     const map: Record<string, string> = {
       admin: "Admin", ict: "ICT", fom: "Field Ops Manager",
       financialadmin: "Financial Admin", auditor: "Financial Auditor",
       supervisor: "Supervisor", coordinator: "Coordinator",
       datacollector: "Data Collector", employee: "Employee",
+      countryDirector: "Country Director", country_director: "Country Director",
     };
-    return map[norm] || currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+    return map[norm] || (displayRole ? displayRole.charAt(0).toUpperCase() + displayRole.slice(1) : "");
   };
 
   const handleLogout = () => {

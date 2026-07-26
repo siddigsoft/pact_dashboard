@@ -11,6 +11,7 @@ import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classifica
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { getStateName, getLocalityName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useAuditLog } from '@/hooks/use-audit-log';
 import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -57,12 +58,13 @@ export function ClaimSiteButton({
   const [feeBreakdown, setFeeBreakdown] = useState<ClaimFeeBreakdown | null>(null);
   const { toast } = useToast();
   const { currentUser } = useUser();
+  const { effectiveRole } = useAuthorization();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
   const { getUserClassification } = useClassification();
   const { isSuperAdmin } = useSuperAdmin();
   const { logSiteVisitEvent } = useAuditLog();
 
-  const userRole = (currentUser?.role || '').toLowerCase().trim();
+  const userRole = (effectiveRole || currentUser?.role || '').toLowerCase().trim();
   const isFieldWorker = userRole === 'datacollector' ||
                         userRole === 'data_collector' ||
                         userRole === 'enumerator' ||

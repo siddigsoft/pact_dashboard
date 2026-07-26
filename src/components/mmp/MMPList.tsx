@@ -57,7 +57,7 @@ interface MMPListProps {
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
   const { deleteMMPFile, verifyMMP, refreshMMPFiles } = useMMP();
-  const { currentUser } = useAppContext();
+  const { currentUser, effectiveCurrentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
   const { mmpBudgets } = useBudget();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Full Report is visible to management/oversight roles only
-  const canViewFullReport = canSeePage('mmp-full-report', currentUser?.role);
+  const canViewFullReport = canSeePage('mmp-full-report', effectiveCurrentUser?.role);
   // State Report is visible to FOM — same dialog, scoped label, red styling
   const canViewStateReport = isFOM && !canViewFullReport;
 

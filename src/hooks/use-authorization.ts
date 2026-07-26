@@ -586,5 +586,10 @@ export const useAuthorization = () => {
     // User info
     currentUser,
     isAuthenticated: !!currentUser,
+
+    // Effective role: viewAs role when preview is active, otherwise the real user's role.
+    // Use this for display labels and action-gate checks (show/hide logic).
+    // Never use for DB writes — those should always record the real user's role.
+    effectiveRole: (viewAsRole ?? currentUser?.role ?? null) as string | null,
   };
 };

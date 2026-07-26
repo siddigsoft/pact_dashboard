@@ -54,7 +54,7 @@ const MobileAppHeader = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, logout, refreshUsers } = useUser() || {};
-  const { currentUser: appUser, roles } = useAppContext() || {};
+  const { currentUser: appUser, effectiveCurrentUser: effectiveAppUser, roles } = useAppContext() || {};
   const { checkPermission = () => false, hasAnyRole = () => false, canManageRoles = () => false } = useAuthorization() || {};
   const { isSuperAdmin = false } = useSuperAdmin() || {};
   const { userSettings } = useSettings() || {};
@@ -213,13 +213,13 @@ const MobileAppHeader = ({
   const menuGroups = useMemo(
     () => {
       try {
-        const workflowGroups = getWorkflowMenuGroups(roles || [], appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs);
+        const workflowGroups = getWorkflowMenuGroups(roles || [], effectiveAppUser?.role || appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs);
       
       // Check if user is a datacollector
       const isDataCollector = roles?.includes('DataCollector' as any) || 
                               roles?.includes('dataCollector' as any) || 
-                              appUser?.role?.toLowerCase() === 'datacollector' ||
-                              appUser?.role?.toLowerCase() === 'data collector' ||
+                              effectiveAppUser?.role?.toLowerCase() === 'datacollector' ||
+                              effectiveAppUser?.role?.toLowerCase() === 'data collector' ||
                               currentUser?.role?.toLowerCase() === 'datacollector' ||
                               currentUser?.role?.toLowerCase() === 'data collector';
       
