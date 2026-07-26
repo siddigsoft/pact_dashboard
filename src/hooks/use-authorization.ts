@@ -31,6 +31,25 @@ export const useAuthorization = () => {
     viewAsUserId = null;
   }
 
+  // SECURITY GUARD: viewAs must only be honoured for real SuperAdmins.
+  // If a previous SA session left 'pact-view-as' in sessionStorage, a non-SA
+  // user who opens the app would inherit the wrong role and lose visibility of
+  // their own data (e.g. FOM seeing 0 cost submissions).
+  // Validate against the REAL profile roles — never through viewAs itself.
+  if (viewAsRole && currentUser) {
+    const realRoles = [
+      currentUser.role,
+      ...(Array.isArray(currentUser.roles) ? currentUser.roles : []),
+    ];
+    const isRealSA =
+      realRoles.some(r => normalizeRole(r) === 'superAdmin') || isSuperAdminUser;
+    if (!isRealSA) {
+      viewAsRole = null;
+      viewAsMode = null;
+      viewAsUserId = null;
+    }
+  }
+
   /**
    * Check if the current user is a SuperAdmin (highest role with all permissions)
    * Supports all variants: superAdmin, SuperAdmin, super_admin.
