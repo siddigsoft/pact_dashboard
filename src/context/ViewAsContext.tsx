@@ -11,12 +11,18 @@ interface ViewAsContextType {
   viewAs: ViewAsTarget | null;
   setViewAs: (target: ViewAsTarget | null) => void;
   clearViewAs: () => void;
+  openPickerRequest: boolean;
+  requestOpenPicker: () => void;
+  clearOpenPickerRequest: () => void;
 }
 
 const ViewAsContext = createContext<ViewAsContextType>({
   viewAs: null,
   setViewAs: () => {},
   clearViewAs: () => {},
+  openPickerRequest: false,
+  requestOpenPicker: () => {},
+  clearOpenPickerRequest: () => {},
 });
 
 export const ViewAsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -28,6 +34,7 @@ export const ViewAsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return null;
     }
   });
+  const [openPickerRequest, setOpenPickerRequest] = useState(false);
 
   const setViewAs = (target: ViewAsTarget | null) => {
     setViewAsState(target);
@@ -36,9 +43,11 @@ export const ViewAsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const clearViewAs = () => setViewAs(null);
+  const requestOpenPicker = () => setOpenPickerRequest(true);
+  const clearOpenPickerRequest = () => setOpenPickerRequest(false);
 
   return (
-    <ViewAsContext.Provider value={{ viewAs, setViewAs, clearViewAs }}>
+    <ViewAsContext.Provider value={{ viewAs, setViewAs, clearViewAs, openPickerRequest, requestOpenPicker, clearOpenPickerRequest }}>
       {children}
     </ViewAsContext.Provider>
   );

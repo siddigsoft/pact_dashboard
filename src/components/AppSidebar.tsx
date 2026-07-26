@@ -609,7 +609,7 @@
     const { state } = useSidebar();
     const isSidebarCollapsed = state === 'collapsed';
     const { isSuperAdmin: realIsSuperAdmin } = useSuperAdmin();
-    const { viewAs, setViewAs, clearViewAs } = useViewAs();
+    const { viewAs, setViewAs, clearViewAs, openPickerRequest, clearOpenPickerRequest } = useViewAs();
     // When in view-as mode, override SA flag and treat current roles as the viewed role only
     const isSuperAdmin = viewAs ? (viewAs.role === 'superAdmin' || viewAs.role === 'super_admin') : realIsSuperAdmin;
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
@@ -621,6 +621,7 @@
     const [viewAsUserSearch, setViewAsUserSearch] = useState('');
     const [viewAsUserSelected, setViewAsUserSelected] = useState<{ id: string; full_name: string; role: string } | null>(null);
     const [viewAsUsers, setViewAsUsers] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
+    const [viewAsUsersLoading, setViewAsUsersLoading] = useState(false);
 
     // Check if non-super-admin user has been explicitly granted monitoring page access
     // Uses a SECURITY DEFINER RPC to bypass RLS (direct table query blocked for non-admins)
@@ -633,6 +634,21 @@
           if (!error) setHasMonitoringAccess(!!data);
         });
     }, [isSuperAdmin, currentUser?.id]);
+
+    // Open picker dialog when the banner's "Switch" button fires requestOpenPicker()
+    const openViewAsDialog = async () => {
+      setViewAsOpen(true);
+      setViewAsUsersLoading(true);
+      const { data } = await supabase.from('profiles').select('id, full_name, email, role').order('full_name');
+      if (data) setViewAsUsers(data.filter(u => u.id !== currentUser?.id));
+      setViewAsUsersLoading(false);
+    };
+    useEffect(() => {
+      if (!openPickerRequest) return;
+      clearOpenPickerRequest();
+      openViewAsDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openPickerRequest]);
 
     // Fetch this user's page_access_overrides so that manually granted pages
     // appear in the sidebar even when the role-based check would deny them.
@@ -897,7 +913,9 @@
       groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
       return groups.filter(g => g.items.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, pageOverrideMap]);
+    // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
+    // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
+    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, pageOverrideMap, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {
@@ -1361,27 +1379,38 @@
         <SidebarFooter className="border-t border-slate-200/70 px-3 py-3">
           {/* View As picker — Super Admins only; always uses real SA status */}
           {realIsSuperAdmin && (
-            <div className="mb-2">
+            <div className="mb-2 group-data-[collapsible=icon]:hidden">
               {viewAs ? (
-                <button
-                  onClick={clearViewAs}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors group-data-[collapsible=icon]:hidden"
-                  data-testid="button-exit-view-as-sidebar"
-                >
-                  <Eye className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate flex-1 text-left">
-                    Viewing as: <strong>{viewAs.displayName}</strong>
-                  </span>
-                  <XIcon className="h-3 w-3 shrink-0 opacity-60" />
-                </button>
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-1.5 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Eye className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
+                    <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 truncate flex-1">
+                      Viewing as <strong>{viewAs.displayName}</strong>
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={openViewAsDialog}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded bg-amber-200/60 dark:bg-amber-800/40 text-amber-900 dark:text-amber-200 text-[10px] font-semibold hover:bg-amber-200 dark:hover:bg-amber-700/60 transition-colors"
+                      data-testid="button-change-view-as-sidebar"
+                    >
+                      <ArrowLeftRight className="h-2.5 w-2.5" />
+                      Change
+                    </button>
+                    <button
+                      onClick={clearViewAs}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 text-[10px] font-medium hover:bg-amber-200 dark:hover:bg-amber-800/40 transition-colors"
+                      data-testid="button-exit-view-as-sidebar"
+                    >
+                      <XIcon className="h-2.5 w-2.5" />
+                      Exit
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <button
-                  onClick={async () => {
-                    setViewAsOpen(true);
-                    const { data } = await supabase.from('profiles').select('id, full_name, email, role').order('full_name');
-                    if (data) setViewAsUsers(data.filter(u => u.id !== currentUser?.id));
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-gray-600 text-slate-500 dark:text-gray-400 text-xs font-medium hover:border-primary hover:text-primary transition-colors group-data-[collapsible=icon]:hidden"
+                  onClick={openViewAsDialog}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-gray-600 text-slate-500 dark:text-gray-400 text-xs font-medium hover:border-primary hover:text-primary transition-colors"
                   data-testid="button-open-view-as"
                 >
                   <Eye className="h-3.5 w-3.5 shrink-0" />
@@ -1461,157 +1490,237 @@
       )}
 
       {/* ── View As Picker Dialog ─────────────────────────────────────────── */}
-      {realIsSuperAdmin && (
-        <Dialog open={viewAsOpen} onOpenChange={o => { if (!o) setViewAsOpen(false); }}>
-          <DialogContent className="max-w-md p-0 overflow-hidden">
-            <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <Eye className="h-4.5 w-4.5 text-primary" />
-                Preview as Role or User
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                The sidebar and page controls will reflect what the selected role would see. Your actual session is unchanged.
-              </p>
-            </DialogHeader>
+      {realIsSuperAdmin && (() => {
+        const VIEW_AS_ROLE_GROUPS = [
+          {
+            label: 'Field Operations',
+            color: 'text-blue-700 dark:text-blue-400',
+            roles: [
+              { value: 'dataCollector',  label: 'Data Collector',     desc: 'Fills forms, collects field data' },
+              { value: 'coordinator',    label: 'Coordinator',         desc: 'Manages site visits & reports' },
+              { value: 'supervisor',     label: 'Supervisor',          desc: 'Oversees coordinators & hubs' },
+              { value: 'fom',            label: 'Field Ops Manager',   desc: 'Leads field operations' },
+            ],
+          },
+          {
+            label: 'Management',
+            color: 'text-violet-700 dark:text-violet-400',
+            roles: [
+              { value: 'countryDirector', label: 'Country Director',  desc: 'Country-level oversight' },
+              { value: 'projectManager',  label: 'Project Manager',   desc: 'Manages project lifecycle' },
+              { value: 'admin',           label: 'Admin',             desc: 'System administration' },
+            ],
+          },
+          {
+            label: 'Finance',
+            color: 'text-emerald-700 dark:text-emerald-400',
+            roles: [
+              { value: 'financialAdmin', label: 'Financial Admin',    desc: 'Finance operations & approvals' },
+              { value: 'auditor',        label: 'Financial Auditor',  desc: 'Audit & compliance view' },
+            ],
+          },
+          {
+            label: 'Technical & Staff',
+            color: 'text-teal-700 dark:text-teal-400',
+            roles: [
+              { value: 'dataTeam',  label: 'Data Team',  desc: 'Analytics & data management' },
+              { value: 'ict',       label: 'ICT',         desc: 'Technical support & integrations' },
+              { value: 'employee',  label: 'Employee',    desc: 'Basic staff access' },
+            ],
+          },
+        ];
 
-            {/* Tab switcher */}
-            <div className="flex border-b border-border">
-              {(['role', 'user'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setViewAsTab(tab)}
-                  className={cn(
-                    'flex-1 py-2.5 text-xs font-semibold capitalize transition-colors',
-                    viewAsTab === tab
-                      ? 'border-b-2 border-primary text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  data-testid={`tab-view-as-${tab}`}
-                >
-                  By {tab === 'role' ? 'Role' : 'User'}
-                </button>
-              ))}
-            </div>
+        const ROLE_BADGE_COLOR: Record<string, string> = {
+          datacollector: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+          coordinator:   'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+          supervisor:    'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+          fom:           'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+          countrydirector: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+          projectmanager:  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+          admin:           'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+          financialadmin:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+          auditor:         'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+          datateam:        'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+          ict:             'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+          employee:        'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+        };
+        const roleBadgeClass = (role: string) =>
+          ROLE_BADGE_COLOR[role.toLowerCase().replace(/[\s_-]/g, '')] ?? 'bg-slate-100 text-slate-600';
 
-            <div className="px-5 py-4 space-y-3">
-              {viewAsTab === 'role' ? (
-                <>
-                  <Label className="text-xs text-muted-foreground">Select a role to preview</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: 'dataCollector',  label: 'Data Collector' },
-                      { value: 'coordinator',    label: 'Coordinator' },
-                      { value: 'supervisor',     label: 'Supervisor' },
-                      { value: 'fom',            label: 'Field Ops Manager' },
-                      { value: 'countryDirector',label: 'Country Director' },
-                      { value: 'dataTeam',       label: 'Data Team' },
-                      { value: 'financialAdmin', label: 'Financial Admin' },
-                      { value: 'auditor',        label: 'Financial Auditor' },
-                      { value: 'projectManager', label: 'Project Manager' },
-                      { value: 'admin',          label: 'Admin' },
-                      { value: 'ict',            label: 'ICT' },
-                      { value: 'employee',       label: 'Employee' },
-                    ].map(r => (
-                      <button
-                        key={r.value}
-                        onClick={() => setViewAsRoleSelected(r.value)}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all text-left',
-                          viewAsRoleSelected === r.value
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                        )}
-                        data-testid={`btn-role-${r.value}`}
-                      >
-                        <Shield className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Label className="text-xs text-muted-foreground">Search a staff member</Label>
-                  <Input
-                    placeholder="Name or email…"
-                    value={viewAsUserSearch}
-                    onChange={e => setViewAsUserSearch(e.target.value)}
-                    className="h-8 text-xs"
-                    data-testid="input-view-as-user-search"
-                  />
-                  <div className="max-h-52 overflow-y-auto divide-y divide-border border border-border rounded-lg">
-                    {viewAsUsers
-                      .filter(u =>
-                        !viewAsUserSearch.trim() ||
-                        u.full_name?.toLowerCase().includes(viewAsUserSearch.toLowerCase()) ||
-                        u.email?.toLowerCase().includes(viewAsUserSearch.toLowerCase())
-                      )
-                      .slice(0, 12)
-                      .map(u => (
-                        <button
-                          key={u.id}
-                          onClick={() => setViewAsUserSelected({ id: u.id, full_name: u.full_name, role: u.role })}
-                          className={cn(
-                            'w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-muted/50 transition-colors',
-                            viewAsUserSelected?.id === u.id && 'bg-primary/5 text-primary font-semibold'
-                          )}
-                          data-testid={`btn-user-${u.id}`}
-                        >
-                          <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-[10px] shrink-0">
-                            {u.full_name?.charAt(0)?.toUpperCase() ?? '?'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="truncate font-medium">{u.full_name || u.email}</p>
-                            <p className="truncate text-[10px] text-muted-foreground">{u.role}</p>
-                          </div>
-                          {viewAsUserSelected?.id === u.id && <CheckCircle className="h-3.5 w-3.5 shrink-0" />}
-                        </button>
-                      ))
-                    }
-                    {viewAsUsers.filter(u =>
-                      !viewAsUserSearch.trim() ||
-                      u.full_name?.toLowerCase().includes(viewAsUserSearch.toLowerCase()) ||
-                      u.email?.toLowerCase().includes(viewAsUserSearch.toLowerCase())
-                    ).length === 0 && (
-                      <p className="text-center text-xs text-muted-foreground py-4">No matching users</p>
+        const filteredUsers = viewAsUsers.filter(u =>
+          !viewAsUserSearch.trim() ||
+          u.full_name?.toLowerCase().includes(viewAsUserSearch.toLowerCase()) ||
+          u.email?.toLowerCase().includes(viewAsUserSearch.toLowerCase())
+        );
+
+        return (
+          <Dialog open={viewAsOpen} onOpenChange={o => { if (!o) setViewAsOpen(false); }}>
+            <DialogContent className="max-w-lg p-0 overflow-hidden">
+              <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <Eye className="h-4 w-4 text-primary" />
+                  Preview as Role or User
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  The sidebar and page controls reflect the selected role. Your session and data access are unchanged.
+                </p>
+              </DialogHeader>
+
+              {/* Tab switcher */}
+              <div className="flex border-b border-border">
+                {(['role', 'user'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setViewAsTab(tab)}
+                    className={cn(
+                      'flex-1 py-2.5 text-xs font-semibold capitalize transition-colors',
+                      viewAsTab === tab
+                        ? 'border-b-2 border-primary text-primary'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
-                  </div>
-                </>
-              )}
-            </div>
+                    data-testid={`tab-view-as-${tab}`}
+                  >
+                    By {tab === 'role' ? 'Role' : 'Specific User'}
+                  </button>
+                ))}
+              </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 pb-5 pt-1">
-              <Button variant="outline" size="sm" onClick={() => setViewAsOpen(false)} data-testid="button-cancel-view-as">
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                disabled={viewAsTab === 'role' ? !viewAsRoleSelected : !viewAsUserSelected}
-                onClick={() => {
-                  if (viewAsTab === 'role' && viewAsRoleSelected) {
-                    const label = {
-                      dataCollector: 'Data Collector', coordinator: 'Coordinator', supervisor: 'Supervisor',
-                      fom: 'Field Ops Manager', countryDirector: 'Country Director', dataTeam: 'Data Team',
-                      financialAdmin: 'Financial Admin', auditor: 'Financial Auditor',
-                      projectManager: 'Project Manager', admin: 'Admin', ict: 'ICT', employee: 'Employee',
-                    }[viewAsRoleSelected] ?? viewAsRoleSelected;
-                    setViewAs({ mode: 'role', role: viewAsRoleSelected, displayName: label });
-                  } else if (viewAsTab === 'user' && viewAsUserSelected) {
-                    setViewAs({ mode: 'user', role: viewAsUserSelected.role, userId: viewAsUserSelected.id, displayName: viewAsUserSelected.full_name });
-                  }
-                  setViewAsOpen(false);
-                  setViewAsRoleSelected('');
-                  setViewAsUserSelected(null);
-                  setViewAsUserSearch('');
-                }}
-                data-testid="button-confirm-view-as"
-              >
-                Start Preview
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+              <div className="px-5 py-4 space-y-4 max-h-[420px] overflow-y-auto">
+                {viewAsTab === 'role' ? (
+                  VIEW_AS_ROLE_GROUPS.map(group => (
+                    <div key={group.label}>
+                      <p className={cn('text-[10px] font-bold uppercase tracking-wider mb-2', group.color)}>{group.label}</p>
+                      <div className="space-y-1">
+                        {group.roles.map(r => (
+                          <button
+                            key={r.value}
+                            onClick={() => setViewAsRoleSelected(r.value)}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all',
+                              viewAsRoleSelected === r.value
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/40 hover:bg-muted/40'
+                            )}
+                            data-testid={`btn-role-${r.value}`}
+                          >
+                            <div className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold', roleBadgeClass(r.value))}>
+                              {r.label.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn('text-xs font-semibold', viewAsRoleSelected === r.value ? 'text-primary' : 'text-foreground')}>
+                                {r.label}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">{r.desc}</p>
+                            </div>
+                            {viewAsRoleSelected === r.value && <CheckCircle className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Search staff member</Label>
+                      <Input
+                        placeholder="Name or email…"
+                        value={viewAsUserSearch}
+                        onChange={e => setViewAsUserSearch(e.target.value)}
+                        className="h-8 text-xs mt-1.5"
+                        data-testid="input-view-as-user-search"
+                      />
+                    </div>
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      {viewAsUsersLoading ? (
+                        <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                          <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs">Loading staff…</span>
+                        </div>
+                      ) : filteredUsers.length === 0 ? (
+                        <p className="text-center text-xs text-muted-foreground py-6">
+                          {viewAsUsers.length === 0 ? 'No staff loaded' : 'No matching staff'}
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-border max-h-60 overflow-y-auto">
+                          {filteredUsers.map(u => (
+                            <button
+                              key={u.id}
+                              onClick={() => setViewAsUserSelected({ id: u.id, full_name: u.full_name, role: u.role })}
+                              className={cn(
+                                'w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-muted/50 transition-colors',
+                                viewAsUserSelected?.id === u.id && 'bg-primary/5'
+                              )}
+                              data-testid={`btn-user-${u.id}`}
+                            >
+                              <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px] shrink-0">
+                                {u.full_name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() ?? '?'}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={cn('truncate font-semibold text-xs', viewAsUserSelected?.id === u.id ? 'text-primary' : '')}>
+                                  {u.full_name || u.email}
+                                </p>
+                                <span className={cn('inline-block text-[9px] font-semibold px-1.5 py-0 rounded mt-0.5', roleBadgeClass(u.role))}>
+                                  {u.role}
+                                </span>
+                              </div>
+                              {viewAsUserSelected?.id === u.id && <CheckCircle className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {filteredUsers.length > 0 && (
+                      <p className="text-[10px] text-muted-foreground text-right">
+                        {filteredUsers.length} of {viewAsUsers.length} staff shown
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 px-5 pb-5 pt-2 border-t border-border">
+                {viewAs && (
+                  <button
+                    onClick={() => { clearViewAs(); setViewAsOpen(false); }}
+                    className="text-[11px] text-rose-600 hover:text-rose-700 font-medium"
+                  >
+                    Exit current preview
+                  </button>
+                )}
+                <div className={cn('flex items-center gap-2', viewAs ? '' : 'ml-auto')}>
+                  <Button variant="outline" size="sm" onClick={() => setViewAsOpen(false)} data-testid="button-cancel-view-as">
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={viewAsTab === 'role' ? !viewAsRoleSelected : !viewAsUserSelected}
+                    onClick={() => {
+                      if (viewAsTab === 'role' && viewAsRoleSelected) {
+                        const label = {
+                          dataCollector: 'Data Collector', coordinator: 'Coordinator', supervisor: 'Supervisor',
+                          fom: 'Field Ops Manager', countryDirector: 'Country Director', dataTeam: 'Data Team',
+                          financialAdmin: 'Financial Admin', auditor: 'Financial Auditor',
+                          projectManager: 'Project Manager', admin: 'Admin', ict: 'ICT', employee: 'Employee',
+                        }[viewAsRoleSelected] ?? viewAsRoleSelected;
+                        setViewAs({ mode: 'role', role: viewAsRoleSelected, displayName: label });
+                      } else if (viewAsTab === 'user' && viewAsUserSelected) {
+                        setViewAs({ mode: 'user', role: viewAsUserSelected.role, userId: viewAsUserSelected.id, displayName: viewAsUserSelected.full_name });
+                      }
+                      setViewAsOpen(false);
+                      setViewAsRoleSelected('');
+                      setViewAsUserSelected(null);
+                      setViewAsUserSearch('');
+                    }}
+                    data-testid="button-confirm-view-as"
+                  >
+                    Start Preview
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
       </>
     );
   };

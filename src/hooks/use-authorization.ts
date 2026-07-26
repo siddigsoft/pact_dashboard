@@ -27,10 +27,19 @@ export const useAuthorization = () => {
 
   /**
    * Check if the current user is a SuperAdmin (highest role with all permissions)
-   * Supports all variants: superAdmin, SuperAdmin, super_admin
+   * Supports all variants: superAdmin, SuperAdmin, super_admin.
+   * When "View As" is active for a non-SA role, this returns false so that
+   * all canXxx() helpers correctly reflect the previewed role's capabilities
+   * instead of silently granting all SA permissions.
    */
   const isSuperAdmin = (): boolean => {
     if (!currentUser) return false;
+    // When previewing as another role, check if the VIEWED role is superAdmin —
+    // NOT the real user. This stops the SA bypass from leaking into previews.
+    if (viewAsRole) {
+      const normalized = normalizeRole(viewAsRole);
+      return normalized === 'superAdmin';
+    }
     if (isSuperAdminUser) return true;
     const roles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
     return roles.some(r => {
