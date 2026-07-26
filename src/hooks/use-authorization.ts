@@ -18,11 +18,17 @@ export const useAuthorization = () => {
   }
 
   let viewAsRole: string | null = null;
+  let viewAsMode: 'role' | 'user' | null = null;
+  let viewAsUserId: string | null = null;
   try {
     const viewAsCtx = useViewAs();
     viewAsRole = viewAsCtx?.viewAs?.role ?? null;
+    viewAsMode = viewAsCtx?.viewAs?.mode ?? null;
+    viewAsUserId = viewAsCtx?.viewAs?.userId ?? null;
   } catch {
     viewAsRole = null;
+    viewAsMode = null;
+    viewAsUserId = null;
   }
 
   /**
@@ -49,12 +55,28 @@ export const useAuthorization = () => {
   };
 
   /**
-   * Check if the current user has a specific permission
-   * SuperAdmin bypasses all permission checks
+   * Check if the current user has a specific permission.
+   * SuperAdmin bypasses all permission checks.
+   *
+   * During "View As" preview the real user's DB permission overrides must NOT
+   * leak through, otherwise SA-level overrides appear on screen even when the
+   * UI is supposedly showing a lower role.
+   *
+   * Rules when viewAs is active:
+   *  • Previewing as a specific USER  → check that user's DB overrides only.
+   *  • Previewing as a generic ROLE   → return false (simulated roles have no
+   *    individual DB overrides; role-based access is handled by hasAnyRole /
+   *    isSuperAdmin already).
    */
   const checkPermission = (resource: ResourceType, action: ActionType): boolean => {
     if (!currentUser) return false;
     if (isSuperAdmin()) return true;
+    if (viewAsRole) {
+      if (viewAsMode === 'user' && viewAsUserId) {
+        return hasPermission(viewAsUserId, resource, action);
+      }
+      return false;
+    }
     return hasPermission(currentUser.id, resource, action);
   };
 
