@@ -848,9 +848,43 @@ const CostSubmission = () => {
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     // Admins and Super Admins see everything unfiltered
-    // Country Directors see everything (they approve FOM T1 and Supervisor T2)
-    if (!isAdminOrSuperUser && !isSuperAdmin && !isCountryDirector) {
-      if (isFOM) {
+    if (!isAdminOrSuperUser && !isSuperAdmin) {
+      if (isCountryDirector) {
+        // Country Directors only see submissions where they have an approval role,
+        // and only AFTER the preceding tier has approved (FOM must act first).
+        //
+        // Approval chain position for CD:
+        //   • FOM submissions       → CD is T1 (first approver) — visible immediately
+        //   • Supervisor submissions → CD is T2 — visible only after FOM (T1) approves
+        //   • Coordinator submissions → CD is T3 — visible only after FOM (T2) approves
+        //   • Own submissions / already actioned — always visible (read-only status)
+        //   • Any other type (e.g., CD or Admin submissions) — NOT visible
+        filtered = filtered.filter(o => {
+          if (o.submitted_by === currentUser?.id) return true;
+          // Already actioned by this CD (approved or rejected at any tier)
+          if (o.tier1_approved_by === currentUser?.id) return true;
+          if (o.tier2_approved_by === currentUser?.id) return true;
+          if (o.tier3_approved_by === currentUser?.id) return true;
+          const submitterRole = (o.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+          const isFomSub = submitterRole === 'fom' || submitterRole.includes('fieldoperationmanager');
+          const isSupervisorSub = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
+          const isCoordSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
+            || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
+            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
+          // FOM submission: CD is T1 — visible immediately (regardless of status)
+          if (isFomSub) return true;
+          // Supervisor submission: CD is T2 — visible only AFTER FOM (T1) has approved
+          if (isSupervisorSub) return o.tier1_status === 'approved';
+          // Coordinator submission: CD is T3 — visible only AFTER FOM (T2) has approved
+          if (isCoordSub) return o.tier2_status === 'approved';
+          // CD's own submissions and anything else they have no role in: hidden
+          return false;
+        });
+        // Project scoping: hide submissions for projects the CD is not a member of
+        if (userProjectIds.length > 0) {
+          filtered = filtered.filter(o => !o.project_id || userProjectIds.includes(o.project_id));
+        }
+      } else if (isFOM) {
         // If this FOM is hub-scoped via additional supervisor roles, restrict to those hubs only.
         // An unrestricted FOM (no additional supervisor roles) sees all supervisor/coordinator submissions.
         const fomAdditionalHubIds = getAdditionalSupervisorHubIds(currentUser as any);
@@ -2050,6 +2084,8 @@ const CostSubmission = () => {
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved' && derivedStatus !== 'partially_paid') return false;
+    // Country Directors are never allowed to mark paid — financial admin action only
+    if (isCountryDirector) return false;
     return isSuperAdmin || isAdmin || isFinanceAdmin || hasMarkPaidOverride;
   };
 
@@ -2073,8 +2109,10 @@ const CostSubmission = () => {
   const hasDeleteOverride       = cs('delete');
 
   // Revert Paid → back to Approved (SuperAdmin, Admin, or per-user override; not once reconciled)
+  // Country Directors are never allowed to revert paid — financial admin action only
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
+    if (isCountryDirector) return false;
     return derivedStatus === 'paid' && (isSuperAdmin || isAdmin || hasRevertPaidOverride);
   };
 
