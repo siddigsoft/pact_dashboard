@@ -514,6 +514,8 @@ export default function DataQualityPage() {
   // ── GPS map enumerator filter ────────────────────────────────────────────
   const [mapEnumFilter, setMapEnumFilter] = useState('__all__');
   const [activeResultsTab, setActiveResultsTab] = useState('overview');
+  const [varSearch, setVarSearch] = useState('');
+  const [varView, setVarView] = useState<'cards'|'table'>('cards');
 
   // ── Section coverage ─────────────────────────────────────────────────────
   const coverageRows = useMemo((): CoverageRow[] => {
@@ -978,6 +980,55 @@ export default function DataQualityPage() {
     });
     return Object.entries(bins).map(([name, count]) => ({ name, count }));
   }, [filteredRows]);
+
+  // ── Per-column / Variable statistics (ONA.io / STATA style) ─────────────
+  const colStats = useMemo(() => {
+    if (!dataset) return [];
+    const totalRows = dataset.rawRows.length;
+    const isNAVal = (v: string) => !v || v === 'n/a' || v === 'N/A' || v === 'NA' || v === 'na' || v === '-' || v === '' || v === 'none';
+
+    return dataset.headers.map(col => {
+      const vals = dataset.rawRows.map(r => String(r[col] ?? '')).filter(v => !isNAVal(v));
+      const missing = totalRows - vals.length;
+      const completeness = totalRows > 0 ? Math.round((vals.length / totalRows) * 100) : 0;
+      const unique = new Set(vals).size;
+
+      // Detect type
+      const numericVals = vals.map(v => parseFloat(v.replace(/,/g, ''))).filter(n => !isNaN(n));
+      const isNumeric = numericVals.length >= vals.length * 0.8 && vals.length > 0;
+      const isDate = !isNumeric && vals.length > 0 && vals.slice(0, 20).some(v => /^\d{4}-\d{2}-\d{2}/.test(v));
+      const isBoolean = !isNumeric && !isDate && unique <= 3 && ['0','1','yes','no','true','false','oui','non'].some(b => vals.some(v => v.toLowerCase() === b));
+      const type: 'numeric'|'date'|'boolean'|'text' = isNumeric ? 'numeric' : isDate ? 'date' : isBoolean ? 'boolean' : 'text';
+
+      if (isNumeric && numericVals.length > 0) {
+        const sorted = [...numericVals].sort((a, b) => a - b);
+        const min = sorted[0];
+        const max = sorted[sorted.length - 1];
+        const mean = numericVals.reduce((s, n) => s + n, 0) / numericVals.length;
+        const median = sorted.length % 2 === 0
+          ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+          : sorted[Math.floor(sorted.length / 2)];
+        const variance = numericVals.reduce((s, n) => s + (n - mean) ** 2, 0) / numericVals.length;
+        const stdDev = Math.sqrt(variance);
+        // Histogram: 8 bins
+        const bins = 8;
+        const step = (max - min) / bins || 1;
+        const hist = Array.from({ length: bins }, (_, i) => ({ x: (min + i * step).toFixed(1), n: 0 }));
+        numericVals.forEach(v => {
+          const idx = Math.min(Math.floor((v - min) / step), bins - 1);
+          hist[idx].n++;
+        });
+        return { col, type, total: vals.length, missing, completeness, unique, min, max, mean: parseFloat(mean.toFixed(2)), median: parseFloat(median.toFixed(2)), stdDev: parseFloat(stdDev.toFixed(2)), histogram: hist, topValues: undefined };
+      } else {
+        // Top values
+        const freq: Record<string, number> = {};
+        vals.forEach(v => { freq[v] = (freq[v] ?? 0) + 1; });
+        const topValues = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([v, n]) => ({ v, n }));
+        const isLikelySelect = unique <= 20;
+        return { col, type, total: vals.length, missing, completeness, unique, min: undefined, max: undefined, mean: undefined, median: undefined, stdDev: undefined, histogram: undefined, topValues, isLikelySelect };
+      }
+    });
+  }, [dataset]);
 
   // ── Exports ───────────────────────────────────────────────────────────────
   function exportFlagsCSV() {
@@ -1640,6 +1691,7 @@ export default function DataQualityPage() {
                   )}
                 </TabsTrigger>
               )}
+              <TabsTrigger value="variables" className="text-xs"><Layers className="w-3.5 h-3.5 mr-1" />Variables</TabsTrigger>
               <TabsTrigger value="rawdata" className="text-xs"><Table2 className="w-3.5 h-3.5 mr-1" />Raw Data</TabsTrigger>
               <TabsTrigger value="gpsmap" className="text-xs"><Globe2 className="w-3.5 h-3.5 mr-1" />GPS Map</TabsTrigger>
               {xlsSchema && (
@@ -2230,6 +2282,190 @@ export default function DataQualityPage() {
                 )}
               </TabsContent>
             )}
+
+            {/* ── TAB: Variables (ONA.io / STATA-style per-column analytics) ── */}
+            <TabsContent value="variables" className="space-y-4">
+              {/* Toolbar */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    className="w-full pl-8 pr-3 h-9 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Search variables…"
+                    value={varSearch}
+                    onChange={e => setVarSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex rounded-lg border overflow-hidden">
+                  <button onClick={() => setVarView('cards')}
+                    className={cn('px-3 py-1.5 text-xs flex items-center gap-1.5 transition-colors',
+                      varView === 'cards' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted')}>
+                    <Layers className="w-3.5 h-3.5" /> Cards
+                  </button>
+                  <button onClick={() => setVarView('table')}
+                    className={cn('px-3 py-1.5 text-xs flex items-center gap-1.5 border-l transition-colors',
+                      varView === 'table' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted')}>
+                    <Table2 className="w-3.5 h-3.5" /> Table
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground ml-auto">
+                  {colStats.filter(s => !varSearch || s.col.toLowerCase().includes(varSearch.toLowerCase())).length} / {colStats.length} variables
+                </p>
+              </div>
+
+              {varView === 'table' ? (
+                /* ── STATA-style summary table ── */
+                <div className="border rounded-xl overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="text-xs">
+                        <TableHead className="text-xs w-[220px]">Variable</TableHead>
+                        <TableHead className="text-xs text-center">Type</TableHead>
+                        <TableHead className="text-xs text-right">Obs</TableHead>
+                        <TableHead className="text-xs text-right">Missing</TableHead>
+                        <TableHead className="text-xs text-right">Complete %</TableHead>
+                        <TableHead className="text-xs text-right">Unique</TableHead>
+                        <TableHead className="text-xs text-right">Min</TableHead>
+                        <TableHead className="text-xs text-right">Max</TableHead>
+                        <TableHead className="text-xs text-right">Mean</TableHead>
+                        <TableHead className="text-xs text-right">Median</TableHead>
+                        <TableHead className="text-xs text-right">Std Dev</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {colStats
+                        .filter(s => !varSearch || s.col.toLowerCase().includes(varSearch.toLowerCase()))
+                        .map(s => (
+                          <TableRow key={s.col} className="text-xs">
+                            <TableCell className="font-mono text-xs max-w-[220px] truncate" title={s.col}>{s.col}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className={cn('text-xs px-1.5 py-0',
+                                s.type === 'numeric' ? 'border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-900/20' :
+                                s.type === 'date'    ? 'border-green-300 text-green-700 bg-green-50 dark:bg-green-900/20' :
+                                s.type === 'boolean' ? 'border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-900/20' :
+                                                       'border-gray-300 text-gray-700 bg-gray-50 dark:bg-gray-800/50')}>
+                                {s.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{s.total.toLocaleString()}</TableCell>
+                            <TableCell className={cn('text-right tabular-nums', s.missing > 0 ? 'text-red-600 font-medium' : '')}>{s.missing > 0 ? s.missing.toLocaleString() : '—'}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              <span className={cn(s.completeness < 70 ? 'text-red-600 font-bold' : s.completeness < 90 ? 'text-amber-600 font-medium' : 'text-green-700 font-medium')}>
+                                {s.completeness}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{s.unique.toLocaleString()}</TableCell>
+                            <TableCell className="text-right tabular-nums">{s.min != null ? s.min : '—'}</TableCell>
+                            <TableCell className="text-right tabular-nums">{s.max != null ? s.max : '—'}</TableCell>
+                            <TableCell className="text-right tabular-nums">{s.mean != null ? s.mean : '—'}</TableCell>
+                            <TableCell className="text-right tabular-nums">{s.median != null ? s.median : '—'}</TableCell>
+                            <TableCell className="text-right tabular-nums">{s.stdDev != null ? s.stdDev : '—'}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                /* ── ONA.io card view ── */
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {colStats
+                    .filter(s => !varSearch || s.col.toLowerCase().includes(varSearch.toLowerCase()))
+                    .map(s => (
+                      <div key={s.col} className="border rounded-xl p-3 bg-card space-y-2 hover:shadow-md transition-shadow">
+                        {/* Completeness bar */}
+                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className={cn('h-full rounded-full transition-all',
+                            s.completeness >= 90 ? 'bg-green-500' : s.completeness >= 70 ? 'bg-amber-400' : 'bg-red-500')}
+                            style={{ width: `${s.completeness}%` }} />
+                        </div>
+                        {/* Header */}
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-mono font-medium truncate" title={s.col}>{s.col}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {s.total.toLocaleString()} filled · {s.missing > 0 ? <span className="text-red-500">{s.missing} missing</span> : <span className="text-green-600">no missing</span>}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={cn('text-xs px-1.5 py-0 shrink-0',
+                            s.type === 'numeric' ? 'border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-900/20' :
+                            s.type === 'date'    ? 'border-green-300 text-green-700 bg-green-50 dark:bg-green-900/20' :
+                            s.type === 'boolean' ? 'border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-900/20' :
+                                                   'border-gray-300 text-gray-600')}>
+                            {s.type}
+                          </Badge>
+                        </div>
+
+                        {/* Numeric stats + histogram */}
+                        {s.type === 'numeric' && s.histogram && (
+                          <>
+                            <div className="grid grid-cols-3 gap-1.5 text-center">
+                              {[
+                                { label: 'Min', val: s.min },
+                                { label: 'Mean', val: s.mean },
+                                { label: 'Max', val: s.max },
+                                { label: 'Median', val: s.median },
+                                { label: 'Std Dev', val: s.stdDev },
+                                { label: 'Unique', val: s.unique },
+                              ].map(({ label, val }) => (
+                                <div key={label} className="bg-muted/50 rounded-lg p-1.5">
+                                  <p className="text-xs text-muted-foreground leading-none">{label}</p>
+                                  <p className="text-xs font-semibold tabular-nums mt-0.5">{val ?? '—'}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ height: 60 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={s.histogram} margin={{ top: 0, right: 0, bottom: 0, left: 0 }} barSize={14}>
+                                  <Bar dataKey="n" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                                  <RTooltip
+                                    contentStyle={{ fontSize: 10 }}
+                                    formatter={(v: number) => [v, 'count']}
+                                    labelFormatter={(l: string) => `≥ ${l}`}
+                                  />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Text / select top values */}
+                        {s.type !== 'numeric' && s.topValues && s.topValues.length > 0 && (
+                          s.isLikelySelect ? (
+                            <div style={{ height: Math.min(s.topValues.length * 20 + 8, 120) }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={s.topValues} layout="vertical" margin={{ top: 0, right: 24, bottom: 0, left: 0 }} barSize={10}>
+                                  <XAxis type="number" hide />
+                                  <YAxis type="category" dataKey="v" width={80} tick={{ fontSize: 9 }} tickLine={false} />
+                                  <Bar dataKey="n" fill="#10b981" radius={[0, 2, 2, 0]} />
+                                  <RTooltip contentStyle={{ fontSize: 10 }} formatter={(v: number) => [v, 'responses']} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                              {s.topValues.slice(0, 6).map(({ v, n }) => (
+                                <div key={v} className="flex items-center gap-2 text-xs">
+                                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.round((n / s.total) * 100)}%` }} />
+                                  </div>
+                                  <span className="w-6 text-right tabular-nums text-muted-foreground">{n}</span>
+                                  <span className="font-mono truncate max-w-[90px]" title={v}>{v}</span>
+                                </div>
+                              ))}
+                              {s.unique > 6 && <p className="text-xs text-muted-foreground">+{s.unique - 6} more unique values</p>}
+                            </div>
+                          )
+                        )}
+
+                        {/* Date: just show unique count */}
+                        {s.type === 'date' && (
+                          <p className="text-xs text-muted-foreground">{s.unique} distinct dates · {s.topValues?.[0]?.v ?? ''} → {s.topValues?.[s.topValues.length - 1]?.v ?? ''}</p>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </TabsContent>
 
             {/* ── TAB: Raw Data ── */}
             <TabsContent value="rawdata" className="space-y-3">
