@@ -138,7 +138,7 @@ BEGIN
         WHEN p_role_coordinator THEN (
           SELECT count(*)::int
           FROM mmp_site_entries m
-          WHERE m.accepted_by = uid
+          WHERE m.accepted_by = uid::text
             AND lower(m.status::text) = 'dispatched'
         )
         ELSE 0

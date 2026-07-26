@@ -194,7 +194,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
     realtimeDebounceRef.current = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: downPaymentQueryKeys.all });
-    }, 800);
+    }, 2500);
   }, [queryClient]);
 
   useRealtimeTable('down_payment_requests', debouncedRefresh, {

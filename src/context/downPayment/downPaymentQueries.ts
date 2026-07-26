@@ -357,7 +357,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
 
 // 90-second cache — balances avoiding unnecessary re-fetches on rapid
 // navigation with picking up newly-created records promptly.
-const STALE_MS = 90 * 1000;
+const STALE_MS = 3 * 60 * 1000;
 
 /**
  * Fetches down payment requests for the current user with role-based filtering.

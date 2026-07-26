@@ -9,6 +9,7 @@ import {
   deleteMMPSiteEntry,
   getOrCreateDefaultMMPFile
 } from './mmpSiteEntriesAdapter';
+import { MMP_SITE_ENTRY_DETAIL_COLS } from '@/constants/mmpSiteEntryCols';
 
 /**
  * Fetches site visits from mmp_site_entries table, with fallback to site_visits table
@@ -285,7 +286,7 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
   // Get current entry first
   const { data: currentEntry, error: fetchError } = await supabase
     .from('mmp_site_entries')
-    .select('*')
+    .select(MMP_SITE_ENTRY_DETAIL_COLS)
     .eq('id', id)
     .single();
     
@@ -368,7 +369,7 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
   // Fetch the updated data
   const { data: updatedData, error: fetchUpdatedError } = await supabase
     .from('mmp_site_entries')
-    .select('*')
+    .select(MMP_SITE_ENTRY_DETAIL_COLS)
     .eq('id', id)
     .single();
     

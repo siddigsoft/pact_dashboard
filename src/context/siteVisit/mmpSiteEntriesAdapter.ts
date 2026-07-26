@@ -7,6 +7,7 @@
 import { SiteVisit } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
+import { MMP_SITE_ENTRY_DETAIL_COLS } from '@/constants/mmpSiteEntryCols';
 
 interface MMPSiteEntry {
   id: string;
@@ -250,11 +251,13 @@ const mapStatusToDb = (appStatus: SiteVisit['status']): string => {
  */
 export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   const PAGE_SIZE = 1000;
+  // Cap parallel fan-out — full-table SELECT * storms were the hottest API path.
+  const MAX_PAGES = 5;
 
   // Fetch first page — covers the common case where all data fits in one page
   const { data: firstPage, error: firstError } = await supabase
     .from('mmp_site_entries')
-    .select('*')
+    .select(MMP_SITE_ENTRY_DETAIL_COLS)
     .order('created_at', { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
@@ -266,19 +269,22 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   let allData: any[] = firstPage || [];
 
   // If the first page was full there is more data — get the total count and
-  // fetch all remaining pages IN PARALLEL instead of sequentially.
+  // fetch remaining pages in parallel (capped).
   if (allData.length === PAGE_SIZE) {
     const { count, error: countError } = await supabase
       .from('mmp_site_entries')
-      .select('*', { count: 'exact', head: true });
+      .select('id', { count: 'exact', head: true });
 
     if (!countError && count && count > PAGE_SIZE) {
-      const remainingPageCount = Math.ceil((count - PAGE_SIZE) / PAGE_SIZE);
+      const remainingPageCount = Math.min(
+        Math.ceil((count - PAGE_SIZE) / PAGE_SIZE),
+        MAX_PAGES - 1
+      );
       const pagePromises = Array.from({ length: remainingPageCount }, (_, i) => {
         const from = PAGE_SIZE + i * PAGE_SIZE;
         return supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select(MMP_SITE_ENTRY_DETAIL_COLS)
           .order('created_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
       });
@@ -416,7 +422,7 @@ export const createMMPSiteEntry = async (
   const { data, error } = await supabase
     .from('mmp_site_entries')
     .insert(dbEntry)
-    .select('*')
+    .select(MMP_SITE_ENTRY_DETAIL_COLS)
     .single();
   
   if (error) {
@@ -523,7 +529,7 @@ export const updateMMPSiteEntry = async (
   // Fetch the updated record
   const { data, error } = await supabase
     .from('mmp_site_entries')
-    .select('*')
+    .select(MMP_SITE_ENTRY_DETAIL_COLS)
     .eq('id', id)
     .single();
   

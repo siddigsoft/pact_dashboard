@@ -176,15 +176,16 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    /* ── 6. Page unload — best-effort final write ───────────────────── */
+    /* ── 6. Page unload — best-effort final write via keepalive (avoids CORS * + credentials) ── */
     const handleUnload = () => {
-      const payload = JSON.stringify({ last_activity: new Date().toISOString() });
-      navigator.sendBeacon?.(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
-        new Blob([payload], { type: 'application/json' }),
-      );
+      try {
+        void (supabase as any)
+          .from('profiles')
+          .update({ last_activity: new Date().toISOString() })
+          .eq('id', userId);
+      } catch { /* unload — ignore */ }
     };
-    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
 
     return () => {
       console.log('[GlobalPresence] Cleaning up');
@@ -193,7 +194,7 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
       if (heartbeatRef.current)     { clearInterval(heartbeatRef.current);     heartbeatRef.current = null; }
       if (activityWriteRef.current) { clearInterval(activityWriteRef.current); activityWriteRef.current = null; }
       document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
       initializedRef.current = false;
     };
   }, [authReady, currentUser?.id, writeLastActivity, syncMerged]);

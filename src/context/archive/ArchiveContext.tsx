@@ -66,11 +66,14 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
 
       if (mmpErr) throw mmpErr;
 
-      // Fetch site visits from mmp_site_entries
+      // Fetch site visits from mmp_site_entries (no SELECT * — skip unused wide cols)
       const { data: mmpEntriesData, error: svErr } = await supabase
         .from('mmp_site_entries')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(
+          'id, site_code, site_name, status, locality, state, activity_at_site, main_activity, visit_date, comments, cost, created_at, updated_at, additional_data'
+        )
+        .order('created_at', { ascending: false })
+        .limit(5000);
 
       if (svErr) {
         console.error('Error fetching site entries for archive:', svErr);

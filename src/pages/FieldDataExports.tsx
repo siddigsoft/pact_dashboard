@@ -502,7 +502,7 @@ export default function FieldDataExports() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 8000,
+    refetchInterval: 30_000,
   });
 
   const { data: templates = [], isLoading: loadingTemplates } = useQuery<ExportTemplate[]>({

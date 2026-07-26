@@ -150,8 +150,8 @@ export function useProjectTasks(projectId: string) {
           assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
           estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies,
-          assignee:profiles!assigned_to(full_name, role),
-          creator:profiles!created_by(full_name)
+          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
+          creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
@@ -365,8 +365,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .select(`
           id, project_id, title, description, priority, status,
           assigned_to, co_assignee_ids, due_date, created_at,
-          project:projects!project_id(name),
-          assignee:profiles!assigned_to(full_name)
+          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name)
         `)
         .eq('assigned_to', userId)
         .neq('status', 'cancelled')
@@ -379,8 +378,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .select(`
           id, project_id, title, description, priority, status,
           assigned_to, co_assignee_ids, due_date, created_at,
-          project:projects!project_id(name),
-          assignee:profiles!assigned_to(full_name)
+          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name)
         `)
         .contains('co_assignee_ids', [userId])
         .neq('assigned_to', userId)
@@ -388,10 +386,26 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .order('due_date', { ascending: true, nullsFirst: false });
       if (e2) throw e2;
 
+      const projectIds = [...new Set(
+        [...(primary ?? []), ...(coAssigned ?? [])]
+          .map((r: any) => r.project_id)
+          .filter(Boolean)
+      )] as string[];
+      const projectNameById = new Map<string, string>();
+      if (projectIds.length > 0) {
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id, name')
+          .in('id', projectIds);
+        for (const p of projects ?? []) {
+          projectNameById.set(p.id, p.name);
+        }
+      }
+
       const toRow = (r: any): MyFieldTask => ({
         id: r.id,
         projectId: r.project_id,
-        projectName: (r.project as any)?.name ?? null,
+        projectName: projectNameById.get(r.project_id) ?? null,
         title: r.title,
         description: r.description,
         priority: r.priority as FieldTaskPriority,
@@ -426,15 +440,20 @@ export function useAllProjectFieldTasks() {
         .select(`
           id, project_id, title, priority, status,
           assigned_to, co_assignee_ids, due_date, created_at,
-          project:projects!project_id(name),
-          assignee:profiles!assigned_to(full_name, role)
+          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
+      const projectIds = [...new Set((data ?? []).map((r: any) => r.project_id).filter(Boolean))] as string[];
+      const projectNameById = new Map<string, string>();
+      if (projectIds.length > 0) {
+        const { data: projects } = await supabase.from('projects').select('id, name').in('id', projectIds);
+        for (const p of projects ?? []) projectNameById.set(p.id, p.name);
+      }
       return (data ?? []).map((r: any) => ({
         id: r.id as string,
         projectId: r.project_id as string,
-        projectName: (r.project as any)?.name as string ?? 'Unknown Project',
+        projectName: projectNameById.get(r.project_id) ?? 'Unknown Project',
         title: r.title as string,
         priority: r.priority as FieldTaskPriority,
         status: r.status as FieldTaskStatus,

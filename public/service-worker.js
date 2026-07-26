@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pact-v6';
+const CACHE_NAME = 'pact-v7';
 const OFFLINE_URL = '/offline.html';
-const STATIC_CACHE = 'pact-static-v4';
-const API_CACHE = 'pact-api-v4';
-const DYNAMIC_CACHE = 'pact-dynamic-v3';
+const STATIC_CACHE = 'pact-static-v5';
+const API_CACHE = 'pact-api-v5';
+const DYNAMIC_CACHE = 'pact-dynamic-v4';
 
 const SW_DEBUG_HOSTS = ['localhost', '127.0.0.1'];
 const SW_DEBUG = SW_DEBUG_HOSTS.includes(self.location.hostname) || self.location.hostname.endsWith('.local');
@@ -68,7 +68,7 @@ const VIBRATION_PATTERNS = {
 };
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v4...');
+  console.log('[SW] Installing service worker v7...');
   event.waitUntil(
     Promise.all([
       caches.open(CACHE_NAME).then((cache) => {
@@ -90,7 +90,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v4...');
+  console.log('[SW] Activating service worker v7...');
   const validCaches = [CACHE_NAME, STATIC_CACHE, API_CACHE, DYNAMIC_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -407,6 +407,13 @@ async function prefetchApiEndpoints(urls) {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Never intercept cross-origin (Supabase REST/Auth/Realtime). Caching authenticated
+  // API responses caused CORS failures, HEAD Cache.put errors, and hung page loads
+  // that only cleared on hard refresh.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   if (event.request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
@@ -436,6 +443,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Same-origin API mirrors only (dev proxies). Never cache non-GET.
   const isApiRequest = API_CACHE_PATTERNS.some(pattern => url.pathname.includes(pattern));
   
   if (isApiRequest && event.request.method === 'GET') {
@@ -453,6 +461,10 @@ self.addEventListener('fetch', (event) => {
   // ReferenceErrors for functions that were added/removed between deployments.
   const isJsOrCss = url.pathname.match(/\.(js|css)(\?.*)?$/);
   if (isJsOrCss) {
+    // HEAD probes (env checks) must not go through Cache API
+    if (event.request.method !== 'GET') {
+      return;
+    }
     event.respondWith(networkFirstWithCache(event.request, DYNAMIC_CACHE));
     return;
   }
@@ -465,7 +477,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.origin === self.location.origin) {
+  if (event.request.method === 'GET') {
     event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
   }
 });
@@ -476,19 +488,24 @@ async function networkFirstWithCache(request, cacheName) {
   try {
     const networkResponse = await fetch(request);
     
-    if (networkResponse.ok) {
-      const responseToCache = networkResponse.clone();
-      const headers = new Headers(responseToCache.headers);
-      headers.set('sw-cache-timestamp', Date.now().toString());
-      
-      const body = await responseToCache.blob();
-      const cachedResponse = new Response(body, {
-        status: responseToCache.status,
-        statusText: responseToCache.statusText,
-        headers
-      });
-      
-      cache.put(request, cachedResponse);
+    // Cache API only supports GET Request objects as keys
+    if (networkResponse.ok && request.method === 'GET') {
+      try {
+        const responseToCache = networkResponse.clone();
+        const headers = new Headers(responseToCache.headers);
+        headers.set('sw-cache-timestamp', Date.now().toString());
+        
+        const body = await responseToCache.blob();
+        const cachedResponse = new Response(body, {
+          status: responseToCache.status,
+          statusText: responseToCache.statusText,
+          headers
+        });
+        
+        await cache.put(request, cachedResponse);
+      } catch (cacheErr) {
+        console.log('[SW] cache.put skipped:', cacheErr?.message || cacheErr);
+      }
     }
     
     return networkResponse;

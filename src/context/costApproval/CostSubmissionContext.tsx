@@ -220,8 +220,8 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
     const { data, isLoading, error, refetch } = useQuery({
       queryKey: ['cost-approvals', 'pending'],
       queryFn: supabaseApi.fetchPendingApprovals,
-      staleTime: 1000 * 15, // 15s for near-real-time queue
-      refetchInterval: 15000
+      staleTime: 1000 * 60, // 1 min — realtime/invalidation covers live updates
+      refetchInterval: 60_000
     });
 
     return {

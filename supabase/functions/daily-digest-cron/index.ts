@@ -492,7 +492,7 @@ async function sendVisitReminders(sb: ReturnType<typeof createClient>): Promise<
     const in3Days = new Date(today); in3Days.setDate(in3Days.getDate() + 3); in3Days.setHours(23, 59, 59, 999)
 
     const { data: sites } = await sb.from('mmp_site_entries')
-      .select('id, site_name, site_code, visit_date, visit_date_from, accepted_by, hub_office')
+      .select('id, site_name, site_code, visit_date, accepted_by, hub_office, additional_data')
       .in('status', ['dispatched', 'accepted', 'assigned'])
       .not('accepted_by', 'is', null)
       .gte('visit_date', today.toISOString())
@@ -507,7 +507,10 @@ async function sendVisitReminders(sb: ReturnType<typeof createClient>): Promise<
 
     for (const site of (sites as any[])) {
       if (!site.accepted_by) continue
-      const visitDate = site.visit_date || site.visit_date_from
+      const visitDate =
+        site.visit_date ||
+        site.additional_data?.visit_date_from ||
+        site.additional_data?.visitDateFrom
       if (!visitDate) continue
 
       const daysUntil = Math.floor((new Date(visitDate).getTime() - today.getTime()) / 86_400_000)

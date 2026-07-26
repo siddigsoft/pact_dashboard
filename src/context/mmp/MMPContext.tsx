@@ -142,14 +142,16 @@ export const useMMPProvider = () => {
 
     // Persist to Supabase (store metadata, not files)
     await withTimeout(
-      supabase.from('mmp_files').update({
-        permits: {
-          federal: !!permits.federal,
-          state: !!permits.state,
-          local: !!permits.local,
-          documents: uploadedDocs,
-        }
-      }).eq('id', id),
+      Promise.resolve(
+        supabase.from('mmp_files').update({
+          permits: {
+            federal: !!permits.federal,
+            state: !!permits.state,
+            local: !!permits.local,
+            documents: uploadedDocs,
+          }
+        }).eq('id', id)
+      ),
       15000,
       'Attach permits timed out'
     );
@@ -484,7 +486,9 @@ export const useMMPProvider = () => {
         // Re-fetch from DB and update local state to the authoritative rows
         const { data: syncedRows, error: syncErr } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select(
+            'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, status, additional_data, enumerator_fee, transport_fee, created_at, updated_at, accepted_by, accepted_at, dispatched_by, dispatched_at, verified_by, verified_at, visit_completed_at, forwarded_to_user_id'
+          )
           .eq('mmp_file_id', id)
           .order('created_at', { ascending: true });
         if (syncErr) {
@@ -628,10 +632,12 @@ export const useMMPProvider = () => {
     );
     try {
       const { error } = await withTimeout(
-        supabase
-          .from('mmp_files')
-          .update({ status: 'pending', deleted_at: null, deleted_by: null })
-          .eq('id', id),
+        Promise.resolve(
+          supabase
+            .from('mmp_files')
+            .update({ status: 'pending', deleted_at: null, deleted_by: null })
+            .eq('id', id)
+        ),
         15000,
         'Restore MMP timed out'
       );
@@ -671,18 +677,20 @@ export const useMMPProvider = () => {
         // Persist reset to DB (avoid columns that may not exist across envs)
         try {
           await withTimeout(
-            supabase
-              .from('mmp_files')
-              .update({
-                status: 'pending',
-                approval_workflow: null,
-                rejection_reason: null,
-                approved_by: null,
-                approved_at: null,
-                verified_by: null,
-                verified_at: null,
-              })
-              .eq('id', id),
+            Promise.resolve(
+              supabase
+                .from('mmp_files')
+                .update({
+                  status: 'pending',
+                  approval_workflow: null,
+                  rejection_reason: null,
+                  approved_by: null,
+                  approved_at: null,
+                  verified_by: null,
+                  verified_at: null,
+                })
+                .eq('id', id)
+            ),
             15000,
             'Reset MMP timed out'
           );
@@ -702,7 +710,9 @@ export const useMMPProvider = () => {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('*')
+        .select(
+          'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, status, additional_data, enumerator_fee, transport_fee, created_at, updated_at, accepted_by, accepted_at, dispatched_by, dispatched_at, verified_by, verified_at, visit_completed_at, forwarded_to_user_id'
+        )
         .eq('mmp_file_id', mmpId)
         .order('created_at', { ascending: true });
 

@@ -54,7 +54,7 @@ export function usePagePermissions(pageSlug: string, skip = false): PagePermissi
   const isSuperAdminUser = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
   const shouldSkip = skip || isSuperAdminUser;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ['page-permissions', currentUser?.id, pageSlug],
     queryFn: async () => {
       if (!currentUser?.id) return null;
@@ -72,6 +72,10 @@ export function usePagePermissions(pageSlug: string, skip = false): PagePermissi
           .eq('user_id', currentUser.id)
           .maybeSingle(),
       ]);
+      // Surface hard failures so React Query can stop loading (fail-open below)
+      if (overrideRes.error && overrideRes.error.code !== 'PGRST116') {
+        throw overrideRes.error;
+      }
       return {
         pageOverride: overrideRes.data ?? null,
         screenPerms:  (screenPermRes.data as any) ?? null,
@@ -79,12 +83,18 @@ export function usePagePermissions(pageSlug: string, skip = false): PagePermissi
     },
     enabled: !!currentUser?.id && !shouldSkip,
     staleTime: 60_000,
+    // Don't leave the UI on an infinite spinner if Supabase/SW flakes
+    retry: 1,
+    networkMode: 'online',
   });
 
   // Super admins and explicitly-skipped callers always have full access.
   if (isSuperAdminUser || skip) return { ...FULL_ACCESS };
 
-  if (!data) return { ...DENIED, isLoading: isLoading && !shouldSkip };
+  // Fail open: if the check errors or never resolves data, don't block the page.
+  if (isError) return { ...DENIED, isLoading: false };
+
+  if (!data) return { ...DENIED, isLoading: (isLoading || isFetching) && !shouldSkip };
 
   // ── Layer 3 (highest priority): page_access_overrides ──────────────────
   if (data.pageOverride) {

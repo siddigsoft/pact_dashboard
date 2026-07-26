@@ -48,6 +48,17 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const currentPageDef = currentSlug ? PAGE_DEFS.find(p => p.slug === currentSlug) : null;
 
   const { isBlocked: pageIsBlocked, isChecking: pageIsChecking, pageLabel } = usePageAccessGuard();
+  // Safety: never leave the content pane spinning if access check hangs
+  const [accessCheckTimedOut, setAccessCheckTimedOut] = useState(false);
+  React.useEffect(() => {
+    if (!pageIsChecking) {
+      setAccessCheckTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setAccessCheckTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, [pageIsChecking, location.pathname]);
+  const showAccessSpinner = pageIsChecking && !accessCheckTimedOut;
 
   const handleGlobalRefresh = useCallback(async () => {
     await queryClient.invalidateQueries();
@@ -90,11 +101,11 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
               <Navbar />
               <div className="global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 bg-transparent px-2 py-2 sm:px-3 sm:py-3 lg:px-5 lg:py-4">
                 <div className="w-full rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
-                  {pageIsChecking ? (
+                  {showAccessSpinner ? (
                     <div className="flex items-center justify-center min-h-[60vh]">
                       <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
                     </div>
-                  ) : pageIsBlocked ? (
+                  ) : pageIsBlocked && !accessCheckTimedOut ? (
                     <PageAccessDenied pageLabel={pageLabel} reason="blocked" />
                   ) : (
                     children || <Outlet />

@@ -31,7 +31,7 @@ interface UseRealtimeTeamLocationsOptions {
 
 const PRESENCE_CHANNEL = 'team-presence';
 const LOCATION_CHANNEL = 'team-locations';
-const DEFAULT_REFRESH_INTERVAL = 15000;
+const DEFAULT_REFRESH_INTERVAL = 60_000;
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
 
 const generateSessionId = () => {

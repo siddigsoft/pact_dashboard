@@ -27,7 +27,7 @@ interface TeamLocationMapProps {
   onMessageUser?: (user: User) => void;
 }
 
-const AUTO_REFRESH_INTERVAL = 15000;
+const AUTO_REFRESH_INTERVAL = 60_000;
 
 const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ 
   users, 
