@@ -536,7 +536,7 @@ const RetainerManagement = () => {
     <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-[1400px]">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/hr?tab=retainer')} data-testid="button-back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>

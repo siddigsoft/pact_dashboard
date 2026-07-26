@@ -240,7 +240,7 @@ export default function CostSubmissionReports({
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/cost-submission')}
             data-testid="button-back"
           >
             <ChevronLeft className="h-5 w-5" />

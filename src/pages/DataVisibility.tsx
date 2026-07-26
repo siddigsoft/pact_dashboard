@@ -154,7 +154,7 @@ const DataVisibility: FC = () => {
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => window.history.back()}
+              onClick={() => navigate('/analytics?tab=data-visibility')}
               className="w-full"
             >
               Go Back

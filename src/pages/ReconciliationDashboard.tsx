@@ -494,7 +494,7 @@ const ReconciliationDashboard = () => {
     <div className="container mx-auto p-4 md:p-6 space-y-4" data-testid="reconciliation-dashboard">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/finance-hub?tab=reconciliation')} data-testid="button-back">
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <div>

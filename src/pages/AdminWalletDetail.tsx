@@ -896,7 +896,7 @@ const AdminWalletDetail = () => {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <div className="text-slate-400 text-lg">No wallet found for this user</div>
-        <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => navigate('/finance-hub?tab=admin-wallets')} className="gap-1.5">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
       </div>
@@ -917,7 +917,7 @@ const AdminWalletDetail = () => {
 
       {/* ── Back ── */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/finance-hub?tab=admin-wallets')}
         className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors font-medium"
         data-testid="button-back"
       >

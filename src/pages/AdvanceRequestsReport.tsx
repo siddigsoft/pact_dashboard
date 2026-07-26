@@ -1783,7 +1783,7 @@ function AdvanceRequestsReportContent() {
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/finance-hub?tab=advance-report')} data-testid="button-back">
                 <ChevronLeft className="h-5 w-5" />
               </Button>
               <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" width={48} height={48} loading="lazy" />

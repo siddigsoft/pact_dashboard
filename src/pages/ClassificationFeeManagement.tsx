@@ -708,7 +708,7 @@ const ClassificationFeeManagement = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/admin-hub?tab=classification-fees')}
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />

@@ -184,7 +184,7 @@ const LoginAnalytics = () => {
               <br />
               Please contact an administrator for access.
             </p>
-            <Button onClick={() => navigate(-1)} data-testid="button-go-back">
+            <Button onClick={() => navigate('/admin-hub')} data-testid="button-go-back">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Go Back
             </Button>
@@ -202,7 +202,7 @@ const LoginAnalytics = () => {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/admin-hub')}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />

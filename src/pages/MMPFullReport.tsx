@@ -350,7 +350,7 @@ const MMPFullReport = () => {
       <div className="flex flex-col items-center justify-center min-h-screen gap-3">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-destructive font-medium">{error}</p>
-        <Button variant="outline" onClick={() => navigate(-1)}>Go Back</Button>
+        <Button variant="outline" onClick={() => navigate(mmpId ? `/mmp/${mmpId}` : '/mmp')}>Go Back</Button>
       </div>
     );
   }
@@ -362,7 +362,7 @@ const MMPFullReport = () => {
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center justify-between gap-3 shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="flex-shrink-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate(mmpId ? `/mmp/${mmpId}` : '/mmp')} className="flex-shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">

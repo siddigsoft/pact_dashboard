@@ -2187,7 +2187,7 @@ export default function EmailManagement() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/super-admin-hub?tab=email-management')}
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4" />

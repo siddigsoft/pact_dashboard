@@ -568,7 +568,7 @@ export default function AdminWhatsAppPage() {
     <div className="space-y-6 p-6 max-w-5xl mx-auto" data-testid="admin-whatsapp-page">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/communication-hub?tab=whatsapp')} data-testid="button-back">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">

@@ -3684,7 +3684,7 @@ const CoordinatorSites: FC = () => {
             </div>
           </div>
           <Button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/coordinator-dashboard')}
             className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
             data-testid="button-back"
           >

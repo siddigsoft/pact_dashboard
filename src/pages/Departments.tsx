@@ -2672,7 +2672,7 @@ export default function Departments() {
 
         <div className="relative flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10" onClick={() => navigate(-1)} data-testid="button-back">
+            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10" onClick={() => navigate('/admin-hub?tab=departments')} data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="p-2 rounded-xl bg-white/10">
