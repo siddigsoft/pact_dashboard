@@ -5793,7 +5793,7 @@ const CostSubmission = () => {
                               <span className="text-[11px] text-blue-300 flex-1">
                                 {grpDoneCnt + grpPartialCnt} item{grpDoneCnt + grpPartialCnt !== 1 ? 's' : ''} approved or partially paid
                               </span>
-                              {groupPayableItems.length > 0 && (
+                              {groupPayableItems.length > 0 && !isCountryDirector && (
                                 <Button size="sm"
                                   className="h-7 px-3 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600/50"
                                   onClick={(e) => { e.stopPropagation(); handleOpenBatchCostPay(groupPayableItems); }}
@@ -5818,7 +5818,7 @@ const CostSubmission = () => {
                                   </Button>
                                 );
                               })()}
-                              {(isSuperAdmin || isAdmin) && !isFOM && (
+                              {(isSuperAdmin || isAdmin) && !isFOM && !isCountryDirector && (
                                 <Button size="sm"
                                   className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
                                   onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
