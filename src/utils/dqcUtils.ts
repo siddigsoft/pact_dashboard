@@ -234,6 +234,7 @@ export function checkSectionCoverage(
   headers: string[],
   schema: XLSFormSchema,
   selectedGroups: Set<string>,
+  selectedQuestions?: Set<string>,
 ): CoverageRow[] {
   const headerSet = new Set(headers.map(h => h.toLowerCase()));
   const results: CoverageRow[] = [];
@@ -242,6 +243,7 @@ export function checkSectionCoverage(
 
   for (const group of groups) {
     for (const q of group.questions) {
+      if (selectedQuestions && !selectedQuestions.has(q.name)) continue;
       // Try multiple column name patterns ODK exports use
       const candidates = [
         q.name,

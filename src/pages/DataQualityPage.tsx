@@ -199,7 +199,13 @@ export default function DataQualityPage() {
   // ── Wizard state ────────────────────────────────────────────────────────
   const [wizardStep, setWizardStep] = useState<WizardStep>('xlsform');
   const [xlsSchema, setXlsSchema] = useState<XLSFormSchema | null>(null);
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
+  const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // Derived: a group counts as "selected" if ≥1 of its questions are selected
+  const selectedGroups = useMemo(() => {
+    if (!xlsSchema) return new Set<string>();
+    return new Set(xlsSchema.groups.filter(g => g.questions.some(q => selectedQuestions.has(q.name))).map(g => g.name));
+  }, [selectedQuestions, xlsSchema]);
   const [xlsLoading, setXlsLoading] = useState(false);
   const [xlsError, setXlsError] = useState<string | null>(null);
   const [xlsFile, setXlsFile] = useState<string>('');
@@ -231,8 +237,8 @@ export default function DataQualityPage() {
   // ── Section coverage ─────────────────────────────────────────────────────
   const coverageRows = useMemo((): CoverageRow[] => {
     if (!xlsSchema || !dataset || selectedGroups.size === 0) return [];
-    return checkSectionCoverage(dataset.headers, xlsSchema, selectedGroups);
-  }, [xlsSchema, dataset, selectedGroups]);
+    return checkSectionCoverage(dataset.headers, xlsSchema, selectedGroups, selectedQuestions);
+  }, [xlsSchema, dataset, selectedGroups, selectedQuestions]);
 
   // ── XLSForm upload handler ───────────────────────────────────────────────
   const handleXLSForm = useCallback((file: File) => {
@@ -244,7 +250,8 @@ export default function DataQualityPage() {
       try {
         const schema = parseXLSForm(e.target!.result as ArrayBuffer);
         setXlsSchema(schema);
-        setSelectedGroups(new Set(schema.groups.map(g => g.name)));
+        setSelectedQuestions(new Set(schema.allQuestions.map(q => q.name)));
+        setExpandedGroups(new Set());
         setWizardStep('sections');
       } catch (err) {
         setXlsError(err instanceof Error ? err.message : 'Failed to parse XLSForm.');
@@ -292,7 +299,8 @@ export default function DataQualityPage() {
   const resetAll = () => {
     setWizardStep('xlsform');
     setXlsSchema(null);
-    setSelectedGroups(new Set());
+    setSelectedQuestions(new Set());
+    setExpandedGroups(new Set());
     setXlsFile('');
     setXlsError(null);
     setDataset(null);
@@ -501,7 +509,7 @@ export default function DataQualityPage() {
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-foreground"
-              onClick={() => { setXlsSchema(null); setSelectedGroups(new Set()); setWizardStep('csv'); }}
+              onClick={() => { setXlsSchema(null); setSelectedQuestions(new Set()); setExpandedGroups(new Set()); setWizardStep('csv'); }}
             >
               Skip XLSForm → Analyze CSV directly
               <ChevronRight className="w-4 h-4 ml-1" />
@@ -516,125 +524,217 @@ export default function DataQualityPage() {
       ════════════════════════════════════════════════════════════════ */}
       {wizardStep === 'sections' && xlsSchema && (
         <div className="bg-card border rounded-xl p-6 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <List className="w-5 h-5 text-primary" /> Step 2: Select Focus Areas
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Found <strong>{xlsSchema.groups.length} sections</strong> and <strong>{xlsSchema.allQuestions.length} questions</strong> in <em>"{xlsSchema.formTitle}"</em>.
-                Choose which sections to include in the QC analysis.
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Button variant="outline" size="sm" onClick={() => setSelectedGroups(new Set(xlsSchema.groups.map(g => g.name)))}>
-                <CheckSquare className="w-3.5 h-3.5 mr-1.5" /> All
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setSelectedGroups(new Set())}>
-                <Square className="w-3.5 h-3.5 mr-1.5" /> None
-              </Button>
-            </div>
+          {/* Header */}
+          <div>
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <List className="w-5 h-5 text-primary" /> Step 2: Select Focus Areas
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Found <strong>{xlsSchema.groups.length} sections</strong> and{' '}
+              <strong>{xlsSchema.allQuestions.length} questions</strong> in{' '}
+              <em>"{xlsSchema.formTitle}"</em>. Select whole sections or individual questions to include in QC.
+            </p>
           </div>
 
-          {/* Section cards */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* Summary bar */}
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm">
+            <span className="font-medium text-primary">{selectedQuestions.size} of {xlsSchema.allQuestions.length} questions selected</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{selectedGroups.size} of {xlsSchema.groups.length} sections</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{xlsSchema.groups.reduce((n,g) => n + g.questions.length, 0)} questions in groups</span>
+            {xlsSchema.topLevelQuestions.length > 0 && (
+              <><span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">{xlsSchema.topLevelQuestions.length} ungrouped</span></>
+            )}
+          </div>
+
+          {/* Toolbar */}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedQuestions(new Set(xlsSchema.allQuestions.map(q => q.name)))}>
+              <CheckSquare className="w-3.5 h-3.5 mr-1.5" /> Select All Questions
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSelectedQuestions(new Set())}>
+              <Square className="w-3.5 h-3.5 mr-1.5" /> Deselect All
+            </Button>
+            <div className="w-px bg-border mx-1" />
+            <Button variant="ghost" size="sm" onClick={() => setExpandedGroups(new Set(xlsSchema.groups.map(g => g.name)))}>
+              <Eye className="w-3.5 h-3.5 mr-1.5" /> Expand All
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setExpandedGroups(new Set())}>
+              <Filter className="w-3.5 h-3.5 mr-1.5" /> Collapse All
+            </Button>
+          </div>
+
+          {/* Group rows */}
+          <div className="space-y-2">
             {xlsSchema.groups.map(group => {
               const Icon = sectionIcon(group);
-              const checked = selectedGroups.has(group.name);
+              const expanded = expandedGroups.has(group.name);
+              const selCount = group.questions.filter(q => selectedQuestions.has(q.name)).length;
+              const isAll = selCount === group.questions.length && group.questions.length > 0;
+              const isPartial = selCount > 0 && selCount < group.questions.length;
+              const isNone = selCount === 0;
+
+              const toggleGroupAll = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                setSelectedQuestions(prev => {
+                  const next = new Set(prev);
+                  if (isAll) { group.questions.forEach(q => next.delete(q.name)); }
+                  else { group.questions.forEach(q => next.add(q.name)); }
+                  return next;
+                });
+              };
+
               return (
-                <div
-                  key={group.name}
-                  onClick={() => {
-                    setSelectedGroups(prev => {
+                <div key={group.name} className={cn(
+                  'border rounded-xl overflow-hidden transition-all',
+                  isAll ? 'border-primary/60 bg-primary/3 dark:bg-primary/5'
+                  : isPartial ? 'border-amber-400/60 bg-amber-50/50 dark:bg-amber-900/10'
+                  : 'border-border'
+                )}>
+                  {/* Group header row */}
+                  <div
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                    onClick={() => setExpandedGroups(prev => {
                       const next = new Set(prev);
                       if (next.has(group.name)) next.delete(group.name);
                       else next.add(group.name);
                       return next;
-                    });
-                  }}
-                  className={cn(
-                    'relative border-2 rounded-xl p-4 cursor-pointer transition-all space-y-2',
-                    checked
-                      ? 'border-primary bg-primary/5 dark:bg-primary/10'
-                      : 'border-border hover:border-muted-foreground/40 hover:bg-muted/20'
-                  )}
-                >
-                  {/* Checkbox corner */}
-                  <div className="absolute top-3 right-3">
-                    <Checkbox checked={checked} onCheckedChange={() => {}} className="pointer-events-none" />
-                  </div>
-
-                  {/* Icon + name */}
-                  <div className="flex items-center gap-2 pr-8">
-                    <div className={cn(
-                      'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
-                      checked ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                    )}>
-                      <Icon className="w-4 h-4" />
+                    })}
+                  >
+                    {/* Group checkbox — click toggles all questions in group */}
+                    <div
+                      onClick={toggleGroupAll}
+                      className={cn(
+                        'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer',
+                        isAll ? 'bg-primary border-primary text-primary-foreground'
+                        : isPartial ? 'bg-amber-100 border-amber-500 dark:bg-amber-900/30'
+                        : 'border-input bg-background'
+                      )}
+                    >
+                      {isAll && <CheckCircle2 className="w-3 h-3" />}
+                      {isPartial && <span className="w-2 h-0.5 bg-amber-600 rounded-full block" />}
                     </div>
-                    <div className="min-w-0">
+
+                    {/* Icon */}
+                    <div className={cn(
+                      'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+                      isAll ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                    )}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+
+                    {/* Labels */}
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold leading-tight truncate">{group.label}</p>
                       <p className="text-xs text-muted-foreground font-mono truncate">{group.name}</p>
                     </div>
-                  </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Info className="w-3 h-3" />
-                      {group.questions.length} question{group.questions.length !== 1 ? 's' : ''}
-                    </span>
-                    {group.type === 'repeat' && (
-                      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">repeat</Badge>
-                    )}
-                  </div>
-
-                  {/* Sample questions */}
-                  {group.questions.length > 0 && (
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {group.questions.slice(0, 3).map(q => (
-                        <p key={q.name} className="truncate">· {q.label}</p>
-                      ))}
-                      {group.questions.length > 3 && (
-                        <p className="text-muted-foreground/60">… and {group.questions.length - 3} more</p>
+                    {/* Counts */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {group.type === 'repeat' && (
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">repeat</Badge>
                       )}
+                      <span className={cn(
+                        'text-xs font-semibold px-2 py-0.5 rounded-full',
+                        isAll ? 'bg-primary/15 text-primary'
+                        : isPartial ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-muted text-muted-foreground'
+                      )}>
+                        {selCount} / {group.questions.length}
+                      </span>
+                      <ChevronRight className={cn('w-4 h-4 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
+                    </div>
+                  </div>
+
+                  {/* Expanded question list */}
+                  {expanded && group.questions.length > 0 && (
+                    <div className="border-t">
+                      {/* Within-group toolbar */}
+                      <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
+                        <Button variant="ghost" size="sm" className="h-6 text-xs px-2"
+                          onClick={() => setSelectedQuestions(prev => { const next = new Set(prev); group.questions.forEach(q => next.add(q.name)); return next; })}>
+                          ✓ All in section
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-6 text-xs px-2"
+                          onClick={() => setSelectedQuestions(prev => { const next = new Set(prev); group.questions.forEach(q => next.delete(q.name)); return next; })}>
+                          ✗ None in section
+                        </Button>
+                        <span className="ml-auto text-xs text-muted-foreground">{group.questions.length} questions total</span>
+                      </div>
+
+                      {/* Questions */}
+                      <div className="divide-y max-h-72 overflow-y-auto">
+                        {group.questions.map((q, idx) => {
+                          const qSelected = selectedQuestions.has(q.name);
+                          return (
+                            <div
+                              key={q.name}
+                              className={cn(
+                                'flex items-start gap-3 px-6 py-2.5 cursor-pointer transition-colors hover:bg-muted/20',
+                                qSelected && 'bg-primary/3 dark:bg-primary/5'
+                              )}
+                              onClick={() => setSelectedQuestions(prev => {
+                                const next = new Set(prev);
+                                if (next.has(q.name)) next.delete(q.name);
+                                else next.add(q.name);
+                                return next;
+                              })}
+                            >
+                              <Checkbox
+                                checked={qSelected}
+                                onCheckedChange={() => {}}
+                                className="pointer-events-none mt-0.5 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm leading-tight">{q.label}</p>
+                                <p className="text-xs text-muted-foreground font-mono mt-0.5">{q.name}</p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                                <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-mono">
+                                  {q.type}
+                                </Badge>
+                                {q.required && (
+                                  <Badge className="text-xs px-1.5 py-0 h-5 bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400">
+                                    required
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
               );
             })}
 
-            {/* Top-level questions (not in any group) */}
+            {/* Top-level questions (ungrouped) */}
             {xlsSchema.topLevelQuestions.length > 0 && (
-              <div className="border-2 border-dashed rounded-xl p-4 space-y-2 opacity-60">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Top-level questions</p>
-                    <p className="text-xs text-muted-foreground">Not inside any group</p>
-                  </div>
+              <div className="border-2 border-dashed rounded-xl p-4 opacity-70">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Ungrouped questions</p>
+                  <Badge variant="secondary" className="text-xs">{xlsSchema.topLevelQuestions.length}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">{xlsSchema.topLevelQuestions.length} question(s) — always included in QC</p>
+                <p className="text-xs text-muted-foreground">Not inside any section — always included in QC.</p>
               </div>
             )}
           </div>
 
           {/* Navigation */}
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-2 border-t">
             <Button variant="outline" onClick={() => setWizardStep('xlsform')}>
               <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
             </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {selectedGroups.size} of {xlsSchema.groups.length} sections selected
-                ({xlsSchema.groups.filter(g => selectedGroups.has(g.name)).reduce((n, g) => n + g.questions.length, 0)} questions)
+                <strong className="text-foreground">{selectedQuestions.size}</strong> questions selected across{' '}
+                <strong className="text-foreground">{selectedGroups.size}</strong> section{selectedGroups.size !== 1 ? 's' : ''}
               </span>
-              <Button
-                onClick={() => setWizardStep('csv')}
-                disabled={selectedGroups.size === 0}
-              >
+              <Button onClick={() => setWizardStep('csv')} disabled={selectedQuestions.size === 0}>
                 Continue → Upload Data
                 <ChevronRight className="w-4 h-4 ml-1.5" />
               </Button>
