@@ -844,15 +844,19 @@ const CostSubmission = () => {
     : rawSubmissions;
 
   // PROJECT TEAM MEMBERSHIP FILTER
-  // Filter submissions to only show those from projects the user belongs to
-  // Non-admin users with no project assignments see nothing (empty array)
+  // Filter submissions to only show those from projects the user belongs to.
+  // Approval-chain roles (FOM, Supervisor, CountryDirector, FinanceAdmin) bypass this filter
+  // because their visibility is governed by the role-based filter in filteredOperationalCosts,
+  // not by project membership. Only lower-tier submitters (Coordinators, DataCollectors) need
+  // the project-scoping restriction.
   const submissions = useMemo(() => {
     if (isAdminOrSuperUser || isSuperAdmin) return supervisorFilteredSubmissions;
+    if (isFOM || isSupervisor || isCountryDirector || isFinanceAdmin) return supervisorFilteredSubmissions;
     if (userProjectIds.length === 0) return []; // No project memberships = no data
     return supervisorFilteredSubmissions.filter(s => 
       !s.projectId || userProjectIds.includes(s.projectId)
     );
-  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin]);
+  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin, isFOM, isSupervisor, isCountryDirector, isFinanceAdmin]);
 
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
