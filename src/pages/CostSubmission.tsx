@@ -912,9 +912,11 @@ const CostSubmission = () => {
             return true;
           }
           if (isCoordSub) {
-            // Coordinator/DataCollector submissions: FOM is T2 approver — no hub restriction
-            return true;
+            // Coordinator submissions: FOM is T2 — visible only AFTER Supervisor (T1) approves.
+            // Still visible if FOM has already actioned it (approved or rejected at T2).
+            return o.tier1_status === 'approved' || o.tier2_approved_by === currentUser?.id;
           }
+          // Fallback: any submission this FOM has already actioned at any tier
           if (o.tier1_approved_by === currentUser?.id) return true;
           if (o.tier2_approved_by === currentUser?.id) return true;
           return false;
