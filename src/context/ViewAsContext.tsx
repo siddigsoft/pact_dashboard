@@ -26,20 +26,17 @@ const ViewAsContext = createContext<ViewAsContextType>({
 });
 
 export const ViewAsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [viewAs, setViewAsState] = useState<ViewAsTarget | null>(() => {
-    try {
-      const stored = sessionStorage.getItem('pact-view-as');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  // viewAs is intentionally NOT persisted to sessionStorage.
+  // It is an SA-only in-session preview tool. Persisting it caused stale "View As"
+  // state to contaminate non-SA users who opened the app in the same browser tab,
+  // making them inherit the wrong role and see empty data pages.
+  const [viewAs, setViewAsState] = useState<ViewAsTarget | null>(null);
   const [openPickerRequest, setOpenPickerRequest] = useState(false);
 
   const setViewAs = (target: ViewAsTarget | null) => {
     setViewAsState(target);
-    if (target) sessionStorage.setItem('pact-view-as', JSON.stringify(target));
-    else sessionStorage.removeItem('pact-view-as');
+    // Also clear any legacy persisted viewAs keys left over from before this fix
+    if (!target) sessionStorage.removeItem('pact-view-as');
   };
 
   const clearViewAs = () => setViewAs(null);

@@ -958,7 +958,11 @@ const CostSubmission = () => {
       } else if (!canViewTeamSubmissions) {
         filtered = filtered.filter(o => o.submitted_by === currentUser?.id);
       }
-      if (userProjectIds.length > 0) {
+      // Project scoping: only restrict submitter-level roles (Coordinators, DataCollectors).
+      // Approval-chain roles (FOM, Supervisor, CountryDirector, FinanceAdmin) must NOT be
+      // project-scoped here — their visibility is already governed by the role filter above
+      // and covers team submissions across all projects they oversee.
+      if (userProjectIds.length > 0 && !isFOM && !isSupervisor && !isCountryDirector && !isFinanceAdmin) {
         filtered = filtered.filter(o => !o.project_id || userProjectIds.includes(o.project_id));
       }
     }
