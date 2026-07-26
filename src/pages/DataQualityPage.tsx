@@ -221,8 +221,9 @@ L.Icon.Default.mergeOptions({
 
 const ENUM_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6'];
 
-function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange }: {
+function GpsSubmissionMap({ rows, cols, enumerators, filterEnumerator, onFilterChange }: {
   rows: ParsedRow[];
+  cols: DetectedColumns;
   enumerators: string[];
   filterEnumerator: string;
   onFilterChange: (e: string) => void;
@@ -236,6 +237,16 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
     enumerators.forEach((e, i) => { m[e] = ENUM_COLORS[i % ENUM_COLORS.length]; });
     return m;
   }, [enumerators]);
+
+  // Helpers: read actual CSV column values from row
+  const getEnum = (row: ParsedRow) => cols.enumerator ? String(row[cols.enumerator] ?? 'Unknown') : 'Unknown';
+  const getLat  = (row: ParsedRow) => cols.gpsLat ? parseFloat(String(row[cols.gpsLat] ?? '')) : NaN;
+  const getLon  = (row: ParsedRow) => cols.gpsLon ? parseFloat(String(row[cols.gpsLon] ?? '')) : NaN;
+  const getPrec = (row: ParsedRow) => cols.gpsPrecision ? String(row[cols.gpsPrecision] ?? '') : '';
+  const getA1   = (row: ParsedRow) => cols.admin1 ? String(row[cols.admin1] ?? '') : '';
+  const getA2   = (row: ParsedRow) => cols.admin2 ? String(row[cols.admin2] ?? '') : '';
+  const getA3   = (row: ParsedRow) => cols.admin3 ? String(row[cols.admin3] ?? '') : '';
+  const hasGps  = (row: ParsedRow) => { const lat = getLat(row); const lon = getLon(row); return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; };
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
@@ -253,25 +264,27 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
     if (!mapInstance.current) return;
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
-    const filtered = filterEnumerator === '__all__' ? rows : rows.filter(r => r._enumerator === filterEnumerator);
+    const filtered = filterEnumerator === '__all__' ? rows : rows.filter(r => getEnum(r) === filterEnumerator);
     const points: L.LatLng[] = [];
     filtered.forEach(row => {
-      const lat = parseFloat(String(row._gpsLat || ''));
-      const lon = parseFloat(String(row._gpsLon || ''));
-      if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-        const color = enumColorMap[row._enumerator] || '#6b7280';
-        const marker = L.circleMarker([lat, lon], {
-          radius: 6, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
-        }).bindPopup(`<div style="font-size:12px;line-height:1.7">
-          <b>${row._enumerator || 'Unknown'}</b><br/>
-          ${[row._admin1, row._admin2, row._admin3].filter(Boolean).join(' › ')}<br/>
-          ${lat.toFixed(5)}, ${lon.toFixed(5)}
-          ${row._gpsPrecision ? `<br/>GPS precision: ${row._gpsPrecision}m` : ''}
-          ${row._flags.length > 0 ? `<br/><span style="color:#ea580c">⚠ ${row._flags.length} flag(s): ${row._flags.join(', ')}</span>` : ''}
-        </div>`).addTo(mapInstance.current!);
-        markersRef.current.push(marker);
-        points.push(L.latLng(lat, lon));
-      }
+      if (!hasGps(row)) return;
+      const lat = getLat(row);
+      const lon = getLon(row);
+      const enu = getEnum(row);
+      const prec = getPrec(row);
+      const area = [getA1(row), getA2(row), getA3(row)].filter(Boolean).join(' › ');
+      const color = enumColorMap[enu] || '#6b7280';
+      const marker = L.circleMarker([lat, lon], {
+        radius: 6, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
+      }).bindPopup(`<div style="font-size:12px;line-height:1.7">
+        <b>${enu}</b><br/>
+        ${area ? area + '<br/>' : ''}
+        ${lat.toFixed(5)}, ${lon.toFixed(5)}
+        ${prec ? `<br/>GPS precision: ${prec}m` : ''}
+        ${row._flags.length > 0 ? `<br/><span style="color:#ea580c">⚠ ${row._flags.length} flag(s)</span>` : ''}
+      </div>`).addTo(mapInstance.current!);
+      markersRef.current.push(marker);
+      points.push(L.latLng(lat, lon));
     });
     if (points.length > 1) {
       try { mapInstance.current.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 12 }); }
@@ -279,14 +292,10 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
     } else if (points.length === 1) {
       mapInstance.current.setView(points[0], 10);
     }
-  }, [rows, filterEnumerator, enumColorMap]);
+  }, [rows, filterEnumerator, enumColorMap, cols]);
 
-  const gpsRows = rows.filter(r => {
-    const lat = parseFloat(String(r._gpsLat || ''));
-    const lon = parseFloat(String(r._gpsLon || ''));
-    return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90;
-  });
-  const noGpsRows = rows.length - gpsRows.length;
+  const gpsCount = rows.filter(hasGps).length;
+  const noGpsRows = rows.length - gpsCount;
 
   return (
     <div className="space-y-3">
@@ -296,16 +305,16 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
             <SelectValue placeholder="All Enumerators" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All Enumerators ({gpsRows.length} GPS points)</SelectItem>
+            <SelectItem value="__all__">All Enumerators ({gpsCount} GPS points)</SelectItem>
             {enumerators.map(e => {
-              const cnt = rows.filter(r => r._enumerator === e && parseFloat(String(r._gpsLat||'')) !== 0).length;
+              const cnt = rows.filter(r => getEnum(r) === e && hasGps(r)).length;
               return <SelectItem key={e} value={e}>{e} ({cnt} pts)</SelectItem>;
             })}
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <MapPin className="w-3.5 h-3.5 text-green-600" />
-          <span><strong>{gpsRows.length}</strong> with GPS</span>
+          <span><strong>{gpsCount}</strong> with GPS</span>
           {noGpsRows > 0 && <Badge variant="destructive" className="text-xs">{noGpsRows} missing GPS</Badge>}
         </div>
       </div>
@@ -318,9 +327,6 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
               {e.split(' ').slice(0, 2).join(' ')}
             </button>
           ))}
-          {filterEnumerator !== '__all__' && (
-            <button onClick={() => onFilterChange('__all__')} className="text-xs text-primary underline">Show all</button>
-          )}
           {enumerators.length > 14 && <span className="text-xs text-muted-foreground self-center">+{enumerators.length - 14} more</span>}
         </div>
       )}
@@ -335,12 +341,15 @@ function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange 
           </button>
         </div>
       )}
-      <div className="border rounded-xl overflow-hidden shadow-sm" style={{ height: '480px' }}>
-        <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-      </div>
-      {gpsRows.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-sm">
-          No GPS coordinates detected in this dataset. Check Column Map to verify GPS latitude/longitude columns.
+      {gpsCount === 0 ? (
+        <div className="border rounded-xl p-10 text-center text-muted-foreground text-sm">
+          <MapPin className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No GPS coordinates detected in this dataset.</p>
+          <p className="text-xs mt-1">Check <strong>Column Map</strong> to verify GPS Latitude/Longitude columns are detected.</p>
+        </div>
+      ) : (
+        <div className="border rounded-xl overflow-hidden shadow-sm" style={{ height: '480px' }}>
+          <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
         </div>
       )}
     </div>
@@ -504,6 +513,7 @@ export default function DataQualityPage() {
 
   // ── GPS map enumerator filter ────────────────────────────────────────────
   const [mapEnumFilter, setMapEnumFilter] = useState('__all__');
+  const [activeResultsTab, setActiveResultsTab] = useState('overview');
 
   // ── Section coverage ─────────────────────────────────────────────────────
   const coverageRows = useMemo((): CoverageRow[] => {
@@ -621,11 +631,11 @@ export default function DataQualityPage() {
       ['Form', xlsSchema?.formTitle ?? 'N/A'],
       ['Dataset', dataset.name],
       ['Total Submissions', dataset.rows.length],
-      ['Flagged', dataset.summary.flaggedCount],
+      ['Flagged', dataset.summary.flaggedRows],
       ['Clean Rate %', dataset.summary.cleanRate],
       ['Enumerators', dataset.summary.enumerators.length],
       ['Avg Duration (min)', dataset.summary.avgDurationMin ?? 'N/A'],
-      ['Missing GPS', dataset.summary.missingGps],
+      ['Missing GPS %', dataset.summary.missingGpsPct],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
@@ -634,37 +644,55 @@ export default function DataQualityPage() {
     const enumHeaders = ['Enumerator','Total','Flagged','Clean %','Avg Duration','Missing GPS','Short Duration','Night','No Consent','High N/A','Test Sub'];
     const enumData = [enumHeaders, ...[...dataset.byEnumerator.values()].map(s => [
       s.name, s.total, s.flagged, s.cleanRate, s.avgDurationMin ?? '', s.missingGps,
-      s.shortDuration, s.nightSubmission, s.noConsent, s.highNaRate, s.testSubmission,
+      s.shortDuration, s.nightSubmissions, s.noConsent, s.highNaRate, s.testSubmissions,
     ])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(enumData), 'By Enumerator');
 
     // Sheet 3: QC Flags
     const flagHeaders = ['#','Enumerator','QN No','Date','Flags','Admin 1','Admin 2','Admin 3'];
     const { cols } = dataset;
+    const getVal = (r: ParsedRow, col: string) => col ? String(r[col] ?? '') : '';
     const flagData = [flagHeaders, ...dataset.rows
       .filter(r => r._flags.length > 0)
       .map((r, i) => [
         i + 1,
-        r._enumerator,
-        cols.questionnaireNo ? String(r[cols.questionnaireNo] ?? '') : '',
-        cols.today ? String(r[cols.today] ?? '') : '',
+        getVal(r, cols.enumerator),
+        getVal(r, cols.questionnaireNo),
+        getVal(r, cols.today),
         r._flags.join(', '),
-        r._admin1, r._admin2, r._admin3,
+        getVal(r, cols.admin1),
+        getVal(r, cols.admin2),
+        getVal(r, cols.admin3),
       ])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(flagData), 'QC Flags');
 
-    // Sheet 4: Section Coverage (if available)
+    // Sheet 4: Section Coverage (if available) — one row per question
     if (coverageRows.length > 0) {
-      const covHeaders = ['Section','Total Questions','Covered','Missing','Coverage %'];
-      const covData = [covHeaders, ...coverageRows.map(r => [r.group, r.total, r.covered, r.missing, r.pct])];
+      const covHeaders = ['Section','Question','Type','Found in CSV','CSV Column'];
+      const covData = [covHeaders, ...coverageRows.map(r => [
+        r.groupLabel, r.label, r.type, r.found ? 'Yes' : 'No', r.csvCol ?? '',
+      ])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(covData), 'Section Coverage');
     }
 
     // Sheet 5: GPS Data
-    const gpsHeaders = ['Enumerator','Latitude','Longitude','Precision','Admin 1','Admin 2','Admin 3','Flags'];
+    const gpsHeaders = ['Enumerator','Latitude','Longitude','Precision (m)','Admin 1','Admin 2','Admin 3','Flags'];
     const gpsData = [gpsHeaders, ...dataset.rows
-      .filter(r => r._gpsLat && parseFloat(String(r._gpsLat)) !== 0)
-      .map(r => [r._enumerator, r._gpsLat, r._gpsLon, r._gpsPrecision ?? '', r._admin1, r._admin2, r._admin3, r._flags.join(', ')])];
+      .filter(r => {
+        const lat = cols.gpsLat ? parseFloat(String(r[cols.gpsLat] ?? '')) : NaN;
+        const lon = cols.gpsLon ? parseFloat(String(r[cols.gpsLon] ?? '')) : NaN;
+        return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90;
+      })
+      .map(r => [
+        getVal(r, cols.enumerator),
+        cols.gpsLat ? String(r[cols.gpsLat] ?? '') : '',
+        cols.gpsLon ? String(r[cols.gpsLon] ?? '') : '',
+        cols.gpsPrecision ? String(r[cols.gpsPrecision] ?? '') : '',
+        getVal(r, cols.admin1),
+        getVal(r, cols.admin2),
+        getVal(r, cols.admin3),
+        r._flags.join(', '),
+      ])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gpsData), 'GPS Data');
 
     XLSX.writeFile(wb, `QC_Report_${dataset.name.replace('.csv','')}_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -1397,7 +1425,7 @@ export default function DataQualityPage() {
           </div>
 
           {/* Tabs */}
-          <Tabs defaultValue="overview" className="space-y-4">
+          <Tabs value={activeResultsTab} onValueChange={setActiveResultsTab} className="space-y-4">
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="overview" className="text-xs"><BarChart3 className="w-3.5 h-3.5 mr-1" />Overview</TabsTrigger>
               <TabsTrigger value="enumerators" className="text-xs"><Users className="w-3.5 h-3.5 mr-1" />By Enumerator</TabsTrigger>
@@ -1825,14 +1853,17 @@ export default function DataQualityPage() {
               </TabsContent>
             )}
 
-            {/* ── TAB: GPS Map ── */}
+            {/* ── TAB: GPS Map — only mount when tab is active so Leaflet has a sized container ── */}
             <TabsContent value="gpsmap" className="space-y-3">
-              <GpsSubmissionMap
-                rows={filteredRows}
-                enumerators={dataset.summary.enumerators}
-                filterEnumerator={mapEnumFilter}
-                onFilterChange={setMapEnumFilter}
-              />
+              {activeResultsTab === 'gpsmap' && (
+                <GpsSubmissionMap
+                  rows={filteredRows}
+                  cols={dataset.cols}
+                  enumerators={dataset.summary.enumerators}
+                  filterEnumerator={mapEnumFilter}
+                  onFilterChange={setMapEnumFilter}
+                />
+              )}
             </TabsContent>
 
             {/* ── TAB: AI Insights ── */}
