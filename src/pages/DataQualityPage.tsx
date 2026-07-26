@@ -1,10 +1,14 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   Upload, FileText, AlertTriangle, CheckCircle2, XCircle, Users,
   Clock, MapPin, Filter, Download, RefreshCw, ChevronRight,
   Search, Eye, BarChart3, Table2, Map, Layers, Info, Trash2,
   CalendarDays, Home, Repeat2, List, ArrowLeft, CheckSquare, Square,
+  Sparkles, BookOpen, Globe2, FileSpreadsheet, TrendingUp, AlertCircle,
+  Zap, X as XIcon, ChevronDown,
 } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -20,6 +24,10 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -192,6 +200,258 @@ function WizardProgress({ step, hasXls }: { step: WizardStep; hasXls: boolean })
   );
 }
 
+// ── AI Insights type ───────────────────────────────────────────────────────
+interface AiInsights {
+  formPurpose: string;
+  keyIndicators: string[];
+  focusAreas: Array<{ title: string; description: string; priority: 'high'|'medium'|'low'; sections: string[] }>;
+  crossChecks: Array<{ title: string; description: string; sections: string[] }>;
+  reportSections: string[];
+  redFlags: string[];
+}
+
+// ── GPS Submission Map ─────────────────────────────────────────────────────
+// Fix Leaflet default icon path (same fix as MapComponent.tsx)
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+const ENUM_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#14b8a6'];
+
+function GpsSubmissionMap({ rows, enumerators, filterEnumerator, onFilterChange }: {
+  rows: ParsedRow[];
+  enumerators: string[];
+  filterEnumerator: string;
+  onFilterChange: (e: string) => void;
+}) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<L.Map | null>(null);
+  const markersRef = useRef<L.CircleMarker[]>([]);
+
+  const enumColorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    enumerators.forEach((e, i) => { m[e] = ENUM_COLORS[i % ENUM_COLORS.length]; });
+    return m;
+  }, [enumerators]);
+
+  useEffect(() => {
+    if (!mapRef.current || mapInstance.current) return;
+    mapInstance.current = L.map(mapRef.current, { zoomControl: false }).setView([15.5, 32.5], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+    }).addTo(mapInstance.current);
+    L.control.zoom({ position: 'topright' }).addTo(mapInstance.current);
+    return () => {
+      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapInstance.current) return;
+    markersRef.current.forEach(m => m.remove());
+    markersRef.current = [];
+    const filtered = filterEnumerator === '__all__' ? rows : rows.filter(r => r._enumerator === filterEnumerator);
+    const points: L.LatLng[] = [];
+    filtered.forEach(row => {
+      const lat = parseFloat(String(row._gpsLat || ''));
+      const lon = parseFloat(String(row._gpsLon || ''));
+      if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        const color = enumColorMap[row._enumerator] || '#6b7280';
+        const marker = L.circleMarker([lat, lon], {
+          radius: 6, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
+        }).bindPopup(`<div style="font-size:12px;line-height:1.7">
+          <b>${row._enumerator || 'Unknown'}</b><br/>
+          ${[row._admin1, row._admin2, row._admin3].filter(Boolean).join(' › ')}<br/>
+          ${lat.toFixed(5)}, ${lon.toFixed(5)}
+          ${row._gpsPrecision ? `<br/>GPS precision: ${row._gpsPrecision}m` : ''}
+          ${row._flags.length > 0 ? `<br/><span style="color:#ea580c">⚠ ${row._flags.length} flag(s): ${row._flags.join(', ')}</span>` : ''}
+        </div>`).addTo(mapInstance.current!);
+        markersRef.current.push(marker);
+        points.push(L.latLng(lat, lon));
+      }
+    });
+    if (points.length > 1) {
+      try { mapInstance.current.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 12 }); }
+      catch { /* ignore fitBounds errors for identical points */ }
+    } else if (points.length === 1) {
+      mapInstance.current.setView(points[0], 10);
+    }
+  }, [rows, filterEnumerator, enumColorMap]);
+
+  const gpsRows = rows.filter(r => {
+    const lat = parseFloat(String(r._gpsLat || ''));
+    const lon = parseFloat(String(r._gpsLon || ''));
+    return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0 && Math.abs(lat) <= 90;
+  });
+  const noGpsRows = rows.length - gpsRows.length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={filterEnumerator} onValueChange={onFilterChange}>
+          <SelectTrigger className="h-9 text-xs w-56">
+            <SelectValue placeholder="All Enumerators" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Enumerators ({gpsRows.length} GPS points)</SelectItem>
+            {enumerators.map(e => {
+              const cnt = rows.filter(r => r._enumerator === e && parseFloat(String(r._gpsLat||'')) !== 0).length;
+              return <SelectItem key={e} value={e}>{e} ({cnt} pts)</SelectItem>;
+            })}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <MapPin className="w-3.5 h-3.5 text-green-600" />
+          <span><strong>{gpsRows.length}</strong> with GPS</span>
+          {noGpsRows > 0 && <Badge variant="destructive" className="text-xs">{noGpsRows} missing GPS</Badge>}
+        </div>
+      </div>
+      {filterEnumerator === '__all__' && enumerators.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {enumerators.slice(0, 14).map(e => (
+            <button key={e} onClick={() => onFilterChange(e)}
+              className="flex items-center gap-1.5 text-xs bg-muted/60 hover:bg-muted border rounded-full px-2.5 py-1 transition-colors">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: enumColorMap[e] }} />
+              {e.split(' ').slice(0, 2).join(' ')}
+            </button>
+          ))}
+          {filterEnumerator !== '__all__' && (
+            <button onClick={() => onFilterChange('__all__')} className="text-xs text-primary underline">Show all</button>
+          )}
+          {enumerators.length > 14 && <span className="text-xs text-muted-foreground self-center">+{enumerators.length - 14} more</span>}
+        </div>
+      )}
+      {filterEnumerator !== '__all__' && (
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: enumColorMap[filterEnumerator] }} />
+            {filterEnumerator}
+          </span>
+          <button onClick={() => onFilterChange('__all__')} className="text-xs text-muted-foreground hover:text-foreground underline ml-1">
+            ← Show all
+          </button>
+        </div>
+      )}
+      <div className="border rounded-xl overflow-hidden shadow-sm" style={{ height: '480px' }}>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+      </div>
+      {gpsRows.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground text-sm">
+          No GPS coordinates detected in this dataset. Check Column Map to verify GPS latitude/longitude columns.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Form Preview Dialog ────────────────────────────────────────────────────
+function FormPreviewDialog({ schema, open, onClose }: {
+  schema: XLSFormSchema;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(schema.groups.map(g => g.name)));
+  const totalQ = schema.allQuestions.length;
+  const required = schema.allQuestions.filter(q => q.required).length;
+  const typeCount = schema.allQuestions.reduce<Record<string,number>>((acc, q) => {
+    acc[q.type] = (acc[q.type] || 0) + 1; return acc;
+  }, {});
+  const topTypes = Object.entries(typeCount).sort((a,b) => b[1]-a[1]).slice(0, 5);
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-primary" />
+            {schema.formTitle}
+          </DialogTitle>
+          <DialogDescription>
+            {schema.groups.length} sections · {totalQ} questions · {required} required
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap gap-2 border-b pb-3">
+          {topTypes.map(([type, count]) => (
+            <Badge key={type} variant="outline" className="text-xs font-mono">{type} ×{count}</Badge>
+          ))}
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExpanded(new Set(schema.groups.map(g => g.name)))}>
+              Expand all
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExpanded(new Set())}>
+              Collapse all
+            </Button>
+          </div>
+        </div>
+
+        <ScrollArea className="flex-1 -mx-6 px-6">
+          <div className="space-y-2 py-2">
+            {schema.topLevelQuestions.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ungrouped</p>
+                {schema.topLevelQuestions.map(q => (
+                  <div key={q.name} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-muted/30 text-sm">
+                    <Badge variant="outline" className="text-xs font-mono shrink-0 mt-0.5">{q.type}</Badge>
+                    <div className="flex-1 min-w-0">
+                      <p className="leading-tight">{q.label}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{q.name}</p>
+                    </div>
+                    {q.required && <Badge className="text-xs shrink-0 bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400">req</Badge>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {schema.groups.map(group => {
+              const Icon = sectionIcon(group);
+              const isExpanded = expanded.has(group.name);
+              return (
+                <div key={group.name} className="border rounded-lg overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                    onClick={() => setExpanded(prev => {
+                      const next = new Set(prev);
+                      if (next.has(group.name)) next.delete(group.name); else next.add(group.name);
+                      return next;
+                    })}
+                  >
+                    <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold">{group.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground font-mono">{group.name}</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">{group.questions.length}q</Badge>
+                    {group.type === 'repeat' && <Badge variant="outline" className="text-xs">repeat</Badge>}
+                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-180')} />
+                  </button>
+                  {isExpanded && group.questions.length > 0 && (
+                    <div className="divide-y">
+                      {group.questions.map((q, idx) => (
+                        <div key={q.name} className="flex items-start gap-3 px-5 py-2.5 text-sm hover:bg-muted/10">
+                          <span className="text-xs text-muted-foreground w-6 shrink-0 mt-0.5">{idx + 1}</span>
+                          <Badge variant="outline" className="text-xs font-mono shrink-0 mt-0.5">{q.type}</Badge>
+                          <div className="flex-1 min-w-0">
+                            <p className="leading-tight">{q.label}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{q.name}</p>
+                          </div>
+                          {q.required && <Badge className="text-xs shrink-0 bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400">req</Badge>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════════════
@@ -233,6 +493,17 @@ export default function DataQualityPage() {
   // ── Pagination ────────────────────────────────────────────────────────────
   const [flagPage, setFlagPage] = useState(1);
   const [rawPage, setRawPage] = useState(1);
+
+  // ── AI Insights state ────────────────────────────────────────────────────
+  const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  // ── Form preview state ────────────────────────────────────────────────────
+  const [showFormPreview, setShowFormPreview] = useState(false);
+
+  // ── GPS map enumerator filter ────────────────────────────────────────────
+  const [mapEnumFilter, setMapEnumFilter] = useState('__all__');
 
   // ── Section coverage ─────────────────────────────────────────────────────
   const coverageRows = useMemo((): CoverageRow[] => {
@@ -306,7 +577,98 @@ export default function DataQualityPage() {
     setDataset(null);
     setColOverrides({});
     setError(null);
+    setAiInsights(null);
+    setAiError(null);
+    setMapEnumFilter('__all__');
   };
+
+  // ── AI Insights fetch ────────────────────────────────────────────────────
+  const fetchAiInsights = useCallback(async (schema: XLSFormSchema) => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const sampleQuestions = schema.allQuestions.slice(0, 30).map(q => q.label);
+      const res = await fetch('/api/dqc-ai-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formTitle: schema.formTitle,
+          groups: schema.groups.map(g => ({ label: g.label, name: g.name, questionCount: g.questions.length })),
+          totalQuestions: schema.allQuestions.length,
+          sampleQuestions,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'AI analysis failed');
+      setAiInsights(data.insights);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }, []);
+
+  // ── Excel Report Export ──────────────────────────────────────────────────
+  const exportFullReport = useCallback(async () => {
+    if (!dataset) return;
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Summary
+    const summaryData = [
+      ['PACT Data Quality Control Report'],
+      ['Generated', new Date().toLocaleString()],
+      ['Form', xlsSchema?.formTitle ?? 'N/A'],
+      ['Dataset', dataset.name],
+      ['Total Submissions', dataset.rows.length],
+      ['Flagged', dataset.summary.flaggedCount],
+      ['Clean Rate %', dataset.summary.cleanRate],
+      ['Enumerators', dataset.summary.enumerators.length],
+      ['Avg Duration (min)', dataset.summary.avgDurationMin ?? 'N/A'],
+      ['Missing GPS', dataset.summary.missingGps],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+    // Sheet 2: By Enumerator
+    const enumHeaders = ['Enumerator','Total','Flagged','Clean %','Avg Duration','Missing GPS','Short Duration','Night','No Consent','High N/A','Test Sub'];
+    const enumData = [enumHeaders, ...[...dataset.byEnumerator.values()].map(s => [
+      s.name, s.total, s.flagged, s.cleanRate, s.avgDurationMin ?? '', s.missingGps,
+      s.shortDuration, s.nightSubmission, s.noConsent, s.highNaRate, s.testSubmission,
+    ])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(enumData), 'By Enumerator');
+
+    // Sheet 3: QC Flags
+    const flagHeaders = ['#','Enumerator','QN No','Date','Flags','Admin 1','Admin 2','Admin 3'];
+    const { cols } = dataset;
+    const flagData = [flagHeaders, ...dataset.rows
+      .filter(r => r._flags.length > 0)
+      .map((r, i) => [
+        i + 1,
+        r._enumerator,
+        cols.questionnaireNo ? String(r[cols.questionnaireNo] ?? '') : '',
+        cols.today ? String(r[cols.today] ?? '') : '',
+        r._flags.join(', '),
+        r._admin1, r._admin2, r._admin3,
+      ])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(flagData), 'QC Flags');
+
+    // Sheet 4: Section Coverage (if available)
+    if (coverageRows.length > 0) {
+      const covHeaders = ['Section','Total Questions','Covered','Missing','Coverage %'];
+      const covData = [covHeaders, ...coverageRows.map(r => [r.group, r.total, r.covered, r.missing, r.pct])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(covData), 'Section Coverage');
+    }
+
+    // Sheet 5: GPS Data
+    const gpsHeaders = ['Enumerator','Latitude','Longitude','Precision','Admin 1','Admin 2','Admin 3','Flags'];
+    const gpsData = [gpsHeaders, ...dataset.rows
+      .filter(r => r._gpsLat && parseFloat(String(r._gpsLat)) !== 0)
+      .map(r => [r._enumerator, r._gpsLat, r._gpsLon, r._gpsPrecision ?? '', r._admin1, r._admin2, r._admin3, r._flags.join(', ')])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gpsData), 'GPS Data');
+
+    XLSX.writeFile(wb, `QC_Report_${dataset.name.replace('.csv','')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }, [dataset, xlsSchema, coverageRows]);
 
   // ── Filtered rows ─────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
@@ -525,16 +887,78 @@ export default function DataQualityPage() {
       {wizardStep === 'sections' && xlsSchema && (
         <div className="bg-card border rounded-xl p-6 space-y-5">
           {/* Header */}
-          <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <List className="w-5 h-5 text-primary" /> Step 2: Select Focus Areas
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Found <strong>{xlsSchema.groups.length} sections</strong> and{' '}
-              <strong>{xlsSchema.allQuestions.length} questions</strong> in{' '}
-              <em>"{xlsSchema.formTitle}"</em>. Select whole sections or individual questions to include in QC.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <List className="w-5 h-5 text-primary" /> Step 2: Select Focus Areas
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Found <strong>{xlsSchema.groups.length} sections</strong> and{' '}
+                <strong>{xlsSchema.allQuestions.length} questions</strong> in{' '}
+                <em>"{xlsSchema.formTitle}"</em>. Select whole sections or individual questions to include in QC.
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="sm" onClick={() => setShowFormPreview(true)}>
+                <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Preview Form
+              </Button>
+              <Button variant="outline" size="sm"
+                disabled={aiLoading}
+                onClick={() => fetchAiInsights(xlsSchema)}
+              >
+                {aiLoading
+                  ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analyzing…</>
+                  : <><Sparkles className="w-3.5 h-3.5 mr-1.5 text-purple-500" /> AI Analysis</>}
+              </Button>
+            </div>
           </div>
+
+          {/* AI insights quick panel (if loaded) */}
+          {aiInsights && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 dark:bg-purple-900/10 dark:border-purple-900/40 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-700 dark:text-purple-400">AI Form Analysis</span>
+                <button onClick={() => setAiInsights(null)} className="ml-auto text-muted-foreground hover:text-foreground">
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground">{aiInsights.formPurpose}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {aiInsights.keyIndicators.map(ind => (
+                  <Badge key={ind} className="text-xs bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400">{ind}</Badge>
+                ))}
+              </div>
+              {aiInsights.focusAreas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">RECOMMENDED FOCUS AREAS FOR QC</p>
+                  <div className="space-y-1.5">
+                    {aiInsights.focusAreas.map(fa => (
+                      <div key={fa.title} className={cn(
+                        'flex items-start gap-2 rounded-lg px-3 py-2 text-xs border',
+                        fa.priority === 'high' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30'
+                        : fa.priority === 'medium' ? 'bg-orange-50 border-orange-200 dark:bg-orange-900/10 dark:border-orange-900/30'
+                        : 'bg-muted border-border'
+                      )}>
+                        <AlertCircle className={cn('w-3.5 h-3.5 mt-0.5 shrink-0',
+                          fa.priority === 'high' ? 'text-red-600' : fa.priority === 'medium' ? 'text-orange-600' : 'text-muted-foreground')} />
+                        <div>
+                          <span className="font-semibold">{fa.title}</span>
+                          <span className="text-muted-foreground ml-1">— {fa.description}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Full analysis available in the AI Insights tab after uploading your data.</p>
+            </div>
+          )}
+          {aiError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/10 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+              AI analysis failed: {aiError}
+            </div>
+          )}
 
           {/* Summary bar */}
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm">
@@ -824,6 +1248,14 @@ export default function DataQualityPage() {
             <Button variant="outline" size="sm" onClick={() => setShowColMapper(v => !v)}>
               <Layers className="w-3.5 h-3.5 mr-1.5" /> Column Map
             </Button>
+            {xlsSchema && (
+              <Button variant="outline" size="sm" onClick={() => setShowFormPreview(true)}>
+                <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Form
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={exportFullReport}>
+              <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" /> Export Report
+            </Button>
             <Button variant="outline" size="sm" onClick={() => reUploadRef.current?.click()}>
               <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> New CSV
             </Button>
@@ -984,6 +1416,13 @@ export default function DataQualityPage() {
                 </TabsTrigger>
               )}
               <TabsTrigger value="rawdata" className="text-xs"><Table2 className="w-3.5 h-3.5 mr-1" />Raw Data</TabsTrigger>
+              <TabsTrigger value="gpsmap" className="text-xs"><Globe2 className="w-3.5 h-3.5 mr-1" />GPS Map</TabsTrigger>
+              {xlsSchema && (
+                <TabsTrigger value="aiinsights" className="text-xs">
+                  <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-500" />AI Insights
+                  {aiInsights && <span className="ml-1 w-1.5 h-1.5 bg-purple-500 rounded-full inline-block" />}
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* ── TAB: Overview ── */}
@@ -1386,6 +1825,154 @@ export default function DataQualityPage() {
               </TabsContent>
             )}
 
+            {/* ── TAB: GPS Map ── */}
+            <TabsContent value="gpsmap" className="space-y-3">
+              <GpsSubmissionMap
+                rows={filteredRows}
+                enumerators={dataset.summary.enumerators}
+                filterEnumerator={mapEnumFilter}
+                onFilterChange={setMapEnumFilter}
+              />
+            </TabsContent>
+
+            {/* ── TAB: AI Insights ── */}
+            {xlsSchema && (
+              <TabsContent value="aiinsights" className="space-y-4">
+                {!aiInsights && !aiLoading && !aiError && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-4">
+                    <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-purple-600" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-base font-semibold">Get AI-powered QC analysis</p>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                        Gemini will analyze your XLSForm structure and suggest what to focus on, cross-checks between sections, and a recommended report structure.
+                      </p>
+                    </div>
+                    <Button onClick={() => fetchAiInsights(xlsSchema)}>
+                      <Sparkles className="w-4 h-4 mr-2" /> Analyze with AI
+                    </Button>
+                  </div>
+                )}
+                {aiLoading && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
+                    <p className="text-sm text-muted-foreground">Analyzing form structure with Gemini…</p>
+                  </div>
+                )}
+                {aiError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/10 px-4 py-3 flex items-center gap-3">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <p className="text-sm text-red-700 dark:text-red-400">{aiError}</p>
+                    <Button variant="outline" size="sm" className="ml-auto" onClick={() => fetchAiInsights(xlsSchema)}>Retry</Button>
+                  </div>
+                )}
+                {aiInsights && (
+                  <div className="space-y-5">
+                    {/* Form purpose */}
+                    <div className="rounded-xl border border-purple-200 bg-purple-50/50 dark:bg-purple-900/10 dark:border-purple-900/40 p-4">
+                      <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider mb-1.5">Form Purpose</p>
+                      <p className="text-sm">{aiInsights.formPurpose}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-3">
+                        {aiInsights.keyIndicators.map(ind => (
+                          <Badge key={ind} className="text-xs bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400">
+                            <TrendingUp className="w-3 h-3 mr-1" />{ind}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Focus Areas */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold flex items-center gap-1.5">
+                          <Zap className="w-4 h-4 text-orange-500" /> QC Focus Areas
+                        </p>
+                        {aiInsights.focusAreas.map(fa => (
+                          <div key={fa.title} className={cn(
+                            'rounded-lg border p-3 space-y-1',
+                            fa.priority === 'high' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30'
+                            : fa.priority === 'medium' ? 'bg-orange-50 border-orange-200 dark:bg-orange-900/10 dark:border-orange-900/30'
+                            : 'bg-muted border-border'
+                          )}>
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className={cn('w-3.5 h-3.5 shrink-0',
+                                fa.priority === 'high' ? 'text-red-600' : fa.priority === 'medium' ? 'text-orange-600' : 'text-muted-foreground')} />
+                              <span className="text-sm font-semibold">{fa.title}</span>
+                              <Badge variant="outline" className={cn('text-xs ml-auto capitalize',
+                                fa.priority === 'high' ? 'border-red-300 text-red-700' : fa.priority === 'medium' ? 'border-orange-300 text-orange-700' : '')}>
+                                {fa.priority}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground pl-5">{fa.description}</p>
+                            {fa.sections.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pl-5">
+                                {fa.sections.map(s => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Cross-checks */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-blue-500" /> Section Cross-Checks
+                        </p>
+                        {aiInsights.crossChecks.map(cc => (
+                          <div key={cc.title} className="rounded-lg border bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-900/30 p-3 space-y-1">
+                            <p className="text-sm font-semibold">{cc.title}</p>
+                            <p className="text-xs text-muted-foreground">{cc.description}</p>
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {cc.sections.map(s => <Badge key={s} className="text-xs bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400">{s}</Badge>)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Report sections */}
+                      <div className="rounded-xl border bg-card p-4">
+                        <p className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                          <FileSpreadsheet className="w-4 h-4 text-green-600" /> Recommended Report Structure
+                        </p>
+                        <ol className="space-y-1.5">
+                          {aiInsights.reportSections.map((s, i) => (
+                            <li key={s} className="flex items-center gap-2.5 text-sm">
+                              <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold flex items-center justify-center shrink-0">{i+1}</span>
+                              {s}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+
+                      {/* Red flags */}
+                      <div className="rounded-xl border bg-card p-4">
+                        <p className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                          <AlertTriangle className="w-4 h-4 text-red-500" /> Red Flags to Watch
+                        </p>
+                        <ul className="space-y-1.5">
+                          {aiInsights.redFlags.map(rf => (
+                            <li key={rf} className="flex items-start gap-2 text-sm">
+                              <span className="text-red-500 shrink-0 mt-0.5">⚑</span>
+                              {rf}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button variant="outline" size="sm" onClick={() => fetchAiInsights(xlsSchema)}>
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh Analysis
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            )}
+
             {/* ── TAB: Raw Data ── */}
             <TabsContent value="rawdata" className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1433,6 +2020,15 @@ export default function DataQualityPage() {
             </TabsContent>
           </Tabs>
         </>
+      )}
+
+      {/* Form Preview Dialog */}
+      {xlsSchema && showFormPreview && (
+        <FormPreviewDialog
+          schema={xlsSchema}
+          open={showFormPreview}
+          onClose={() => setShowFormPreview(false)}
+        />
       )}
     </div>
   );

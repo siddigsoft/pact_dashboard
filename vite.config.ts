@@ -656,6 +656,79 @@ ${langInstruction}${topic.trim() ? '\nAdditional context: ' + topic : ''}`
           }
         });
       });
+
+      // ── /api/dqc-ai-insights — DQC XLSForm AI analysis ─────────────────
+      server.middlewares.use('/api/dqc-ai-insights', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== 'POST') return next();
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const { formTitle, groups, totalQuestions, sampleQuestions } = JSON.parse(Buffer.concat(chunks).toString());
+            const prompt = `You are a humanitarian data quality expert. Analyze this XLSForm survey structure and provide a concise, actionable data quality analysis.
+
+Form: "${formTitle}"
+Sections (${groups.length}): ${(groups as any[]).map((g: any) => `${g.label} (${g.questionCount}q)`).join(', ')}
+Total questions: ${totalQuestions}
+Sample questions: ${(sampleQuestions as string[]).slice(0, 20).join('; ')}
+
+Respond with a JSON object (no markdown, no code blocks) with these exact fields:
+{
+  "formPurpose": "1-2 sentence description of what this form measures",
+  "keyIndicators": ["indicator 1", "indicator 2"],
+  "focusAreas": [
+    { "title": "short title", "description": "what to check", "priority": "high", "sections": ["section name"] }
+  ],
+  "crossChecks": [
+    { "title": "check name", "description": "what inconsistency to look for", "sections": ["section A", "section B"] }
+  ],
+  "reportSections": ["Overview & KPIs", "Enumerator Performance"],
+  "redFlags": ["specific red flag to watch for"]
+}
+Rules: keyIndicators max 6, focusAreas max 5, crossChecks max 4, reportSections 5-7, redFlags max 4. Be specific to this form type.`;
+
+            let text = '';
+            try {
+              const { GoogleGenAI } = await import('@google/genai');
+              outerDqc: for (let ki = 0; ki < GEMINI_API_KEYS.length; ki++) {
+                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEYS[ki] });
+                for (const model of GEMINI_MODELS) {
+                  const cacheKey = `${ki}:${model}`;
+                  if (isModelUnavailable(unavailableModels, cacheKey)) continue;
+                  try {
+                    const response = await ai.models.generateContent({
+                      model,
+                      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                      config: { maxOutputTokens: 2048 },
+                    });
+                    text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+                    break outerDqc;
+                  } catch (e: any) {
+                    const msg = e.message || '';
+                    if (msg.includes('404') || msg.includes('GenerateRequestsPerDay')) {
+                      markModelUnavailable(unavailableModels, cacheKey);
+                    } else throw e;
+                  }
+                }
+              }
+              if (!text) throw new Error('Gemini exhausted');
+            } catch {
+              const r = await callGroqText([{ role: 'user', content: prompt }]);
+              text = r.text.replace(/```json\n?|```\n?/g, '').trim();
+            }
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('No JSON in AI response');
+            const insights = JSON.parse(jsonMatch[0]);
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ insights }));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: String(err?.message ?? err) }));
+          }
+        });
+      });
     },
   };
 }
