@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { GoogleGenAI } from '@google/genai';
 import { ocrPostProcess } from '../src/utils/ocrPostProcess';
 
 // ── Model lists ───────────────────────────────────────────────────────────────
@@ -87,7 +88,6 @@ async function callGeminiWithRotation(
   apiKeys: string[],
   images: Array<{ base64: string; mimeType: string }>,
 ): Promise<{ text: string; model: string }> {
-  const { GoogleGenAI } = await import('@google/genai');
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
   for (let ki = 0; ki < apiKeys.length; ki++) {
@@ -249,15 +249,15 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
 
-  // Collect body
-  const chunks: Buffer[] = [];
-  req.on('data', (c: Buffer) => chunks.push(c));
-  await new Promise<void>((resolve, reject) => {
-    req.on('end', resolve);
-    req.on('error', reject);
-  });
-
   try {
+    // Collect body — inside try-catch so stream errors return JSON, not HTML 500
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+
     const parsed = JSON.parse(Buffer.concat(chunks).toString());
     const images: Array<{ base64: string; mimeType: string }> = parsed.images
       ? parsed.images

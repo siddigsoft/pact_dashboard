@@ -121,7 +121,15 @@ async function extractBatch(
       },
       body: JSON.stringify({ images }),
     });
-    const data = await res.json().catch(() => ({ error: `Server error (${res.status}) — try again or retry later` }));
+    let data: any;
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      data = await res.json().catch(() => ({ error: `Server error (${res.status}) — response could not be parsed` }));
+    } else {
+      const body = await res.text().catch(() => '');
+      const preview = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      data = { error: `Server error (${res.status})${preview ? `: ${preview}` : ' — try again or retry later'}` };
+    }
 
     if (res.status === 503 && data.needsGroqKey) {
       throw new Error('__NEEDS_GROQ_KEY__');
