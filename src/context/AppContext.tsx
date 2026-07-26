@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type FC, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, type FC, type ReactNode } from 'react';
 import { useViewAs } from './ViewAsContext';
 import { createContext, useContext, useContextSelector } from 'use-context-selector';
 import { calculateDistanceFee as _calculateDistanceFee } from '@/utils/distanceFee';
@@ -95,8 +95,20 @@ const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => 
   const siteVisitContext = useSiteVisitContext();
   const notificationContext = useNotifications();
   const roleManagement = useRoleManagement();
-  const { viewAs } = useViewAs();
-  
+  const { viewAs, clearViewAs } = useViewAs();
+
+  // Guard: if the logged-in user is not a SuperAdmin, clear any stale viewAs
+  // that was persisted in sessionStorage from a previous SA session in the same
+  // browser tab. Without this a FOM/Coordinator who opens the app after an SA
+  // used "View As" inherits the wrong role and sees no data on data pages.
+  useEffect(() => {
+    if (!viewAs) return;
+    if (!userContext.currentUser) return;
+    const role = userContext.currentUser.role ?? '';
+    const isSA = /^(superAdmin|super_admin|superadmin)$/i.test(role);
+    if (!isSA) clearViewAs();
+  }, [userContext.currentUser?.id, userContext.currentUser?.role]);
+
   // Memoized utility functions to prevent recreation on each render
   const hasGranularPermission = useCallback((resource: ResourceType, action: ActionType): boolean => {
     if (!userContext.currentUser) return false;

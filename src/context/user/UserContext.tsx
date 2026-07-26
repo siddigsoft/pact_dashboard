@@ -1075,6 +1075,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Clear local state immediately so route guards react without delay
       setCurrentUser(null);
       localStorage.removeItem('PACTCurrentUser');
+      // Clear viewAs so a subsequent login by a different user never inherits
+      // a SuperAdmin's "View As" session from the same browser tab.
+      sessionStorage.removeItem('pact-view-as');
 
       // Then sign out from Supabase (network async)
       // Use scope: 'local' to only end this session, not all sessions for the user
