@@ -6532,6 +6532,8 @@ const MMPCycleClose = () => {
                             </Collapsible>
                           </>
                         )}
+                      </div>
+                    </div>
                   ) : (
                   /* ── PRE-CLOSE CHECKLIST (cycle still active, user about to start) ── */
                   <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -7896,6 +7898,7 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* Re-open Cycle Confirmation Dialog — Super Admin only */}
       <Dialog open={!!reopenConfirmId} onOpenChange={(open) => { if (!open) { setReopenConfirmId(null); setReopenReason(''); } }}>
