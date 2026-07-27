@@ -26,7 +26,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
   ArrowRight, ArrowLeft, FileText, BarChart3, Filter, Download,
-  ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, RefreshCw, FileSpreadsheet,
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
   BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign, Lightbulb,
@@ -200,6 +200,86 @@ const getSuperAdminEmails = async (): Promise<string[]> => {
 
 const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
 
+// ── Wizard step definitions ─────────────────────────────────────────────────
+const WIZARD_STEPS = [
+  {
+    step: 0,
+    title: 'Select Cycle',
+    titleAr: 'اختر الدورة',
+    tab: 'active',
+    checklistIds: [] as string[],
+    help: [
+      'Choose the MMP cycle you want to close from the list below.',
+      'Confirm the cycle month, hub, total sites, and coverage summary.',
+      'Once selected, the Step-by-Step Close Guide will show the full status.',
+    ],
+  },
+  {
+    step: 1,
+    title: 'Upload WFP Clean Data',
+    titleAr: 'رفع البيانات النظيفة',
+    tab: 'wfp',
+    checklistIds: ['wfp_confirmation'],
+    help: [
+      'Upload the WFP monthly confirmation Excel/CSV file using the drag-and-drop zone.',
+      'The system auto-matches WFP rows to MMP sites by name, state, locality, and activity.',
+      'Review amber "Needs Review" rows manually — link each to the correct MMP site.',
+      'Click "Apply Results" once all rows are actioned. Sites become wfp_confirmed or wfp_rejected.',
+    ],
+  },
+  {
+    step: 2,
+    title: 'Mark Uncovered Sites',
+    titleAr: 'تحديد المواقع غير المشمولة',
+    tab: 'uncovered',
+    checklistIds: ['site_visits'],
+    help: [
+      'Every site that is not WFP-confirmed must have a reason assigned.',
+      'Use "Bulk Assign" to apply the same reason (Security Concerns, Access Denied, Budget…) to many sites at once.',
+      'Sites flagged Security Concerns or Access Denied auto-create a follow-up for the next cycle.',
+      'All sites must be resolved before proceeding.',
+    ],
+  },
+  {
+    step: 3,
+    title: 'Resolve Advance Exceptions',
+    titleAr: 'تسوية سلف المواقع غير المشمولة',
+    tab: 'exceptions',
+    checklistIds: ['cost_recovery'],
+    help: [
+      'Not-covered sites that received an advance payment need a decision.',
+      'Choose: Roll to Next MMP | Return Required | Write-Off | Redirect to Fees.',
+      'All decisions are logged with your name, role, and timestamp.',
+    ],
+  },
+  {
+    step: 4,
+    title: 'Finance & Reconciliation',
+    titleAr: 'المالية ومطابقة المستحقات',
+    tab: 'finance',
+    checklistIds: ['cost_submissions', 'transport_advances', 'withdrawal_requests', 'enumerator_reconciliation'],
+    help: [
+      'Approve all pending cost submissions (use "Approve All" for bulk).',
+      'Settle any partially-paid transport advances — mark as paid or process the balance.',
+      'In the Enumerator Reconciliation table: generate balance payments, schedule recoveries, or mark balanced.',
+      'The red banner at the top shows exactly how many items are still blocking the close.',
+    ],
+  },
+  {
+    step: 5,
+    title: 'Final Review & Close',
+    titleAr: 'المراجعة النهائية والإغلاق',
+    tab: 'active',
+    checklistIds: [] as string[],
+    help: [
+      'Return here when all steps above show green.',
+      'Review the financial summary and readiness checklist — all items must show green ticks.',
+      'Click "Submit for Approval" (if approval workflow is on) or "Close Cycle" directly.',
+      'A full Cycle Close report (PDF + Excel) is generated automatically.',
+    ],
+  },
+] as const;
+
 const RECOVERY_DECISION_CONFIG: Record<string, { label: string; labelAr: string; color: string }> = {
   rolled:            { label: 'Rolled to Next MMP',      labelAr: 'مُرحَّل للدورة التالية',  color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
   return_required:   { label: 'Return Required',         labelAr: 'مطلوب الإعادة',           color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
@@ -231,6 +311,11 @@ const MMPCycleClose = () => {
   const [filterReason, setFilterReason] = useState<string>('all');
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'active');
+  const [viewMode, setViewMode] = useState<'guided' | 'tabs'>(() =>
+    (localStorage.getItem('cycle-close-view-mode') as 'guided' | 'tabs') || 'tabs'
+  );
+  const [wizardStep, setWizardStep] = useState(0);
+  const [showWizardHelp, setShowWizardHelp] = useState(true);
   
   useEffect(() => {
     getLatestExchangeRate().then(r => { if (r) setLiveExchangeRate(r.rate); });
@@ -3954,6 +4039,27 @@ const MMPCycleClose = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mode A / Mode B toggle */}
+          <Button
+            variant={viewMode === 'guided' ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 rounded-lg gap-1.5"
+            onClick={() => {
+              const next = viewMode === 'guided' ? 'tabs' : 'guided';
+              setViewMode(next);
+              localStorage.setItem('cycle-close-view-mode', next);
+              if (next === 'guided') {
+                setWizardStep(0);
+                setActiveTab('active');
+              }
+            }}
+            data-testid="button-view-mode-toggle"
+          >
+            {viewMode === 'guided'
+              ? <><Layers className="h-3.5 w-3.5" /> Tab View</>
+              : <><BookOpen className="h-3.5 w-3.5" /> Guided Mode</>
+            }
+          </Button>
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -4518,8 +4624,212 @@ const MMPCycleClose = () => {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className="h-auto p-1 bg-muted/60 rounded-lg flex-wrap gap-1">
+      {/* ── Mode A: Guided Wizard progress bar ─────────────────────────────── */}
+      {viewMode === 'guided' && (
+        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 space-y-4" data-testid="wizard-header">
+          {/* Step dots / progress bar */}
+          <div className="flex items-center gap-0">
+            {WIZARD_STEPS.map((ws, idx) => {
+              const isCurrent = wizardStep === idx;
+              const isDone    = wizardStep > idx;
+              const isPending = wizardStep < idx;
+              // Determine status from checklist
+              const relevant = cycleReadiness.items.filter(i => ws.checklistIds.includes(i.id));
+              const stepPassed = relevant.length === 0 ? isDone : relevant.every(i => i.passed);
+              return (
+                <div key={ws.step} className="flex items-center flex-1 last:flex-none">
+                  <button
+                    type="button"
+                    className={cn(
+                      'relative flex flex-col items-center gap-1 shrink-0 group cursor-pointer',
+                    )}
+                    onClick={() => {
+                      setWizardStep(idx);
+                      setActiveTab(ws.tab as string);
+                      if (ws.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                    }}
+                    data-testid={`wizard-step-${idx}`}
+                  >
+                    <div className={cn(
+                      'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all',
+                      isCurrent && 'border-primary bg-primary text-white shadow-md scale-110',
+                      isDone && stepPassed && 'border-green-500 bg-green-500 text-white',
+                      isDone && !stepPassed && 'border-amber-400 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+                      isPending && 'border-muted bg-muted text-muted-foreground',
+                    )}>
+                      {isDone && stepPassed
+                        ? <CheckCircle2 className="h-4 w-4" />
+                        : isDone && !stepPassed
+                          ? <AlertTriangle className="h-4 w-4" />
+                          : idx + 1}
+                    </div>
+                    <span className={cn(
+                      'text-[9px] font-medium text-center leading-tight max-w-[56px] hidden sm:block',
+                      isCurrent && 'text-primary font-bold',
+                      isPending && 'text-muted-foreground',
+                    )}>
+                      {ws.title}
+                    </span>
+                  </button>
+                  {/* Connector line */}
+                  {idx < WIZARD_STEPS.length - 1 && (
+                    <div className={cn(
+                      'flex-1 h-0.5 mx-1 mt-[-10px] sm:mt-[-20px] transition-colors',
+                      wizardStep > idx ? 'bg-green-400' : 'bg-muted',
+                    )} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Current step header + help panel */}
+          <div className={cn(
+            'rounded-lg border p-3 space-y-2',
+            'border-primary/30 bg-white dark:bg-card',
+          )}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                    Step {wizardStep + 1} of {WIZARD_STEPS.length}
+                  </span>
+                  {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id)).every(i => i.passed) && WIZARD_STEPS[wizardStep].checklistIds.length > 0 && (
+                    <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs gap-1 py-0">
+                      <CheckCircle2 className="h-3 w-3" /> Done
+                    </Badge>
+                  )}
+                  {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
+                    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs gap-1 py-0">
+                      <Clock className="h-3 w-3" /> In Progress
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-base font-bold mt-0.5">
+                  {WIZARD_STEPS[wizardStep].title}
+                  <span dir="rtl" className="mr-2 text-xs font-normal text-muted-foreground">{WIZARD_STEPS[wizardStep].titleAr}</span>
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1 shrink-0"
+                onClick={() => setShowWizardHelp(v => !v)}
+                data-testid="button-toggle-help"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                {showWizardHelp ? 'Hide Help' : 'Show Help'}
+              </Button>
+            </div>
+
+            {/* Help panel */}
+            {showWizardHelp && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1.5 flex items-center gap-1">
+                  <HelpCircle className="h-3.5 w-3.5" /> What to do on this step:
+                </p>
+                <ol className="space-y-1">
+                  {WIZARD_STEPS[wizardStep].help.map((line, i) => (
+                    <li key={i} className="text-xs text-blue-800 dark:text-blue-200 flex gap-2">
+                      <span className="text-blue-400 shrink-0">{i + 1}.</span>
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* Blocking issues for this step */}
+            {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
+              <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Still needed before you can advance:
+                </p>
+                {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed).map(item => (
+                  <div key={item.id} className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+                    <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-red-500" />
+                    <div>
+                      <p className="font-medium">{item.label}</p>
+                      <p className="text-red-600/80 dark:text-red-400/80">{item.description}</p>
+                      {item.count > 0 && item.total > 0 && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex-1 h-1 bg-red-200 dark:bg-red-800 rounded-full overflow-hidden max-w-[120px]">
+                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.round((item.count / item.total) * 100)}%` }} />
+                          </div>
+                          <span className="text-[10px]">{item.count}/{item.total}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Next / Back navigation */}
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                disabled={wizardStep === 0}
+                onClick={() => {
+                  const prev = WIZARD_STEPS[wizardStep - 1];
+                  setWizardStep(wizardStep - 1);
+                  setActiveTab(prev.tab as string);
+                }}
+                data-testid="button-wizard-back"
+              >
+                <ChevronLeft className="h-4 w-4" /> Back
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {wizardStep + 1} / {WIZARD_STEPS.length}
+              </span>
+              {wizardStep < WIZARD_STEPS.length - 1 ? (
+                <div className="flex items-center gap-2">
+                  {/* Block Next if current step's checks haven't passed — allow override for admins */}
+                  {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (isSuperAdmin || isAdmin || isFOM) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs text-muted-foreground gap-1"
+                      onClick={() => {
+                        const next = WIZARD_STEPS[wizardStep + 1];
+                        setWizardStep(wizardStep + 1);
+                        setActiveTab(next.tab as string);
+                        if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                      }}
+                      data-testid="button-wizard-skip"
+                    >
+                      Skip <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1"
+                    disabled={cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed)}
+                    onClick={() => {
+                      const next = WIZARD_STEPS[wizardStep + 1];
+                      setWizardStep(wizardStep + 1);
+                      setActiveTab(next.tab as string);
+                      if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                    }}
+                    data-testid="button-wizard-next"
+                  >
+                    Next <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Final Step
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (viewMode === 'guided') { const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); } }} className="space-y-4">
+        <TabsList data-testid="tabs-cycle-close" className={cn('h-auto p-1 bg-muted/60 rounded-lg flex-wrap gap-1', viewMode === 'guided' && 'hidden')}>
           <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Activity className="h-3.5 w-3.5" />
             <span>Active Cycles</span>
