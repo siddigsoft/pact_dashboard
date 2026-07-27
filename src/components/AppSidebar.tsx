@@ -702,23 +702,31 @@
     const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
     const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
 
-    // Check if the current user is a fund holder on any pre_fund_requests row.
+    // Check if the current user (or the ViewAs-previewed user) is a fund holder.
     // Fund holders get a "My Fund" sidebar entry and can access /pre-funding even
     // without a finance admin role.
     // IMPORTANT: declared here, AFTER hasAnyRole is available — accessing hasAnyRole
     // before this line would trigger a temporal dead zone crash in the minified bundle.
-    const isFinanceAdminRole = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+    //
+    // When ViewAs is active in "user" mode, we check the previewed user's fund holder
+    // status so the sidebar accurately reflects what that user would see.
+    const FINANCE_ADMIN_ROLES = ['super_admin', 'admin', 'financialAdmin'];
+    const isFinanceAdminRole = viewAs
+      ? FINANCE_ADMIN_ROLES.includes(viewAs.role)
+      : hasAnyRole(FINANCE_ADMIN_ROLES);
+    // The user ID to check fund holder status for — uses previewed user when ViewAs active
+    const effectiveHolderCheckId = (viewAs?.mode === 'user' ? viewAs.userId : undefined) ?? currentUser?.id;
     const [isFundHolder, setIsFundHolder] = useState(false);
     useEffect(() => {
-      if (isFinanceAdminRole || !currentUser?.id) return;
+      if (isFinanceAdminRole || !effectiveHolderCheckId) { setIsFundHolder(false); return; }
       supabase
         .from('pre_fund_requests')
         .select('id', { count: 'exact', head: true })
-        .eq('holder_user_id', currentUser.id)
+        .eq('holder_user_id', effectiveHolderCheckId)
         .then(({ count }: { count: number | null }) => {
           setIsFundHolder((count ?? 0) > 0);
         });
-    }, [isFinanceAdminRole, currentUser?.id]);
+    }, [isFinanceAdminRole, effectiveHolderCheckId]);
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
