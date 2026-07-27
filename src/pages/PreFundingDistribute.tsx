@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Banknote, RefreshCw, Users, Search, Plus, Pencil, Trash2,
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
-  TrendingDown, Info,
+  TrendingDown, Info, Paperclip, ExternalLink, Upload,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,7 @@ interface Allocation {
   spent_amount: number;
   currency: string;
   notes: string | null;
+  receipt_url: string | null;
   created_at: string;
   user_name?: string;
   user_email?: string;
@@ -82,13 +83,27 @@ export default function PreFundingDistribute() {
   const [userSearch, setUserSearch] = useState('');
   const [addSaving, setAddSaving] = useState(false);
 
-  // Inline edit
-  const [editingAllocId, setEditingAllocId] = useState<string | null>(null);
-  const [editAllocAmt, setEditAllocAmt]     = useState('');
+  // Add dialog receipt
+  const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null);
+
+  // Top-up dialog (replaces inline edit — also collects a receipt)
+  const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string }>({ open: false, alloc: null, fundId: '' });
+  const [topUpAmt, setTopUpAmt]           = useState('');
+  const [topUpReceiptFile, setTopUpReceiptFile] = useState<File | null>(null);
+  const [topUpSaving, setTopUpSaving]     = useState(false);
 
   // Remove confirmation
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  /** Upload a receipt file to Supabase storage and return the public URL. */
+  const uploadReceipt = async (file: File, fundId: string, userId: string): Promise<string | null> => {
+    const ext  = file.name.split('.').pop() ?? 'bin';
+    const path = `pre-fund-alloc-receipts/${fundId}/${userId}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true });
+    if (error) { toast({ title: 'Receipt upload failed', description: error.message, variant: 'destructive' }); return null; }
+    return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl;
+  };
 
   const load = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -125,7 +140,7 @@ export default function PreFundingDistribute() {
     try {
       const { data: allocs, error } = await (supabase as any)
         .from('pre_fund_allocations')
-        .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes,created_at')
+        .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes,receipt_url,created_at')
         .eq('pre_fund_request_id', fundId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -213,6 +228,12 @@ export default function PreFundingDistribute() {
     }
     setAddSaving(true);
     try {
+      // Upload receipt first if provided
+      let receiptUrl: string | null = null;
+      if (addReceiptFile) {
+        receiptUrl = await uploadReceipt(addReceiptFile, fund.id, addForm.userId);
+        if (!receiptUrl) { setAddSaving(false); return; } // upload failed, error already toasted
+      }
       const { error } = await (supabase as any).from('pre_fund_allocations').insert({
         pre_fund_request_id: fund.id,
         user_id: addForm.userId,
@@ -220,6 +241,7 @@ export default function PreFundingDistribute() {
         spent_amount: 0,
         currency: fund.currency,
         notes: addForm.notes || null,
+        receipt_url: receiptUrl,
       });
       if (error) throw error;
       // Notify the user
@@ -244,6 +266,7 @@ export default function PreFundingDistribute() {
       });
       toast({ title: 'Allocation added', description: `${formatNumber(amt, 0)} ${fund.currency} assigned.` });
       setAddDialog({ open: false, fund: null });
+      setAddReceiptFile(null);
       await loadAllocations(fund.id);
     } catch (e: any) {
       toast({ title: 'Failed to add allocation', description: e.message, variant: 'destructive' });
@@ -252,17 +275,39 @@ export default function PreFundingDistribute() {
     }
   };
 
-  const saveEditAlloc = async (allocId: string, fundId: string) => {
-    const newAmt = parseFloat(editAllocAmt);
-    if (isNaN(newAmt) || newAmt < 0) return;
-    const { error } = await (supabase as any)
-      .from('pre_fund_allocations')
-      .update({ allocated_amount: newAmt })
-      .eq('id', allocId);
-    if (error) { toast({ title: 'Update failed', description: error.message, variant: 'destructive' }); return; }
-    setEditingAllocId(null);
-    setEditAllocAmt('');
-    await loadAllocations(fundId);
+  const openTopUp = (alloc: Allocation, fundId: string) => {
+    setTopUpAmt(String(alloc.allocated_amount));
+    setTopUpReceiptFile(null);
+    setTopUpDialog({ open: true, alloc, fundId });
+  };
+
+  const saveTopUp = async () => {
+    const { alloc, fundId } = topUpDialog;
+    if (!alloc) return;
+    const newAmt = parseFloat(topUpAmt);
+    if (isNaN(newAmt) || newAmt < 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
+    setTopUpSaving(true);
+    try {
+      let receiptUrl: string | null = alloc.receipt_url ?? null;
+      if (topUpReceiptFile) {
+        const uploaded = await uploadReceipt(topUpReceiptFile, fundId, alloc.user_id);
+        if (!uploaded) { setTopUpSaving(false); return; }
+        receiptUrl = uploaded;
+      }
+      const { error } = await (supabase as any)
+        .from('pre_fund_allocations')
+        .update({ allocated_amount: newAmt, receipt_url: receiptUrl })
+        .eq('id', alloc.id);
+      if (error) throw error;
+      toast({ title: 'Allocation updated', description: `Amount set to ${formatNumber(newAmt, 0)} ${alloc.currency}.` });
+      setTopUpDialog({ open: false, alloc: null, fundId: '' });
+      setTopUpReceiptFile(null);
+      await loadAllocations(fundId);
+    } catch (e: any) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setTopUpSaving(false);
+    }
   };
 
   const handleRemoveAlloc = async () => {
@@ -418,7 +463,6 @@ export default function PreFundingDistribute() {
                     {!isAllocLoading && allocs.map(a => {
                       const pct = a.allocated_amount > 0 ? Math.min(100, Math.round((a.spent_amount / a.allocated_amount) * 100)) : 0;
                       const rem = a.allocated_amount - a.spent_amount;
-                      const isEditing = editingAllocId === a.id;
                       return (
                         <div
                           key={a.id}
@@ -427,48 +471,37 @@ export default function PreFundingDistribute() {
                         >
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-[13px] truncate">{a.user_name}</div>
-                            <div className="text-[11px] text-muted-foreground truncate">{a.user_email} · {a.user_role?.replace(/_/g, ' ')}</div>
-                          </div>
-                          {/* Allocated amount — inline edit */}
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                value={editAllocAmt}
-                                onChange={e => setEditAllocAmt(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') saveEditAlloc(a.id, fund.id);
-                                  if (e.key === 'Escape') { setEditingAllocId(null); setEditAllocAmt(''); }
-                                }}
-                                className="h-6 w-28 text-xs px-1.5 py-0"
-                                autoFocus
-                                data-testid={`input-edit-alloc-${a.id}`}
-                              />
-                              <button onClick={() => saveEditAlloc(a.id, fund.id)} className="text-emerald-600 hover:text-emerald-700" data-testid={`button-save-alloc-${a.id}`}>
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                              <button onClick={() => { setEditingAllocId(null); setEditAllocAmt(''); }} className="text-muted-foreground hover:text-foreground">
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="text-right">
-                              <div className="font-mono text-[12px] font-semibold flex items-center gap-1 justify-end">
-                                {fund.currency} {formatNumber(a.allocated_amount, 0)}
-                                <button
-                                  onClick={() => { setEditingAllocId(a.id); setEditAllocAmt(String(a.allocated_amount)); }}
-                                  className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
-                                  title="Edit amount"
-                                  data-testid={`button-edit-alloc-${a.id}`}
+                            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
+                              {a.user_email} · {a.user_role?.replace(/_/g, ' ')}
+                              {a.receipt_url && (
+                                <a href={a.receipt_url} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline shrink-0"
+                                  title="View receipt"
+                                  data-testid={`link-receipt-${a.id}`}
+                                  onClick={e => e.stopPropagation()}
                                 >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">
-                                {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
-                              </div>
+                                  <Paperclip className="h-3 w-3" />Receipt
+                                </a>
+                              )}
                             </div>
-                          )}
+                          </div>
+                          {/* Amount + top-up button */}
+                          <div className="text-right">
+                            <div className="font-mono text-[12px] font-semibold flex items-center gap-1 justify-end">
+                              {fund.currency} {formatNumber(a.allocated_amount, 0)}
+                              <button
+                                onClick={() => openTopUp(a, fund.id)}
+                                className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
+                                title="Edit amount / upload receipt"
+                                data-testid={`button-topup-alloc-${a.id}`}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
+                            </div>
+                          </div>
                           {/* Mini progress */}
                           <div className="w-16 shrink-0 hidden sm:block">
                             <Progress
@@ -608,12 +641,99 @@ export default function PreFundingDistribute() {
                   data-testid="input-alloc-notes"
                 />
               </div>
+
+              {/* Receipt upload */}
+              <div>
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document (optional)
+                </Label>
+                {addReceiptFile ? (
+                  <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30 text-sm">
+                    <Paperclip className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                    <span className="truncate flex-1 text-[12px]">{addReceiptFile.name}</span>
+                    <button onClick={() => setAddReceiptFile(null)} className="text-muted-foreground hover:text-destructive shrink-0" data-testid="button-clear-add-receipt">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-add-receipt-upload">
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[12px] text-muted-foreground">Click to attach a receipt (image or PDF)</span>
+                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setAddReceiptFile(e.target.files?.[0] ?? null)} data-testid="input-add-receipt-file" />
+                  </label>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialog({ open: false, fund: null })}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setAddDialog({ open: false, fund: null }); setAddReceiptFile(null); }}>Cancel</Button>
             <Button onClick={handleAddAllocation} disabled={addSaving} data-testid="button-confirm-add-alloc">
               {addSaving ? 'Saving…' : 'Add Allocation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Top-Up / Edit Allocation Dialog */}
+      <Dialog open={topUpDialog.open} onOpenChange={o => !o && setTopUpDialog({ open: false, alloc: null, fundId: '' })}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-sky-600" />
+              Edit Allocation — {topUpDialog.alloc?.user_name}
+            </DialogTitle>
+          </DialogHeader>
+          {topUpDialog.alloc && (
+            <div className="space-y-4 py-1">
+              <div>
+                <Label className="text-xs mb-1 block">New Amount ({topUpDialog.alloc.currency})</Label>
+                <Input
+                  type="number"
+                  value={topUpAmt}
+                  onChange={e => setTopUpAmt(e.target.value)}
+                  className="h-8 text-sm"
+                  autoFocus
+                  data-testid="input-topup-amount"
+                />
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Currently allocated: {formatNumber(topUpDialog.alloc.allocated_amount, 0)} · Spent: {formatNumber(topUpDialog.alloc.spent_amount, 0)}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document
+                </Label>
+                {topUpDialog.alloc.receipt_url && !topUpReceiptFile && (
+                  <a href={topUpDialog.alloc.receipt_url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sky-600 hover:text-sky-700 text-[12px] underline mb-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />View current receipt
+                  </a>
+                )}
+                {topUpReceiptFile ? (
+                  <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30 text-sm">
+                    <Paperclip className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                    <span className="truncate flex-1 text-[12px]">{topUpReceiptFile.name}</span>
+                    <button onClick={() => setTopUpReceiptFile(null)} className="text-muted-foreground hover:text-destructive shrink-0" data-testid="button-clear-topup-receipt">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[12px] text-muted-foreground">
+                      {topUpDialog.alloc.receipt_url ? 'Replace receipt…' : 'Attach receipt (image or PDF)'}
+                    </span>
+                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setTopUpReceiptFile(e.target.files?.[0] ?? null)} data-testid="input-topup-receipt-file" />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '' })}>Cancel</Button>
+            <Button onClick={saveTopUp} disabled={topUpSaving} data-testid="button-confirm-topup">
+              {topUpSaving ? 'Saving…' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
