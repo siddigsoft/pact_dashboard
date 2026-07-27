@@ -168,6 +168,8 @@ export default function PreFundingDistribute() {
     setAddForm({ userId: '', amount: '', notes: '' });
     setUserSearch('');
     setAddDialog({ open: true, fund });
+    // Ensure allocations are loaded so the duplicate check in handleAddAllocation works
+    if (!fundAllocs.has(fund.id)) loadAllocations(fund.id);
   };
 
   const handleAddAllocation = async () => {
@@ -191,10 +193,22 @@ export default function PreFundingDistribute() {
       });
       return;
     }
-    // Check for existing allocation for this user+fund
-    const duplicate = existing.find(a => a.user_id === addForm.userId);
-    if (duplicate) {
+    // Check for existing allocation for this user+fund (in-memory first, then DB)
+    const inMemoryDupe = existing.find(a => a.user_id === addForm.userId);
+    if (inMemoryDupe) {
       toast({ title: 'User already allocated', description: 'Edit the existing allocation instead of adding a new one.', variant: 'destructive' });
+      return;
+    }
+    // DB-level check as safety net (catches case where allocations weren't loaded yet)
+    const { data: dbDupe } = await (supabase as any)
+      .from('pre_fund_allocations')
+      .select('id')
+      .eq('pre_fund_request_id', fund.id)
+      .eq('user_id', addForm.userId)
+      .maybeSingle();
+    if (dbDupe) {
+      toast({ title: 'User already allocated', description: 'This staff member already has an allocation for this fund. Edit the existing one instead.', variant: 'destructive' });
+      await loadAllocations(fund.id); // refresh so UI shows it
       return;
     }
     setAddSaving(true);
