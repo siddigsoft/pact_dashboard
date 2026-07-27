@@ -1,18 +1,16 @@
 -- pre_fund_holder_rls.sql
--- Grants fund holders SELECT access to their own pre_fund_requests rows.
--- Also adds finance-admin bypass policies so enabling RLS doesn't lock admins out.
--- Safe to run multiple times (all statements are idempotent).
+-- Grants fund holders SELECT access to their own rows and ensures
+-- finance admins retain full access after RLS is enabled.
+-- Safe to run multiple times (idempotent).
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- pre_fund_requests
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.pre_fund_requests ENABLE ROW LEVEL SECURITY;
 
--- Finance admins / super admins: full access to all rows
 DROP POLICY IF EXISTS "Finance admins full access pre_fund_requests" ON public.pre_fund_requests;
 CREATE POLICY "Finance admins full access pre_fund_requests"
-  ON public.pre_fund_requests
-  FOR ALL
+  ON public.pre_fund_requests FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -28,11 +26,9 @@ CREATE POLICY "Finance admins full access pre_fund_requests"
     )
   );
 
--- Fund holders: read their own assigned fund
 DROP POLICY IF EXISTS "Fund holders can read their own fund" ON public.pre_fund_requests;
 CREATE POLICY "Fund holders can read their own fund"
-  ON public.pre_fund_requests
-  FOR SELECT
+  ON public.pre_fund_requests FOR SELECT
   USING (holder_user_id = auth.uid());
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -42,8 +38,7 @@ ALTER TABLE public.pre_fund_allocations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Finance admins full access pre_fund_allocations" ON public.pre_fund_allocations;
 CREATE POLICY "Finance admins full access pre_fund_allocations"
-  ON public.pre_fund_allocations
-  FOR ALL
+  ON public.pre_fund_allocations FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -61,24 +56,21 @@ CREATE POLICY "Finance admins full access pre_fund_allocations"
 
 DROP POLICY IF EXISTS "Fund holders can read allocations for their fund" ON public.pre_fund_allocations;
 CREATE POLICY "Fund holders can read allocations for their fund"
-  ON public.pre_fund_allocations
-  FOR SELECT
+  ON public.pre_fund_allocations FOR SELECT
   USING (
     pre_fund_request_id IN (
-      SELECT id FROM public.pre_fund_requests
-      WHERE holder_user_id = auth.uid()
+      SELECT id FROM public.pre_fund_requests WHERE holder_user_id = auth.uid()
     )
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- pre_fund_steps
+-- pre_fund_approval_steps
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.pre_fund_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pre_fund_approval_steps ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Finance admins full access pre_fund_steps" ON public.pre_fund_steps;
-CREATE POLICY "Finance admins full access pre_fund_steps"
-  ON public.pre_fund_steps
-  FOR ALL
+DROP POLICY IF EXISTS "Finance admins full access pre_fund_approval_steps" ON public.pre_fund_approval_steps;
+CREATE POLICY "Finance admins full access pre_fund_approval_steps"
+  ON public.pre_fund_approval_steps FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -94,13 +86,11 @@ CREATE POLICY "Finance admins full access pre_fund_steps"
     )
   );
 
-DROP POLICY IF EXISTS "Fund holders can read steps for their fund" ON public.pre_fund_steps;
-CREATE POLICY "Fund holders can read steps for their fund"
-  ON public.pre_fund_steps
-  FOR SELECT
+DROP POLICY IF EXISTS "Fund holders can read approval steps for their fund" ON public.pre_fund_approval_steps;
+CREATE POLICY "Fund holders can read approval steps for their fund"
+  ON public.pre_fund_approval_steps FOR SELECT
   USING (
     pre_fund_request_id IN (
-      SELECT id FROM public.pre_fund_requests
-      WHERE holder_user_id = auth.uid()
+      SELECT id FROM public.pre_fund_requests WHERE holder_user_id = auth.uid()
     )
   );
