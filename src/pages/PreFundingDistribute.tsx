@@ -218,7 +218,7 @@ export default function PreFundingDistribute() {
         target_user_ids: [addForm.userId],
         created_by: currentUser?.id ?? null,
         metadata: { fund_id: fund.id, fund_name: fund.name, amount: amt, currency: fund.currency },
-      }).maybeSingle().throwOnError().catch(() => null);
+      }).catch(() => null);
       dispatchNotification({
         event: 'pre_fund_allocation_assigned', recipientIds: [addForm.userId],
         titleEn: 'Fund Allocation Assigned to You', titleAr: 'تم تعيين تخصيص الصندوق لك',
