@@ -145,6 +145,19 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'broadcast':                  { title_en: 'System Announcement',                  title_ar: 'إعلان النظام',                                category: 'broadcast',    priority: 'normal' },
   'reminder':                   { title_en: 'Reminder',                             title_ar: 'تذكير',                                       category: 'system',       priority: 'normal' },
   'daily_digest':               { title_en: 'Daily Action Summary',                 title_ar: 'ملخص الإجراءات اليومية',                      category: 'system',       priority: 'normal' },
+  // Pre-Funding
+  'pre_fund_created':            { title_en: 'New Pre-Fund Created',                  title_ar: 'تم إنشاء تمويل مسبق جديد',                   category: 'financial',  priority: 'normal' },
+  'pre_fund_approval_requested': { title_en: 'Pre-Fund Approval Required',            title_ar: 'مطلوب موافقة على التمويل المسبق',             category: 'approvals',  priority: 'high'   },
+  'pre_fund_step_assigned':      { title_en: 'Pre-Fund: Action Required on Your Step',title_ar: 'التمويل المسبق: إجراء مطلوب في خطوتك',       category: 'approvals',  priority: 'high'   },
+  'pre_fund_approved':           { title_en: 'Pre-Fund Fully Approved',               title_ar: 'تمت الموافقة الكاملة على التمويل المسبق',    category: 'financial',  priority: 'high'   },
+  'pre_fund_rejected':           { title_en: 'Pre-Fund Rejected',                     title_ar: 'تم رفض التمويل المسبق',                      category: 'financial',  priority: 'urgent' },
+  'pre_fund_activated':          { title_en: 'Pre-Fund Now Active',                   title_ar: 'التمويل المسبق نشط الآن',                    category: 'financial',  priority: 'normal' },
+  'pre_fund_allocated':          { title_en: 'Pre-Fund Allocation Assigned',          title_ar: 'تم تعيين تخصيص التمويل المسبق',              category: 'financial',  priority: 'normal' },
+  'pre_fund_allocation_removed': { title_en: 'Pre-Fund Allocation Removed',           title_ar: 'تم إلغاء تخصيص التمويل المسبق',              category: 'financial',  priority: 'normal' },
+  'pre_fund_allocation_assigned':{ title_en: 'Fund Allocation Assigned to You',       title_ar: 'تم تعيين تخصيص الصندوق لك',                  category: 'financial',  priority: 'normal' },
+  'pre_fund_topup_requested':    { title_en: 'Pre-Fund Top-Up Requested',             title_ar: 'تم طلب تعبئة التمويل المسبق',                category: 'approvals',  priority: 'high'   },
+  'pre_fund_expiry_warning':     { title_en: 'Pre-Fund Expiry Warning',               title_ar: 'تحذير: انتهاء صلاحية التمويل المسبق قريباً', category: 'financial',  priority: 'high'   },
+  'pre_fund_period_closed':      { title_en: 'Pre-Fund Period Closed',                title_ar: 'تم إغلاق فترة التمويل المسبق',               category: 'financial',  priority: 'normal' },
 }
 
 // ── Preference column mapping (expanded) ──────────────────────────────────────
@@ -245,6 +258,19 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'timesheet_approved':          'email_notify_payroll',
   'timesheet_rejected':          'email_notify_payroll',
   'timesheet_revision_requested':'email_notify_payroll',
+  // Pre-Funding
+  'pre_fund_created':            'email_notify_payroll',
+  'pre_fund_approval_requested': 'email_notify_approval_needed',
+  'pre_fund_step_assigned':      'email_notify_approval_needed',
+  'pre_fund_approved':           'email_notify_payroll',
+  'pre_fund_rejected':           'email_notify_payroll',
+  'pre_fund_activated':          'email_notify_payroll',
+  'pre_fund_allocated':          'email_notify_payroll',
+  'pre_fund_allocation_removed': 'email_notify_payroll',
+  'pre_fund_allocation_assigned':'email_notify_payroll',
+  'pre_fund_topup_requested':    'email_notify_approval_needed',
+  'pre_fund_expiry_warning':     'email_notify_payroll',
+  'pre_fund_period_closed':      'email_notify_payroll',
 }
 
 // ── Per-event email accent colors ─────────────────────────────────────────────
@@ -321,6 +347,19 @@ function getEventAccentColor(eventType: string, priority?: string): string {
     'broadcast':                '#7c3aed',
     'wallet_updated':           '#0891b2',
     'payment_processed':        '#0891b2',
+    // Pre-Funding
+    'pre_fund_approved':            '#059669',
+    'pre_fund_activated':           '#059669',
+    'pre_fund_rejected':            '#dc2626',
+    'pre_fund_approval_requested':  '#d97706',
+    'pre_fund_step_assigned':       '#d97706',
+    'pre_fund_topup_requested':     '#d97706',
+    'pre_fund_expiry_warning':      '#d97706',
+    'pre_fund_created':             '#2563eb',
+    'pre_fund_allocated':           '#0891b2',
+    'pre_fund_allocation_assigned': '#0891b2',
+    'pre_fund_allocation_removed':  '#6b7280',
+    'pre_fund_period_closed':       '#6b7280',
   }
   return colorMap[eventType] || '#1D3461'
 }
@@ -353,6 +392,11 @@ function getEventIconSvg(eventType: string): string {
     'project_stage_advanced': '🚀', 'project_stage_completed': '✅', 'project_milestone_reached': '🏆',
     'project_milestone_completed': '🏆', 'project_risk_added': '⚠️', 'project_risk_updated': '🔄',
     'project_status_changed': '📊', 'crm_opportunity_won': '🏆', 'reminder': '🔔',
+    // Pre-Funding
+    'pre_fund_created': '💼', 'pre_fund_approval_requested': '⏳', 'pre_fund_step_assigned': '📋',
+    'pre_fund_approved': '✅', 'pre_fund_rejected': '❌', 'pre_fund_activated': '🟢',
+    'pre_fund_allocated': '💰', 'pre_fund_allocation_removed': '🚫', 'pre_fund_allocation_assigned': '💰',
+    'pre_fund_topup_requested': '📈', 'pre_fund_expiry_warning': '⏰', 'pre_fund_period_closed': '🔒',
   }
   return icons[eventType] || '🔔'
 }
@@ -445,6 +489,16 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.value)        items.push({ label_en: 'Value',           label_ar: 'القيمة',           value: metadata.value })
   }
   if (metadata.payroll_month) items.push({ label_en: 'Payroll Month',  label_ar: 'شهر الراتب',      value: metadata.payroll_month })
+
+  if (eventType.startsWith('pre_fund_')) {
+    if (metadata.fund_name)        items.push({ label_en: 'Fund Name',       label_ar: 'اسم الصندوق',       value: String(metadata.fund_name) })
+    if (metadata.amount != null)   items.push({ label_en: 'Amount',          label_ar: 'المبلغ',            value: `${Number(metadata.amount).toLocaleString('en-US')} ${metadata.currency || 'SDG'}` })
+    if (metadata.step_label)       items.push({ label_en: 'Approval Step',   label_ar: 'خطوة الموافقة',     value: String(metadata.step_label) })
+    if (metadata.days_remaining != null) items.push({ label_en: 'Days Remaining', label_ar: 'الأيام المتبقية', value: `${metadata.days_remaining} days` })
+    if (metadata.surplus_action)   items.push({ label_en: 'Surplus Action',  label_ar: 'إجراء الفائض',      value: String(metadata.surplus_action) })
+    if (metadata.reason)           items.push({ label_en: 'Reason',          label_ar: 'السبب',             value: String(metadata.reason) })
+    if (metadata.requested_amount != null) items.push({ label_en: 'Requested Amount', label_ar: 'المبلغ المطلوب', value: `${Number(metadata.requested_amount).toLocaleString('en-US')} ${metadata.currency || 'SDG'}` })
+  }
 
   if (items.length === 0) return ''
 

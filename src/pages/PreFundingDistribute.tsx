@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -218,6 +219,15 @@ export default function PreFundingDistribute() {
         created_by: currentUser?.id ?? null,
         metadata: { fund_id: fund.id, fund_name: fund.name, amount: amt, currency: fund.currency },
       }).maybeSingle().throwOnError().catch(() => null);
+      dispatchNotification({
+        event: 'pre_fund_allocation_assigned', recipientIds: [addForm.userId],
+        titleEn: 'Fund Allocation Assigned to You', titleAr: 'تم تعيين تخصيص الصندوق لك',
+        messageEn: `You have been allocated ${formatNumber(amt, 0)} ${fund.currency} from fund "${fund.name}".`,
+        messageAr: `تم تخصيص مبلغ ${formatNumber(amt, 0)} ${fund.currency} لك من صندوق "${fund.name}".`,
+        entityType: 'pre_fund_request', entityId: fund.id,
+        triggeredBy: currentUser?.id, priority: 'normal',
+        metadata: { fund_name: fund.name, amount: amt, currency: fund.currency },
+      });
       toast({ title: 'Allocation added', description: `${formatNumber(amt, 0)} ${fund.currency} assigned.` });
       setAddDialog({ open: false, fund: null });
       await loadAllocations(fund.id);

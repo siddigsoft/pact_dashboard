@@ -13,7 +13,9 @@ export interface DispatchNotificationOptions {
   /** Event key — must exist in the eventTemplates map of dispatch-notification. */
   event: string;
   /** User IDs that should receive the message (in-app, email, optionally WA). */
-  recipientIds: string[];
+  recipientIds?: string[];
+  /** Role names whose members should receive the message (resolved server-side). */
+  recipientRoles?: string[];
   titleEn: string;
   titleAr: string;
   messageEn: string;
@@ -40,7 +42,8 @@ export interface DispatchNotificationOptions {
 
 export async function dispatchNotification(opts: DispatchNotificationOptions): Promise<void> {
   const recipients = Array.from(new Set((opts.recipientIds ?? []).filter(Boolean)));
-  if (recipients.length === 0) return;
+  const roles = Array.from(new Set((opts.recipientRoles ?? []).filter(Boolean)));
+  if (recipients.length === 0 && roles.length === 0) return;
 
   // ── 1. In-app + (optionally) email ──────────────────────────────────────
   // The edge function always inserts the in-app row; `send_email: false`
@@ -55,6 +58,7 @@ export async function dispatchNotification(opts: DispatchNotificationOptions): P
         entity_id: opts.entityId,
         priority: opts.priority ?? 'normal',
         recipient_ids: recipients,
+        recipient_roles: roles,
         title_en: opts.titleEn,
         title_ar: opts.titleAr,
         message_en: opts.messageEn,

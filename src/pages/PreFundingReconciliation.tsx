@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -1546,6 +1547,16 @@ export default function PreFundingReconciliation() {
             surplus: surplus,
             surplus_action: closeForm.surplus_action,
           },
+        });
+        dispatchNotification({
+          event: 'pre_fund_period_closed',
+          recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+          titleEn: 'Pre-Fund Period Closed', titleAr: 'تم إغلاق فترة التمويل المسبق',
+          messageEn: `Fund "${selectedFund.name}" (${selectedFund.currency}) period has been closed. Surplus action: ${closeForm.surplus_action}.`,
+          messageAr: `تم إغلاق فترة صندوق "${selectedFund.name}" (${selectedFund.currency}). إجراء الفائض: ${closeForm.surplus_action}.`,
+          entityType: 'pre_fund_request', entityId: selectedFund.id,
+          triggeredBy: currentUser?.id, priority: 'normal',
+          metadata: { fund_name: selectedFund.name, currency: selectedFund.currency, surplus: surplus, surplus_action: closeForm.surplus_action },
         });
       } catch { /* notifications are non-blocking */ }
       setShowClose(false);

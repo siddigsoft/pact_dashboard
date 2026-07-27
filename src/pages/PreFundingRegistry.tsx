@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
 import { exportToExcel } from '@/utils/report-export';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -1087,6 +1088,15 @@ export default function PreFundingRegistry() {
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: allocDialog.fund.id, fund_name: allocDialog.fund.name, amount: amt, currency: allocDialog.fund.currency },
         });
+        dispatchNotification({
+          event: 'pre_fund_allocated', recipientIds: [allocForm.userId],
+          titleEn: 'Pre-Fund Allocation Assigned', titleAr: 'تم تعيين تخصيص التمويل المسبق',
+          messageEn: `You have been allocated ${formatNumber(amt, 0)} ${allocDialog.fund.currency} from fund "${allocDialog.fund.name}".`,
+          messageAr: `تم تخصيص مبلغ ${formatNumber(amt, 0)} ${allocDialog.fund.currency} من صندوق "${allocDialog.fund.name}".`,
+          entityType: 'pre_fund_request', entityId: allocDialog.fund.id,
+          triggeredBy: currentUser?.id, priority: 'normal',
+          metadata: { fund_name: allocDialog.fund.name, amount: amt, currency: allocDialog.fund.currency },
+        });
       } catch { /* non-blocking */ }
       toast({ title: 'User allocated', description: `${formatNumber(amt, 0)} ${allocDialog.fund.currency} assigned.` });
       setAllocForm({ userId: '', amount: '', notes: '' });
@@ -1115,6 +1125,15 @@ export default function PreFundingRegistry() {
           target_user_ids: [removedAlloc.user_id],
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: allocDialog.fund.id, fund_name: allocDialog.fund.name, amount: removedAlloc.allocated_amount, currency: allocDialog.fund.currency },
+        });
+        dispatchNotification({
+          event: 'pre_fund_allocation_removed', recipientIds: [removedAlloc.user_id],
+          titleEn: 'Pre-Fund Allocation Removed', titleAr: 'تم إلغاء تخصيص التمويل المسبق',
+          messageEn: `Your allocation of ${formatNumber(Number(removedAlloc.allocated_amount), 0)} ${allocDialog.fund.currency} from fund "${allocDialog.fund.name}" has been removed.`,
+          messageAr: `تم إلغاء تخصيص مبلغ ${formatNumber(Number(removedAlloc.allocated_amount), 0)} ${allocDialog.fund.currency} من صندوق "${allocDialog.fund.name}".`,
+          entityType: 'pre_fund_request', entityId: allocDialog.fund.id,
+          triggeredBy: currentUser?.id, priority: 'normal',
+          metadata: { fund_name: allocDialog.fund.name, amount: removedAlloc.allocated_amount, currency: allocDialog.fund.currency },
         });
       } catch { /* non-blocking */ }
     }
@@ -1168,6 +1187,17 @@ export default function PreFundingRegistry() {
           reason: reason.trim(),
           requested_by: currentUser?.id ?? null,
         },
+      });
+      dispatchNotification({
+        event: 'pre_fund_topup_requested',
+        recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+        recipientIds: uniqueRecipients,
+        titleEn: 'Pre-Fund Top-Up Requested', titleAr: 'تم طلب تعبئة التمويل المسبق',
+        messageEn: `A top-up of ${fund.currency} ${formatNumber(parsedAmt, 0)} has been requested for fund "${fund.name}". Reason: ${reason.trim()}`,
+        messageAr: `تم طلب تعبئة بمبلغ ${fund.currency} ${formatNumber(parsedAmt, 0)} لصندوق "${fund.name}". السبب: ${reason.trim()}`,
+        entityType: 'pre_fund_request', entityId: fund.id,
+        triggeredBy: currentUser?.id, priority: 'high',
+        metadata: { fund_name: fund.name, requested_amount: parsedAmt, currency: fund.currency, reason: reason.trim() },
       });
 
       toast({
@@ -1239,6 +1269,16 @@ export default function PreFundingRegistry() {
         target_roles: ['super_admin', 'admin', 'financialAdmin'],
         created_by: currentUser?.id ?? null,
         metadata: { source_fund: sourceFund.name, dest_fund: destFund.name, amount: parsedAmt, currency: sourceFund.currency },
+      });
+      dispatchNotification({
+        event: 'pre_fund_topup_requested',
+        recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+        titleEn: 'Fund Transfer Completed', titleAr: 'اكتمل تحويل الصندوق',
+        messageEn: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} transferred from "${sourceFund.name}" to "${destFund.name}". Reason: ${reason.trim()}`,
+        messageAr: `تم تحويل ${sourceFund.currency} ${formatNumber(parsedAmt, 0)} من "${sourceFund.name}" إلى "${destFund.name}". السبب: ${reason.trim()}`,
+        entityType: 'pre_fund_request', entityId: destFund.id,
+        triggeredBy: currentUser?.id, priority: 'normal',
+        metadata: { fund_name: destFund.name, amount: parsedAmt, currency: sourceFund.currency, reason: reason.trim() },
       });
 
       toast({ title: 'Transfer complete', description: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} moved from "${sourceFund.name}" to "${destFund.name}".` });
@@ -1354,6 +1394,16 @@ export default function PreFundingRegistry() {
             message: `Fund "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}) has been created as a draft and is ready for approval submission.`,
             target_roles: ['super_admin', 'admin', 'financialAdmin'],
             created_by: currentUser?.id ?? null,
+            metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
+          });
+          dispatchNotification({
+            event: 'pre_fund_created',
+            recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+            titleEn: 'New Pre-Fund Created', titleAr: 'تم إنشاء تمويل مسبق جديد',
+            messageEn: `Fund "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}) has been created as a draft and is ready for approval submission.`,
+            messageAr: `تم إنشاء صندوق "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}) كمسودة وهو جاهز لتقديمه للموافقة.`,
+            entityType: 'pre_fund_request', entityId: newFund?.id ?? undefined,
+            triggeredBy: currentUser?.id, priority: 'normal',
             metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
           });
         } catch { /* notifications are non-blocking */ }
@@ -1577,6 +1627,16 @@ export default function PreFundingRegistry() {
         created_by: currentUser?.id ?? null,
         metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'SDG', usd_to_sdg_rate: _rate },
       });
+      dispatchNotification({
+        event: 'pre_fund_approval_requested',
+        recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+        titleEn: 'Pre-Fund Approval Required', titleAr: 'مطلوب موافقة على التمويل المسبق',
+        messageEn: `Fund "${f.name}" (SDG ${f.amount.toLocaleString()}${_usdEquivNote}) requires approval before activation.`,
+        messageAr: `يتطلب صندوق "${f.name}" (SDG ${f.amount.toLocaleString()}${_usdEquivNote}) موافقة قبل التفعيل.`,
+        entityType: 'pre_fund_request', entityId: f.id,
+        triggeredBy: currentUser?.id, priority: 'high',
+        metadata: { fund_name: f.name, amount: f.amount, currency: 'SDG' },
+      });
     } catch { /* notifications are non-blocking */ }
 
     // Also notify specific users assigned to approval chain steps
@@ -1601,6 +1661,17 @@ export default function PreFundingRegistry() {
           target_user_ids: allStepUserIds,
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: f.id, fund_name: f.name, amount: f.amount, currency: 'SDG', usd_to_sdg_rate: rate },
+        });
+        dispatchNotification({
+          event: 'pre_fund_approval_requested',
+          recipientIds: allStepUserIds,
+          titleEn: 'Pre-Fund Approval — Action Required', titleAr: 'التمويل المسبق — إجراء مطلوب',
+          messageEn: `Pre-fund "${f.name}" (SDG ${f.amount.toLocaleString()}${usdNote}) has been submitted for approval and awaits your review.`,
+          messageAr: `تم تقديم التمويل المسبق "${f.name}" (SDG ${f.amount.toLocaleString()}${usdNote}) للموافقة وينتظر مراجعتك.`,
+          entityType: 'pre_fund_request', entityId: f.id,
+          triggeredBy: currentUser?.id, priority: 'high',
+          metadata: { fund_name: f.name, amount: f.amount, currency: 'SDG' },
+          actionUrl: '/pre-funding?tab=approvals',
         });
       }
     } catch { /* non-blocking */ }
@@ -1676,6 +1747,17 @@ export default function PreFundingRegistry() {
           target_roles: ['super_admin', 'admin', 'financialAdmin'],
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: receiptDialog.fundId, fund_name: fund?.name, amount: fund?.amount, currency: fund?.currency },
+        });
+        dispatchNotification({
+          event: 'pre_fund_activated',
+          recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+          titleEn: 'Pre-Fund Now Active', titleAr: 'التمويل المسبق نشط الآن',
+          messageEn: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active.${hasGL ? ' GL journal entry posted.' : ''}`,
+          messageAr: `أصبح صندوق "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) نشطاً الآن.${hasGL ? ' تم ترحيل قيد دفتر اليومية.' : ''}`,
+          entityType: 'pre_fund_request', entityId: receiptDialog.fundId,
+          triggeredBy: currentUser?.id, priority: 'high',
+          metadata: { fund_name: fund?.name ?? receiptDialog.fundName, amount: fund?.amount, currency: fund?.currency },
+          actionUrl: '/pre-funding?tab=registry',
         });
       } catch { /* non-blocking */ }
       setReceiptDialog({ open: false, fundId: '', fundName: '' });

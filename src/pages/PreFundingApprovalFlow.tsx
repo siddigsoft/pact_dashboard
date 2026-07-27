@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { useUser } from '@/context/user/UserContext';
@@ -274,6 +275,16 @@ export default function PreFundingApprovalFlow() {
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
             });
+            dispatchNotification({
+              event: 'pre_fund_step_assigned', recipientIds: newlyAddedIds,
+              titleEn: 'Pre-Fund Approval — You Were Added', titleAr: 'التمويل المسبق — تمت إضافتك كمعتمد',
+              messageEn: `You have been added as an approver for pre-fund "${selectedFund.name}" — Step: ${stepForm.step_label}. Please review and take action.`,
+              messageAr: `تمت إضافتك كمعتمد للتمويل المسبق "${selectedFund.name}" — الخطوة: ${stepForm.step_label}. يُرجى المراجعة واتخاذ الإجراء.`,
+              entityType: 'pre_fund_request', entityId: selectedFund.id,
+              triggeredBy: currentUser?.id, priority: 'high',
+              metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: stepForm.step_label },
+              actionUrl: '/pre-funding?tab=approvals',
+            });
           } catch { /* non-blocking */ }
         }
       } else {
@@ -300,6 +311,16 @@ export default function PreFundingApprovalFlow() {
               target_user_ids: stepForm.assigned_user_ids,
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: stepForm.step_label },
+            });
+            dispatchNotification({
+              event: 'pre_fund_step_assigned', recipientIds: stepForm.assigned_user_ids,
+              titleEn: 'Pre-Fund Approval — Action Required', titleAr: 'التمويل المسبق — إجراء مطلوب في خطوتك',
+              messageEn: `You have been assigned to approve pre-fund "${selectedFund.name}" — Step: ${stepForm.step_label}. Please review and take action.`,
+              messageAr: `تم تعيينك للموافقة على التمويل المسبق "${selectedFund.name}" — الخطوة: ${stepForm.step_label}. يُرجى المراجعة واتخاذ الإجراء.`,
+              entityType: 'pre_fund_request', entityId: selectedFund.id,
+              triggeredBy: currentUser?.id, priority: 'high',
+              metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: stepForm.step_label },
+              actionUrl: '/pre-funding?tab=approvals',
             });
           } catch { /* non-blocking */ }
         }
@@ -417,6 +438,16 @@ export default function PreFundingApprovalFlow() {
               created_by: currentUser?.id ?? null,
               metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, step_label: nextPendingStep.step_label },
             });
+            dispatchNotification({
+              event: 'pre_fund_step_assigned', recipientIds: nextPendingStep.assigned_user_ids,
+              titleEn: 'Pre-Fund Approval — Your Turn', titleAr: 'التمويل المسبق — دورك للمراجعة',
+              messageEn: `Step "${step.step_label}" approved. Step "${nextPendingStep.step_label}" for fund "${selectedFund.name}" now requires your review.`,
+              messageAr: `تمت الموافقة على "${step.step_label}". الخطوة "${nextPendingStep.step_label}" لصندوق "${selectedFund.name}" تتطلب مراجعتك.`,
+              entityType: 'pre_fund_request', entityId: selectedFund.id,
+              triggeredBy: currentUser?.id, priority: 'high',
+              metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: nextPendingStep.step_label },
+              actionUrl: '/pre-funding?tab=approvals',
+            });
           }
         } catch { /* non-blocking */ }
       }
@@ -435,6 +466,23 @@ export default function PreFundingApprovalFlow() {
             target_roles: ['super_admin', 'admin', 'financialAdmin'],
             created_by: currentUser?.id ?? null,
             metadata: { fund_id: selectedFund.id, fund_name: selectedFund.name, new_status: newFundStatus },
+          });
+          dispatchNotification({
+            event: newFundStatus === 'awaiting_receipt' ? 'pre_fund_approved' : 'pre_fund_rejected',
+            recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+            titleEn: newFundStatus === 'awaiting_receipt' ? 'Pre-Fund Fully Approved' : 'Pre-Fund Rejected',
+            titleAr: newFundStatus === 'awaiting_receipt' ? 'تمت الموافقة الكاملة على التمويل المسبق' : 'تم رفض التمويل المسبق',
+            messageEn: newFundStatus === 'awaiting_receipt'
+              ? `Pre-fund "${selectedFund.name}" passed all approval steps and is now awaiting bank receipt to activate.`
+              : `Pre-fund "${selectedFund.name}" was rejected at step "${step.step_label}".`,
+            messageAr: newFundStatus === 'awaiting_receipt'
+              ? `اجتاز التمويل المسبق "${selectedFund.name}" جميع خطوات الموافقة وينتظر الآن إيصال البنك للتفعيل.`
+              : `تم رفض التمويل المسبق "${selectedFund.name}" عند خطوة "${step.step_label}".`,
+            entityType: 'pre_fund_request', entityId: selectedFund.id,
+            triggeredBy: currentUser?.id,
+            priority: newFundStatus === 'rejected' ? 'urgent' : 'high',
+            metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG' },
+            actionUrl: '/pre-funding?tab=registry',
           });
         } catch { /* non-blocking */ }
       }
