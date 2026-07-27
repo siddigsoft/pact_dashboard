@@ -1376,6 +1376,34 @@ export default function PreFundingRegistry() {
         }
         const { error: e } = await runWithFallback(p => supabase.from('pre_fund_requests').update(p).eq('id', editing.id));
         if (e) throw e;
+        // Notify the newly assigned holder if the holder changed
+        const newHolder = form.holder_user_id;
+        const oldHolder = (editing as any).holder_user_id;
+        if (newHolder && newHolder !== oldHolder) {
+          try {
+            await supabase.from('notification_events' as any).insert({
+              event_type: 'pre_fund_allocated',
+              reference_id: editing.id,
+              reference_type: 'pre_fund_request',
+              title: 'You Have Been Assigned as Fund Holder',
+              message: `You have been assigned as the fund holder for "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}). You are now responsible for managing this fund.`,
+              target_user_ids: [newHolder],
+              created_by: currentUser?.id ?? null,
+              metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
+            });
+            dispatchNotification({
+              event: 'pre_fund_allocated',
+              recipientIds: [newHolder],
+              titleEn: 'You Have Been Assigned as Fund Holder', titleAr: 'تم تعيينك حاملاً للصندوق',
+              messageEn: `You have been assigned as the fund holder for "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}). You are now responsible for managing this fund.`,
+              messageAr: `تم تعيينك حاملاً لصندوق "${payload.name}" (${payload.currency} ${formatNumber(payload.amount, 0)}). أنت الآن مسؤول عن إدارة هذا الصندوق.`,
+              entityType: 'pre_fund_request', entityId: editing.id,
+              triggeredBy: currentUser?.id, priority: 'normal',
+              metadata: { fund_name: payload.name, amount: payload.amount, currency: payload.currency },
+              actionUrl: '/pre-funding?tab=registry',
+            });
+          } catch { /* non-blocking */ }
+        }
         toast({ title: 'Fund updated' });
       } else {
         payload.status = 'draft';
@@ -1751,9 +1779,11 @@ export default function PreFundingRegistry() {
           created_by: currentUser?.id ?? null,
           metadata: { fund_id: receiptDialog.fundId, fund_name: fund?.name, amount: fund?.amount, currency: fund?.currency },
         });
+        const holderUserId = (fund as any)?.holder_user_id as string | null | undefined;
         dispatchNotification({
           event: 'pre_fund_activated',
           recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
+          recipientIds: holderUserId ? [holderUserId] : [],
           titleEn: 'Pre-Fund Now Active', titleAr: 'التمويل المسبق نشط الآن',
           messageEn: `Fund "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) is now Active.${hasGL ? ' GL journal entry posted.' : ''}`,
           messageAr: `أصبح صندوق "${fund?.name ?? receiptDialog.fundName}" (${fund?.currency ?? ''} ${formatNumber(fund?.amount ?? 0, 0)}) نشطاً الآن.${hasGL ? ' تم ترحيل قيد دفتر اليومية.' : ''}`,
