@@ -191,6 +191,668 @@ const THRESHOLD_MODE_OPTIONS = [
   { value: 'both',  label: 'Both (% and fixed, alerts on either)' },
 ];
 
+interface PreFundFormDialogProps {
+  open: boolean;
+  onClose: () => void;
+  editing: PreFundRequest | null;
+  projects: Project[];
+  periodTypes: PeriodType[];
+  acctAccounts: { id: string; code: string; name_en: string; is_active: boolean; is_postable: boolean }[];
+  staffProfiles: { id: string; full_name: string; email: string; role: string }[];
+  pfSettings: { default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null;
+  saving: boolean;
+  onSave: (formData: typeof EMPTY_FORM) => void;
+}
+
+function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acctAccounts, staffProfiles, pfSettings, saving, onSave }: PreFundFormDialogProps) {
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [dialogStep, setDialogStep] = useState<1 | 2>(1);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [holderSearch, setHolderSearch] = useState('');
+  const [notifRecipSearch, setNotifRecipSearch] = useState('');
+
+  // Reset form when dialog opens or editing target changes
+  useEffect(() => {
+    if (!open) return;
+    if (editing) {
+      const fa = editing as any;
+      const hasPct   = fa.threshold_pct   != null;
+      const hasFixed = fa.threshold_amount != null;
+      const tMode: 'pct' | 'fixed' | 'both' = hasPct && hasFixed ? 'both' : hasFixed ? 'fixed' : 'pct';
+      setForm({
+        name: editing.name, source: editing.source ?? '', amount: String(editing.amount), currency: 'SDG',
+        usd_to_sdg_rate: fa.usd_to_sdg_rate != null ? String(fa.usd_to_sdg_rate) : '',
+        period_type_id: editing.period_type_id ?? '', start_date: editing.start_date ?? '', end_date: editing.end_date ?? '',
+        country_id: editing.country_id ?? '', project_id: editing.project_id ?? '', grant_id: editing.grant_id ?? '',
+        matching_scope: editing.matching_scope,
+        cost_category: editing.cost_category ?? '',
+        threshold_mode: tMode,
+        threshold_pct:    fa.threshold_pct    != null ? String(fa.threshold_pct)    : '',
+        threshold_amount: fa.threshold_amount != null ? String(fa.threshold_amount) : '',
+        warning_days: editing.warning_days != null ? String(editing.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
+        auto_renewal_mode: editing.auto_renewal_mode,
+        auto_renewal_days_before: editing.auto_renewal_days_before != null ? String(editing.auto_renewal_days_before) : '',
+        auto_renewal_bypass_approvals: fa.auto_renewal_bypass_approvals ?? false,
+        gl_receipt_account:     fa.gl_receipt_account     ?? '',
+        gl_liability_account:   fa.gl_liability_account   ?? '',
+        gl_expense_account:     fa.gl_expense_account     ?? '',
+        gl_cf_account:          fa.gl_cf_account          ?? '',
+        gl_encumbrance_account: fa.gl_encumbrance_account ?? '',
+        notes: editing.notes ?? '',
+        notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
+        holder_user_id: fa.holder_user_id ?? '',
+        allow_overpay: fa.allow_overpay ?? null,
+      });
+      setDialogStep(2);
+    } else {
+      setForm({
+        ...EMPTY_FORM,
+        warning_days: pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : '',
+        auto_renewal_mode: pfSettings?.default_renewal_mode ?? EMPTY_FORM.auto_renewal_mode,
+        threshold_pct: pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : '',
+      });
+      setDialogStep(1);
+    }
+    setProjectSearch('');
+    setHolderSearch('');
+    setNotifRecipSearch('');
+  }, [open, editing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // GL auto-fill: prefill empty GL fields when form opens or currency changes
+  useEffect(() => {
+    if (!open || acctAccounts.length === 0) return;
+    const defaults = detectGlDefaults(form.currency, acctAccounts);
+    setForm(prev => ({
+      ...prev,
+      gl_receipt_account:     prev.gl_receipt_account     || defaults.gl_receipt_account,
+      gl_liability_account:   prev.gl_liability_account   || defaults.gl_liability_account,
+      gl_expense_account:     prev.gl_expense_account     || defaults.gl_expense_account,
+      gl_cf_account:          prev.gl_cf_account          || defaults.gl_cf_account,
+      gl_encumbrance_account: prev.gl_encumbrance_account || defaults.gl_encumbrance_account,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, form.currency, acctAccounts]);
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[96vh] overflow-y-auto">
+
+        {/* ── STEP 1: Project selection (new fund only) ──────────────────── */}
+        {!editing && dialogStep === 1 && (() => {
+          const filteredProjects = projects.filter(p =>
+            !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())
+          );
+          const selectedProject = projects.find(p => p.id === form.project_id);
+          return (
+            <>
+              <DialogHeader className="pb-1">
+                <DialogTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-sky-600" />
+                  New Pre-Fund Request
+                </DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Step 1 of 2 — Select the project this fund belongs to, then continue to fill in the details.
+                </p>
+              </DialogHeader>
+
+              <div className="flex items-center gap-2 py-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                  <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Select Project</span>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-1.5 opacity-40">
+                  <span className="h-6 w-6 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center font-bold">2</span>
+                  <span className="text-sm text-muted-foreground">Fund Details</span>
+                </div>
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={projectSearch}
+                  onChange={e => setProjectSearch(e.target.value)}
+                  placeholder="Search projects…"
+                  className="pl-9"
+                  data-testid="input-project-search"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                <button
+                  onClick={() => setForm(p => ({ ...p, project_id: '' }))}
+                  className={cn(
+                    'w-full text-left px-4 py-3 rounded-lg border transition-all',
+                    form.project_id === ''
+                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
+                      : 'border-border bg-card hover:bg-muted/40'
+                  )}
+                  data-testid="button-project-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                      <FolderOpen className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm">No Project / General Fund</div>
+                      <div className="text-[11px] text-muted-foreground">This fund is not tied to a specific project</div>
+                    </div>
+                    {form.project_id === '' && <CheckCircle2 className="h-4 w-4 text-sky-600 ml-auto shrink-0" />}
+                  </div>
+                </button>
+
+                {filteredProjects.length === 0 && projectSearch ? (
+                  <p className="text-center text-sm text-muted-foreground py-6">No projects match "{projectSearch}"</p>
+                ) : filteredProjects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setForm(prev => ({ ...prev, project_id: p.id }))}
+                    className={cn(
+                      'w-full text-left px-4 py-3 rounded-lg border transition-all',
+                      form.project_id === p.id
+                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
+                        : 'border-border bg-card hover:bg-muted/40'
+                    )}
+                    data-testid={`button-project-${p.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+                        <Briefcase className="h-4 w-4 text-sky-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{p.name}</div>
+                        {p.description && <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>}
+                      </div>
+                      {p.status && (
+                        <span className="text-[10px] shrink-0 bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{p.status}</span>
+                      )}
+                      {form.project_id === p.id && <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                {selectedProject ? `Selected: ${selectedProject.name}` : 'No project selected (general fund)'}
+              </p>
+
+              <DialogFooter className="mt-2">
+                <Button variant="outline" onClick={onClose}>Cancel</Button>
+                <Button
+                  className="bg-sky-600 hover:bg-sky-700 text-white"
+                  onClick={() => { setDialogStep(2); setProjectSearch(''); }}
+                  data-testid="button-step1-continue"
+                >
+                  Continue — Fund Details
+                  <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </DialogFooter>
+            </>
+          );
+        })()}
+
+        {/* ── STEP 2: Fund details (new fund) OR full form (edit) ─────────── */}
+        {(editing || dialogStep === 2) && (
+          <>
+            <DialogHeader className="pb-1">
+              <DialogTitle>
+                {editing ? 'Edit Pre-Fund' : 'New Pre-Fund Request'}
+              </DialogTitle>
+              {!editing && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Step 2 of 2 — Fill in the fund details.
+                </p>
+              )}
+            </DialogHeader>
+
+            {!editing && (
+              <div className="flex items-center gap-2 py-1">
+                <div className="flex items-center gap-1.5 opacity-50">
+                  <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">✓</span>
+                  <span className="text-sm text-muted-foreground">Project Selected</span>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-1.5">
+                  <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                  <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Fund Details</span>
+                </div>
+              </div>
+            )}
+
+            {!editing && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border">
+                <Briefcase className="h-4 w-4 text-sky-600 shrink-0" />
+                <span className="text-sm flex-1">
+                  {form.project_id
+                    ? <><span className="font-medium">{projects.find(p => p.id === form.project_id)?.name}</span><span className="text-muted-foreground ml-1 text-xs">— project fund</span></>
+                    : <span className="text-muted-foreground italic">No Project / General Fund</span>
+                  }
+                </span>
+                <button
+                  className="text-xs text-sky-600 hover:underline"
+                  onClick={() => setDialogStep(1)}
+                  data-testid="button-change-project"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+              <div className="sm:col-span-2">
+                <Label>Fund Name *</Label>
+                <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. WFP Q3 Field Operations" data-testid="input-fund-name" />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Source / Donor</Label>
+                <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
+              </div>
+
+              {/* Fund Holder — single-user picker */}
+              <div className="sm:col-span-2">
+                <Label className="flex items-center gap-1.5">
+                  Fund Holder
+                  <span className="text-[10px] font-normal text-muted-foreground">(optional — assigned user can distribute to staff from the Distribute Funds tab)</span>
+                </Label>
+                {form.holder_user_id ? (
+                  <div className="flex items-center justify-between border rounded-md px-3 py-2 bg-muted/30 mt-1">
+                    {(() => {
+                      const hp = staffProfiles.find(p => p.id === form.holder_user_id);
+                      return hp ? (
+                        <div>
+                          <div className="text-sm font-medium">{hp.full_name}</div>
+                          <div className="text-[11px] text-muted-foreground">{hp.email} · {hp.role}</div>
+                        </div>
+                      ) : <span className="text-sm text-muted-foreground">User ID: {form.holder_user_id}</span>;
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => { setForm(p => ({ ...p, holder_user_id: '' })); setHolderSearch(''); }}
+                      className="text-muted-foreground hover:text-foreground ml-2"
+                      data-testid="button-clear-holder"
+                    >✕</button>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <div className="relative mb-1">
+                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={holderSearch}
+                        onChange={e => setHolderSearch(e.target.value)}
+                        placeholder="Search staff to assign as fund holder…"
+                        className="pl-8 h-8 text-sm"
+                        data-testid="input-holder-search"
+                      />
+                    </div>
+                    {holderSearch.trim() && (
+                      <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
+                        {staffProfiles
+                          .filter(p =>
+                            p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
+                            p.email?.toLowerCase().includes(holderSearch.toLowerCase())
+                          )
+                          .slice(0, 8)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                              onClick={() => { setForm(prev => ({ ...prev, holder_user_id: p.id })); setHolderSearch(''); }}
+                              data-testid={`button-select-holder-${p.id}`}
+                            >
+                              <div>
+                                <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                                <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                              </div>
+                              <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                            </button>
+                          ))}
+                        {staffProfiles.filter(p =>
+                          p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
+                          p.email?.toLowerCase().includes(holderSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
+                        )}
+                      </div>
+                    )}
+                    {!holderSearch && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">No holder set — type to search</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Allow Overpay ── */}
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 col-span-2">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Allow Overpay</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    When <strong>OFF</strong>, payments that would push this fund's total above its funded amount will be blocked.
+                    Leave as "Use default" to follow the global setting in Pre-Funding Settings.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Select
+                    value={form.allow_overpay === null ? 'default' : form.allow_overpay ? 'yes' : 'no'}
+                    onValueChange={v => setForm(p => ({ ...p, allow_overpay: v === 'default' ? null : v === 'yes' }))}
+                  >
+                    <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-allow-overpay">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Use default</SelectItem>
+                      <SelectItem value="yes">Allow overpay</SelectItem>
+                      <SelectItem value="no">Block overpay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Amount (SDG) *</Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.amount}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, '');
+                    setForm(p => ({ ...p, amount: raw }));
+                  }}
+                  onBlur={() => {
+                    const num = parseFloat(form.amount.replace(/,/g, ''));
+                    if (!isNaN(num) && num > 0) setForm(p => ({ ...p, amount: num.toLocaleString('en-US') }));
+                  }}
+                  onFocus={() => setForm(p => ({ ...p, amount: p.amount.replace(/,/g, '') }))}
+                  placeholder="0"
+                  data-testid="input-fund-amount"
+                />
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <div className="flex h-10 items-center gap-2 rounded-md border bg-muted/40 px-3">
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-sm">SDG</span>
+                  <span className="text-[11px] text-muted-foreground ml-auto">Fixed — all pre-funds are in SDG</span>
+                </div>
+              </div>
+              <div>
+                <Label>Rate of Day (1 USD = ? SDG)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={form.usd_to_sdg_rate}
+                  onChange={e => setForm(p => ({ ...p, usd_to_sdg_rate: e.target.value }))}
+                  placeholder="e.g. 2500"
+                  data-testid="input-usd-to-sdg-rate"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Rate at time of request — used to compute the USD equivalent for reporting and the approval chain.
+                </p>
+              </div>
+              {form.amount && form.usd_to_sdg_rate && (() => {
+                const amtNum  = parseFloat(form.amount.replace(/,/g, ''));
+                const rateNum = parseFloat(form.usd_to_sdg_rate);
+                if (!isNaN(amtNum) && !isNaN(rateNum) && amtNum > 0 && rateNum > 0) {
+                  const usdEquiv = amtNum / rateNum;
+                  return (
+                    <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 dark:border-sky-800 px-4 py-2.5">
+                      <DollarSign className="h-4 w-4 text-sky-600 shrink-0" />
+                      <div>
+                        <span className="text-xs text-sky-700 dark:text-sky-400">USD Equivalent: </span>
+                        <span className="font-semibold text-sky-800 dark:text-sky-300 text-sm">USD {usdEquiv.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                        <span className="text-[11px] text-sky-600 dark:text-sky-500 ml-2">(SDG {amtNum.toLocaleString()} ÷ {rateNum.toLocaleString()} rate)</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <div>
+                <Label>Period Type</Label>
+                <Select value={form.period_type_id} onValueChange={v => setForm(p => ({ ...p, period_type_id: v }))}>
+                  <SelectTrigger data-testid="select-period-type"><SelectValue placeholder="Select period type…" /></SelectTrigger>
+                  <SelectContent>
+                    {periodTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Matching Scope</Label>
+                <Select value={form.matching_scope} onValueChange={v => setForm(p => ({ ...p, matching_scope: v }))}>
+                  <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MATCHING_SCOPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.matching_scope === 'country_project_category' && (
+                <div>
+                  <Label>Cost Category</Label>
+                  <Input
+                    value={form.cost_category}
+                    onChange={e => setForm(p => ({ ...p, cost_category: e.target.value }))}
+                    placeholder="e.g. Transportation, Accommodation…"
+                    data-testid="input-cost-category"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Only payments whose expense category matches this value will be auto-linked to this fund.
+                    Leave blank to accept any category.
+                  </p>
+                </div>
+              )}
+              <div>
+                <Label>Start Date</Label>
+                <Input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} data-testid="input-start-date" />
+              </div>
+              <div>
+                <Label>End Date</Label>
+                <Input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} data-testid="input-end-date" />
+              </div>
+              <div>
+                <Label>Alert Threshold Mode</Label>
+                <Select value={form.threshold_mode} onValueChange={v => setForm(p => ({ ...p, threshold_mode: v as any }))}>
+                  <SelectTrigger data-testid="select-threshold-mode"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {THRESHOLD_MODE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(form.threshold_mode === 'pct' || form.threshold_mode === 'both') && (
+                <div>
+                  <Label>Low-Balance Threshold %</Label>
+                  <Input type="number" min="0" max="100" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
+                </div>
+              )}
+              {(form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && (
+                <div>
+                  <Label>Low-Balance Fixed Amount ({form.currency})</Label>
+                  <Input type="number" min="0" value={form.threshold_amount} onChange={e => setForm(p => ({ ...p, threshold_amount: e.target.value }))} placeholder="e.g. 5000" data-testid="input-threshold-amount" />
+                </div>
+              )}
+              <div>
+                <Label>Ending-Soon Warning (days)</Label>
+                <Input type="number" value={form.warning_days} onChange={e => setForm(p => ({ ...p, warning_days: e.target.value }))} placeholder="14" data-testid="input-warning-days" />
+              </div>
+              <div>
+                <Label>Auto-Renewal Mode</Label>
+                <Select value={form.auto_renewal_mode} onValueChange={v => setForm(p => ({ ...p, auto_renewal_mode: v }))}>
+                  <SelectTrigger data-testid="select-renewal-mode"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {RENEWAL_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.auto_renewal_mode !== 'off' && (
+                <div>
+                  <Label>Renew N days before end</Label>
+                  <Input type="number" value={form.auto_renewal_days_before} onChange={e => setForm(p => ({ ...p, auto_renewal_days_before: e.target.value }))} placeholder="7" data-testid="input-renewal-days" />
+                </div>
+              )}
+              {form.auto_renewal_mode === 'auto_activate' && (
+                <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
+                  <Switch
+                    id="switch-bypass-approvals"
+                    checked={form.auto_renewal_bypass_approvals}
+                    onCheckedChange={v => setForm(p => ({ ...p, auto_renewal_bypass_approvals: v }))}
+                    data-testid="switch-bypass-approvals"
+                  />
+                  <div>
+                    <Label htmlFor="switch-bypass-approvals" className="text-amber-800 dark:text-amber-300 font-medium cursor-pointer">
+                      Bypass approval chain on auto-renewal
+                    </Label>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      When on, the renewed fund goes directly to <em>Active</em> without re-running the approval flow.
+                      Leave off to require approvers to re-approve each renewal cycle.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {/* GL Account Mappings */}
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <span>GL Account Mappings</span>
+                  <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(() => {
+                    const cur = form.currency?.toUpperCase() ?? '';
+                    const bankAccounts = cur
+                      ? (() => {
+                          const filtered = acctAccounts.filter(a => a.name_en.toUpperCase().includes(cur));
+                          return filtered.length > 0 ? filtered : acctAccounts;
+                        })()
+                      : acctAccounts;
+                    return ([
+                      { key: 'gl_receipt_account',     label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',     accounts: bankAccounts, hint: cur ? `Showing ${cur} accounts` : '' },
+                      { key: 'gl_liability_account',   label: 'Donor Liability Account',   testId: 'select-gl-liability',   accounts: acctAccounts, hint: '' },
+                      { key: 'gl_expense_account',     label: 'Expense / Payment Account', testId: 'select-gl-expense',     accounts: acctAccounts, hint: '' },
+                      { key: 'gl_cf_account',          label: 'Carry-Forward Account',     testId: 'select-gl-cf',          accounts: acctAccounts, hint: '' },
+                      { key: 'gl_encumbrance_account', label: 'Encumbrance Reserve Account (for commitments)', testId: 'select-gl-encumbrance', accounts: acctAccounts, hint: 'Required only if commitment transactions are used' },
+                    ] as const).map(({ key, label, testId, accounts, hint }) => (
+                      <div key={key}>
+                        <Label>{label}</Label>
+                        <Select value={(form as any)[key] || '__none__'} onValueChange={v => setForm(p => ({ ...p, [key]: v === '__none__' ? '' : v }))}>
+                          <SelectTrigger data-testid={testId}>
+                            <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— None —</SelectItem>
+                            {accounts.map(a => (
+                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {hint && <p className="text-[10px] text-sky-600 mt-0.5">{hint}</p>}
+                      </div>
+                    ));
+                  })()}
+                </div>
+                {acctAccounts.length === 0 && (
+                  <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
+                )}
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Notes</Label>
+                <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
+              </div>
+
+              {/* Notification Recipients picker */}
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Bell className="h-3.5 w-3.5" />
+                  Alert Recipients
+                  <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(low-balance, ending-soon, renewal alerts)</span>
+                </p>
+                {form.notification_recipients.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {form.notification_recipients.map(uid => {
+                      const p = staffProfiles.find(s => s.id === uid);
+                      return p ? (
+                        <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300 text-xs font-medium border border-sky-200 dark:border-sky-700">
+                          {p.full_name || p.email}
+                          <button
+                            type="button"
+                            className="ml-0.5 hover:text-red-500 transition-colors"
+                            onClick={() => setForm(prev => ({ ...prev, notification_recipients: prev.notification_recipients.filter(id => id !== uid) }))}
+                            data-testid={`button-remove-notif-recip-${uid}`}
+                          >✕</button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                <div className="relative mb-1">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={notifRecipSearch}
+                    onChange={e => setNotifRecipSearch(e.target.value)}
+                    placeholder="Search staff to add…"
+                    className="pl-8 h-8 text-sm"
+                    data-testid="input-notif-recip-search"
+                  />
+                </div>
+                {notifRecipSearch.trim() && (
+                  <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
+                    {staffProfiles
+                      .filter(p =>
+                        !form.notification_recipients.includes(p.id) &&
+                        (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
+                         p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
+                      )
+                      .slice(0, 8)
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                          onClick={() => {
+                            setForm(prev => ({ ...prev, notification_recipients: [...prev.notification_recipients, p.id] }));
+                            setNotifRecipSearch('');
+                          }}
+                          data-testid={`button-add-notif-recip-${p.id}`}
+                        >
+                          <div>
+                            <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                            <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                          </div>
+                          <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                        </button>
+                      ))}
+                    {staffProfiles.filter(p =>
+                      !form.notification_recipients.includes(p.id) &&
+                      (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
+                       p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
+                    ).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
+                    )}
+                  </div>
+                )}
+                {form.notification_recipients.length === 0 && !notifRecipSearch && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    No recipients set — system default recipients (from Settings) will be used for alerts.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              {!editing
+                ? <Button variant="outline" onClick={() => setDialogStep(1)}>← Back</Button>
+                : <Button variant="outline" onClick={onClose}>Cancel</Button>
+              }
+              <Button onClick={() => onSave(form)} disabled={saving} data-testid="button-save-fund">
+                {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Fund'}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+
 export default function PreFundingRegistry() {
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const { currentUser } = useAppContext();
@@ -211,10 +873,7 @@ export default function PreFundingRegistry() {
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatus]   = useState('all');
   const [showForm, setShowForm]     = useState(false);
-  const [dialogStep, setDialogStep] = useState<1 | 2>(1);   // 1 = pick project, 2 = fill details
-  const [projectSearch, setProjectSearch] = useState('');
   const [editing, setEditing]       = useState<PreFundRequest | null>(null);
-  const [form, setForm]             = useState({ ...EMPTY_FORM });
   const [saving, setSaving]         = useState(false);
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
@@ -255,8 +914,6 @@ export default function PreFundingRegistry() {
   const [dynamicCurrencies, setDynamicCurrencies] = useState<string[]>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
   const [pfSettings, setPfSettings] = useState<{ default_warning_days: number; default_renewal_mode: string; default_threshold_pct: number | null } | null>(null);
   const [staffProfiles, setStaffProfiles] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
-  const [notifRecipSearch, setNotifRecipSearch] = useState('');
-  const [holderSearch, setHolderSearch] = useState('');
 
   // Tracks whether form-only data (accounts, profiles) has been loaded
   const [formDataLoaded, setFormDataLoaded] = useState(false);
@@ -310,22 +967,6 @@ export default function PreFundingRegistry() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Auto-fill GL accounts when form opens or currency changes ─────────────
-  // Only fills EMPTY fields — never overwrites a value the user/fund already set.
-  // Receipt account is re-evaluated on currency change because it is currency-specific.
-  useEffect(() => {
-    if (!showForm || acctAccounts.length === 0) return;
-    const defaults = detectGlDefaults(form.currency, acctAccounts);
-    setForm(prev => ({
-      ...prev,
-      gl_receipt_account:     prev.gl_receipt_account     || defaults.gl_receipt_account,
-      gl_liability_account:   prev.gl_liability_account   || defaults.gl_liability_account,
-      gl_expense_account:     prev.gl_expense_account     || defaults.gl_expense_account,
-      gl_cf_account:          prev.gl_cf_account          || defaults.gl_cf_account,
-      gl_encumbrance_account: prev.gl_encumbrance_account || defaults.gl_encumbrance_account,
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showForm, form.currency, acctAccounts]);
 
   // Load transactions whenever a fund is targeted for deletion
   useEffect(() => {
@@ -441,15 +1082,6 @@ export default function PreFundingRegistry() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({
-      ...EMPTY_FORM,
-      warning_days: pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : '',
-      auto_renewal_mode: pfSettings?.default_renewal_mode ?? EMPTY_FORM.auto_renewal_mode,
-      threshold_pct: pfSettings?.default_threshold_pct != null ? String(pfSettings.default_threshold_pct) : '',
-    });
-    setDialogStep(1);
-    setProjectSearch('');
-    setNotifRecipSearch('');
     setShowForm(true);
     loadFormData();
   };
@@ -580,40 +1212,12 @@ export default function PreFundingRegistry() {
 
   const openEdit = (f: PreFundRequest) => {
     setEditing(f);
-    const fa = f as any;
-    const hasPct   = fa.threshold_pct   != null;
-    const hasFixed = fa.threshold_amount != null;
-    const tMode: 'pct' | 'fixed' | 'both' = hasPct && hasFixed ? 'both' : hasFixed ? 'fixed' : 'pct';
-    setForm({
-      name: f.name, source: f.source ?? '', amount: String(f.amount), currency: 'SDG',
-      usd_to_sdg_rate: fa.usd_to_sdg_rate != null ? String(fa.usd_to_sdg_rate) : '',
-      period_type_id: f.period_type_id ?? '', start_date: f.start_date ?? '', end_date: f.end_date ?? '',
-      country_id: f.country_id ?? '', project_id: f.project_id ?? '', grant_id: f.grant_id ?? '',
-      matching_scope: f.matching_scope,
-      cost_category: f.cost_category ?? '',
-      threshold_mode: tMode,
-      threshold_pct:    fa.threshold_pct    != null ? String(fa.threshold_pct)    : '',
-      threshold_amount: fa.threshold_amount != null ? String(fa.threshold_amount) : '',
-      warning_days: f.warning_days != null ? String(f.warning_days) : (pfSettings?.default_warning_days != null ? String(pfSettings.default_warning_days) : ''),
-      auto_renewal_mode: f.auto_renewal_mode, auto_renewal_days_before: f.auto_renewal_days_before != null ? String(f.auto_renewal_days_before) : '',
-      auto_renewal_bypass_approvals: fa.auto_renewal_bypass_approvals ?? false,
-      gl_receipt_account:     fa.gl_receipt_account     ?? '',
-      gl_liability_account:   fa.gl_liability_account   ?? '',
-      gl_expense_account:     fa.gl_expense_account     ?? '',
-      gl_cf_account:          fa.gl_cf_account          ?? '',
-      gl_encumbrance_account: fa.gl_encumbrance_account ?? '',
-      notes: f.notes ?? '',
-      notification_recipients: Array.isArray(fa.notification_recipients) ? fa.notification_recipients : [],
-      holder_user_id: fa.holder_user_id ?? '',
-      allow_overpay: fa.allow_overpay ?? null,
-    });
-    setNotifRecipSearch('');
-    setHolderSearch('');
     setShowForm(true);
     loadFormData();
   };
 
-  const handleSave = async () => {
+  const handleSave = async (formData: typeof EMPTY_FORM) => {
+    const form = formData;
     if (!form.name.trim() || !form.amount || !form.currency) {
       toast({ title: 'Required fields missing', variant: 'destructive' });
       return;
@@ -1539,595 +2143,19 @@ export default function PreFundingRegistry() {
         </div>
       )}
 
-      {/* Create/Edit Dialog — two-step wizard for new funds, single step for edits */}
-      <Dialog open={showForm} onOpenChange={o => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-3xl max-h-[96vh] overflow-y-auto">
-
-          {/* ── STEP 1: Project selection (new fund only) ──────────────────── */}
-          {!editing && dialogStep === 1 && (() => {
-            const filteredProjects = projects.filter(p =>
-              !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())
-            );
-            const selectedProject = projects.find(p => p.id === form.project_id);
-            return (
-              <>
-                <DialogHeader className="pb-1">
-                  <DialogTitle className="flex items-center gap-2">
-                    <Briefcase className="h-5 w-5 text-sky-600" />
-                    New Pre-Fund Request
-                  </DialogTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Step 1 of 2 — Select the project this fund belongs to, then continue to fill in the details.
-                  </p>
-                </DialogHeader>
-
-                {/* Step indicator */}
-                <div className="flex items-center gap-2 py-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">1</span>
-                    <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Select Project</span>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex items-center gap-1.5 opacity-40">
-                    <span className="h-6 w-6 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center font-bold">2</span>
-                    <span className="text-sm text-muted-foreground">Fund Details</span>
-                  </div>
-                </div>
-
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={projectSearch}
-                    onChange={e => setProjectSearch(e.target.value)}
-                    placeholder="Search projects…"
-                    className="pl-9"
-                    data-testid="input-project-search"
-                  />
-                </div>
-
-                {/* Project cards */}
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {/* No-project option */}
-                  <button
-                    onClick={() => setForm(p => ({ ...p, project_id: '' }))}
-                    className={cn(
-                      'w-full text-left px-4 py-3 rounded-lg border transition-all',
-                      form.project_id === ''
-                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
-                        : 'border-border bg-card hover:bg-muted/40'
-                    )}
-                    data-testid="button-project-none"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                        <FolderOpen className="h-4 w-4 text-slate-500" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">No Project / General Fund</div>
-                        <div className="text-[11px] text-muted-foreground">This fund is not tied to a specific project</div>
-                      </div>
-                      {form.project_id === '' && <CheckCircle2 className="h-4 w-4 text-sky-600 ml-auto shrink-0" />}
-                    </div>
-                  </button>
-
-                  {filteredProjects.length === 0 && projectSearch ? (
-                    <p className="text-center text-sm text-muted-foreground py-6">No projects match "{projectSearch}"</p>
-                  ) : filteredProjects.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setForm(prev => ({ ...prev, project_id: p.id }))}
-                      className={cn(
-                        'w-full text-left px-4 py-3 rounded-lg border transition-all',
-                        form.project_id === p.id
-                          ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 ring-1 ring-sky-500'
-                          : 'border-border bg-card hover:bg-muted/40'
-                      )}
-                      data-testid={`button-project-${p.id}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-md bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
-                          <Briefcase className="h-4 w-4 text-sky-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{p.name}</div>
-                          {p.description && <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>}
-                        </div>
-                        {p.status && (
-                          <span className="text-[10px] shrink-0 bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{p.status}</span>
-                        )}
-                        {form.project_id === p.id && <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <p className="text-[11px] text-muted-foreground">
-                  {selectedProject ? `Selected: ${selectedProject.name}` : 'No project selected (general fund)'}
-                </p>
-
-                <DialogFooter className="mt-2">
-                  <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-                  <Button
-                    className="bg-sky-600 hover:bg-sky-700 text-white"
-                    onClick={() => { setDialogStep(2); setProjectSearch(''); }}
-                    data-testid="button-step1-continue"
-                  >
-                    Continue — Fund Details
-                    <ArrowRight className="h-4 w-4 ml-1.5" />
-                  </Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
-
-          {/* ── STEP 2: Fund details (new fund) OR full form (edit) ─────────── */}
-          {(editing || dialogStep === 2) && (
-            <>
-              <DialogHeader className="pb-1">
-                <DialogTitle>
-                  {editing ? 'Edit Pre-Fund' : 'New Pre-Fund Request'}
-                </DialogTitle>
-                {!editing && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Step 2 of 2 — Fill in the fund details.
-                  </p>
-                )}
-              </DialogHeader>
-
-              {/* Step indicator (new only) */}
-              {!editing && (
-                <div className="flex items-center gap-2 py-1">
-                  <div className="flex items-center gap-1.5 opacity-50">
-                    <span className="h-6 w-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">✓</span>
-                    <span className="text-sm text-muted-foreground">Project Selected</span>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-6 w-6 rounded-full bg-sky-600 text-white text-xs flex items-center justify-center font-bold">2</span>
-                    <span className="text-sm font-medium text-sky-700 dark:text-sky-400">Fund Details</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Selected project chip */}
-              {!editing && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border">
-                  <Briefcase className="h-4 w-4 text-sky-600 shrink-0" />
-                  <span className="text-sm flex-1">
-                    {form.project_id
-                      ? <><span className="font-medium">{projects.find(p => p.id === form.project_id)?.name}</span><span className="text-muted-foreground ml-1 text-xs">— project fund</span></>
-                      : <span className="text-muted-foreground italic">No Project / General Fund</span>
-                    }
-                  </span>
-                  <button
-                    className="text-xs text-sky-600 hover:underline"
-                    onClick={() => setDialogStep(1)}
-                    data-testid="button-change-project"
-                  >
-                    Change
-                  </button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-                <div className="sm:col-span-2">
-                  <Label>Fund Name *</Label>
-                  <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. WFP Q3 Field Operations" data-testid="input-fund-name" />
-                </div>
-                <div className="sm:col-span-2">
-                  <Label>Source / Donor</Label>
-                  <Input value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="e.g. WFP Sudan, UNICEF" data-testid="input-fund-source" />
-                </div>
-
-                {/* Fund Holder — single-user picker */}
-                <div className="sm:col-span-2">
-                  <Label className="flex items-center gap-1.5">
-                    Fund Holder
-                    <span className="text-[10px] font-normal text-muted-foreground">(optional — assigned user can distribute to staff from the Distribute Funds tab)</span>
-                  </Label>
-                  {form.holder_user_id ? (
-                    <div className="flex items-center justify-between border rounded-md px-3 py-2 bg-muted/30 mt-1">
-                      {(() => {
-                        const hp = staffProfiles.find(p => p.id === form.holder_user_id);
-                        return hp ? (
-                          <div>
-                            <div className="text-sm font-medium">{hp.full_name}</div>
-                            <div className="text-[11px] text-muted-foreground">{hp.email} · {hp.role}</div>
-                          </div>
-                        ) : <span className="text-sm text-muted-foreground">User ID: {form.holder_user_id}</span>;
-                      })()}
-                      <button
-                        type="button"
-                        onClick={() => { setForm(p => ({ ...p, holder_user_id: '' })); setHolderSearch(''); }}
-                        className="text-muted-foreground hover:text-foreground ml-2"
-                        data-testid="button-clear-holder"
-                      >✕</button>
-                    </div>
-                  ) : (
-                    <div className="mt-1">
-                      <div className="relative mb-1">
-                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input
-                          value={holderSearch}
-                          onChange={e => setHolderSearch(e.target.value)}
-                          placeholder="Search staff to assign as fund holder…"
-                          className="pl-8 h-8 text-sm"
-                          data-testid="input-holder-search"
-                        />
-                      </div>
-                      {holderSearch.trim() && (
-                        <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
-                          {staffProfiles
-                            .filter(p =>
-                              p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
-                              p.email?.toLowerCase().includes(holderSearch.toLowerCase())
-                            )
-                            .slice(0, 8)
-                            .map(p => (
-                              <button
-                                key={p.id}
-                                type="button"
-                                className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
-                                onClick={() => { setForm(prev => ({ ...prev, holder_user_id: p.id })); setHolderSearch(''); }}
-                                data-testid={`button-select-holder-${p.id}`}
-                              >
-                                <div>
-                                  <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
-                                  <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
-                                </div>
-                                <Plus className="h-4 w-4 text-sky-600 shrink-0" />
-                              </button>
-                            ))}
-                          {staffProfiles.filter(p =>
-                            p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
-                            p.email?.toLowerCase().includes(holderSearch.toLowerCase())
-                          ).length === 0 && (
-                            <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
-                          )}
-                        </div>
-                      )}
-                      {!holderSearch && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">No holder set — type to search</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Allow Overpay ── */}
-                <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 col-span-2">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium">Allow Overpay</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      When <strong>OFF</strong>, payments that would push this fund's total above its funded amount will be blocked.
-                      Leave as "Use default" to follow the global setting in Pre-Funding Settings.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Select
-                      value={form.allow_overpay === null ? 'default' : form.allow_overpay ? 'yes' : 'no'}
-                      onValueChange={v => setForm(p => ({ ...p, allow_overpay: v === 'default' ? null : v === 'yes' }))}
-                    >
-                      <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-allow-overpay">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Use default</SelectItem>
-                        <SelectItem value="yes">Allow overpay</SelectItem>
-                        <SelectItem value="no">Block overpay</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Amount (SDG) *</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    value={form.amount}
-                    onChange={e => {
-                      const raw = e.target.value.replace(/[^0-9.]/g, '');
-                      setForm(p => ({ ...p, amount: raw }));
-                    }}
-                    onBlur={() => {
-                      const num = parseFloat(form.amount.replace(/,/g, ''));
-                      if (!isNaN(num) && num > 0) setForm(p => ({ ...p, amount: num.toLocaleString('en-US') }));
-                    }}
-                    onFocus={() => setForm(p => ({ ...p, amount: p.amount.replace(/,/g, '') }))}
-                    placeholder="0"
-                    data-testid="input-fund-amount"
-                  />
-                </div>
-                <div>
-                  <Label>Currency</Label>
-                  <div className="flex h-10 items-center gap-2 rounded-md border bg-muted/40 px-3">
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-sm">SDG</span>
-                    <span className="text-[11px] text-muted-foreground ml-auto">Fixed — all pre-funds are in SDG</span>
-                  </div>
-                </div>
-                <div>
-                  <Label>Rate of Day (1 USD = ? SDG)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={form.usd_to_sdg_rate}
-                    onChange={e => setForm(p => ({ ...p, usd_to_sdg_rate: e.target.value }))}
-                    placeholder="e.g. 2500"
-                    data-testid="input-usd-to-sdg-rate"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Rate at time of request — used to compute the USD equivalent for reporting and the approval chain.
-                  </p>
-                </div>
-                {form.amount && form.usd_to_sdg_rate && (() => {
-                  const amtNum  = parseFloat(form.amount.replace(/,/g, ''));
-                  const rateNum = parseFloat(form.usd_to_sdg_rate);
-                  if (!isNaN(amtNum) && !isNaN(rateNum) && amtNum > 0 && rateNum > 0) {
-                    const usdEquiv = amtNum / rateNum;
-                    return (
-                      <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 dark:border-sky-800 px-4 py-2.5">
-                        <DollarSign className="h-4 w-4 text-sky-600 shrink-0" />
-                        <div>
-                          <span className="text-xs text-sky-700 dark:text-sky-400">USD Equivalent: </span>
-                          <span className="font-semibold text-sky-800 dark:text-sky-300 text-sm">USD {usdEquiv.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                          <span className="text-[11px] text-sky-600 dark:text-sky-500 ml-2">(SDG {amtNum.toLocaleString()} ÷ {rateNum.toLocaleString()} rate)</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                <div>
-                  <Label>Period Type</Label>
-                  <Select value={form.period_type_id} onValueChange={v => setForm(p => ({ ...p, period_type_id: v }))}>
-                    <SelectTrigger data-testid="select-period-type"><SelectValue placeholder="Select period type…" /></SelectTrigger>
-                    <SelectContent>
-                      {periodTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Matching Scope</Label>
-                  <Select value={form.matching_scope} onValueChange={v => setForm(p => ({ ...p, matching_scope: v }))}>
-                    <SelectTrigger data-testid="select-matching-scope"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {MATCHING_SCOPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.matching_scope === 'country_project_category' && (
-                  <div>
-                    <Label>Cost Category</Label>
-                    <Input
-                      value={form.cost_category}
-                      onChange={e => setForm(p => ({ ...p, cost_category: e.target.value }))}
-                      placeholder="e.g. Transportation, Accommodation…"
-                      data-testid="input-cost-category"
-                    />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Only payments whose expense category matches this value will be auto-linked to this fund.
-                      Leave blank to accept any category.
-                    </p>
-                  </div>
-                )}
-                <div>
-                  <Label>Start Date</Label>
-                  <Input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} data-testid="input-start-date" />
-                </div>
-                <div>
-                  <Label>End Date</Label>
-                  <Input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} data-testid="input-end-date" />
-                </div>
-                <div>
-                  <Label>Alert Threshold Mode</Label>
-                  <Select value={form.threshold_mode} onValueChange={v => setForm(p => ({ ...p, threshold_mode: v as any }))}>
-                    <SelectTrigger data-testid="select-threshold-mode"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {THRESHOLD_MODE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {(form.threshold_mode === 'pct' || form.threshold_mode === 'both') && (
-                  <div>
-                    <Label>Low-Balance Threshold %</Label>
-                    <Input type="number" min="0" max="100" value={form.threshold_pct} onChange={e => setForm(p => ({ ...p, threshold_pct: e.target.value }))} placeholder="e.g. 20" data-testid="input-threshold-pct" />
-                  </div>
-                )}
-                {(form.threshold_mode === 'fixed' || form.threshold_mode === 'both') && (
-                  <div>
-                    <Label>Low-Balance Fixed Amount ({form.currency})</Label>
-                    <Input type="number" min="0" value={form.threshold_amount} onChange={e => setForm(p => ({ ...p, threshold_amount: e.target.value }))} placeholder="e.g. 5000" data-testid="input-threshold-amount" />
-                  </div>
-                )}
-                <div>
-                  <Label>Ending-Soon Warning (days)</Label>
-                  <Input type="number" value={form.warning_days} onChange={e => setForm(p => ({ ...p, warning_days: e.target.value }))} placeholder="14" data-testid="input-warning-days" />
-                </div>
-                <div>
-                  <Label>Auto-Renewal Mode</Label>
-                  <Select value={form.auto_renewal_mode} onValueChange={v => setForm(p => ({ ...p, auto_renewal_mode: v }))}>
-                    <SelectTrigger data-testid="select-renewal-mode"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {RENEWAL_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.auto_renewal_mode !== 'off' && (
-                  <div>
-                    <Label>Renew N days before end</Label>
-                    <Input type="number" value={form.auto_renewal_days_before} onChange={e => setForm(p => ({ ...p, auto_renewal_days_before: e.target.value }))} placeholder="7" data-testid="input-renewal-days" />
-                  </div>
-                )}
-                {form.auto_renewal_mode === 'auto_activate' && (
-                  <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
-                    <Switch
-                      id="switch-bypass-approvals"
-                      checked={form.auto_renewal_bypass_approvals}
-                      onCheckedChange={v => setForm(p => ({ ...p, auto_renewal_bypass_approvals: v }))}
-                      data-testid="switch-bypass-approvals"
-                    />
-                    <div>
-                      <Label htmlFor="switch-bypass-approvals" className="text-amber-800 dark:text-amber-300 font-medium cursor-pointer">
-                        Bypass approval chain on auto-renewal
-                      </Label>
-                      <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                        When on, the renewed fund goes directly to <em>Active</em> without re-running the approval flow.
-                        Leave off to require approvers to re-approve each renewal cycle.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {/* GL Account Mappings */}
-                <div className="sm:col-span-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                    <span>GL Account Mappings</span>
-                    <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(() => {
-                      // For the Cash/Bank receipt account: filter by fund currency so only matching
-                      // bank accounts appear (e.g. SDG fund → only "Cash at Bank — SDG" accounts).
-                      // Fall back to the full list if no currency-matched accounts exist.
-                      const cur = form.currency?.toUpperCase() ?? '';
-                      const bankAccounts = cur
-                        ? (() => {
-                            const filtered = acctAccounts.filter(a =>
-                              a.name_en.toUpperCase().includes(cur)
-                            );
-                            return filtered.length > 0 ? filtered : acctAccounts;
-                          })()
-                        : acctAccounts;
-
-                      return ([
-                        { key: 'gl_receipt_account',     label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',     accounts: bankAccounts, hint: cur ? `Showing ${cur} accounts` : '' },
-                        { key: 'gl_liability_account',   label: 'Donor Liability Account',   testId: 'select-gl-liability',   accounts: acctAccounts, hint: '' },
-                        { key: 'gl_expense_account',     label: 'Expense / Payment Account', testId: 'select-gl-expense',     accounts: acctAccounts, hint: '' },
-                        { key: 'gl_cf_account',          label: 'Carry-Forward Account',     testId: 'select-gl-cf',          accounts: acctAccounts, hint: '' },
-                        { key: 'gl_encumbrance_account', label: 'Encumbrance Reserve Account (for commitments)', testId: 'select-gl-encumbrance', accounts: acctAccounts, hint: 'Required only if commitment transactions are used' },
-                      ] as const).map(({ key, label, testId, accounts, hint }) => (
-                        <div key={key}>
-                          <Label>{label}</Label>
-                          <Select value={(form as any)[key] || '__none__'} onValueChange={v => setForm(p => ({ ...p, [key]: v === '__none__' ? '' : v }))}>
-                            <SelectTrigger data-testid={testId}>
-                              <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">— None —</SelectItem>
-                              {accounts.map(a => (
-                                <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {hint && <p className="text-[10px] text-sky-600 mt-0.5">{hint}</p>}
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                  {acctAccounts.length === 0 && (
-                    <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
-                  )}
-                </div>
-                <div className="sm:col-span-2">
-                  <Label>Notes</Label>
-                  <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
-                </div>
-
-                {/* Notification Recipients picker */}
-                <div className="sm:col-span-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                    <Bell className="h-3.5 w-3.5" />
-                    Alert Recipients
-                    <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(low-balance, ending-soon, renewal alerts)</span>
-                  </p>
-                  {/* Selected recipients chips */}
-                  {form.notification_recipients.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {form.notification_recipients.map(uid => {
-                        const p = staffProfiles.find(s => s.id === uid);
-                        return p ? (
-                          <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300 text-xs font-medium border border-sky-200 dark:border-sky-700">
-                            {p.full_name || p.email}
-                            <button
-                              type="button"
-                              className="ml-0.5 hover:text-red-500 transition-colors"
-                              onClick={() => setForm(prev => ({ ...prev, notification_recipients: prev.notification_recipients.filter(id => id !== uid) }))}
-                              data-testid={`button-remove-notif-recip-${uid}`}
-                            >✕</button>
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                  {/* Search + add */}
-                  <div className="relative mb-1">
-                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      value={notifRecipSearch}
-                      onChange={e => setNotifRecipSearch(e.target.value)}
-                      placeholder="Search staff to add…"
-                      className="pl-8 h-8 text-sm"
-                      data-testid="input-notif-recip-search"
-                    />
-                  </div>
-                  {notifRecipSearch.trim() && (
-                    <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
-                      {staffProfiles
-                        .filter(p =>
-                          !form.notification_recipients.includes(p.id) &&
-                          (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
-                           p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
-                        )
-                        .slice(0, 8)
-                        .map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
-                            onClick={() => {
-                              setForm(prev => ({ ...prev, notification_recipients: [...prev.notification_recipients, p.id] }));
-                              setNotifRecipSearch('');
-                            }}
-                            data-testid={`button-add-notif-recip-${p.id}`}
-                          >
-                            <div>
-                              <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
-                              <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
-                            </div>
-                            <Plus className="h-4 w-4 text-sky-600 shrink-0" />
-                          </button>
-                        ))}
-                      {staffProfiles.filter(p =>
-                        !form.notification_recipients.includes(p.id) &&
-                        (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
-                         p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
-                      ).length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
-                      )}
-                    </div>
-                  )}
-                  {form.notification_recipients.length === 0 && !notifRecipSearch && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      No recipients set — system default recipients (from Settings) will be used for alerts.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <DialogFooter>
-                {!editing
-                  ? <Button variant="outline" onClick={() => setDialogStep(1)}>← Back</Button>
-                  : <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-                }
-                <Button onClick={handleSave} disabled={saving} data-testid="button-save-fund">
-                  {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Fund'}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Create/Edit Fund Dialog */}
+      <PreFundFormDialog
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        editing={editing}
+        projects={projects}
+        periodTypes={periodTypes}
+        acctAccounts={acctAccounts}
+        staffProfiles={staffProfiles}
+        pfSettings={pfSettings}
+        saving={saving}
+        onSave={handleSave}
+      />
 
       {/* Receipt Upload Dialog */}
       {(() => {
@@ -2172,7 +2200,7 @@ export default function PreFundingRegistry() {
                       onClick={() => {
                         setReceiptDialog({ open: false, fundId: '', fundName: '' });
                         setReceiptFiles([]);
-                        if (receiptFund) { setEditing(receiptFund as any); setDialogStep(2); setShowForm(true); loadFormData(); }
+                        if (receiptFund) { setEditing(receiptFund as any); setShowForm(true); loadFormData(); }
                       }}
                     >
                       Configure GL Accounts in Edit Fund →
