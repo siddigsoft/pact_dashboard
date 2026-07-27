@@ -92,6 +92,7 @@ interface CycleMMPCardProps {
   finalizingCycle: boolean;
   siteVisitCounts?: SiteVisitCounts;
   scopeOptions?: MmpScopeOptions;
+  onScopeDropdownOpen?: (mmpId: string) => void;
   handleStartClosingCycle: (mmpId: string) => void;
   handleScopedClose: (mmpId: string, scope: CloseScope, scopeValue: string) => void;
   handleFinalizeCycleClose: (mmpId: string) => void;
@@ -207,6 +208,7 @@ export function CycleMMPCard({
   finalizingCycle,
   siteVisitCounts,
   scopeOptions,
+  onScopeDropdownOpen,
   handleStartClosingCycle,
   handleScopedClose,
   handleFinalizeCycleClose,
@@ -605,7 +607,11 @@ export function CycleMMPCard({
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">
                     <div className="flex flex-wrap gap-2 items-end">
-                      <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); setActivitySubFilter('none'); setActivitySubValue(''); }}>
+                      <Select
+                        value={closeScope}
+                        onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); setActivitySubFilter('none'); setActivitySubValue(''); }}
+                        onOpenChange={(open) => { if (open) onScopeDropdownOpen?.(mmp.id); }}
+                      >
                         <SelectTrigger className="w-[140px]" data-testid={`select-close-scope-${mmp.id}`}>
                           <SelectValue placeholder="Close Scope" />
                         </SelectTrigger>

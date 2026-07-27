@@ -6468,6 +6468,12 @@ const MMPCycleClose = () => {
                         finalizingCycle={finalizingCycle}
                         siteVisitCounts={siteVisitCounts[mmp.id]}
                         scopeOptions={mmpScopeOptions[mmp.id]}
+                        onScopeDropdownOpen={(mmpId) => {
+                          if (!fetchedScopeIdsRef.current.has(mmpId)) {
+                            fetchedScopeIdsRef.current.add(mmpId);
+                            fetchMmpScopeOptions(mmpId);
+                          }
+                        }}
                         handleStartClosingCycle={(mmpId) => {
                           if (cycleStatus === 'active' && canManageCycle) {
                             setChecklistMmpId(mmpId);
