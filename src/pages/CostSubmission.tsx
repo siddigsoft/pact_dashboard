@@ -5625,6 +5625,7 @@ const CostSubmission = () => {
                      // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
                      const GroupHeader = isMultiItem ? (() => {
                        const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
+                       const totalPaidCents = groupItems.reduce((s, o) => s + (o.amount_paid_cents || 0), 0);
                        const currency = groupItems[0].currency;
                        const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                        const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
@@ -5758,7 +5759,17 @@ const CostSubmission = () => {
                                 </div>
                                 <div className="flex-none text-right">
                                   <p className="font-bold text-base tabular-nums text-white">{currency} {(totalCents / 100).toLocaleString()}</p>
-                                  <p className="text-[10px] text-white/50">Total</p>
+                                  <p className="text-[10px] text-white/50">Total Requested</p>
+                                  {totalPaidCents > 0 && (
+                                    <p className="text-[11px] font-semibold tabular-nums text-orange-300 mt-0.5">
+                                      Paid: {currency} {(totalPaidCents / 100).toLocaleString()}
+                                    </p>
+                                  )}
+                                  {totalPaidCents > 0 && totalPaidCents < totalCents && (
+                                    <p className="text-[10px] text-white/40">
+                                      Remaining: {currency} {((totalCents - totalPaidCents) / 100).toLocaleString()}
+                                    </p>
+                                  )}
                                 </div>
                                 {/* Chevron toggle — far-right edge */}
                                 <div className="flex-none flex items-center pl-2">
@@ -6113,9 +6124,24 @@ const CostSubmission = () => {
                             </div>
                             {/* Amount + View + Audit */}
                             <div className="flex-none text-right space-y-1 ml-1">
-                              <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
-                                {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
-                              </p>
+                              <div>
+                                <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
+                                  {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
+                                </p>
+                                <p className="text-[9px] text-gray-400 dark:text-gray-500 leading-tight">Requested</p>
+                                {(oc.amount_paid_cents || 0) > 0 && (
+                                  <>
+                                    <p className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400 mt-0.5" data-testid={`text-paid-amount-${oc.id}`}>
+                                      Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
+                                    </p>
+                                    {(oc.amount_paid_cents || 0) < oc.amount_cents && (
+                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
+                                        Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                               <button className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
                                 onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
                                 <Eye className="h-3 w-3" /> View
@@ -6855,6 +6881,19 @@ const CostSubmission = () => {
                               <span className="font-bold text-sm tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
                                 {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
                               </span>
+                              <span className="text-[9px] text-muted-foreground leading-none">Requested</span>
+                              {(oc.amount_paid_cents || 0) > 0 && (
+                                <>
+                                  <span className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400" data-testid={`text-paid-amount-${oc.id}`}>
+                                    Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
+                                  </span>
+                                  {(oc.amount_paid_cents || 0) < oc.amount_cents && (
+                                    <span className="text-[10px] text-muted-foreground/70">
+                                      Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}
+                                    </span>
+                                  )}
+                                </>
+                              )}
                               <Badge className={`text-[10px] border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
                                 {statusLabels[derivedStatus] || derivedStatus}
                               </Badge>
