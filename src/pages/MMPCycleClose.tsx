@@ -4802,7 +4802,6 @@ const MMPCycleClose = () => {
             </div>
           </div>
         </div>
-      </div>
 
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); }} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="hidden">
@@ -8091,7 +8090,6 @@ const MMPCycleClose = () => {
         </AlertDialog>
       )}
     </div>
-  </div>
   );
 };
 
