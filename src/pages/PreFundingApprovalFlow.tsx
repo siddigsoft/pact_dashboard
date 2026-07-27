@@ -284,6 +284,7 @@ export default function PreFundingApprovalFlow() {
               triggeredBy: currentUser?.id, priority: 'high',
               metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: stepForm.step_label },
               actionUrl: '/pre-funding?tab=approvals',
+              sendWhatsApp: true,
             });
           } catch { /* non-blocking */ }
         }
@@ -321,6 +322,7 @@ export default function PreFundingApprovalFlow() {
               triggeredBy: currentUser?.id, priority: 'high',
               metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: stepForm.step_label },
               actionUrl: '/pre-funding?tab=approvals',
+              sendWhatsApp: true,
             });
           } catch { /* non-blocking */ }
         }
@@ -447,6 +449,7 @@ export default function PreFundingApprovalFlow() {
               triggeredBy: currentUser?.id, priority: 'high',
               metadata: { fund_name: selectedFund.name, amount: selectedFund.amount ?? 0, currency: 'SDG', step_label: nextPendingStep.step_label },
               actionUrl: '/pre-funding?tab=approvals',
+              sendWhatsApp: true,
             });
           }
         } catch { /* non-blocking */ }

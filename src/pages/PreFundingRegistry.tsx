@@ -1198,6 +1198,7 @@ export default function PreFundingRegistry() {
         entityType: 'pre_fund_request', entityId: fund.id,
         triggeredBy: currentUser?.id, priority: 'high',
         metadata: { fund_name: fund.name, requested_amount: parsedAmt, currency: fund.currency, reason: reason.trim() },
+        sendWhatsApp: true,
       });
 
       toast({
@@ -1636,6 +1637,7 @@ export default function PreFundingRegistry() {
         entityType: 'pre_fund_request', entityId: f.id,
         triggeredBy: currentUser?.id, priority: 'high',
         metadata: { fund_name: f.name, amount: f.amount, currency: 'SDG' },
+        sendWhatsApp: true,
       });
     } catch { /* notifications are non-blocking */ }
 
@@ -1672,6 +1674,7 @@ export default function PreFundingRegistry() {
           triggeredBy: currentUser?.id, priority: 'high',
           metadata: { fund_name: f.name, amount: f.amount, currency: 'SDG' },
           actionUrl: '/pre-funding?tab=approvals',
+          sendWhatsApp: true,
         });
       }
     } catch { /* non-blocking */ }
