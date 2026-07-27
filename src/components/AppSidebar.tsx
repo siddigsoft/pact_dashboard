@@ -716,17 +716,21 @@
       : hasAnyRole(FINANCE_ADMIN_ROLES);
     // The user ID to check fund holder status for — uses previewed user when ViewAs active
     const effectiveHolderCheckId = (viewAs?.mode === 'user' ? viewAs.userId : undefined) ?? currentUser?.id;
-    const [isFundHolder, setIsFundHolder] = useState(false);
-    useEffect(() => {
-      if (isFinanceAdminRole || !effectiveHolderCheckId) { setIsFundHolder(false); return; }
-      supabase
-        .from('pre_fund_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('holder_user_id', effectiveHolderCheckId)
-        .then(({ count }: { count: number | null }) => {
-          setIsFundHolder((count ?? 0) > 0);
-        });
-    }, [isFinanceAdminRole, effectiveHolderCheckId]);
+    const { data: isFundHolder = false } = useQuery({
+      queryKey: ['sidebar-fund-holder', effectiveHolderCheckId],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('pre_fund_requests')
+          .select('id')
+          .eq('holder_user_id', effectiveHolderCheckId!)
+          .limit(1);
+        if (error) console.warn('[Sidebar] fund-holder check:', error.message);
+        return (data?.length ?? 0) > 0;
+      },
+      enabled: !isFinanceAdminRole && !!effectiveHolderCheckId,
+      staleTime: 60_000,
+      select: (v) => v,
+    });
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
