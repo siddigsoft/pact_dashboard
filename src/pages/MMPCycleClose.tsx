@@ -201,85 +201,6 @@ const getSuperAdminEmails = async (): Promise<string[]> => {
 
 const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
 
-// ── Wizard step definitions ─────────────────────────────────────────────────
-const WIZARD_STEPS = [
-  {
-    step: 0,
-    title: 'Select Cycle',
-    titleAr: 'اختر الدورة',
-    tab: 'active',
-    checklistIds: [] as string[],
-    help: [
-      'Choose the MMP cycle you want to close from the list below.',
-      'Confirm the cycle month, hub, total sites, and coverage summary.',
-      'Once selected, the Step-by-Step Close Guide will show the full status.',
-    ],
-  },
-  {
-    step: 1,
-    title: 'Upload WFP Clean Data',
-    titleAr: 'رفع البيانات النظيفة',
-    tab: 'wfp',
-    checklistIds: ['wfp_confirmation'],
-    help: [
-      'Upload the WFP monthly confirmation Excel/CSV file using the drag-and-drop zone.',
-      'The system auto-matches WFP rows to MMP sites by name, state, locality, and activity.',
-      'Review amber "Needs Review" rows manually — link each to the correct MMP site.',
-      'Click "Apply Results" once all rows are actioned. Sites become wfp_confirmed or wfp_rejected.',
-    ],
-  },
-  {
-    step: 2,
-    title: 'Mark Uncovered Sites',
-    titleAr: 'تحديد المواقع غير المشمولة',
-    tab: 'uncovered',
-    checklistIds: ['site_visits'],
-    help: [
-      'Every site that is not WFP-confirmed must have a reason assigned.',
-      'Use "Bulk Assign" to apply the same reason (Security Concerns, Access Denied, Budget…) to many sites at once.',
-      'Sites flagged Security Concerns or Access Denied auto-create a follow-up for the next cycle.',
-      'All sites must be resolved before proceeding.',
-    ],
-  },
-  {
-    step: 3,
-    title: 'Resolve Advance Exceptions',
-    titleAr: 'تسوية سلف المواقع غير المشمولة',
-    tab: 'exceptions',
-    checklistIds: ['cost_recovery'],
-    help: [
-      'Not-covered sites that received an advance payment need a decision.',
-      'Choose: Roll to Next MMP | Return Required | Write-Off | Redirect to Fees.',
-      'All decisions are logged with your name, role, and timestamp.',
-    ],
-  },
-  {
-    step: 4,
-    title: 'Finance & Reconciliation',
-    titleAr: 'المالية ومطابقة المستحقات',
-    tab: 'finance',
-    checklistIds: ['cost_submissions', 'transport_advances', 'withdrawal_requests', 'enumerator_reconciliation'],
-    help: [
-      'Approve all pending cost submissions (use "Approve All" for bulk).',
-      'Settle any partially-paid transport advances — mark as paid or process the balance.',
-      'In the Enumerator Reconciliation table: generate balance payments, schedule recoveries, or mark balanced.',
-      'The red banner at the top shows exactly how many items are still blocking the close.',
-    ],
-  },
-  {
-    step: 5,
-    title: 'Final Review & Close',
-    titleAr: 'المراجعة النهائية والإغلاق',
-    tab: 'active',
-    checklistIds: [] as string[],
-    help: [
-      'Return here when all steps above show green.',
-      'Review the financial summary and readiness checklist — all items must show green ticks.',
-      'Click "Submit for Approval" (if approval workflow is on) or "Close Cycle" directly.',
-      'A full Cycle Close report (PDF + Excel) is generated automatically.',
-    ],
-  },
-] as const;
 
 const RECOVERY_DECISION_CONFIG: Record<string, { label: string; labelAr: string; color: string }> = {
   rolled:            { label: 'Rolled to Next MMP',      labelAr: 'مُرحَّل للدورة التالية',  color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
@@ -312,8 +233,6 @@ const MMPCycleClose = () => {
   const [filterReason, setFilterReason] = useState<string>('all');
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'active');
-  const [wizardStep, setWizardStep] = useState(0);
-  const [showWizardHelp, setShowWizardHelp] = useState(true);
   
   useEffect(() => {
     getLatestExchangeRate().then(r => { if (r) setLiveExchangeRate(r.rate); });
@@ -4602,296 +4521,32 @@ const MMPCycleClose = () => {
       )}
 
 
-      {/* ── Guided Wizard ─────────────────────────────────────────────── */}
-      <div className="rounded-xl border-2 border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 space-y-4" data-testid="wizard-header">
-        <div className="flex items-center gap-0">
-          {WIZARD_STEPS.map((ws, idx) => {
-            const isCurrent = wizardStep === idx;
-            const isDone    = wizardStep > idx;
-            const isPending = wizardStep < idx;
-            const relevant = cycleReadiness.items.filter(i => ws.checklistIds.includes(i.id));
-            const stepPassed = relevant.length === 0 ? isDone : relevant.every(i => i.passed);
-            return (
-              <div key={ws.step} className="flex items-center flex-1 last:flex-none">
-                <button
-                  type="button"
-                  className={cn('relative flex flex-col items-center gap-1 shrink-0 group cursor-pointer')}
-                  onClick={() => {
-                    setWizardStep(idx);
-                    setActiveTab(ws.tab as string);
-                    if (ws.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
-                  }}
-                  data-testid={`wizard-step-${idx}`}
-                >
-                  <div className={cn(
-                    'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all',
-                    isCurrent && 'border-primary bg-primary text-white shadow-md scale-110',
-                    isDone && stepPassed && 'border-green-500 bg-green-500 text-white',
-                    isDone && !stepPassed && 'border-amber-400 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-                    isPending && 'border-muted bg-muted text-muted-foreground',
-                  )}>
-                    {isDone && stepPassed ? <CheckCircle2 className="h-4 w-4" /> : isDone && !stepPassed ? <AlertTriangle className="h-4 w-4" /> : idx + 1}
-                  </div>
-                  <span className={cn(
-                    'text-[9px] font-medium text-center leading-tight max-w-[56px] hidden sm:block',
-                    isCurrent && 'text-primary font-bold',
-                    isPending && 'text-muted-foreground',
-                  )}>{ws.title}</span>
-                </button>
-                {idx < WIZARD_STEPS.length - 1 && (
-                  <div className={cn('flex-1 h-0.5 mx-1 mt-[-10px] sm:mt-[-20px] transition-colors', wizardStep > idx ? 'bg-green-400' : 'bg-muted')} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-lg border border-primary/30 bg-white dark:bg-card p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-primary uppercase tracking-wide">
-                  Step {wizardStep + 1} of {WIZARD_STEPS.length}
-                </span>
-                {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id)).every(i => i.passed) && WIZARD_STEPS[wizardStep].checklistIds.length > 0 && (
-                  <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs gap-1 py-0"><CheckCircle2 className="h-3 w-3" /> Done</Badge>
-                )}
-                {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
-                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs gap-1 py-0"><Clock className="h-3 w-3" /> In Progress</Badge>
-                )}
-              </div>
-              <p className="text-base font-bold mt-0.5">
-                {WIZARD_STEPS[wizardStep].title}
-                <span dir="rtl" className="mr-2 text-xs font-normal text-muted-foreground">{WIZARD_STEPS[wizardStep].titleAr}</span>
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => setShowWizardHelp(v => !v)} data-testid="button-toggle-help">
-              <HelpCircle className="h-3.5 w-3.5" />
-              {showWizardHelp ? 'Hide Help' : 'Show Help'}
-            </Button>
+      {/* ── Full Guided Wizard (inline) ─────────────────────────────────── */}
+      {checklistMmpId ? (
+      <div className="rounded-xl border-2 border-primary/20 bg-card shadow-sm overflow-hidden" data-testid="section-cycle-close-checklist">
+        <div className="px-6 pt-5 pb-4 border-b flex items-start justify-between gap-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              {checklistMmpStatus === 'active'
+                ? <><CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" /> Pre-Close Requirements</>
+                : <><ArrowRight className="h-5 w-5 text-amber-500 shrink-0" /> Cycle Close — Step by Step Guide</>
+              }
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {checklistMmpStatus === 'active'
+                ? 'Review all requirements before starting the close process.'
+                : 'Follow each step in order. Your progress is saved automatically.'}
+            </p>
           </div>
-          {showWizardHelp && (
-            <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
-              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1.5 flex items-center gap-1"><HelpCircle className="h-3.5 w-3.5" /> What to do on this step:</p>
-              <ol className="space-y-1">
-                {WIZARD_STEPS[wizardStep].help.map((line, i) => (
-                  <li key={i} className="text-xs text-blue-800 dark:text-blue-200 flex gap-2">
-                    <span className="text-blue-400 shrink-0">{i + 1}.</span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-          {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
-            <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Still needed before you can advance:</p>
-              {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed).map(item => (
-                <div key={item.id} className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
-                  <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-red-500" />
-                  <div>
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-red-600/80 dark:text-red-400/80">{item.description}</p>
-                    {item.count > 0 && item.total > 0 && (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className="flex-1 h-1 bg-red-200 dark:bg-red-800 rounded-full overflow-hidden max-w-[120px]">
-                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.round((item.count / item.total) * 100)}%` }} />
-                        </div>
-                        <span className="text-[10px]">{item.count}/{item.total}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center justify-between pt-1">
-            <Button variant="outline" size="sm" className="h-8 gap-1" disabled={wizardStep === 0}
-              onClick={() => { const prev = WIZARD_STEPS[wizardStep - 1]; setWizardStep(wizardStep - 1); setActiveTab(prev.tab as string); }}
-              data-testid="button-wizard-back">
-              <ChevronLeft className="h-4 w-4" /> Back
-            </Button>
-            <span className="text-xs text-muted-foreground">{wizardStep + 1} / {WIZARD_STEPS.length}</span>
-            {wizardStep < WIZARD_STEPS.length - 1 ? (
-              <div className="flex items-center gap-2">
-                {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (isSuperAdmin || isAdmin || isFOM) && (
-                  <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground gap-1"
-                    onClick={() => { const next = WIZARD_STEPS[wizardStep + 1]; setWizardStep(wizardStep + 1); setActiveTab(next.tab as string); if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId); }}
-                    data-testid="button-wizard-skip">
-                    Skip <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                <Button size="sm" className="h-8 gap-1"
-                  disabled={cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed)}
-                  onClick={() => { const next = WIZARD_STEPS[wizardStep + 1]; setWizardStep(wizardStep + 1); setActiveTab(next.tab as string); if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId); }}
-                  data-testid="button-wizard-next">
-                  Next <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Final Step</Badge>
-            )}
+          <div className="flex items-center gap-3 shrink-0 mt-0.5">
+            <span className="text-sm font-semibold text-muted-foreground">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard"><X className="h-4 w-4" /></Button>
           </div>
         </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); }} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className="hidden">
-          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Activity className="h-3.5 w-3.5" />
-            <span>Active Cycles</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
-          </TabsTrigger>
-          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span>Uncovered Sites</span>
-            {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span>Reports</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">التقارير</span>
-          </TabsTrigger>
-          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Layers className="h-3.5 w-3.5" />
-            <span>Comparison</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">المقارنة</span>
-          </TabsTrigger>
-          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Star className="h-3.5 w-3.5" />
-            <span>Scorecard</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
-          </TabsTrigger>
-          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-            <span>Exceptions</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الاستثناءات</span>
-            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
-                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <DollarSign className="h-3.5 w-3.5 text-amber-500" />
-            <span>Pending Finance</span>
-            {(financeCosts.length + financeAdvances.length) > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Shield className="h-3.5 w-3.5 text-blue-500" />
-            <span>WFP Confirmation</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">تأكيد WFP</span>
-            {wfpAppliedUpload && (
-              <Badge className="ml-0.5 text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>
-            )}
-            {!wfpAppliedUpload && wfpSummary && wfpSummary.pendingReview > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-emerald-500" />
-            <span>Ad-hoc Visits</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الزيارات الطارئة</span>
-          </TabsTrigger>
-          <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <BookOpen className="h-3.5 w-3.5" />
-            <span>Closed Cycles</span>
-            {closedCycles.length > 0 && <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0">{closedCycles.length}</Badge>}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="active" className="space-y-4">
-          {activeMmps.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <div className="flex items-center justify-center h-16 w-16 mx-auto bg-muted rounded-full mb-4">
-                  <FileText className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium">No Active MMP Cycles</h3>
-                <p className="text-muted-foreground mt-1 text-sm max-w-md mx-auto">
-                  All MMP cycles have been closed or there are no approved MMPs available for cycle management.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <Card data-testid="active-filters">
-                <CardContent className="p-3">
-                  <div className="flex flex-col sm:flex-row gap-3 items-center">
-                    <div className="flex items-center gap-2 flex-wrap flex-1">
-                      <Select value={activeHubFilter} onValueChange={setActiveHubFilter}>
-                        <SelectTrigger className="w-[180px]" data-testid="select-active-hub-filter">
-                          <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                          <SelectValue placeholder="All Hubs" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Hubs</SelectItem>
-                          {activeHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Select value={activeSort} onValueChange={v => setActiveSort(v as any)}>
-                        <SelectTrigger className="w-[160px]" data-testid="select-active-sort">
-                          <SelectValue placeholder="Sort by..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="status">Sort by Status</SelectItem>
-                          <SelectItem value="name">Sort by Name</SelectItem>
-                          <SelectItem value="coverage">Sort by Coverage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setActiveSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                        data-testid="button-sort-direction"
-                      >
-                        {activeSortDir === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {canManageCycle && (
-                        <Button variant="outline" size="sm" onClick={handleScheduleReminders} data-testid="button-schedule-reminders">
-                          <Bell className="h-3.5 w-3.5 mr-1.5" /> Reminders
-                        </Button>
-                      )}
-                      <Badge variant="secondary" data-testid="badge-showing-count">
-                        {filteredActiveMmps.length} of {activeMmps.length} MMPs
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Pre-Close Checklist Dialog — opens when user clicks Close on an MMP card */}
-              <Dialog
-                open={!!checklistMmpId}
-                onOpenChange={(open) => {
-                  if (!open) { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }
-                }}
-              >
-                <DialogContent className="max-w-none w-screen h-screen m-0 rounded-none flex flex-col overflow-hidden p-0" data-testid="section-cycle-close-checklist">
-                  <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
-                    <div className="flex items-center justify-between gap-4">
-                      <DialogTitle className="flex items-center gap-2 text-lg">
-                        {checklistMmpStatus === 'active'
-                          ? <><CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" /> Pre-Close Requirements</>
-                          : <><ArrowRight className="h-5 w-5 text-amber-500 shrink-0" /> Cycle Close — Step by Step Guide</>
-                        }
-                      </DialogTitle>
-                      <div className="text-sm font-semibold text-muted-foreground">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</div>
-                    </div>
-                    <DialogDescription>
-                      {checklistMmpStatus === 'active'
-                        ? 'Review all requirements before starting the close process.'
-                        : 'Follow each step in order. Your progress is saved automatically — you can close this and return any time.'}
-                    </DialogDescription>
-                  </DialogHeader>
 
                   {/* ── GUIDED WIZARD (cycle already in closing / pending_approval state) ── */}
                   {checklistMmpStatus !== 'active' ? (
-                    <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6">
+                    <div className="overflow-y-auto max-h-[65vh] overscroll-contain px-6 py-6">
                       <div className="max-w-2xl mx-auto space-y-3">
                         {cycleReadiness.loading ? (
                           <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
@@ -5052,7 +4707,6 @@ const MMPCycleClose = () => {
                                           size="sm"
                                           className={`mt-3 gap-1.5 text-xs h-8 ${isCurrentStep ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
                                           onClick={() => {
-                                            setChecklistMmpId(null);
                                             setActiveTab(step.tab!);
                                             if (checklistMmpId) setSelectedMmpId(checklistMmpId);
                                           }}
@@ -6638,7 +6292,6 @@ const MMPCycleClose = () => {
                             onClick={() => {
                               const mmpId = checklistMmpId!;
                               const pending = pendingScopedClose;
-                              setChecklistMmpId(null);
                               setPendingScopedClose(null);
                               setReconciliationAcknowledged(false);
                               if (pending) {
@@ -6658,8 +6311,145 @@ const MMPCycleClose = () => {
                   </div>
                   </div>
                   )}
-                </DialogContent>
-              </Dialog>
+                </div>
+              </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-muted/70 p-8 text-center mb-4" data-testid="wizard-prompt">
+          <div className="flex items-center justify-center h-12 w-12 mx-auto mb-3 rounded-full bg-muted/40">
+            <ArrowRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="font-semibold text-foreground">No cycle selected</p>
+          <p className="text-sm text-muted-foreground mt-1">Click <strong>Start Closing</strong> or <strong>View Full Wizard</strong> on any active MMP cycle in the list below to begin the guided close process.</p>
+        </div>
+      )}
+      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); }} className="space-y-4">
+        <TabsList data-testid="tabs-cycle-close" className="hidden">
+          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <Activity className="h-3.5 w-3.5" />
+            <span>Active Cycles</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
+          </TabsTrigger>
+          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>Uncovered Sites</span>
+            {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span>Reports</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">التقارير</span>
+          </TabsTrigger>
+          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <Layers className="h-3.5 w-3.5" />
+            <span>Comparison</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">المقارنة</span>
+          </TabsTrigger>
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <Star className="h-3.5 w-3.5" />
+            <span>Scorecard</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
+          </TabsTrigger>
+          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+            <span>Exceptions</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الاستثناءات</span>
+            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
+                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <DollarSign className="h-3.5 w-3.5 text-amber-500" />
+            <span>Pending Finance</span>
+            {(financeCosts.length + financeAdvances.length) > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <Shield className="h-3.5 w-3.5 text-blue-500" />
+            <span>WFP Confirmation</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">تأكيد WFP</span>
+            {wfpAppliedUpload && (
+              <Badge className="ml-0.5 text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>
+            )}
+            {!wfpAppliedUpload && wfpSummary && wfpSummary.pendingReview > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Ad-hoc Visits</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الزيارات الطارئة</span>
+          </TabsTrigger>
+          <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Closed Cycles</span>
+            {closedCycles.length > 0 && <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0">{closedCycles.length}</Badge>}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="active" className="space-y-4">
+          {activeMmps.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <div className="flex items-center justify-center h-16 w-16 mx-auto bg-muted rounded-full mb-4">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium">No Active MMP Cycles</h3>
+                <p className="text-muted-foreground mt-1 text-sm max-w-md mx-auto">
+                  All MMP cycles have been closed or there are no approved MMPs available for cycle management.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card data-testid="active-filters">
+                <CardContent className="p-3">
+                  <div className="flex flex-col sm:flex-row gap-3 items-center">
+                    <div className="flex items-center gap-2 flex-wrap flex-1">
+                      <Select value={activeHubFilter} onValueChange={setActiveHubFilter}>
+                        <SelectTrigger className="w-[180px]" data-testid="select-active-hub-filter">
+                          <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                          <SelectValue placeholder="All Hubs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Hubs</SelectItem>
+                          {activeHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={activeSort} onValueChange={v => setActiveSort(v as any)}>
+                        <SelectTrigger className="w-[160px]" data-testid="select-active-sort">
+                          <SelectValue placeholder="Sort by..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="status">Sort by Status</SelectItem>
+                          <SelectItem value="name">Sort by Name</SelectItem>
+                          <SelectItem value="coverage">Sort by Coverage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setActiveSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                        data-testid="button-sort-direction"
+                      >
+                        {activeSortDir === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {canManageCycle && (
+                        <Button variant="outline" size="sm" onClick={handleScheduleReminders} data-testid="button-schedule-reminders">
+                          <Bell className="h-3.5 w-3.5 mr-1.5" /> Reminders
+                        </Button>
+                      )}
+                      <Badge variant="secondary" data-testid="badge-showing-count">
+                        {filteredActiveMmps.length} of {activeMmps.length} MMPs
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4">
                 {filteredActiveMmps.map(mmp => {
