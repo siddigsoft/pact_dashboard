@@ -226,13 +226,16 @@ export default function PreFundingDistribute() {
       await loadAllocations(fund.id); // refresh so UI shows it
       return;
     }
+    if (!addReceiptFile) {
+      toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
+      return;
+    }
     setAddSaving(true);
     try {
-      // Upload receipt first if provided
       let receiptUrl: string | null = null;
       if (addReceiptFile) {
         receiptUrl = await uploadReceipt(addReceiptFile, fund.id, addForm.userId);
-        if (!receiptUrl) { setAddSaving(false); return; } // upload failed, error already toasted
+        if (!receiptUrl) { setAddSaving(false); return; }
       }
       const { error } = await (supabase as any).from('pre_fund_allocations').insert({
         pre_fund_request_id: fund.id,
@@ -286,6 +289,10 @@ export default function PreFundingDistribute() {
     if (!alloc) return;
     const newAmt = parseFloat(topUpAmt);
     if (isNaN(newAmt) || newAmt < 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
+    if (!topUpReceiptFile && !alloc.receipt_url) {
+      toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
+      return;
+    }
     setTopUpSaving(true);
     try {
       let receiptUrl: string | null = alloc.receipt_url ?? null;
@@ -645,7 +652,7 @@ export default function PreFundingDistribute() {
               {/* Receipt upload */}
               <div>
                 <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document (optional)
+                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document <span className="text-destructive">*</span>
                 </Label>
                 {addReceiptFile ? (
                   <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30 text-sm">
@@ -701,7 +708,7 @@ export default function PreFundingDistribute() {
               </div>
               <div>
                 <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document
+                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document <span className="text-destructive">*</span>
                 </Label>
                 {topUpDialog.alloc.receipt_url && !topUpReceiptFile && (
                   <a href={topUpDialog.alloc.receipt_url} target="_blank" rel="noopener noreferrer"
