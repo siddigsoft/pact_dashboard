@@ -6532,8 +6532,6 @@ const MMPCycleClose = () => {
                             </Collapsible>
                           </>
                         )}
-                      </div>
-                    </div>
                   ) : (
                   /* ── PRE-CLOSE CHECKLIST (cycle still active, user about to start) ── */
                   <div className="flex-1 overflow-y-auto px-6 py-5">
