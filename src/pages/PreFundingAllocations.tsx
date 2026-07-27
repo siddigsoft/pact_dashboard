@@ -110,12 +110,13 @@ export default function PreFundingAllocations() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
-  // Finance/Admin can see everyone and do all actions
-  // Country Director can see everyone and edit allocated amounts only
-  // Other roles see only their own row
+  // Finance/Admin can see all funds and all staff allocations
+  // Fund holders (CD, FOM, etc.) see only allocations within their assigned funds
+  // Other roles see only their own allocation row
   const isFinanceAdmin       = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  const isCD                 = hasAnyRole(['countryDirector']);
-  const canManageAllocations = isFinanceAdmin || isCD;
+  // CD / FOM / etc. are now fund holders with a scoped view — they are NOT
+  // full finance admins, so canManageAllocations is finance-only.
+  const canManageAllocations = isFinanceAdmin;
   const canAccess            = canManageAllocations || !!currentUser?.id;
 
   const [allAllocations, setAll] = useState<AllocRow[]>([]);
@@ -133,13 +134,32 @@ export default function PreFundingAllocations() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch allocations — unlimited, scoped to this user if non-finance
+      // For non-finance-admin users (fund holders: CD, FOM, etc.):
+      // fetch their assigned fund IDs first, then scope allocations to those funds.
+      let holderFundIds: string[] | null = null;
+      if (!isFinanceAdmin && currentUser?.id) {
+        const { data: holderFunds } = await (supabase as any)
+          .from('pre_fund_requests')
+          .select('id')
+          .eq('holder_user_id', currentUser.id);
+        holderFundIds = (holderFunds ?? []).map((f: any) => f.id as string);
+      }
+
+      // Fetch allocations — unlimited, scoped by holder funds or own user_id
       const allocs: any[] = await fetchAll(() => {
         let q = (supabase as any)
           .from('pre_fund_allocations')
           .select('id,user_id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,created_at')
           .order('created_at', { ascending: false });
-        if (!canManageAllocations && currentUser?.id) q = q.eq('user_id', currentUser.id);
+        if (!isFinanceAdmin) {
+          if (holderFundIds && holderFundIds.length > 0) {
+            // Fund holder: see all staff allocations within their assigned funds
+            q = q.in('pre_fund_request_id', holderFundIds);
+          } else if (currentUser?.id) {
+            // Not a holder or no funds found — show own row only
+            q = q.eq('user_id', currentUser.id);
+          }
+        }
         return q;
       });
 
