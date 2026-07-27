@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import {
   RotateCcw, AlertTriangle, Trash2, CheckCircle2, Loader2,
-  DollarSign, Calendar, Info, ArrowRight,
+  DollarSign, Calendar, Info, ArrowRight, Repeat,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
 
-export type RecoveryDecision = 'rolled' | 'return_required' | 'writeoff';
+export type RecoveryDecision = 'rolled' | 'return_required' | 'writeoff' | 'redirect_to_fees';
 
 export interface CostRecoverySite {
   id: string;
@@ -94,6 +94,10 @@ export function CostRecoveryDialog({
   const [writeoffReason, setWriteoffReason] = useState('');
   const [writeoffSignatureName, setWriteoffSignatureName] = useState('');
 
+  // Redirect-to-fees state
+  const [redirectAmount, setRedirectAmount] = useState('');
+  const [redirectNote, setRedirectNote] = useState('');
+
   // Reset when dialog opens
   useEffect(() => {
     if (open) {
@@ -106,6 +110,8 @@ export function CostRecoveryDialog({
       setReturnNote('');
       setWriteoffReason('');
       setWriteoffSignatureName('');
+      setRedirectAmount('');
+      setRedirectNote('');
     }
   }, [open]);
 
@@ -134,6 +140,10 @@ export function CostRecoveryDialog({
     if (decision === 'rolled') return Boolean(targetMmpId);
     if (decision === 'return_required') return Boolean(repaymentMethod && repaymentDeadline);
     if (decision === 'writeoff') return writeoffReason.trim().length >= 10 && writeoffSignatureName.trim().length >= 3;
+    if (decision === 'redirect_to_fees') {
+      const amt = parseFloat(redirectAmount);
+      return !isNaN(amt) && amt > 0 && amt <= advanceAmount && redirectNote.trim().length >= 5;
+    }
     return false;
   };
 
@@ -185,10 +195,17 @@ export function CostRecoveryDialog({
       if (logErr) throw new Error(logErr.message);
 
       // 2. Write to payment_event_log
+      if (decision === 'redirect_to_fees') {
+        payload.redirect_amount = parseFloat(redirectAmount);
+        payload.redirect_note = redirectNote;
+        payload.decision_note = `Redirected ${redirectAmount} ${currency} to enumerator fees. ${redirectNote}`;
+      }
+
       const eventTypeMap: Record<RecoveryDecision, string> = {
-        rolled:           'recovery_decision_rolled',
-        return_required:  'recovery_decision_return_required',
-        writeoff:         'recovery_decision_writeoff',
+        rolled:            'recovery_decision_rolled',
+        return_required:   'recovery_decision_return_required',
+        writeoff:          'recovery_decision_writeoff',
+        redirect_to_fees:  'recovery_decision_redirect_to_fees',
       };
 
       await logPaymentEvent({
@@ -456,6 +473,15 @@ export function CostRecoveryDialog({
               onClick={() => handleChooseDecision('writeoff')}
               testId="button-recovery-writeoff"
             />
+            <OptionCard
+              icon={<Repeat className="h-5 w-5 text-blue-500" />}
+              title="Redirect to Enumerator Fees"
+              titleAr="تحويل إلى أتعاب العداد"
+              description="Reclassify part or all of the advance as enumerator fees for related work performed."
+              descriptionAr="إعادة تصنيف المبلغ كأتعاب للعداد مقابل عمل ذي صلة."
+              onClick={() => handleChooseDecision('redirect_to_fees')}
+              testId="button-recovery-redirect"
+            />
           </div>
         )}
 
@@ -582,6 +608,44 @@ export function CostRecoveryDialog({
           </div>
         )}
 
+        {step === 'details' && decision === 'redirect_to_fees' && (
+          <div className="space-y-4 py-2" data-testid="recovery-step-redirect">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Reclassify part or all of the advance as enumerator fees. This is appropriate when the enumerator
+                performed additional work (e.g. coordination, extra travel) not captured in the original fee structure.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-1">
+              <Label>
+                Amount to redirect to fees <span className="text-red-500">*</span>
+                <span className="text-xs text-muted-foreground ml-1">(max {advanceAmount.toLocaleString()} {currency})</span>
+              </Label>
+              <Input
+                type="number"
+                value={redirectAmount}
+                onChange={e => setRedirectAmount(e.target.value)}
+                max={advanceAmount}
+                min={0.01}
+                step={0.01}
+                placeholder={`Enter amount in ${currency}…`}
+                data-testid="input-redirect-amount"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Justification <span className="text-red-500">*</span> <span className="text-xs text-muted-foreground">(minimum 5 characters)</span></Label>
+              <Textarea
+                value={redirectNote}
+                onChange={e => setRedirectNote(e.target.value)}
+                placeholder="Describe the additional work that justifies reclassifying the advance as enumerator fees…"
+                className="min-h-[80px]"
+                data-testid="input-redirect-note"
+              />
+            </div>
+          </div>
+        )}
+
         <DialogFooter className="gap-2">
           {step === 'choose' && (
             <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-recovery">
@@ -615,6 +679,7 @@ function decisionLabel(d: RecoveryDecision | null) {
   if (d === 'rolled') return 'Confirm Roll-Over';
   if (d === 'return_required') return 'Require Return';
   if (d === 'writeoff') return 'Authorize Write-Off';
+  if (d === 'redirect_to_fees') return 'Redirect to Fees';
   return 'Confirm';
 }
 

@@ -46,6 +46,8 @@ import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
 import { WFPUploadZone } from '@/components/cycle/WFPUploadZone';
 import { WFPMatchReviewTable } from '@/components/cycle/WFPMatchReviewTable';
 import { WFPBulkActions } from '@/components/cycle/WFPBulkActions';
+import { CycleCloseGuide } from '@/components/cycle/CycleCloseGuide';
+import { EnumeratorReconciliation } from '@/components/cycle/EnumeratorReconciliation';
 import { RolledAllocationsPanel } from '@/components/cycle/RolledAllocationsPanel';
 import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
 import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
@@ -199,9 +201,10 @@ const getSuperAdminEmails = async (): Promise<string[]> => {
 const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
 
 const RECOVERY_DECISION_CONFIG: Record<string, { label: string; labelAr: string; color: string }> = {
-  rolled:          { label: 'Rolled to Next MMP',  labelAr: 'مُرحَّل للدورة التالية', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
-  return_required: { label: 'Return Required',     labelAr: 'مطلوب الإعادة',         color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
-  writeoff:        { label: 'Written Off',         labelAr: 'مشطوب',                 color: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+  rolled:            { label: 'Rolled to Next MMP',      labelAr: 'مُرحَّل للدورة التالية',  color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
+  return_required:   { label: 'Return Required',         labelAr: 'مطلوب الإعادة',           color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
+  writeoff:          { label: 'Written Off',             labelAr: 'مشطوب',                   color: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+  redirect_to_fees:  { label: 'Redirected to Fees',      labelAr: 'محوَّل إلى أتعاب العداد', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
 };
 
 const FOLLOW_UP_ACTIONS: Record<string, string> = {
@@ -6356,6 +6359,17 @@ const MMPCycleClose = () => {
                       </div>
                     )}
 
+                    {/* ── Guided step-by-step close wizard ── */}
+                    <CycleCloseGuide
+                      mmpId={checklistMmpId}
+                      checklistItems={cycleReadiness.items}
+                      loading={cycleReadiness.loading}
+                      onTabChange={(tab) => {
+                        setActiveTab(tab);
+                        if (tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                      }}
+                    />
+
                     {!cycleReadiness.loading && cycleReadiness.allPassed && (
                       <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
                         <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
@@ -7166,6 +7180,13 @@ const MMPCycleClose = () => {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* ── Enumerator Financial Reconciliation ── */}
+              <EnumeratorReconciliation
+                mmpId={selectedMmpId}
+                mmpName={mmpFiles?.find(m => m.id === selectedMmpId)?.name}
+                wfpApplied={Boolean(wfpAppliedUpload)}
+              />
 
               {/* Stuck Transport Advances */}
               <Card>

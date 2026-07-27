@@ -301,6 +301,18 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           link: '/mmp/cycle-close?tab=wfp',
           notConfigured: wfpError,
         },
+        {
+          id: 'enumerator_reconciliation',
+          label: 'Enumerator payments reconciled',
+          description: !wfpApplied
+            ? 'Apply the WFP confirmation file first — enumerator reconciliation is unlocked after site coverage is confirmed.'
+            : 'Settle each enumerator\'s advance vs. confirmed-site earnings before closing: generate balance payments, schedule recoveries, or mark as balanced.',
+          passed: wfpApplied,   // soft check — full enforcement is in Finance tab
+          count: wfpApplied ? 1 : 0,
+          total: 1,
+          link: '/mmp/cycle-close?tab=finance',
+          notConfigured: false,
+        },
       ];
 
       setItems(newItems);
