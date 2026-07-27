@@ -637,22 +637,6 @@
         });
     }, [isSuperAdmin, currentUser?.id]);
 
-    // Check if the current user is a fund holder on any pre_fund_requests row.
-    // Fund holders get a "My Fund" sidebar entry and can access /pre-funding even
-    // without a finance admin role.
-    const isFinanceAdminRole = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-    const [isFundHolder, setIsFundHolder] = useState(false);
-    useEffect(() => {
-      if (isFinanceAdminRole || !currentUser?.id) return;
-      supabase
-        .from('pre_fund_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('holder_user_id', currentUser.id)
-        .then(({ count }: { count: number | null }) => {
-          setIsFundHolder((count ?? 0) > 0);
-        });
-    }, [isFinanceAdminRole, currentUser?.id]);
-
     // Open picker dialog when the banner's "Switch" button fires requestOpenPicker()
     const openViewAsDialog = async () => {
       setViewAsOpen(true);
@@ -717,6 +701,24 @@
     const roleIsFomOrAdmin   = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
     const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
     const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+
+    // Check if the current user is a fund holder on any pre_fund_requests row.
+    // Fund holders get a "My Fund" sidebar entry and can access /pre-funding even
+    // without a finance admin role.
+    // IMPORTANT: declared here, AFTER hasAnyRole is available — accessing hasAnyRole
+    // before this line would trigger a temporal dead zone crash in the minified bundle.
+    const isFinanceAdminRole = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+    const [isFundHolder, setIsFundHolder] = useState(false);
+    useEffect(() => {
+      if (isFinanceAdminRole || !currentUser?.id) return;
+      supabase
+        .from('pre_fund_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('holder_user_id', currentUser.id)
+        .then(({ count }: { count: number | null }) => {
+          setIsFundHolder((count ?? 0) > 0);
+        });
+    }, [isFinanceAdminRole, currentUser?.id]);
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
@@ -938,7 +940,7 @@
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
     // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
-    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, pageOverrideMap, viewAs]);
+    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {
