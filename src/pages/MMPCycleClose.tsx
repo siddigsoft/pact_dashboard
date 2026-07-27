@@ -1288,212 +1288,206 @@ const MMPCycleClose = () => {
   const guideSteps = useMemo(() => {
     const ri = cycleReadiness.items;
     const get = (id: string) => ri.find(i => i.id === id);
-    const financeIds = ['cost_submissions', 'transport_advances', 'withdrawal_requests', 'cost_recovery'];
-    const financePassed = financeIds.every(id => get(id)?.passed !== false || get(id) === undefined);
-    const financeIssues = financeIds.map(id => get(id)).filter(i => i && !i.passed) as typeof ri;
 
-    const svItem = get('site_visits');
-    const svRemaining = svItem && !svItem.passed ? (svItem.total - svItem.count) : 0;
-    const csItem = get('cost_submissions');
-    const csRemaining = csItem && !csItem.passed ? csItem.total : 0;
     const wfpItem = get('wfp_confirmation');
+    const svItem = get('site_visits');
+    const costRecoveryItem = get('cost_recovery');
+    const costSubsItem = get('cost_submissions');
+    const advancesItem = get('transport_advances');
+    const withdrawalsItem = get('withdrawal_requests');
 
-    const paymentStepPassed = paymentsConfirmedAt !== null;
     const wfpPassed = wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false);
     const reasonsPassed = svItem?.passed ?? false;
+    const svRemaining = svItem && !svItem.passed ? Math.max(0, svItem.total - svItem.count) : 0;
+    const costRecoveryPassed = costRecoveryItem?.passed ?? false;
+    const costRecoveryRemaining = costRecoveryItem?.total || 0;
+
+    const financeBlocking = [costSubsItem, advancesItem, withdrawalsItem].filter(i => i && !i.passed) as typeof ri;
+    const csRemaining = costSubsItem && !costSubsItem.passed ? costSubsItem.total : 0;
+    const financePassed = financeBlocking.length === 0;
+
     const feesLocked = feesLockedAt !== null;
-    const exchangeRateBlocked = !reasonsPassed || !financePassed || !wfpPassed;
+    const paymentStepPassed = paymentsConfirmedAt !== null;
+    const exchangeRateBlocked = !wfpPassed || !reasonsPassed || !financePassed;
     const paymentStepBlocked = exchangeRateBlocked || !feesLocked;
 
     return [
       {
-        id: 'start', number: 1,
-        title: 'Start Closing', titleAr: 'بدء الإغلاق',
-        desc: 'Closing process initiated. The cycle is now locked for new visits — work through each step below in order to fully close and archive it.',
-        passed: true, blocked: false,
-        tab: null as string | null, actionLabel: null as string | null,
-        sub: [] as typeof ri,
+        id: 'wfp', number: 1,
+        title: 'Upload WFP Data', titleAr: 'رفع بيانات WFP',
+        desc: wfpItem?.notConfigured
+          ? 'WFP confirmation is not configured for this MMP — this step is skipped.'
+          : wfpPassed
+            ? 'WFP file applied — matched sites promoted to WFP Confirmed status.'
+            : 'Upload the WFP-provided clean data Excel or CSV file. The system will auto-match sites and flag any that need manual review.',
+        passed: wfpPassed,
+        blocked: false,
+        tab: 'wfp' as string | null, actionLabel: 'Open WFP Upload' as string | null,
+        sub: wfpItem ? [wfpItem] : [] as typeof ri,
         remaining: 0,
         howTo: [
-          'This step is automatically done when you start the close process.',
-          'Work through Steps 2 → 7 in order. You can leave and come back any time — progress is saved.',
-          'Use "Check again" after completing work in another tab to update the status here.',
+          'Upload the WFP-provided Excel (.xlsx, .xls) or CSV file for this cycle.',
+          'The system auto-matches sites by name, state, and locality — fuzzy matching handles spelling differences.',
+          'Review any "Needs Review" rows in the match table — confirm, link to the correct site, or reject.',
+          'Use the Match Review table to manually link rows the system could not auto-match.',
+          'Click "Apply" — all matched sites are promoted to WFP Confirmed status.',
         ] as string[],
       },
       {
-        id: 'site_review', number: 2,
-        title: 'Review All Sites & Advances', titleAr: 'مراجعة المواقع والسلف',
-        desc: 'Review all MMP sites, their current visit status, and any transport advances paid per site. This is a read-only overview to help you understand the full financial picture before proceeding.',
-        passed: true,
-        blocked: false,
-        tab: null, actionLabel: null,
-        sub: [],
-        remaining: 0,
-        howTo: [
-          'Review the full site list below — all sites assigned to this MMP are shown.',
-          'The "Advance" column shows whether a transport advance was issued and how much was paid.',
-          'Advance amounts already paid will be automatically deducted from the Payment Sheet in Step 7.',
-          'Sites with 0 fees set will need fee entry before the payment sheet is generated.',
-          'No action needed here — this step is informational and always marked Done.',
-        ],
-      },
-      {
-        id: 'reasons', number: 3,
-        title: 'Assign Reasons — Uncovered Sites', titleAr: 'أسباب المواقع غير المغطاة',
-        desc: svItem?.passed
+        id: 'reasons', number: 2,
+        title: 'Mark Uncovered Sites', titleAr: 'المواقع غير المغطاة',
+        desc: reasonsPassed
           ? 'All unvisited sites have a documented reason — this gate is clear.'
           : svRemaining > 0
-            ? `${svRemaining} site${svRemaining !== 1 ? 's' : ''} still need a reason recorded. Every unvisited site must have an explanation before the cycle can close.`
+            ? `${svRemaining} site${svRemaining !== 1 ? 's' : ''} still need a reason assigned. Every unvisited site must have an explanation before the cycle can close.`
             : (svItem?.description || 'Every unvisited site needs a reason before the cycle can close.'),
         passed: reasonsPassed,
         blocked: false,
-        tab: 'uncovered', actionLabel: 'Open Uncovered Sites tab →',
+        tab: 'uncovered', actionLabel: 'Open Uncovered Sites',
         sub: svItem ? [svItem] : [],
         remaining: svRemaining,
         howTo: [
-          'Click "Open Uncovered Sites tab →" button below.',
-          'In the list, find every site showing an orange "No Reason" badge.',
-          'Click the orange badge to open a small popup.',
-          'Pick the correct reason from the dropdown and press Save.',
-          'Repeat for every site until no orange badges remain.',
-          'Come back here and click "Check again" to confirm.',
+          'Find every site below with an orange "No Reason" badge.',
+          'Select a reason: Not Distributed, Security Concerns, Access Denied, Staff Unavailable, etc.',
+          'Sites flagged Security Concerns or Access Denied generate a follow-up action for the next cycle.',
+          'Use "Select All" and "Bulk Assign" to set the same reason for multiple sites at once.',
+          'All sites must have a reason before you can proceed — the step turns green automatically.',
+        ],
+      },
+      {
+        id: 'exceptions', number: 3,
+        title: 'Resolve Advance Exceptions', titleAr: 'حل استثناءات السلف',
+        desc: costRecoveryPassed
+          ? 'All advance exceptions resolved — every site with an outstanding advance has a decision on record.'
+          : costRecoveryRemaining > 0
+            ? `${costRecoveryRemaining} not-covered site${costRecoveryRemaining !== 1 ? 's' : ''} received advance payments that need a recovery decision before closing.`
+            : 'No not-covered sites received advances — this step is clear.',
+        passed: costRecoveryPassed,
+        blocked: !reasonsPassed,
+        tab: 'exceptions', actionLabel: 'Open Exceptions',
+        sub: costRecoveryItem ? [costRecoveryItem] : [],
+        remaining: costRecoveryRemaining,
+        howTo: [
+          'This step applies when an enumerator received an advance for a site that ended up not covered.',
+          'For each such site, choose one of four actions:',
+          '  → Roll to Next MMP: treat as pre-payment for the next cycle.',
+          '  → Return Required: enumerator must repay the advance.',
+          '  → Write-Off: amount is unrecoverable (requires FOM approval + justification).',
+          '  → Redirect to Fees: reclassify advance as payment for actual work done.',
+          'All decisions are logged with your name and timestamp for audit.',
         ],
       },
       {
         id: 'finance', number: 4,
-        title: 'Clear Finance', titleAr: 'تسوية المالية',
+        title: 'Financial Reconciliation', titleAr: 'التسوية المالية',
         desc: financePassed
-          ? 'All financial items are cleared — cost submissions, advances, withdrawals, and cost recovery are all settled.'
-          : `${financeIssues.length} item${financeIssues.length !== 1 ? 's' : ''} blocking close: ${financeIssues.map(i => i.label).join(' • ')}. Review each section below and clear before proceeding.`,
+          ? 'All financial items cleared — cost submissions, transport advances, and withdrawals are all settled.'
+          : `${financeBlocking.length} item${financeBlocking.length !== 1 ? 's' : ''} still need resolution before closing: ${financeBlocking.map(i => i.label).join(' • ')}.`,
         passed: financePassed,
-        blocked: false,
-        tab: 'finance', actionLabel: 'Open Pending Finance tab →',
-        sub: financeIssues,
+        blocked: !costRecoveryPassed,
+        tab: 'finance', actionLabel: 'Open Finance',
+        sub: financeBlocking,
         remaining: csRemaining,
         howTo: [
-          'Look at each ❌ item in the list below — these are the specific gates blocking close.',
-          'Cost submissions: click "Open Pending Finance tab →" → approve or reject each pending submission.',
-          'Transport advances: go to the Down Payment Approval page → find partially-paid advances → mark as Reconciled or Paid.',
-          'Withdrawal requests: go to the Finance page → approve or reject each pending withdrawal.',
-          'Cost recovery: check the Exceptions tab → log a recovery decision for each not-covered site that received an advance.',
-          'Come back here and click "Check again" after each action to watch the gates turn green.',
+          'Approve or reject all pending cost submissions for this MMP.',
+          'Settle any partially-paid transport advances — go to Down Payment Approval and mark each as Reconciled or Paid.',
+          'Process any pending withdrawal requests in the Finance page.',
+          'Review the Enumerator Reconciliation table — generate balance payments or schedule recoveries.',
+          'Return here after each action; the step turns green once all items are cleared.',
         ],
       },
       {
-        id: 'wfp', number: 5,
-        title: 'WFP Confirmation', titleAr: 'تأكيد WFP',
-        desc: wfpItem?.notConfigured
-          ? 'WFP confirmation is not configured for this MMP — this step is optional and skipped.'
-          : wfpItem?.passed
-            ? 'WFP confirmation file has been uploaded and applied — matched sites promoted to WFP Confirmed status.'
-            : (wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file. Matched sites (any status) will be promoted to WFP Confirmed automatically.'),
-        passed: wfpPassed,
-        blocked: false,
-        tab: 'wfp', actionLabel: 'Open WFP Confirmation tab →',
-        sub: wfpItem ? [wfpItem] : [],
-        remaining: 0,
-        howTo: [
-          'Click "Open WFP Confirmation tab →" button below.',
-          'Upload the WFP cleaned Excel file for this month.',
-          'Review the matching results — strong, fuzzy, and manual matches are shown.',
-          'Review any weak/fuzzy matches and accept or reject them manually.',
-          'Click "Apply" — all confirmed sites will be promoted to WFP Confirmed status (even if they were not yet marked completed).',
-          'Come back here and click "Check again" to confirm the gate turns green.',
-        ],
-      },
-      {
-        id: 'exchange_rate', number: 6,
-        title: 'Exchange Rate & Fee Lock', titleAr: 'سعر الصرف وتثبيت الأتعاب',
+        id: 'exchange_rate', number: 5,
+        title: 'Lock Exchange Rate', titleAr: 'تثبيت سعر الصرف',
         desc: feesLockedAt
-          ? `Fees locked at 1 USD = ${feesLockedRate?.toLocaleString()} SDG on ${new Date(feesLockedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. All site fees and wallets updated.`
-          : 'Enter today\'s official USD → SDG exchange rate. All dispatched site fees will be recalculated to the correct SDG amount and enumerator wallets updated.',
+          ? `Fees locked at 1 USD = ${feesLockedRate?.toLocaleString()} SDG on ${new Date(feesLockedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
+          : 'Enter the official USD → SDG exchange rate to lock final fee amounts. All dispatched site fees will be recalculated to the correct SDG amounts.',
         passed: feesLocked,
         blocked: exchangeRateBlocked,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
-          'Check today\'s official exchange rate from your finance team or central bank.',
-          'Enter "1 USD = X SDG" in the field below.',
-          'Review the live preview table — it shows every dispatched site with the calculated SDG equivalent.',
-          'Tick "Also update enumerator wallets" if you want the wallet balances updated immediately.',
-          'Click "Lock Fees & Apply Rate" — this updates all site fees in the database to SDG amounts.',
-          'Once locked, the payment sheet in Step 7 will reflect the correct final SDG amounts.',
-          'You can re-apply a corrected rate if needed — it will overwrite the previous values.',
+          'Check the official exchange rate from your finance team or central bank.',
+          'Enter the rate in the field below: 1 USD = X SDG.',
+          'Review the live preview — each dispatched site shows the calculated SDG fee.',
+          'Tick "Also update enumerator wallets" to update wallet balances immediately.',
+          'Click "Lock Fees & Apply Rate" — this freezes all site fees to the final SDG amounts.',
+          'Once locked, the payment sheet in the next step shows the correct final numbers.',
         ],
       },
       {
-        id: 'payment_request', number: 7,
-        title: 'Payment Sheet & Request', titleAr: 'ورقة الدفع وطلب السداد',
+        id: 'payment_request', number: 6,
+        title: 'Confirm Payments Done', titleAr: 'تأكيد المدفوعات',
         desc: paymentsConfirmedAt
           ? `Payments confirmed on ${new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} — this step is complete.`
           : paymentRequestedAt
             ? `Payment request sent on ${new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. Once finance processes all payments, return here to confirm.`
-            : 'Review the per-site payment sheet (now in locked SDG amounts). Export PDF/Excel, request payments from finance, then confirm when all payments are done.',
+            : 'Review the per-site payment sheet in locked SDG amounts. Export for finance, request payment, then confirm once done.',
         passed: paymentStepPassed,
         blocked: paymentStepBlocked,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
-          'Review the payment sheet below — each site shows locked SDG fees minus any advances already paid = Net to Pay.',
-          'Export the Payment Sheet PDF and/or Excel file for finance processing.',
-          'Click "Send Payment Request to Finance" to formally log the request.',
+          'Review the payment sheet below — each site shows: Total Fee − Advance Paid = Net to Pay.',
+          'Export the Payment Sheet PDF and/or Excel and send it to your finance team.',
+          'Click "Send Payment Request to Finance" to formally log the payment request.',
           'Once finance processes all payments, return here and click "Confirm All Payments Done".',
-          'This step is complete once you confirm — you can then submit for final approval.',
+          'This step is complete once confirmed — you can then submit for final approval.',
         ],
       },
       {
-        id: 'submit', number: 8,
-        title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
+        id: 'submit', number: 7,
+        title: 'Final Review & Close', titleAr: 'المراجعة النهائية',
         desc: checklistMmpStatus === 'closed'
-          ? 'Cycle was submitted and approved — it is permanently archived.'
+          ? 'Cycle has been approved and permanently archived.'
           : checklistMmpStatus === 'pending_approval'
-            ? 'Submitted — waiting for FOM / Director to approve or reject.'
+            ? 'Submitted — waiting for FOM / Director to approve or send back for corrections.'
             : cycleReadiness.allPassed && paymentStepPassed && feesLocked
-              ? 'All gates are green and payments confirmed. Review the financial summary below, then tick the confirmation and submit.'
+              ? 'All checks passed and payments confirmed. Review the financial summary below, then submit for approval.'
               : !feesLocked
-                ? 'Complete Step 6 (lock exchange rate) first.'
+                ? 'Complete Step 5 (lock exchange rate) first.'
                 : !paymentStepPassed
-                  ? 'Complete Step 7 (confirm payments done) before submitting.'
-                  : 'Complete Steps 3–5 above first, then return here to submit.',
+                  ? 'Complete Step 6 (confirm payments) before submitting.'
+                  : 'Complete all earlier steps first, then return here to submit.',
         passed: checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed',
         blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && (!cycleReadiness.allPassed || !paymentStepPassed || !feesLocked),
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
-          'Ensure all previous steps are green — reasons, finance, WFP, fees locked, and payments confirmed.',
-          'Tick the confirmation checkbox below.',
-          'Click the green "Submit Cycle for Final Approval" button.',
-          'The FOM and Country Director will be notified for review.',
+          'Review the full readiness checklist — all items must be green (or overridden with justification).',
+          'Check the financial summary: total sites confirmed, enumerator costs, advances, net payable amount.',
+          'Tick the confirmation checkbox at the bottom.',
+          'Click "Submit Cycle for Final Approval" — FOM and Director will be notified immediately.',
         ],
       },
       {
-        id: 'approval', number: 9,
-        title: 'Final Approval & Archive', titleAr: 'في انتظار الموافقة',
+        id: 'approval', number: 8,
+        title: 'Final Approval', titleAr: 'الموافقة النهائية',
         desc: checklistMmpStatus === 'closed'
-          ? 'Cycle approved and archived. The financial settlement above is now frozen permanently.'
+          ? 'Cycle approved and archived permanently.'
           : checklistMmpStatus === 'pending_approval'
             ? (isFOM || isAdmin || isSuperAdmin)
-              ? 'Your approval is required. Scroll down to review the Cycle Financial Summary, then approve or reject below.'
-              : 'Submitted and waiting for FOM / Admin to approve. You will receive a notification when a decision is made.'
-            : 'This step unlocks once Step 7 is submitted. The FOM or Admin will review and approve or send back.',
+              ? 'Your approval is required. Review the financial summary below, then approve or reject.'
+              : 'Waiting for FOM / Admin approval. You will be notified when a decision is made.'
+            : 'Unlocks after Step 7 is submitted.',
         passed: checklistMmpStatus === 'closed',
         blocked: false,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: (isFOM || isAdmin || isSuperAdmin) ? [
-          'Scroll down and review the "💰 Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and the net payable amount.',
-          'If the figures look correct, click "Approve & Close Cycle" to permanently archive this cycle.',
-          'If something is wrong, click "Reject & Send Back" and enter the specific reason so the admin knows what to correct.',
-          'Once approved, the cycle status becomes Closed, the financial snapshot is frozen, and the MMP is unlocked for the next cycle.',
+          'Review the "Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and net payable.',
+          'If everything is correct, click "Approve & Close Cycle" to permanently archive this cycle.',
+          'If corrections are needed, click "Reject & Send Back" and enter the specific reason.',
+          'Once approved, the cycle becomes Closed, the financial snapshot is frozen, and the MMP is archived.',
         ] : [
-          'The cycle has been submitted and is now waiting for FOM, Admin, or Super Admin to review.',
-          'You will receive an in-app notification when the cycle is approved or sent back for corrections.',
-          'If approved → the cycle status becomes Closed and appears in the Archive tab.',
-          'If rejected → the cycle returns to Closing state and you can correct the issues and re-submit.',
+          'The cycle is submitted and waiting for FOM, Admin, or Super Admin to review.',
+          'You will receive an in-app notification when the cycle is approved or sent back.',
+          'If approved → the cycle becomes Closed and appears in the Archive tab.',
+          'If rejected → the cycle returns to Closing state for corrections and re-submission.',
         ],
       },
     ];
@@ -4522,23 +4516,33 @@ const MMPCycleClose = () => {
       {/* ── Full Guided Wizard (inline) ─────────────────────────────────── */}
       {checklistMmpId ? (
       <div className="rounded-xl border-2 border-primary/20 bg-card shadow-sm overflow-hidden" data-testid="section-cycle-close-checklist">
-        <div className="px-6 pt-5 pb-4 border-b flex items-start justify-between gap-4">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              {checklistMmpStatus === 'active'
-                ? <><AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" /> Pre-Close Requirements</>
-                : <><ArrowRight className="h-5 w-5 text-amber-500 shrink-0" /> Cycle Close — Step by Step Guide</>
-              }
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {checklistMmpStatus === 'active'
-                ? 'Check all requirements below. Once everything is green, you can start the close process.'
-                : 'Follow each step in order. Your progress is saved automatically.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0 mt-0.5">
-            <span className="text-sm font-semibold text-muted-foreground">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard"><X className="h-4 w-4" /></Button>
+        <div className="px-6 pt-4 pb-4 border-b">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {checklistMmpStatus === 'active'
+                  ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  : <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                }
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  {checklistMmpStatus === 'active' ? 'Pre-Close Checklist' : 'Guided Cycle Close'}
+                </span>
+                <span className="text-[11px] text-muted-foreground">·</span>
+                <span className="text-[11px] font-semibold truncate max-w-[260px]">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</span>
+              </div>
+              <h2 className="text-base font-bold mt-0.5 leading-tight">
+                {checklistMmpStatus === 'active'
+                  ? 'Complete all requirements before starting the close process'
+                  : 'Follow the 7 steps below to close and archive this cycle'
+                }
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {checklistMmpStatus === 'active'
+                  ? 'Once all items are green, a "Start Close Process" button will appear.'
+                  : 'Each step must be completed in order. Progress is saved automatically — you can leave and return any time.'}
+              </p>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mt-0.5" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard"><X className="h-4 w-4" /></Button>
           </div>
         </div>
 
@@ -4556,13 +4560,14 @@ const MMPCycleClose = () => {
                       {/* ── LEFT SIDEBAR: Step Navigation ── */}
                       <div className="w-52 border-r shrink-0 bg-muted/20 flex flex-col overflow-hidden">
                         <div className="px-4 py-3 border-b">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Steps</p>
-                          <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">7 Steps to Close</p>
+                          <div className="flex items-center gap-2 mb-1">
                             <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                               <div className="h-full bg-green-500 rounded-full transition-all duration-500" style={{width: `${pct}%`}} />
                             </div>
-                            <span className="text-[10px] text-muted-foreground shrink-0">{doneCnt}/{actionable.length}</span>
+                            <span className="text-[10px] text-muted-foreground shrink-0 font-medium">{doneCnt}/{actionable.length}</span>
                           </div>
+                          <p className="text-[10px] text-muted-foreground">{pct === 100 ? '✓ All steps complete' : `${100 - pct}% remaining`}</p>
                         </div>
                         <div className="flex-1 overflow-y-auto">
                           {guideSteps.map((s) => {
@@ -4636,7 +4641,7 @@ const MMPCycleClose = () => {
                                       <span className="font-semibold">Reason:</span> {rejNote}
                                     </p>
                                     <p className="text-[11px] text-red-500 dark:text-red-400 mt-1.5">
-                                      Address the issues above, then re-submit using Step 8 below.
+                                      Address the issues above, then re-submit using Step 7 (Final Review &amp; Close) below.
                                     </p>
                                   </div>
                                 </div>
@@ -4659,7 +4664,7 @@ const MMPCycleClose = () => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Step {activeStepIdx + 1} of {guideSteps.length}</span>
+                                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Step {step.number} of {actionable.length}</span>
                                         {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
                                         {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500">👉 Do this now</Badge>}
                                         {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">🔒 Complete steps above first</Badge>}
@@ -4748,6 +4753,88 @@ const MMPCycleClose = () => {
                                                     )}
                                                   </div>
                                                 ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* ── Step 3: Advance Exceptions (inline) ── */}
+                                      {step.id === 'exceptions' && (() => {
+                                        const costRecovItem = cycleReadiness.items.find(i => i.id === 'cost_recovery');
+                                        const hasExceptions = (costRecovItem?.total ?? 0) > 0;
+                                        const exceptionsResolved = costRecovItem?.passed ?? true;
+                                        return (
+                                          <div className="mt-3 space-y-3">
+                                            {step.blocked ? (
+                                              <div className="flex items-center gap-3 rounded-lg border border-muted bg-muted/30 px-4 py-3">
+                                                <Clock className="h-5 w-5 text-muted-foreground shrink-0" />
+                                                <div>
+                                                  <p className="text-sm font-medium">Complete Step 2 first</p>
+                                                  <p className="text-xs text-muted-foreground mt-0.5">Assign reasons to all uncovered sites before resolving advance exceptions.</p>
+                                                </div>
+                                              </div>
+                                            ) : !hasExceptions ? (
+                                              <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
+                                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                                <div>
+                                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">No advance exceptions for this cycle.</p>
+                                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">No not-covered sites received advance payments — this step is automatically clear.</p>
+                                                </div>
+                                              </div>
+                                            ) : exceptionsResolved ? (
+                                              <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
+                                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                                <div>
+                                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">All advance exceptions resolved.</p>
+                                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Every not-covered site with an advance has a recovery decision on record.</p>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="space-y-3">
+                                                <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-4">
+                                                  <div className="flex items-start gap-3">
+                                                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                                    <div className="flex-1">
+                                                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                                                        {costRecovItem?.total ?? 0} site{(costRecovItem?.total ?? 0) !== 1 ? 's' : ''} with unresolved advance payments
+                                                      </p>
+                                                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                                                        These sites were marked not covered after receiving advance payments. You must decide what happens to each advance before closing the cycle.
+                                                      </p>
+                                                    </div>
+                                                  </div>
+                                                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
+                                                      <span className="font-semibold">Roll to Next MMP</span>
+                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Pre-payment for next cycle</p>
+                                                    </div>
+                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
+                                                      <span className="font-semibold">Return Required</span>
+                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Enumerator repays advance</p>
+                                                    </div>
+                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
+                                                      <span className="font-semibold">Write-Off</span>
+                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">FOM approval + justification</p>
+                                                    </div>
+                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
+                                                      <span className="font-semibold">Redirect to Fees</span>
+                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Reclassify as fee payment</p>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <Button
+                                                    variant="default"
+                                                    size="sm"
+                                                    className="gap-1.5"
+                                                    onClick={() => { setChecklistMmpId(null); setActiveTab('exceptions'); }}
+                                                    data-testid="button-open-exceptions-tab"
+                                                  >
+                                                    Go to Exceptions Tab <ArrowRight className="h-3.5 w-3.5" />
+                                                  </Button>
+                                                  <span className="text-xs text-muted-foreground">(exits wizard — you can re-enter from the MMP card)</span>
+                                                </div>
                                               </div>
                                             )}
                                           </div>
@@ -6292,19 +6379,28 @@ const MMPCycleClose = () => {
                         </div>
                         {/* ── Wizard navigation footer ── */}
                         <div className="border-t px-6 py-3 flex items-center justify-between shrink-0 bg-muted/10">
-                          {prevStepObj ? (
-                            <Button variant="outline" size="sm" onClick={() => setWizardStep(prevStepObj.id)} className="gap-1.5 text-xs" data-testid="button-wizard-prev">
-                              <ArrowLeft className="h-3.5 w-3.5" /> {prevStepObj.title}
+                          <div className="flex items-center gap-2">
+                            {prevStepObj ? (
+                              <Button variant="outline" size="sm" onClick={() => setWizardStep(prevStepObj.id)} className="gap-1.5 text-xs h-8" data-testid="button-wizard-prev">
+                                <ChevronLeft className="h-3.5 w-3.5" /> Back
+                              </Button>
+                            ) : <div />}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="ghost" className="gap-1 text-xs text-muted-foreground h-8" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh-footer">
+                              <RefreshCw className="h-3 w-3" /> Check progress
                             </Button>
-                          ) : <div />}
-                          <Button size="sm" variant="ghost" className="gap-1 text-xs text-muted-foreground" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh-footer">
-                            <RefreshCw className="h-3 w-3" /> Refresh
-                          </Button>
-                          {nextStepObj ? (
-                            <Button size="sm" onClick={() => setWizardStep(nextStepObj.id)} className="gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-wizard-next">
-                              {nextStepObj.title} <ArrowRight className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : <div />}
+                            <span className="text-[10px] text-muted-foreground hidden sm:block">
+                              Step {guideSteps.find(s => s.id === activeStepId)?.number ?? '?'} of {actionable.length}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {nextStepObj ? (
+                              <Button size="sm" onClick={() => setWizardStep(nextStepObj.id)} className={`gap-1.5 text-xs h-8 ${nextStepObj.blocked ? 'opacity-50' : ''}`} disabled={nextStepObj.blocked} data-testid="button-wizard-next">
+                                Next <ChevronRight className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : <div />}
+                          </div>
                         </div>
                       </div>
                     </div>
