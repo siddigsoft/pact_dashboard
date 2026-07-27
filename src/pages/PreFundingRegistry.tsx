@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { exportToExcel } from '@/utils/report-export';
@@ -191,6 +191,69 @@ const THRESHOLD_MODE_OPTIONS = [
   { value: 'both',  label: 'Both (% and fixed, alerts on either)' },
 ];
 
+interface GlAccountMappingsProps {
+  currency: string;
+  acctAccounts: { id: string; code: string; name_en: string; is_active: boolean; is_postable: boolean }[];
+  gl_receipt_account: string;
+  gl_liability_account: string;
+  gl_expense_account: string;
+  gl_cf_account: string;
+  gl_encumbrance_account: string;
+  onChange: (key: string, value: string) => void;
+}
+
+const GlAccountMappings = memo(function GlAccountMappings({
+  currency, acctAccounts,
+  gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account, gl_encumbrance_account,
+  onChange,
+}: GlAccountMappingsProps) {
+  const cur = currency?.toUpperCase() ?? '';
+  const bankAccounts = useMemo(() => {
+    if (!cur) return acctAccounts;
+    const filtered = acctAccounts.filter(a => a.name_en.toUpperCase().includes(cur));
+    return filtered.length > 0 ? filtered : acctAccounts;
+  }, [cur, acctAccounts]);
+
+  const fields = useMemo(() => [
+    { key: 'gl_receipt_account',     label: 'Receipt / Bank Account',                          testId: 'select-gl-receipt',     accounts: bankAccounts, hint: cur ? `Showing ${cur} accounts` : '', value: gl_receipt_account },
+    { key: 'gl_liability_account',   label: 'Donor Liability Account',                          testId: 'select-gl-liability',   accounts: acctAccounts, hint: '', value: gl_liability_account },
+    { key: 'gl_expense_account',     label: 'Expense / Payment Account',                        testId: 'select-gl-expense',     accounts: acctAccounts, hint: '', value: gl_expense_account },
+    { key: 'gl_cf_account',          label: 'Carry-Forward Account',                            testId: 'select-gl-cf',          accounts: acctAccounts, hint: '', value: gl_cf_account },
+    { key: 'gl_encumbrance_account', label: 'Encumbrance Reserve Account (for commitments)',    testId: 'select-gl-encumbrance', accounts: acctAccounts, hint: 'Required only if commitment transactions are used', value: gl_encumbrance_account },
+  ], [bankAccounts, acctAccounts, cur, gl_receipt_account, gl_liability_account, gl_expense_account, gl_cf_account, gl_encumbrance_account]);
+
+  return (
+    <div className="sm:col-span-2">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+        <span>GL Account Mappings</span>
+        <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {fields.map(({ key, label, testId, accounts, hint, value }) => (
+          <div key={key}>
+            <Label>{label}</Label>
+            <Select value={value || '__none__'} onValueChange={v => onChange(key, v === '__none__' ? '' : v)}>
+              <SelectTrigger data-testid={testId}>
+                <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— None —</SelectItem>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hint && <p className="text-[10px] text-sky-600 mt-0.5">{hint}</p>}
+          </div>
+        ))}
+      </div>
+      {acctAccounts.length === 0 && (
+        <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
+      )}
+    </div>
+  );
+});
+
 interface PreFundFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -271,19 +334,51 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
       gl_encumbrance_account: prev.gl_encumbrance_account || defaults.gl_encumbrance_account,
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, form.currency, acctAccounts]);
+  }, [open, form.currency]); // acctAccounts intentionally omitted — stable after load
+
+  // Memoize expensive filtered lists so they don't recompute on every keystroke
+  const filteredProjects = useMemo(() =>
+    projects.filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())),
+    [projects, projectSearch]
+  );
+  const selectedProject = useMemo(() =>
+    projects.find(p => p.id === form.project_id),
+    [projects, form.project_id]
+  );
+  const holderSearchResults = useMemo(() => {
+    if (!holderSearch.trim()) return [];
+    return staffProfiles
+      .filter(p =>
+        p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
+        p.email?.toLowerCase().includes(holderSearch.toLowerCase())
+      )
+      .slice(0, 8);
+  }, [holderSearch, staffProfiles]);
+  const notifRecipResults = useMemo(() => {
+    if (!notifRecipSearch.trim()) return [];
+    return staffProfiles
+      .filter(p =>
+        !form.notification_recipients.includes(p.id) &&
+        (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
+         p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
+      )
+      .slice(0, 8);
+  }, [notifRecipSearch, staffProfiles, form.notification_recipients]);
+  const notifRecipNoResults = useMemo(() =>
+    notifRecipSearch.trim().length > 0 && notifRecipResults.length === 0,
+    [notifRecipSearch, notifRecipResults]
+  );
+
+  const handleGlChange = useCallback((key: string, value: string) => {
+    setForm(p => ({ ...p, [key]: value }));
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent className="max-w-3xl max-h-[96vh] overflow-y-auto">
 
         {/* ── STEP 1: Project selection (new fund only) ──────────────────── */}
-        {!editing && dialogStep === 1 && (() => {
-          const filteredProjects = projects.filter(p =>
-            !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())
-          );
-          const selectedProject = projects.find(p => p.id === form.project_id);
-          return (
+        {!editing && dialogStep === 1 && (
             <>
               <DialogHeader className="pb-1">
                 <DialogTitle className="flex items-center gap-2">
@@ -388,8 +483,7 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
                 </Button>
               </DialogFooter>
             </>
-          );
-        })()}
+          )}
 
         {/* ── STEP 2: Fund details (new fund) OR full form (edit) ─────────── */}
         {(editing || dialogStep === 2) && (
@@ -486,31 +580,22 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
                     </div>
                     {holderSearch.trim() && (
                       <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
-                        {staffProfiles
-                          .filter(p =>
-                            p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
-                            p.email?.toLowerCase().includes(holderSearch.toLowerCase())
-                          )
-                          .slice(0, 8)
-                          .map(p => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
-                              onClick={() => { setForm(prev => ({ ...prev, holder_user_id: p.id })); setHolderSearch(''); }}
-                              data-testid={`button-select-holder-${p.id}`}
-                            >
-                              <div>
-                                <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
-                                <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
-                              </div>
-                              <Plus className="h-4 w-4 text-sky-600 shrink-0" />
-                            </button>
-                          ))}
-                        {staffProfiles.filter(p =>
-                          p.full_name?.toLowerCase().includes(holderSearch.toLowerCase()) ||
-                          p.email?.toLowerCase().includes(holderSearch.toLowerCase())
-                        ).length === 0 && (
+                        {holderSearchResults.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                            onClick={() => { setForm(prev => ({ ...prev, holder_user_id: p.id })); setHolderSearch(''); }}
+                            data-testid={`button-select-holder-${p.id}`}
+                          >
+                            <div>
+                              <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                              <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                            </div>
+                            <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                          </button>
+                        ))}
+                        {holderSearchResults.length === 0 && (
                           <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
                         )}
                       </div>
@@ -707,50 +792,17 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
                   </div>
                 </div>
               )}
-              {/* GL Account Mappings */}
-              <div className="sm:col-span-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <span>GL Account Mappings</span>
-                  <span className="normal-case font-normal text-[10px] text-muted-foreground/70">(required before activation)</span>
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(() => {
-                    const cur = form.currency?.toUpperCase() ?? '';
-                    const bankAccounts = cur
-                      ? (() => {
-                          const filtered = acctAccounts.filter(a => a.name_en.toUpperCase().includes(cur));
-                          return filtered.length > 0 ? filtered : acctAccounts;
-                        })()
-                      : acctAccounts;
-                    return ([
-                      { key: 'gl_receipt_account',     label: 'Receipt / Bank Account',    testId: 'select-gl-receipt',     accounts: bankAccounts, hint: cur ? `Showing ${cur} accounts` : '' },
-                      { key: 'gl_liability_account',   label: 'Donor Liability Account',   testId: 'select-gl-liability',   accounts: acctAccounts, hint: '' },
-                      { key: 'gl_expense_account',     label: 'Expense / Payment Account', testId: 'select-gl-expense',     accounts: acctAccounts, hint: '' },
-                      { key: 'gl_cf_account',          label: 'Carry-Forward Account',     testId: 'select-gl-cf',          accounts: acctAccounts, hint: '' },
-                      { key: 'gl_encumbrance_account', label: 'Encumbrance Reserve Account (for commitments)', testId: 'select-gl-encumbrance', accounts: acctAccounts, hint: 'Required only if commitment transactions are used' },
-                    ] as const).map(({ key, label, testId, accounts, hint }) => (
-                      <div key={key}>
-                        <Label>{label}</Label>
-                        <Select value={(form as any)[key] || '__none__'} onValueChange={v => setForm(p => ({ ...p, [key]: v === '__none__' ? '' : v }))}>
-                          <SelectTrigger data-testid={testId}>
-                            <SelectValue placeholder={acctAccounts.length ? 'Select account…' : 'No COA accounts loaded'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">— None —</SelectItem>
-                            {accounts.map(a => (
-                              <SelectItem key={a.id} value={a.code}>{a.code} — {a.name_en}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {hint && <p className="text-[10px] text-sky-600 mt-0.5">{hint}</p>}
-                      </div>
-                    ));
-                  })()}
-                </div>
-                {acctAccounts.length === 0 && (
-                  <p className="text-[10px] text-amber-600 mt-1">Chart of Accounts not loaded — set up COA accounts in Accounting → Chart of Accounts first, then return here to configure GL mappings.</p>
-                )}
-              </div>
+              {/* GL Account Mappings — memoized to avoid re-rendering all selects on every keystroke */}
+              <GlAccountMappings
+                currency={form.currency}
+                acctAccounts={acctAccounts}
+                gl_receipt_account={form.gl_receipt_account}
+                gl_liability_account={form.gl_liability_account}
+                gl_expense_account={form.gl_expense_account}
+                gl_cf_account={form.gl_cf_account}
+                gl_encumbrance_account={form.gl_encumbrance_account}
+                onChange={handleGlChange}
+              />
               <div className="sm:col-span-2">
                 <Label>Notes</Label>
                 <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Internal notes…" data-testid="textarea-fund-notes" />
@@ -793,36 +845,25 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
                 </div>
                 {notifRecipSearch.trim() && (
                   <div className="border border-border rounded-md max-h-36 overflow-y-auto divide-y divide-border">
-                    {staffProfiles
-                      .filter(p =>
-                        !form.notification_recipients.includes(p.id) &&
-                        (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
-                         p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
-                      )
-                      .slice(0, 8)
-                      .map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
-                          onClick={() => {
-                            setForm(prev => ({ ...prev, notification_recipients: [...prev.notification_recipients, p.id] }));
-                            setNotifRecipSearch('');
-                          }}
-                          data-testid={`button-add-notif-recip-${p.id}`}
-                        >
-                          <div>
-                            <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
-                            <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
-                          </div>
-                          <Plus className="h-4 w-4 text-sky-600 shrink-0" />
-                        </button>
-                      ))}
-                    {staffProfiles.filter(p =>
-                      !form.notification_recipients.includes(p.id) &&
-                      (p.full_name?.toLowerCase().includes(notifRecipSearch.toLowerCase()) ||
-                       p.email?.toLowerCase().includes(notifRecipSearch.toLowerCase()))
-                    ).length === 0 && (
+                    {notifRecipResults.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                        onClick={() => {
+                          setForm(prev => ({ ...prev, notification_recipients: [...prev.notification_recipients, p.id] }));
+                          setNotifRecipSearch('');
+                        }}
+                        data-testid={`button-add-notif-recip-${p.id}`}
+                      >
+                        <div>
+                          <div className="text-sm font-medium">{p.full_name || '(no name)'}</div>
+                          <div className="text-[11px] text-muted-foreground">{p.email} · {p.role}</div>
+                        </div>
+                        <Plus className="h-4 w-4 text-sky-600 shrink-0" />
+                      </button>
+                    ))}
+                    {notifRecipNoResults && (
                       <p className="text-sm text-muted-foreground text-center py-3">No matching staff</p>
                     )}
                   </div>
