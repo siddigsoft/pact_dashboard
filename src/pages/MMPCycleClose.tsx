@@ -356,6 +356,7 @@ const MMPCycleClose = () => {
   const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState<string>('');
   const skipMmpResetRef = useRef(false);
 
   // Defined early (right after its state deps) to prevent any temporal dead zone issues
@@ -4541,16 +4542,56 @@ const MMPCycleClose = () => {
           </div>
         </div>
 
-                  {/* ── GUIDED WIZARD (cycle already in closing / pending_approval state) ── */}
-                  {checklistMmpStatus !== 'active' ? (
-                    <div className="overflow-y-auto max-h-[65vh] overscroll-contain px-6 py-6">
-                      <div className="max-w-2xl mx-auto space-y-3">
-                        {cycleReadiness.loading ? (
-                          <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
-                            <Loader2 className="h-5 w-5 animate-spin" /> Loading progress…
+                  {/* ── GUIDED WIZARD (two-column: step sidebar + single-step view) ── */}
+                  {checklistMmpStatus !== 'active' ? (() => {
+                    const activeStepId = wizardStep || guideSteps.find(s => !s.passed)?.id || guideSteps[guideSteps.length - 1]?.id || '';
+                    const activeStepIdx = guideSteps.findIndex(s => s.id === activeStepId);
+                    const prevStepObj = activeStepIdx > 0 ? guideSteps[activeStepIdx - 1] : null;
+                    const nextStepObj = activeStepIdx < guideSteps.length - 1 ? guideSteps[activeStepIdx + 1] : null;
+                    const actionable = guideSteps.filter(s => s.id !== 'approval');
+                    const doneCnt = actionable.filter(s => s.passed).length;
+                    const pct = actionable.length > 0 ? Math.round((doneCnt / actionable.length) * 100) : 0;
+                    return (
+                    <div className="flex" style={{minHeight: '70vh'}}>
+                      {/* ── LEFT SIDEBAR: Step Navigation ── */}
+                      <div className="w-52 border-r shrink-0 bg-muted/20 flex flex-col overflow-hidden">
+                        <div className="px-4 py-3 border-b">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Steps</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-green-500 rounded-full transition-all duration-500" style={{width: `${pct}%`}} />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{doneCnt}/{actionable.length}</span>
                           </div>
-                        ) : (
-                          <>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                          {guideSteps.map((s) => {
+                            const isActive = activeStepId === s.id;
+                            return (
+                              <button key={s.id} onClick={() => setWizardStep(s.id)} data-testid={`sidebar-step-${s.id}`}
+                                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left border-b border-border/40 transition-all ${isActive ? 'bg-background border-l-[3px] border-l-primary' : s.blocked ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-muted/50'}`}
+                              >
+                                <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold mt-0.5 ${s.passed ? 'bg-green-500 text-white' : isActive ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+                                  {s.passed ? '✓' : s.number}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className={`text-xs font-semibold leading-snug ${s.passed ? 'text-green-700 dark:text-green-400' : isActive ? 'text-foreground' : 'text-muted-foreground'}`}>{s.title}</div>
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.passed ? 'Done ✓' : isActive ? '← You are here' : s.blocked ? '🔒 Blocked' : s.remaining > 0 ? `${s.remaining} pending` : 'Not started'}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* ── RIGHT PANEL: Current Step Content ── */}
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6 space-y-4">
+                          {cycleReadiness.loading ? (
+                            <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
+                              <Loader2 className="h-5 w-5 animate-spin" /> Loading progress…
+                            </div>
+                          ) : (
+                            <>
                             {/* Cycle is Closed — top banner */}
                             {checklistMmpStatus === 'closed' && (
                               <div className="flex items-center gap-3 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-2">
@@ -4602,75 +4643,33 @@ const MMPCycleClose = () => {
                               );
                             })()}
 
-                            {/* Progress bar + check-again */}
-                            <div className="flex items-center gap-3 mb-4">
-                              {(() => {
-                                const actionable = guideSteps.filter(s => s.id !== 'approval');
-                                const done = actionable.filter(s => s.passed).length;
-                                const pct = actionable.length > 0 ? Math.round((done / actionable.length) * 100) : 0;
-                                return (<>
-                                  <Progress value={pct} className="h-2 flex-1" />
-                                  <span className="text-xs text-muted-foreground shrink-0">{done} / {actionable.length} done</span>
-                                </>);
-                              })()}
-                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh">
-                                <RefreshCw className="h-3 w-3" /> Check again
-                              </Button>
-                            </div>
-
-                            {/* Step cards */}
-                            {guideSteps.filter(s => s.id !== 'approval').map((step, idx) => {
-                              const isCurrentStep = !step.passed && !step.blocked && guideSteps.slice(0, idx).every(s => s.passed);
+                            {/* ── Active Step Content (single step at a time) ── */}
+                            {guideSteps.filter(s => s.id === activeStepId && s.id !== 'approval').map((step) => {
+                              const isCurrentStep = !step.passed && !step.blocked;
                               const isLocked = step.blocked;
                               const isDone = step.passed;
                               return (
-                                <div
-                                  key={step.id}
-                                  ref={isCurrentStep ? (el) => {
-                                    if (el && guideScrolledStepRef.current !== step.id) {
-                                      guideScrolledStepRef.current = step.id;
-                                      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
-                                    }
-                                  } : undefined}
-                                  className={`rounded-xl border transition-all ${
-                                    isDone
-                                      ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
-                                      : isCurrentStep && step.id === 'approval'
-                                        ? 'border-purple-400 bg-purple-50/60 dark:border-purple-600 dark:bg-purple-950/30 shadow-md p-4'
-                                        : isCurrentStep
-                                          ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-md p-4'
-                                          : isLocked
-                                            ? 'border-muted bg-muted/20 opacity-60 p-4'
-                                            : 'border-muted bg-card p-4'
-                                  }`}
-                                  data-testid={`guide-step-${step.id}`}
-                                >
-                                  <div className="flex items-start gap-3">
-                                    {/* Step number / icon */}
-                                    <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                      isDone ? 'bg-green-500 text-white'
-                                        : isCurrentStep && step.id === 'approval' ? 'bg-purple-600 text-white animate-pulse'
-                                        : isCurrentStep ? 'bg-amber-500 text-white animate-pulse'
-                                        : 'bg-muted text-muted-foreground'
+                                <div key={step.id} data-testid={`guide-step-${step.id}`} className="space-y-5">
+                                  {/* Step header */}
+                                  <div className="flex items-start gap-4 pb-4 border-b">
+                                    <div className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold ${
+                                      isDone ? 'bg-green-500 text-white' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-amber-500 text-white'
                                     }`}>
-                                      {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.number}
+                                      {isDone ? <CheckCircle2 className="h-5 w-5" /> : step.number}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-semibold text-sm ${isDone ? 'text-green-700 dark:text-green-300' : isCurrentStep && step.id === 'approval' ? 'text-purple-800 dark:text-purple-200' : isCurrentStep ? 'text-amber-800 dark:text-amber-200' : 'text-foreground'}`}>
-                                          {step.title}
-                                        </span>
-                                        <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>
+                                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Step {activeStepIdx + 1} of {guideSteps.length}</span>
                                         {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
-                                        {isCurrentStep && step.id !== 'approval' && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500 animate-pulse">👉 Do this now</Badge>}
-                                        {isCurrentStep && step.id === 'approval' && <Badge className="text-[10px] px-1.5 bg-purple-600 text-white border-purple-600 animate-pulse">⏳ Awaiting approval</Badge>}
-                                        {!isDone && !isLocked && !isCurrentStep && step.id !== 'submit' && step.id !== 'approval' && <Badge variant="outline" className="text-[10px] px-1.5 text-orange-600 border-orange-300">Needs attention</Badge>}
-                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">Complete steps above first</Badge>}
+                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500">👉 Do this now</Badge>}
+                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">🔒 Complete steps above first</Badge>}
                                         {!isDone && step.remaining > 0 && (
                                           <Badge variant="destructive" className="text-[10px] px-1.5">{step.remaining} remaining</Badge>
                                         )}
                                       </div>
-                                      <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
+                                      <h3 className="text-lg font-bold mt-0.5">{step.title}</h3>
+                                      {step.titleAr && <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>}
+                                      <p className="text-sm text-muted-foreground mt-1">{step.desc}</p>
 
                                       {/* Exact how-to instructions — shown for current step */}
                                       {isCurrentStep && step.howTo.length > 0 && (
@@ -4698,21 +4697,128 @@ const MMPCycleClose = () => {
                                           ))}
                                         </ul>
                                       )}
-                                      {/* Action button — visible for current step and all unfinished steps */}
-                                      {!isDone && !isLocked && step.tab && (
-                                        <Button
-                                          size="sm"
-                                          className={`mt-3 gap-1.5 text-xs h-8 ${isCurrentStep ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
-                                          onClick={() => {
-                                            setActiveTab(step.tab!);
-                                            if (checklistMmpId) setSelectedMmpId(checklistMmpId);
-                                          }}
-                                          data-testid={`button-guide-go-${step.id}`}
-                                        >
-                                          <ArrowRight className="h-3.5 w-3.5" />
-                                          {step.actionLabel}
-                                        </Button>
+                                      {/* ── Step 3: Uncovered Sites (inline) ── */}
+                                      {step.id === 'reasons' && (() => {
+                                        const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === checklistMmpId);
+                                        const pending = mmpUncovered.filter(s => !s.not_covered_reason);
+                                        return (
+                                          <div className="mt-3 space-y-3">
+                                            <div className="grid grid-cols-3 gap-2">
+                                              <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                                <div className="text-2xl font-bold">{mmpUncovered.length}</div>
+                                                <div className="text-xs text-muted-foreground">Total Uncovered</div>
+                                              </div>
+                                              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 p-3 text-center">
+                                                <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{pending.length}</div>
+                                                <div className="text-xs text-amber-600 dark:text-amber-400">Need Reason</div>
+                                              </div>
+                                              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200/60 p-3 text-center">
+                                                <div className="text-2xl font-bold text-green-700 dark:text-green-300">{mmpUncovered.length - pending.length}</div>
+                                                <div className="text-xs text-green-600 dark:text-green-400">Assigned</div>
+                                              </div>
+                                            </div>
+                                            {mmpUncovered.length === 0 ? (
+                                              <div className="text-center py-6 text-muted-foreground">
+                                                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                                                <p className="text-sm font-medium">No uncovered sites for this MMP.</p>
+                                              </div>
+                                            ) : (
+                                              <div className="space-y-2 max-h-64 overflow-y-auto">
+                                                {mmpUncovered.map(site => (
+                                                  <div key={site.id} className="flex items-center gap-3 rounded-lg border bg-card p-2.5">
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="font-medium text-sm truncate">{site.site_name}</div>
+                                                      <div className="text-xs text-muted-foreground">{site.site_code}</div>
+                                                    </div>
+                                                    {canAssignReasons ? (
+                                                      <Select value={site.not_covered_reason || ''} onValueChange={val => handleAssignReason(site.id, val as NotCoveredReason)}>
+                                                        <SelectTrigger className="w-[200px] h-8 text-xs" data-testid={`select-reason-${site.id}`}>
+                                                          <SelectValue placeholder="Assign reason…" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                          {NOT_COVERED_REASONS.map(r => (
+                                                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                                                          ))}
+                                                        </SelectContent>
+                                                      </Select>
+                                                    ) : (
+                                                      <Badge variant={site.not_covered_reason ? 'secondary' : 'destructive'} className="text-xs shrink-0">
+                                                        {site.not_covered_reason ? NOT_COVERED_REASONS.find(r => r.value === site.not_covered_reason)?.label || site.not_covered_reason : 'No reason yet'}
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* ── Step 4: Finance Clearance (inline) ── */}
+                                      {step.id === 'finance' && (
+                                        <div className="mt-3 space-y-3">
+                                          {step.remaining > 0 ? (
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4">
+                                              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">⚠ {step.remaining} item{step.remaining > 1 ? 's' : ''} need resolution</p>
+                                              <p className="text-xs text-amber-700 dark:text-amber-300">Approve or reject pending cost submissions and settle open advances in the Finance module, then return here.</p>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
+                                              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                              <p className="text-sm font-medium text-green-800 dark:text-green-200">All finance items cleared for this MMP.</p>
+                                            </div>
+                                          )}
+                                          <ReconciliationSummary
+                                            mmpId={checklistMmpId ?? undefined}
+                                            mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+                                          />
+                                        </div>
                                       )}
+
+                                      {/* ── Step 5: WFP Confirmation (inline) ── */}
+                                      {step.id === 'wfp' && (
+                                        <div className="mt-3 space-y-3">
+                                          {wfpAppliedUpload ? (
+                                            <div className="flex items-center gap-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+                                              <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
+                                              <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-300">WFP Results Applied ✓</p>
+                                                <p className="text-xs text-emerald-600 dark:text-emerald-400 truncate">{wfpAppliedUpload.filename} · Applied {new Date(wfpAppliedUpload.applied_at).toLocaleString()}</p>
+                                              </div>
+                                            </div>
+                                          ) : loadingWFP ? (
+                                            <div className="flex items-center justify-center gap-3 py-6 text-muted-foreground">
+                                              <Loader2 className="h-5 w-5 animate-spin" /> Loading WFP data…
+                                            </div>
+                                          ) : (
+                                            <div className="rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-700 p-5 text-center space-y-3">
+                                              <Shield className="h-8 w-8 mx-auto text-blue-400" />
+                                              <div>
+                                                <p className="font-semibold">WFP Reconciliation Not Yet Applied</p>
+                                                <p className="text-sm text-muted-foreground mt-1">Upload the WFP confirmation file to verify sites confirmed by WFP for this cycle.</p>
+                                              </div>
+                                              {wfpSummary && (
+                                                <div className="grid grid-cols-3 gap-2 text-center">
+                                                  <div className="rounded-lg bg-muted/50 p-2">
+                                                    <div className="font-bold">{wfpSummary.total}</div>
+                                                    <div className="text-xs text-muted-foreground">WFP Rows</div>
+                                                  </div>
+                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-2">
+                                                    <div className="font-bold text-green-700">{wfpSummary.confirmed}</div>
+                                                    <div className="text-xs text-green-600">Confirmed</div>
+                                                  </div>
+                                                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2">
+                                                    <div className="font-bold text-amber-700">{wfpSummary.pendingReview}</div>
+                                                    <div className="text-xs text-amber-600">Pending Review</div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                              <p className="text-xs text-muted-foreground">Use the <strong>WFP Confirmation</strong> tab to upload and review the WFP file.</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
                                       {/* ── Site & Advance Review (Step 2) ── */}
                                       {step.id === 'site_review' && (
                                         <div className="mt-3 space-y-2">
@@ -5998,12 +6104,12 @@ const MMPCycleClose = () => {
                               </CollapsibleContent>
                             </Collapsible>
 
-                            {/* ── Step 9: Final Approval (rendered after financial panels) ── */}
-                            {(() => {
+                            {/* ── Step 9: Final Approval ── */}
+                            {activeStepId === 'approval' && (() => {
                               const approvalIdx = guideSteps.findIndex(s => s.id === 'approval');
                               const step = guideSteps[approvalIdx];
                               if (!step) return null;
-                              const isCurrentStep = !step.passed && !step.blocked && guideSteps.slice(0, approvalIdx).every(s => s.passed);
+                              const isCurrentStep = !step.passed && !step.blocked;
                               const isDone = step.passed;
                               return (
                                 <div
@@ -6181,11 +6287,29 @@ const MMPCycleClose = () => {
                                 />
                               </CollapsibleContent>
                             </Collapsible>
-                          </>
-                        )}
+                            </>
+                          )}
+                        </div>
+                        {/* ── Wizard navigation footer ── */}
+                        <div className="border-t px-6 py-3 flex items-center justify-between shrink-0 bg-muted/10">
+                          {prevStepObj ? (
+                            <Button variant="outline" size="sm" onClick={() => setWizardStep(prevStepObj.id)} className="gap-1.5 text-xs" data-testid="button-wizard-prev">
+                              <ArrowLeft className="h-3.5 w-3.5" /> {prevStepObj.title}
+                            </Button>
+                          ) : <div />}
+                          <Button size="sm" variant="ghost" className="gap-1 text-xs text-muted-foreground" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh-footer">
+                            <RefreshCw className="h-3 w-3" /> Refresh
+                          </Button>
+                          {nextStepObj ? (
+                            <Button size="sm" onClick={() => setWizardStep(nextStepObj.id)} className="gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-wizard-next">
+                              {nextStepObj.title} <ArrowRight className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : <div />}
+                        </div>
                       </div>
                     </div>
-                  ) : (
+                    );
+                  })() : (
                   /* ── PRE-CLOSE CHECKLIST (cycle still active, user about to start) ── */
                   <div className="flex-1 overflow-y-auto px-6 py-5">
                   <div className="max-w-2xl mx-auto space-y-3">
@@ -6318,6 +6442,7 @@ const MMPCycleClose = () => {
           <p className="text-sm text-muted-foreground mt-1">On any MMP card below, click <strong>Close Full MMP</strong> to start, or <strong>Continue in Close Wizard</strong> if a cycle is already in progress.</p>
         </div>
       )}
+      {(!checklistMmpId || checklistMmpStatus === 'active') && (
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); }} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="h-auto flex flex-nowrap gap-1 p-1.5 overflow-x-auto w-full justify-start bg-muted/60 rounded-xl border border-border/60">
           <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
@@ -7717,6 +7842,7 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
+      )}
       </div>
 
       {/* Re-open Cycle Confirmation Dialog — Super Admin only */}
