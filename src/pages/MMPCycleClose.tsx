@@ -6312,7 +6312,6 @@ const MMPCycleClose = () => {
                   </div>
                   )}
                 </div>
-              </div>
       ) : (
         <div className="rounded-xl border border-dashed border-muted/70 p-8 text-center mb-4" data-testid="wizard-prompt">
           <div className="flex items-center justify-center h-12 w-12 mx-auto mb-3 rounded-full bg-muted/40">
