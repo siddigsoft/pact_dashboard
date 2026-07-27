@@ -2240,7 +2240,7 @@ export default function PreFundingRegistry() {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuContent align="end" className="w-52 max-h-[min(420px,80vh)] overflow-y-auto">
 
                           {/* Fund-level actions */}
                           {['active', 'low_balance', 'closed'].includes(f.status) && (
