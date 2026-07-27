@@ -1308,6 +1308,20 @@ export default function PreFundingRegistry() {
         holder_user_id: form.holder_user_id || null,
         allow_overpay: form.allow_overpay,
       };
+      // Helper: run the DB operation, retrying without allow_overpay if that column is missing
+      const runWithFallback = async (op: (p: any) => Promise<{ data?: any; error: any }>) => {
+        let res = await op(payload);
+        if (res.error?.message?.toLowerCase().includes('allow_overpay')) {
+          // Column not yet migrated — retry without it so the user isn't blocked
+          const { allow_overpay: _dropped, ...payloadWithout } = payload;
+          res = await op(payloadWithout);
+          if (!res.error) {
+            toast({ title: 'Note: Allow Overpay not saved', description: 'Run the pre_fund_allow_overpay.sql migration in Supabase SQL Editor to enable this field.', variant: 'destructive' });
+          }
+        }
+        return res;
+      };
+
       if (editing) {
         // If the fund has already been activated (paid_amount/committed_amount tracked),
         // editing the Amount must also recompute available_balance — otherwise the
@@ -1319,7 +1333,7 @@ export default function PreFundingRegistry() {
           const committed = Number(editing.committed_amount ?? 0);
           payload.available_balance = Math.max(0, parsedAmount - paid - committed);
         }
-        const { error: e } = await supabase.from('pre_fund_requests').update(payload).eq('id', editing.id);
+        const { error: e } = await runWithFallback(p => supabase.from('pre_fund_requests').update(p).eq('id', editing.id));
         if (e) throw e;
         toast({ title: 'Fund updated' });
       } else {
@@ -1328,8 +1342,8 @@ export default function PreFundingRegistry() {
         payload.committed_amount = 0;
         payload.paid_amount = 0;
         payload.created_by = currentUser?.id ?? null;
-        const { data: newFund, error: e } = await supabase
-          .from('pre_fund_requests').insert(payload).select('id').single();
+        const { data: newFund, error: e } = await runWithFallback(p => supabase
+          .from('pre_fund_requests').insert(p).select('id').single());
         if (e) throw e;
         try {
           await supabase.from('notification_events' as any).insert({
