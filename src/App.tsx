@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
-import { isSupabaseConfigured } from './integrations/supabase/client';
+import { isSupabaseConfigured, supabase } from './integrations/supabase/client';
 import { ConfigurationError } from './components/ConfigurationError';
 import { isMobileApp } from './utils/platformDetection';
 import { SessionGuard } from './components/SessionGuard';
@@ -312,12 +312,36 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Pre-Funding: Finance and Admin roles only.
-// Non-finance approvers access their approval steps via the Approvals Hub (/approvals).
+// Pre-Funding: Finance/Admin roles always pass through.
+// Any other user who is assigned as holder_user_id on at least one fund also gets access.
+// A quick async DB check gates the second path; a spinner shows while checking.
 const PreFundingRoute = ({ children }: { children: React.ReactNode }) => {
   const { hasAnyRole } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  if (!allowed) return <PageRoleDenied pageLabel="Pre-Funding Management" />;
+  const { currentUser } = useAppContext();
+  const isAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const [holderCheck, setHolderCheck] = useState<'loading' | 'yes' | 'no'>(
+    isAdmin ? 'yes' : 'loading'
+  );
+
+  useEffect(() => {
+    if (isAdmin) { setHolderCheck('yes'); return; }
+    if (!currentUser?.id) { setHolderCheck('no'); return; }
+    supabase
+      .from('pre_fund_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('holder_user_id', currentUser.id)
+      .then(({ count }: { count: number | null }) =>
+        setHolderCheck((count ?? 0) > 0 ? 'yes' : 'no')
+      );
+  }, [isAdmin, currentUser?.id]);
+
+  if (holderCheck === 'loading') return (
+    <div className="flex items-center justify-center h-64 gap-2 text-muted-foreground">
+      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <span className="text-sm">Checking access…</span>
+    </div>
+  );
+  if (holderCheck === 'no') return <PageRoleDenied pageLabel="Pre-Funding Management" />;
   return <>{children}</>;
 };
 
