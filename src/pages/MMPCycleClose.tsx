@@ -4601,207 +4601,139 @@ const MMPCycleClose = () => {
         </div>
       )}
 
-      {/* ── Guided Wizard ───────────────────────────────────────────────────── */}
+
+      {/* ── Guided Wizard ─────────────────────────────────────────────── */}
       <div className="rounded-xl border-2 border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 space-y-4" data-testid="wizard-header">
-          {/* Step dots / progress bar */}
-          <div className="flex items-center gap-0">
-            {WIZARD_STEPS.map((ws, idx) => {
-              const isCurrent = wizardStep === idx;
-              const isDone    = wizardStep > idx;
-              const isPending = wizardStep < idx;
-              // Determine status from checklist
-              const relevant = cycleReadiness.items.filter(i => ws.checklistIds.includes(i.id));
-              const stepPassed = relevant.length === 0 ? isDone : relevant.every(i => i.passed);
-              return (
-                <div key={ws.step} className="flex items-center flex-1 last:flex-none">
-                  <button
-                    type="button"
-                    className={cn(
-                      'relative flex flex-col items-center gap-1 shrink-0 group cursor-pointer',
-                    )}
-                    onClick={() => {
-                      setWizardStep(idx);
-                      setActiveTab(ws.tab as string);
-                      if (ws.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
-                    }}
-                    data-testid={`wizard-step-${idx}`}
-                  >
-                    <div className={cn(
-                      'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all',
-                      isCurrent && 'border-primary bg-primary text-white shadow-md scale-110',
-                      isDone && stepPassed && 'border-green-500 bg-green-500 text-white',
-                      isDone && !stepPassed && 'border-amber-400 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-                      isPending && 'border-muted bg-muted text-muted-foreground',
-                    )}>
-                      {isDone && stepPassed
-                        ? <CheckCircle2 className="h-4 w-4" />
-                        : isDone && !stepPassed
-                          ? <AlertTriangle className="h-4 w-4" />
-                          : idx + 1}
-                    </div>
-                    <span className={cn(
-                      'text-[9px] font-medium text-center leading-tight max-w-[56px] hidden sm:block',
-                      isCurrent && 'text-primary font-bold',
-                      isPending && 'text-muted-foreground',
-                    )}>
-                      {ws.title}
-                    </span>
-                  </button>
-                  {/* Connector line */}
-                  {idx < WIZARD_STEPS.length - 1 && (
-                    <div className={cn(
-                      'flex-1 h-0.5 mx-1 mt-[-10px] sm:mt-[-20px] transition-colors',
-                      wizardStep > idx ? 'bg-green-400' : 'bg-muted',
-                    )} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Current step header + help panel */}
-          <div className={cn(
-            'rounded-lg border p-3 space-y-2',
-            'border-primary/30 bg-white dark:bg-card',
-          )}>
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">
-                    Step {wizardStep + 1} of {WIZARD_STEPS.length}
-                  </span>
-                  {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id)).every(i => i.passed) && WIZARD_STEPS[wizardStep].checklistIds.length > 0 && (
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs gap-1 py-0">
-                      <CheckCircle2 className="h-3 w-3" /> Done
-                    </Badge>
-                  )}
-                  {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
-                    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs gap-1 py-0">
-                      <Clock className="h-3 w-3" /> In Progress
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-base font-bold mt-0.5">
-                  {WIZARD_STEPS[wizardStep].title}
-                  <span dir="rtl" className="mr-2 text-xs font-normal text-muted-foreground">{WIZARD_STEPS[wizardStep].titleAr}</span>
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1 shrink-0"
-                onClick={() => setShowWizardHelp(v => !v)}
-                data-testid="button-toggle-help"
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                {showWizardHelp ? 'Hide Help' : 'Show Help'}
-              </Button>
-            </div>
-
-            {/* Help panel */}
-            {showWizardHelp && (
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1.5 flex items-center gap-1">
-                  <HelpCircle className="h-3.5 w-3.5" /> What to do on this step:
-                </p>
-                <ol className="space-y-1">
-                  {WIZARD_STEPS[wizardStep].help.map((line, i) => (
-                    <li key={i} className="text-xs text-blue-800 dark:text-blue-200 flex gap-2">
-                      <span className="text-blue-400 shrink-0">{i + 1}.</span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-
-            {/* Blocking issues for this step */}
-            {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
-              <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 space-y-1.5">
-                <p className="text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-1">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Still needed before you can advance:
-                </p>
-                {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed).map(item => (
-                  <div key={item.id} className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
-                    <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-red-500" />
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-red-600/80 dark:text-red-400/80">{item.description}</p>
-                      {item.count > 0 && item.total > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <div className="flex-1 h-1 bg-red-200 dark:bg-red-800 rounded-full overflow-hidden max-w-[120px]">
-                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.round((item.count / item.total) * 100)}%` }} />
-                          </div>
-                          <span className="text-[10px]">{item.count}/{item.total}</span>
-                        </div>
-                      )}
-                    </div>
+        <div className="flex items-center gap-0">
+          {WIZARD_STEPS.map((ws, idx) => {
+            const isCurrent = wizardStep === idx;
+            const isDone    = wizardStep > idx;
+            const isPending = wizardStep < idx;
+            const relevant = cycleReadiness.items.filter(i => ws.checklistIds.includes(i.id));
+            const stepPassed = relevant.length === 0 ? isDone : relevant.every(i => i.passed);
+            return (
+              <div key={ws.step} className="flex items-center flex-1 last:flex-none">
+                <button
+                  type="button"
+                  className={cn('relative flex flex-col items-center gap-1 shrink-0 group cursor-pointer')}
+                  onClick={() => {
+                    setWizardStep(idx);
+                    setActiveTab(ws.tab as string);
+                    if (ws.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                  }}
+                  data-testid={`wizard-step-${idx}`}
+                >
+                  <div className={cn(
+                    'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all',
+                    isCurrent && 'border-primary bg-primary text-white shadow-md scale-110',
+                    isDone && stepPassed && 'border-green-500 bg-green-500 text-white',
+                    isDone && !stepPassed && 'border-amber-400 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+                    isPending && 'border-muted bg-muted text-muted-foreground',
+                  )}>
+                    {isDone && stepPassed ? <CheckCircle2 className="h-4 w-4" /> : isDone && !stepPassed ? <AlertTriangle className="h-4 w-4" /> : idx + 1}
                   </div>
-                ))}
+                  <span className={cn(
+                    'text-[9px] font-medium text-center leading-tight max-w-[56px] hidden sm:block',
+                    isCurrent && 'text-primary font-bold',
+                    isPending && 'text-muted-foreground',
+                  )}>{ws.title}</span>
+                </button>
+                {idx < WIZARD_STEPS.length - 1 && (
+                  <div className={cn('flex-1 h-0.5 mx-1 mt-[-10px] sm:mt-[-20px] transition-colors', wizardStep > idx ? 'bg-green-400' : 'bg-muted')} />
+                )}
               </div>
-            )}
+            );
+          })}
+        </div>
 
-            {/* Next / Back navigation */}
-            <div className="flex items-center justify-between pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1"
-                disabled={wizardStep === 0}
-                onClick={() => {
-                  const prev = WIZARD_STEPS[wizardStep - 1];
-                  setWizardStep(wizardStep - 1);
-                  setActiveTab(prev.tab as string);
-                }}
-                data-testid="button-wizard-back"
-              >
-                <ChevronLeft className="h-4 w-4" /> Back
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {wizardStep + 1} / {WIZARD_STEPS.length}
-              </span>
-              {wizardStep < WIZARD_STEPS.length - 1 ? (
-                <div className="flex items-center gap-2">
-                  {/* Block Next if current step's checks haven't passed — allow override for admins */}
-                  {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (isSuperAdmin || isAdmin || isFOM) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs text-muted-foreground gap-1"
-                      onClick={() => {
-                        const next = WIZARD_STEPS[wizardStep + 1];
-                        setWizardStep(wizardStep + 1);
-                        setActiveTab(next.tab as string);
-                        if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
-                      }}
-                      data-testid="button-wizard-skip"
-                    >
-                      Skip <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1"
-                    disabled={cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed)}
-                    onClick={() => {
-                      const next = WIZARD_STEPS[wizardStep + 1];
-                      setWizardStep(wizardStep + 1);
-                      setActiveTab(next.tab as string);
-                      if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
-                    }}
-                    data-testid="button-wizard-next"
-                  >
-                    Next <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Final Step
-                </Badge>
-              )}
+        <div className="rounded-lg border border-primary/30 bg-white dark:bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                  Step {wizardStep + 1} of {WIZARD_STEPS.length}
+                </span>
+                {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id)).every(i => i.passed) && WIZARD_STEPS[wizardStep].checklistIds.length > 0 && (
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs gap-1 py-0"><CheckCircle2 className="h-3 w-3" /> Done</Badge>
+                )}
+                {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
+                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs gap-1 py-0"><Clock className="h-3 w-3" /> In Progress</Badge>
+                )}
+              </div>
+              <p className="text-base font-bold mt-0.5">
+                {WIZARD_STEPS[wizardStep].title}
+                <span dir="rtl" className="mr-2 text-xs font-normal text-muted-foreground">{WIZARD_STEPS[wizardStep].titleAr}</span>
+              </p>
             </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={() => setShowWizardHelp(v => !v)} data-testid="button-toggle-help">
+              <HelpCircle className="h-3.5 w-3.5" />
+              {showWizardHelp ? 'Hide Help' : 'Show Help'}
+            </Button>
+          </div>
+          {showWizardHelp && (
+            <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1.5 flex items-center gap-1"><HelpCircle className="h-3.5 w-3.5" /> What to do on this step:</p>
+              <ol className="space-y-1">
+                {WIZARD_STEPS[wizardStep].help.map((line, i) => (
+                  <li key={i} className="text-xs text-blue-800 dark:text-blue-200 flex gap-2">
+                    <span className="text-blue-400 shrink-0">{i + 1}.</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (
+            <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Still needed before you can advance:</p>
+              {cycleReadiness.items.filter(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed).map(item => (
+                <div key={item.id} className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+                  <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-red-500" />
+                  <div>
+                    <p className="font-medium">{item.label}</p>
+                    <p className="text-red-600/80 dark:text-red-400/80">{item.description}</p>
+                    {item.count > 0 && item.total > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex-1 h-1 bg-red-200 dark:bg-red-800 rounded-full overflow-hidden max-w-[120px]">
+                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.round((item.count / item.total) * 100)}%` }} />
+                        </div>
+                        <span className="text-[10px]">{item.count}/{item.total}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1">
+            <Button variant="outline" size="sm" className="h-8 gap-1" disabled={wizardStep === 0}
+              onClick={() => { const prev = WIZARD_STEPS[wizardStep - 1]; setWizardStep(wizardStep - 1); setActiveTab(prev.tab as string); }}
+              data-testid="button-wizard-back">
+              <ChevronLeft className="h-4 w-4" /> Back
+            </Button>
+            <span className="text-xs text-muted-foreground">{wizardStep + 1} / {WIZARD_STEPS.length}</span>
+            {wizardStep < WIZARD_STEPS.length - 1 ? (
+              <div className="flex items-center gap-2">
+                {cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed) && (isSuperAdmin || isAdmin || isFOM) && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground gap-1"
+                    onClick={() => { const next = WIZARD_STEPS[wizardStep + 1]; setWizardStep(wizardStep + 1); setActiveTab(next.tab as string); if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId); }}
+                    data-testid="button-wizard-skip">
+                    Skip <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                <Button size="sm" className="h-8 gap-1"
+                  disabled={cycleReadiness.items.some(i => WIZARD_STEPS[wizardStep].checklistIds.includes(i.id) && !i.passed)}
+                  onClick={() => { const next = WIZARD_STEPS[wizardStep + 1]; setWizardStep(wizardStep + 1); setActiveTab(next.tab as string); if (next.tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId); }}
+                  data-testid="button-wizard-next">
+                  Next <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Final Step</Badge>
+            )}
           </div>
         </div>
+      </div>
 
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); }} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="hidden">
