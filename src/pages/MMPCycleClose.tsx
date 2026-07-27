@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { cn } from '@/lib/utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -311,9 +312,6 @@ const MMPCycleClose = () => {
   const [filterReason, setFilterReason] = useState<string>('all');
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'active');
-  const [viewMode, setViewMode] = useState<'guided' | 'tabs'>(() =>
-    (localStorage.getItem('cycle-close-view-mode') as 'guided' | 'tabs') || 'tabs'
-  );
   const [wizardStep, setWizardStep] = useState(0);
   const [showWizardHelp, setShowWizardHelp] = useState(true);
   
@@ -4039,27 +4037,6 @@ const MMPCycleClose = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Mode A / Mode B toggle */}
-          <Button
-            variant={viewMode === 'guided' ? 'default' : 'outline'}
-            size="sm"
-            className="h-9 rounded-lg gap-1.5"
-            onClick={() => {
-              const next = viewMode === 'guided' ? 'tabs' : 'guided';
-              setViewMode(next);
-              localStorage.setItem('cycle-close-view-mode', next);
-              if (next === 'guided') {
-                setWizardStep(0);
-                setActiveTab('active');
-              }
-            }}
-            data-testid="button-view-mode-toggle"
-          >
-            {viewMode === 'guided'
-              ? <><Layers className="h-3.5 w-3.5" /> Tab View</>
-              : <><BookOpen className="h-3.5 w-3.5" /> Guided Mode</>
-            }
-          </Button>
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -4624,9 +4601,8 @@ const MMPCycleClose = () => {
         </div>
       )}
 
-      {/* ── Mode A: Guided Wizard progress bar ─────────────────────────────── */}
-      {viewMode === 'guided' && (
-        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 space-y-4" data-testid="wizard-header">
+      {/* ── Guided Wizard ───────────────────────────────────────────────────── */}
+      <div className="rounded-xl border-2 border-primary/20 bg-primary/5 dark:bg-primary/10 p-4 space-y-4" data-testid="wizard-header">
           {/* Step dots / progress bar */}
           <div className="flex items-center gap-0">
             {WIZARD_STEPS.map((ws, idx) => {
@@ -4826,10 +4802,10 @@ const MMPCycleClose = () => {
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (viewMode === 'guided') { const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); } }} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className={cn('h-auto p-1 bg-muted/60 rounded-lg flex-wrap gap-1', viewMode === 'guided' && 'hidden')}>
+      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); const idx = WIZARD_STEPS.findIndex(s => s.tab === tab); if (idx >= 0) setWizardStep(idx); }} className="space-y-4">
+        <TabsList data-testid="tabs-cycle-close" className="hidden">
           <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
             <Activity className="h-3.5 w-3.5" />
             <span>Active Cycles</span>
