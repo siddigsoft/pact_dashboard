@@ -12,12 +12,12 @@
   Ensures all main content is scrollable on all devices
 */
 .global-scrollable {
-  min-height: 100vh;
-  min-height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
+  /* Height is controlled by flex-1 inside SidebarInset (h-screen).
+     Do NOT set min/max-height here — they fight flex sizing and break scroll. */
   overflow-y: auto;
-  overflow-x: hidden;
+  /* clip instead of hidden: prevents page-level horizontal bleed without
+     creating a new scroll container, so inner overflow-x-auto tables work. */
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
