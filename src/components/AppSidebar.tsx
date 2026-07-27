@@ -482,7 +482,11 @@
       if (!isHidden('/pre-funding/approvals'))     preFundItems.push({ id: 'pre-funding-approvals', title: 'Approval Flow',  url: '/pre-funding/approvals',     icon: CheckSquare, priority: 3, isPinned: isPinned('/pre-funding/approvals') });
       if (!isHidden('/pre-funding/reconciliation'))preFundItems.push({ id: 'pre-funding-recon',     title: 'Reconciliation', url: '/pre-funding/reconciliation', icon: Landmark,    priority: 4, isPinned: isPinned('/pre-funding/reconciliation') });
       if (!isHidden('/pre-funding/settings'))      preFundItems.push({ id: 'pre-funding-settings',  title: 'Settings',       url: '/pre-funding/settings',      icon: Settings,    priority: 5, isPinned: isPinned('/pre-funding/settings') });
-    } else if (isFundHolder) {
+    } else if (isCountryDirector || isAuditor || isFundHolder) {
+      // CD and Auditor are in PAGE_DEFS for pre-funding; show the link immediately
+      // without waiting for the async isFundHolder DB check.
+      // PreFundingRoute handles the holder-only gate for non-holders.
+      // isFundHolder covers other roles (FOM, etc.) granted via page override.
       if (!isHidden('/pre-funding')) preFundItems.push({ id: 'pre-funding-overview', title: 'My Fund', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
