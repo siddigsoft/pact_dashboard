@@ -2391,22 +2391,25 @@ export default function PreFundingRegistry() {
                   <p className="text-xs text-muted-foreground">Images, PDF, Word, Excel — select multiple files if needed.</p>
                 </div>
                 {receiptFiles.length > 0 && (
-                  <div className="rounded-md border border-border bg-muted/40 divide-y divide-border">
-                    {receiptFiles.map((f, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                        <span className="truncate max-w-[280px] text-foreground">{f.name}</span>
-                        <div className="flex items-center gap-2 ml-2 shrink-0">
-                          <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                            onClick={() => setReceiptFiles(prev => prev.filter((_, j) => j !== i))}
-                          >
-                            ✕
-                          </button>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">{receiptFiles.length} file{receiptFiles.length > 1 ? 's' : ''} selected</p>
+                    <div className="rounded-md border border-border bg-muted/40 divide-y divide-border max-h-44 overflow-y-auto">
+                      {receiptFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                          <span className="truncate max-w-[240px] text-foreground">{f.name}</span>
+                          <div className="flex items-center gap-2 ml-2 shrink-0">
+                            <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              onClick={() => setReceiptFiles(prev => prev.filter((_, j) => j !== i))}
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
