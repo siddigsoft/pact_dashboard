@@ -92,13 +92,13 @@ const LS_KEY = 'hub_last_tab_prefunding';
 
 // Tabs visible per role group:
 // Finance/Admin        → all tabs (including distribute for managing all holders)
-// Country Director     → overview (read-only), allocations, distribute (if assigned as holder)
-// Coordinator/Supervisor/FOM → overview, approvals, allocations, distribute
-// Everyone else → overview, allocations, distribute (content adapts: only shown if assigned as holder)
+// Country Director     → overview (read-only), allocations, distribute, report (scoped to their fund)
+// Coordinator/Supervisor/FOM → overview, approvals, allocations, distribute, report (scoped)
+// Everyone else (fund holders) → overview, allocations, distribute, report (scoped to their fund)
 const FINANCE_TABS: PFTab[] = ['overview', 'registry', 'approvals', 'reconciliation', 'allocations', 'settings', 'report', 'distribute'];
-const CD_TABS: PFTab[]       = ['overview', 'allocations', 'distribute'];
-const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations', 'distribute'];
-const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute'];
+const CD_TABS: PFTab[]       = ['overview', 'allocations', 'distribute', 'report'];
+const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations', 'distribute', 'report'];
+const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute', 'report'];
 
 export default function PreFundingHub() {
   const { hasAnyRole } = useAuthorization();
@@ -164,7 +164,7 @@ export default function PreFundingHub() {
         {tab === 'reconciliation'  && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
         {tab === 'allocations'     && <Suspense fallback={<PanelLoader />}><AllocationsPanel /></Suspense>}
         {tab === 'settings'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
-        {tab === 'report'          && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}
+        {tab === 'report'          && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}
         {tab === 'distribute'      && <Suspense fallback={<PanelLoader />}><DistributePanel /></Suspense>}
       </div>
     </HubLayout>

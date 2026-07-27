@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -112,7 +113,10 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
 
 export default function PreFundingReport() {
   const { hasAnyRole } = useAuthorization();
+  const { currentUser } = useAppContext();
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  // When not a finance admin, scope all data to funds where this user is the holder
+  const holderUserId = canAccess ? null : (currentUser?.id ?? null);
 
   const [funds, setFunds]           = useState<FundRow[]>([]);
   const [txns, setTxns]             = useState<TxnRow[]>([]);
@@ -144,8 +148,12 @@ export default function PreFundingReport() {
     setLoading(true);
     setError(null);
     try {
+      // Build the funds query — holders only see their assigned fund(s)
+      let fundsQuery = supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false });
+      if (holderUserId) fundsQuery = (fundsQuery as any).eq('holder_user_id', holderUserId);
+
       const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes] = await Promise.all([
-        supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
+        fundsQuery,
         (supabase as any).from('pre_fund_transactions')
           .select('id,pre_fund_request_id,transaction_type,amount,currency,reference,description,transaction_date,created_at,user_id,created_by,receipt_url,source_table,source_id,reconciled')
           .order('transaction_date', { ascending: false }),
@@ -175,28 +183,38 @@ export default function PreFundingReport() {
         return enriched;
       });
 
-      const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? []).map((t: TxnRow) => {
-        const userId = t.user_id ?? t.created_by ?? null;
-        return {
-          ...t,
-          fund_name: fundMap.get(t.pre_fund_request_id) ?? '—',
-          user_name: userId ? (profMap.get(userId) ?? userId.slice(0, 8)) : '—',
-        };
-      });
+      // For holders, only show data belonging to their fund(s)
+      const allowedFundIds = holderUserId ? new Set(enrichedFunds.map(f => f.id)) : null;
+      const inScope = (fundId: string) => !allowedFundIds || allowedFundIds.has(fundId);
 
-      const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? []).map((s: StepRow) => {
-        const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length
-          ? s.assigned_user_ids
-          : s.assigned_user_id ? [s.assigned_user_id] : [];
-        const assignee_names = ids.map(id => profMap.get(id) ?? id.slice(0, 8)).join(', ') || '—';
-        return { ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—', assignee_names };
-      });
+      const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? [])
+        .filter((t: TxnRow) => inScope(t.pre_fund_request_id))
+        .map((t: TxnRow) => {
+          const userId = t.user_id ?? t.created_by ?? null;
+          return {
+            ...t,
+            fund_name: fundMap.get(t.pre_fund_request_id) ?? '—',
+            user_name: userId ? (profMap.get(userId) ?? userId.slice(0, 8)) : '—',
+          };
+        });
 
-      const enrichedAllocs: AllocRow[] = ((allocRes.data as any) ?? []).map((a: AllocRow) => ({
-        ...a,
-        fund_name: fundMap.get(a.pre_fund_request_id) ?? '—',
-        user_name: profMap.get(a.user_id) ?? a.user_id.slice(0, 8),
-      }));
+      const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? [])
+        .filter((s: StepRow) => inScope(s.pre_fund_request_id))
+        .map((s: StepRow) => {
+          const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length
+            ? s.assigned_user_ids
+            : s.assigned_user_id ? [s.assigned_user_id] : [];
+          const assignee_names = ids.map(id => profMap.get(id) ?? id.slice(0, 8)).join(', ') || '—';
+          return { ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—', assignee_names };
+        });
+
+      const enrichedAllocs: AllocRow[] = ((allocRes.data as any) ?? [])
+        .filter((a: AllocRow) => inScope(a.pre_fund_request_id))
+        .map((a: AllocRow) => ({
+          ...a,
+          fund_name: fundMap.get(a.pre_fund_request_id) ?? '—',
+          user_name: profMap.get(a.user_id) ?? a.user_id.slice(0, 8),
+        }));
 
       setFunds(enrichedFunds);
       setTxns(enrichedTxns);
@@ -228,7 +246,7 @@ export default function PreFundingReport() {
       setCurrencies(['All', ...[...currSet].sort()]);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, []);
+  }, [holderUserId]);
 
   useEffect(() => { load(); }, [load]);
 
