@@ -4525,13 +4525,13 @@ const MMPCycleClose = () => {
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               {checklistMmpStatus === 'active'
-                ? <><CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" /> Pre-Close Requirements</>
+                ? <><AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" /> Pre-Close Requirements</>
                 : <><ArrowRight className="h-5 w-5 text-amber-500 shrink-0" /> Cycle Close — Step by Step Guide</>
               }
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               {checklistMmpStatus === 'active'
-                ? 'Review all requirements before starting the close process.'
+                ? 'Check all requirements below. Once everything is green, you can start the close process.'
                 : 'Follow each step in order. Your progress is saved automatically.'}
             </p>
           </div>
@@ -6315,57 +6315,31 @@ const MMPCycleClose = () => {
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
           </div>
           <p className="font-semibold text-foreground">No cycle selected</p>
-          <p className="text-sm text-muted-foreground mt-1">Click <strong>Start Closing</strong> or <strong>View Full Wizard</strong> on any active MMP cycle in the list below to begin the guided close process.</p>
+          <p className="text-sm text-muted-foreground mt-1">On any MMP card below, click <strong>Close Full MMP</strong> to start, or <strong>Continue in Close Wizard</strong> if a cycle is already in progress.</p>
         </div>
       )}
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); }} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className="hidden">
-          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+        <TabsList data-testid="tabs-cycle-close" className="h-auto flex flex-nowrap gap-1 p-1.5 overflow-x-auto w-full justify-start bg-muted/60 rounded-xl border border-border/60">
+          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <Activity className="h-3.5 w-3.5" />
             <span>Active Cycles</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
           </TabsTrigger>
-          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>Uncovered Sites</span>
             {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span>Reports</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">التقارير</span>
-          </TabsTrigger>
-          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Layers className="h-3.5 w-3.5" />
-            <span>Comparison</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">المقارنة</span>
-          </TabsTrigger>
-          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <Star className="h-3.5 w-3.5" />
-            <span>Scorecard</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
-          </TabsTrigger>
-          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-            <span>Exceptions</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الاستثناءات</span>
-            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
-                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <DollarSign className="h-3.5 w-3.5 text-amber-500" />
             <span>Pending Finance</span>
             {(financeCosts.length + financeAdvances.length) > 0 && (
               <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <Shield className="h-3.5 w-3.5 text-blue-500" />
             <span>WFP Confirmation</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">تأكيد WFP</span>
             {wfpAppliedUpload && (
               <Badge className="ml-0.5 text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>
             )}
@@ -6373,12 +6347,32 @@ const MMPCycleClose = () => {
               <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+            <span>Exceptions</span>
+            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
+                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span>Reports</span>
+          </TabsTrigger>
+          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <MapPin className="h-3.5 w-3.5 text-emerald-500" />
             <span>Ad-hoc Visits</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الزيارات الطارئة</span>
           </TabsTrigger>
-          <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5">
+          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
+            <Layers className="h-3.5 w-3.5" />
+            <span>Comparison</span>
+          </TabsTrigger>
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
+            <Star className="h-3.5 w-3.5" />
+            <span>Scorecard</span>
+          </TabsTrigger>
+          <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <BookOpen className="h-3.5 w-3.5" />
             <span>Closed Cycles</span>
             {closedCycles.length > 0 && <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0">{closedCycles.length}</Badge>}
@@ -6732,6 +6726,17 @@ const MMPCycleClose = () => {
 
         {/* ── EXCEPTIONS TAB — Section B: Not-Covered Cost Resolutions (Phase B) ── */}
         <TabsContent value="exceptions" className="space-y-4">
+          {checklistMmpId && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-300/50 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-2.5 text-xs" data-testid="banner-cycle-context-exceptions">
+              <ArrowLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-blue-800 dark:text-blue-200">
+                Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — reviewing cost-recovery exceptions for this cycle.
+              </span>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-exceptions">
+                ← Back to wizard
+              </Button>
+            </div>
+          )}
           {!checklistMmpId ? (
             <Card>
               <CardContent className="py-10 text-center">
@@ -6948,6 +6953,17 @@ const MMPCycleClose = () => {
 
         {/* ── PENDING FINANCE TAB ── */}
         <TabsContent value="finance" className="space-y-4">
+          {checklistMmpId && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-300/50 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-2.5 text-xs" data-testid="banner-cycle-context-finance">
+              <ArrowLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-blue-800 dark:text-blue-200">
+                Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — reviewing pending finance for this cycle.
+              </span>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-finance">
+                ← Back to wizard
+              </Button>
+            </div>
+          )}
           {/* MMP selector row — always visible at the top of the Finance tab */}
           <Card>
             <CardContent className="py-3 px-4">
@@ -7261,6 +7277,17 @@ const MMPCycleClose = () => {
 
         {/* ── WFP CONFIRMATION TAB (Phase C) ── */}
         <TabsContent value="wfp" className="space-y-4">
+          {checklistMmpId && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-300/50 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-2.5 text-xs" data-testid="banner-cycle-context-wfp">
+              <ArrowLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-blue-800 dark:text-blue-200">
+                Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — upload WFP file for this cycle.
+              </span>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-wfp">
+                ← Back to wizard
+              </Button>
+            </div>
+          )}
           {!checklistMmpId ? (
             <Card>
               <CardContent className="py-10 text-center">

@@ -116,7 +116,7 @@ function formatDate(dateStr: string | undefined | null): string {
 }
 
 function getStatusBadgeVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'closing') return 'destructive';
+  if (status === 'closing') return 'outline';
   if (status === 'pending_approval') return 'default';
   return 'secondary';
 }
@@ -343,7 +343,11 @@ export function CycleMMPCard({
                 )}
               </div>
             </div>
-            <Badge variant={getStatusBadgeVariant(cycleStatus)} data-testid={`badge-cycle-status-${mmp.id}`}>
+            <Badge
+              variant={getStatusBadgeVariant(cycleStatus)}
+              className={cycleStatus === 'closing' ? 'border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30' : ''}
+              data-testid={`badge-cycle-status-${mmp.id}`}
+            >
               {getStatusLabel(cycleStatus)}
             </Badge>
           </div>
@@ -683,28 +687,31 @@ export function CycleMMPCard({
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              {closeScope === 'full' ? 'Start Full MMP Cycle Close' : closeScope === 'activity'
+                              {closeScope === 'full' ? `Begin Close Process — ${mmp.name}` : closeScope === 'activity'
                                 ? `Close Activity: ${closeScopeValue}${activitySubFilter !== 'none' && activitySubValue ? ` (${activitySubFilter === 'state' ? 'State' : 'Hub'}: ${activitySubValue})` : ''}`
                                 : `Close by ${SCOPE_LABELS[closeScope]}: ${closeScopeValue}`}
                             </AlertDialogTitle>
                             <AlertDialogDescription asChild>
                               <div className="space-y-3">
+                                <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+                                  <strong>Next step:</strong> You will be taken to the pre-close checklist. The system will only flag incomplete sites as "Not Covered" <em>after</em> you pass the checklist and confirm.
+                                </div>
                                 {closeScope === 'full' ? (
-                                  <p>
-                                    This will flag all incomplete site visits (pending, assigned, dispatched) as &quot;Not Covered&quot;.
-                                    Supervisors will need to provide a reason for each uncovered site before the cycle can be fully closed.
+                                  <p className="text-sm text-muted-foreground">
+                                    Once confirmed in the checklist, all incomplete site visits (pending, assigned, dispatched) will be flagged as <strong>Not Covered</strong>.
+                                    You will then assign a reason to each uncovered site before submitting for final approval.
                                   </p>
                                 ) : closeScope === 'activity' ? (
-                                  <p>
-                                    This will flag all incomplete site visits for <strong>Activity: {closeScopeValue}</strong>
+                                  <p className="text-sm text-muted-foreground">
+                                    Incomplete site visits for <strong>Activity: {closeScopeValue}</strong>
                                     {activitySubFilter !== 'none' && activitySubValue && (
                                       <> in <strong>{activitySubFilter === 'state' ? 'State' : 'Hub'}: {activitySubValue}</strong></>
-                                    )} as &quot;Not Covered&quot;.
+                                    )} will be flagged as <strong>Not Covered</strong> after checklist confirmation.
                                     Only sites matching this scope will be affected.
                                   </p>
                                 ) : (
-                                  <p>
-                                    This will flag all incomplete site visits for <strong>{SCOPE_LABELS[closeScope]}: {closeScopeValue}</strong> as &quot;Not Covered&quot;.
+                                  <p className="text-sm text-muted-foreground">
+                                    Incomplete site visits for <strong>{SCOPE_LABELS[closeScope]}: {closeScopeValue}</strong> will be flagged as <strong>Not Covered</strong> after checklist confirmation.
                                     Only sites matching this {closeScope} will be affected. Other sites will remain active.
                                   </p>
                                 )}
@@ -722,9 +729,7 @@ export function CycleMMPCard({
                                   {closeScope !== 'full' && closeScope !== 'activity' && (
                                     <div className="text-muted-foreground">Target: {closeScopeValue}</div>
                                   )}
-                                  <div className="text-muted-foreground">Close date will be recorded: {new Date().toLocaleDateString()}</div>
                                 </div>
-                                <p className="text-xs text-muted-foreground"><strong>This action cannot be undone.</strong></p>
                               </div>
                             </AlertDialogDescription>
                           </AlertDialogHeader>
@@ -745,7 +750,7 @@ export function CycleMMPCard({
                               }}
                               data-testid="button-confirm-start-close"
                             >
-                              Start Closing
+                              Review Pre-Close Checklist →
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
