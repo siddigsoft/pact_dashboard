@@ -329,7 +329,8 @@
     perms: Record<string, boolean> = {},
     isSuperAdmin: boolean = false,
     menuPrefs: MenuPreferences = DEFAULT_MENU_PREFERENCES,
-    hasMonitoringAccess: boolean = false
+    hasMonitoringAccess: boolean = false,
+    isFundHolder: boolean = false
   ): MenuGroup[] => {
     const normalizedDefault = normalizeRole(defaultRole);
     const normalizedRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
@@ -481,6 +482,8 @@
       if (!isHidden('/pre-funding/approvals'))     preFundItems.push({ id: 'pre-funding-approvals', title: 'Approval Flow',  url: '/pre-funding/approvals',     icon: CheckSquare, priority: 3, isPinned: isPinned('/pre-funding/approvals') });
       if (!isHidden('/pre-funding/reconciliation'))preFundItems.push({ id: 'pre-funding-recon',     title: 'Reconciliation', url: '/pre-funding/reconciliation', icon: Landmark,    priority: 4, isPinned: isPinned('/pre-funding/reconciliation') });
       if (!isHidden('/pre-funding/settings'))      preFundItems.push({ id: 'pre-funding-settings',  title: 'Settings',       url: '/pre-funding/settings',      icon: Settings,    priority: 5, isPinned: isPinned('/pre-funding/settings') });
+    } else if (isFundHolder) {
+      if (!isHidden('/pre-funding')) preFundItems.push({ id: 'pre-funding-overview', title: 'My Fund', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
@@ -633,6 +636,22 @@
           if (!error) setHasMonitoringAccess(!!data);
         });
     }, [isSuperAdmin, currentUser?.id]);
+
+    // Check if the current user is a fund holder on any pre_fund_requests row.
+    // Fund holders get a "My Fund" sidebar entry and can access /pre-funding even
+    // without a finance admin role.
+    const isFinanceAdminRole = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+    const [isFundHolder, setIsFundHolder] = useState(false);
+    useEffect(() => {
+      if (isFinanceAdminRole || !currentUser?.id) return;
+      supabase
+        .from('pre_fund_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('holder_user_id', currentUser.id)
+        .then(({ count }: { count: number | null }) => {
+          setIsFundHolder((count ?? 0) > 0);
+        });
+    }, [isFinanceAdminRole, currentUser?.id]);
 
     // Open picker dialog when the banner's "Switch" button fires requestOpenPicker()
     const openViewAsDialog = async () => {
@@ -872,7 +891,8 @@
             perms,
             isSuperAdmin,
             menuPrefs,
-            hasMonitoringAccess
+            hasMonitoringAccess,
+            isFundHolder
           )
         : [];
       if (Object.keys(pageOverrideMap).length === 0) return rawMenuGroups;
