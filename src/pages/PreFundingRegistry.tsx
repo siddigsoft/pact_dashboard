@@ -334,7 +334,7 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
       gl_encumbrance_account: prev.gl_encumbrance_account || defaults.gl_encumbrance_account,
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, form.currency]); // acctAccounts intentionally omitted — stable after load
+  }, [open, form.currency, acctAccounts]); // acctAccounts needed so auto-fill fires when data loads
 
   // Memoize expensive filtered lists so they don't recompute on every keystroke
   const filteredProjects = useMemo(() =>
