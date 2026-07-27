@@ -39,7 +39,7 @@ interface ApproveCloseParams {
   overrideJustification?: string | null;
 }
 
-const PAYABLE_STATUSES = ['wfp_confirmed', 'verified', 'completed', 'approved'];
+const PAYABLE_STATUSES = ['submitted', 'wfp_confirmed', 'verified', 'completed', 'approved'];
 
 export async function buildApproveCloseRecords(
   mmpId: string,
@@ -53,11 +53,22 @@ export async function buildApproveCloseRecords(
   let financialSnapshot: ClosedCycleFinancialSnapshot | null = null;
 
   try {
-    const [siteRes, opRes] = await Promise.all([
-      supabase
+    // Paginate mmp_site_entries to avoid silently missing sites when the cycle has >1000 rows.
+    type SiteEntry = { id: string; enumerator_fee: number | null; transport_fee: number | null; status: string; currency: string | null };
+    let allSiteEntries: SiteEntry[] = [];
+    const SITE_PAGE = 1000;
+    for (let from = 0; ; from += SITE_PAGE) {
+      const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, enumerator_fee, transport_fee, status, currency')
-        .eq('mmp_file_id', mmpId),
+        .eq('mmp_file_id', mmpId)
+        .range(from, from + SITE_PAGE - 1);
+      if (error || !data) break;
+      allSiteEntries = [...allSiteEntries, ...data];
+      if (data.length < SITE_PAGE) break;
+    }
+
+    const [opRes] = await Promise.all([
       supabase
         .from('operational_cost_submissions')
         .select('amount_cents, currency')
@@ -65,15 +76,15 @@ export async function buildApproveCloseRecords(
         .eq('status', 'approved'),
     ]);
 
-    const payable = (siteRes.data || []).filter((e: { status: string }) =>
+    const payable = allSiteEntries.filter((e) =>
       PAYABLE_STATUSES.includes(e.status),
     );
     const enumeratorFees = payable.reduce(
-      (s: number, e: { enumerator_fee?: number }) => s + (e.enumerator_fee ?? 0),
+      (s: number, e: { enumerator_fee?: number | null }) => s + (e.enumerator_fee ?? 0),
       0,
     );
     const transportFees = payable.reduce(
-      (s: number, e: { transport_fee?: number }) => s + (e.transport_fee ?? 0),
+      (s: number, e: { transport_fee?: number | null }) => s + (e.transport_fee ?? 0),
       0,
     );
     const opCosts = (opRes.data || []).reduce(
@@ -82,16 +93,12 @@ export async function buildApproveCloseRecords(
     );
     // Prefer the currency carried on site entries (locked fees are always in one
     // currency), falling back to the first approved cost submission, then SDG.
-    // Previously this only looked at opRes.data?.[0]?.currency, which would give
-    // the wrong currency if the only approved cost sub happened to be in a different
-    // denomination than the field fees.
-    const siteCurrency = (siteRes.data as Array<{ currency?: string }> | null)
-      ?.find(e => e.currency)?.currency;
+    const siteCurrency = allSiteEntries.find(e => e.currency)?.currency;
     const currency = siteCurrency ||
       (opRes.data?.[0] as { currency?: string } | undefined)?.currency ||
       'SDG';
 
-    const siteIds = (siteRes.data || []).map((e: { id: string }) => e.id).filter(Boolean);
+    const siteIds = allSiteEntries.map((e) => e.id).filter(Boolean);
     let advancesRecovered = 0;
     if (siteIds.length > 0) {
       const { data: advData } = await supabase

@@ -365,7 +365,7 @@ const MMPCycleClose = () => {
     try {
       const { data: costRows } = await supabase
         .from('operational_cost_submissions')
-        .select('expense_category, amount_cents, currency, tier1_status, tier2_status')
+        .select('expense_category, amount_cents, currency, tier1_status, tier2_status, tier3_status, tier4_status, submitter_role')
         .or(mmpCostSubmissionOrFilter(mmpId));
       const catMap: Record<string, { count: number; approvedCents: number; pendingCents: number; currency: string }> = {};
       (costRows || []).forEach((r: any) => {
@@ -373,7 +373,7 @@ const MMPCycleClose = () => {
         if (!catMap[cat]) catMap[cat] = { count: 0, approvedCents: 0, pendingCents: 0, currency: r.currency || 'SDG' };
         catMap[cat].count++;
         const cents = r.amount_cents ?? 0;
-        const fullyApproved = r.tier1_status === 'approved' && r.tier2_status === 'approved';
+        const fullyApproved = isCostFullyApproved(r);
         if (fullyApproved) catMap[cat].approvedCents += cents;
         else catMap[cat].pendingCents += cents;
       });
@@ -1060,7 +1060,6 @@ const MMPCycleClose = () => {
   useEffect(() => {
     if (checklistMmpId) {
       const mmp = mmpFiles?.find(m => m.id === checklistMmpId) as any;
-      const status = mmp?.cycle_status ?? 'active';
       const tracking = mmp?.payment_tracking || {};
       setPaymentRequestedAt(tracking.payment_requested_at || null);
       setPaymentsConfirmedAt(tracking.payments_confirmed_at || null);
@@ -1070,10 +1069,8 @@ const MMPCycleClose = () => {
       if (tracking.exchange_rate_applied) setExchangeRateInput(String(tracking.exchange_rate_applied));
       setWalletUpdateResults(null);
       setCycleSubmittedAt(tracking.submitted_at || null);
-      if (status === 'closing' || status === 'pending_approval') {
-        fetchCycleSummary(checklistMmpId);
-        fetchAllSiteDetails(checklistMmpId);
-      }
+      fetchCycleSummary(checklistMmpId);
+      fetchAllSiteDetails(checklistMmpId);
     } else {
       setCycleSummaryData(null);
       setAllSiteReviewData([]);

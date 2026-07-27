@@ -37,7 +37,7 @@ export function ReconciliationSummary({
       try {
         let query = supabase
           .from('operational_cost_submissions')
-          .select('id, tier1_status, tier2_status, expense_date');
+          .select('id, tier1_status, tier2_status, tier3_status, tier4_status, expense_date');
 
         let resolvedScopeLabel = '(all pending)';
 
@@ -56,16 +56,19 @@ export function ReconciliationSummary({
 
         const costSubs = costData || [];
         const pendingCosts = costSubs.filter(
-          s => s.tier1_status === 'pending' || s.tier2_status === 'pending',
+          s =>
+            s.tier1_status === 'pending' ||
+            s.tier2_status === 'pending' ||
+            (s as any).tier3_status === 'pending' ||
+            (s as any).tier4_status === 'pending',
         ).length;
-        const clearedCosts = costSubs.filter(s => {
-          const t1Done = s.tier1_status === 'approved' || s.tier1_status === 'rejected';
-          const t2Done =
-            s.tier2_status === 'approved' ||
-            s.tier2_status === 'rejected' ||
-            s.tier2_status === null;
-          return t1Done && t2Done;
-        }).length;
+        const clearedCosts = costSubs.filter(
+          s =>
+            s.tier1_status !== 'pending' &&
+            s.tier2_status !== 'pending' &&
+            (s as any).tier3_status !== 'pending' &&
+            (s as any).tier4_status !== 'pending',
+        ).length;
 
         setData({
           pendingCosts,
