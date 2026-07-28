@@ -1,11 +1,11 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, FolderKanban, LayoutDashboard, BarChart3, Database,
-  Building2, ClipboardList, TrendingUp, Info, ArrowRight,
+  Building2, ClipboardList, TrendingUp, ArrowRight, Lock,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
-import { cn } from '@/lib/utils';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const ProjectsPanel       = lazy(() => import('./Projects'));
 const PortfolioPanel      = lazy(() => import('./PortfolioDashboard'));
@@ -20,7 +20,7 @@ type ProgTab = 'projects' | 'portfolio' | 'analytics' | 'mmp' | 'hub-ops' | 'tra
 interface TabDef { id: ProgTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: ProgSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
 
-const SECTIONS: SectionDef[] = [
+const ALL_SECTIONS: SectionDef[] = [
   {
     id: 'projects', label: 'Projects & Portfolio', icon: FolderKanban, color: '#7c3aed',
     description: 'Manage the full project lifecycle and view the director-level portfolio view.',
@@ -59,15 +59,16 @@ const SECTIONS: SectionDef[] = [
   },
 ];
 
+const PROJECTS_TABS: ProgTab[] = ['projects', 'portfolio', 'analytics'];
+
 const LS_KEY = 'hub_last_tab_programme';
-const ALL_TABS = SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id as ProgSection, sectionColor: s.color })));
 
 const PanelMap: Record<ProgTab, React.LazyExoticComponent<any>> = {
-  projects:     ProjectsPanel,
-  portfolio:    PortfolioPanel,
-  analytics:    AnalyticsPanel,
-  mmp:          MMPPanel,
-  'hub-ops':    HubOpsPanel,
+  projects:       ProjectsPanel,
+  portfolio:      PortfolioPanel,
+  analytics:      AnalyticsPanel,
+  mmp:            MMPPanel,
+  'hub-ops':      HubOpsPanel,
   'tracker-prep': TrackerPanel,
 };
 
@@ -82,33 +83,63 @@ function PanelLoader() {
 
 export default function ProgrammeHub() {
   const [params, setParams] = useSearchParams();
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+
+  const canSeeProjects = isSuperAdmin() || hasAnyRole(['admin']);
+
+  const SECTIONS = useMemo(
+    () => canSeeProjects ? ALL_SECTIONS : ALL_SECTIONS.filter(s => s.id !== 'projects'),
+    [canSeeProjects],
+  );
+
+  const ALL_TABS = useMemo(
+    () => SECTIONS.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id as ProgSection, sectionColor: s.color }))),
+    [SECTIONS],
+  );
+
   const rawTab = params.get('tab') ?? '';
-  const tabDef = ALL_TABS.find(t => t.id === rawTab);
 
   const getDefaultTab = (): ProgTab | null => {
     const saved = localStorage.getItem(LS_KEY) as ProgTab | null;
     if (saved && ALL_TABS.some(t => t.id === saved)) return saved;
-    return null;
+    return ALL_TABS[0]?.id ?? null;
   };
 
+  const isTabAllowed = (tab: ProgTab) => ALL_TABS.some(t => t.id === tab);
+  const tabDef = ALL_TABS.find(t => t.id === rawTab);
   const activeTab: ProgTab | null = tabDef ? (rawTab as ProgTab) : getDefaultTab();
-
-  useEffect(() => {
-    if (!rawTab && activeTab) setParams({ tab: activeTab }, { replace: true });
-  }, []);
 
   const setTab = (t: ProgTab) => {
     localStorage.setItem(LS_KEY, t);
     setParams({ tab: t }, { replace: true });
   };
 
-  const activeTabDef = activeTab ? ALL_TABS.find(t => t.id === activeTab)! : null;
-  const activeSection = activeTabDef ? SECTIONS.find(s => s.id === activeTabDef.sectionId)! : null;
-  const accent = activeSection?.color ?? '#7c3aed';
+  useEffect(() => {
+    if (!rawTab && activeTab) {
+      setParams({ tab: activeTab }, { replace: true });
+      return;
+    }
+    // If CD (or other restricted user) lands on a projects tab, redirect to first allowed tab
+    if (rawTab && !isTabAllowed(rawTab as ProgTab)) {
+      const fallback = ALL_TABS[0]?.id ?? null;
+      if (fallback) setParams({ tab: fallback }, { replace: true });
+    }
+  }, [canSeeProjects]);
+
+  const activeTabDef = activeTab ? ALL_TABS.find(t => t.id === activeTab) ?? null : null;
+  const activeSection = activeTabDef ? SECTIONS.find(s => s.id === activeTabDef.sectionId) ?? null : null;
 
   const overviewContent = (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
       <p className="text-sm text-muted-foreground mb-6">Select a section to get started, or jump directly to any tool below.</p>
+      {!canSeeProjects && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 px-4 py-3">
+          <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            The <strong>Projects &amp; Portfolio</strong> section is restricted to Admin and Super Admin users.
+          </p>
+        </div>
+      )}
       <div className="grid gap-5 sm:grid-cols-2">
         {SECTIONS.map(section => (
           <div
@@ -149,7 +180,7 @@ export default function ProgrammeHub() {
   return (
     <HubLayout
       title="Programme Management"
-      subtitle="Projects · Portfolio · Field Planning"
+      subtitle={canSeeProjects ? 'Projects · Portfolio · Field Planning' : 'Field Planning'}
       hubIcon={TrendingUp}
       sections={SECTIONS}
       activeSectionId={activeSection?.id ?? null}
@@ -160,7 +191,7 @@ export default function ProgrammeHub() {
       onTabClick={id => setTab(id as ProgTab)}
       overviewContent={overviewContent}
     >
-      {activeTab && (
+      {activeTab && isTabAllowed(activeTab) && (
         <div className="min-h-[calc(100vh-160px)]">
           <Suspense fallback={<PanelLoader />}>
             {(() => { const Panel = PanelMap[activeTab]; return <Panel />; })()}
