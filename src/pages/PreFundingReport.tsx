@@ -345,24 +345,30 @@ export default function PreFundingReport() {
     return steps.filter(s => fundIds.has(s.pre_fund_request_id));
   }, [steps, filteredFunds]);
 
+  // Accurate paid amount per fund: sum of payment-type transactions (not the stale paid_amount column)
+  const fundPaidMap = useMemo(() => {
+    const m = new Map<string, number>();
+    txns.filter(t => t.transaction_type === 'payment').forEach(t => {
+      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + t.amount);
+    });
+    return m;
+  }, [txns]);
+
   // ─── KPIs ────────────────────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
     const activeFunds    = filteredFunds.filter(f => ['active','low_balance'].includes(f.status));
     const totalFunded    = filteredFunds.reduce((s, f) => s + f.amount, 0);
-    const totalBalance   = filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0);
-    const totalPaid      = filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0);
+    const totalPaid      = filteredFunds.reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0);
+    const totalBalance   = filteredFunds.reduce((s, f) => s + Math.max(0, f.amount - (fundPaidMap.get(f.id) ?? 0)), 0);
     const totalCommit    = filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0);
     const utilPct        = totalFunded > 0 ? Math.round((totalPaid / totalFunded) * 100) : 0;
-    // Funds are recorded in SDG; USD equivalent = SDG ÷ rate
-    // USD equivalent: sum of (SDG amount ÷ rate) for funds that have a rate set
-    const totalUsdEquiv  = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 ? f.amount / f.usd_to_sdg_rate : 0), 0);
     // SDG actually paid: sum of payment transactions denominated in SDG
     const totalSdgPaid   = filteredTxns
       .filter(t => t.currency === 'SDG' && t.transaction_type === 'payment')
       .reduce((s, t) => s + t.amount, 0);
-    return { activeFunds, totalFunded, totalBalance, totalPaid, totalCommit, utilPct, totalUsdEquiv, totalSdgPaid };
-  }, [filteredFunds, filteredTxns]);
+    return { activeFunds, totalFunded, totalBalance, totalPaid, totalCommit, utilPct, totalSdgPaid };
+  }, [filteredFunds, filteredTxns, fundPaidMap]);
 
   // ─── Charts data ─────────────────────────────────────────────────────────────
 
@@ -379,13 +385,16 @@ export default function PreFundingReport() {
 
   // Utilization per fund (bar — top 10)
   const utilizationBarData = useMemo(() =>
-    filteredFunds.slice(0, 12).map(f => ({
-      name: f.name.length > 18 ? f.name.slice(0, 16) + '…' : f.name,
-      Funded: f.amount,
-      Paid: f.paid_amount ?? 0,
-      Balance: f.available_balance ?? 0,
-    })),
-    [filteredFunds]
+    filteredFunds.slice(0, 12).map(f => {
+      const paid = fundPaidMap.get(f.id) ?? 0;
+      return {
+        name: f.name.length > 18 ? f.name.slice(0, 16) + '…' : f.name,
+        Funded: f.amount,
+        Paid: paid,
+        Balance: Math.max(0, f.amount - paid),
+      };
+    }),
+    [filteredFunds, fundPaidMap]
   );
 
   // Monthly disbursements (line) — last 6 months
@@ -471,15 +480,18 @@ export default function PreFundingReport() {
     autoTable(doc, {
       startY: y,
       head: [['Fund', 'Status', 'Currency', 'Amount', 'Paid', 'Balance', 'Util %']],
-      body: filteredFunds.map(f => [
-        f.name,
-        STATUS_CFG[f.status]?.label ?? f.status,
-        f.currency,
-        formatNumber(f.amount, 0),
-        formatNumber(f.paid_amount ?? 0, 0),
-        formatNumber(f.available_balance ?? 0, 0),
-        f.amount > 0 ? `${Math.round(((f.paid_amount ?? 0) / f.amount) * 100)}%` : '—',
-      ]),
+      body: filteredFunds.map(f => {
+        const paid = fundPaidMap.get(f.id) ?? 0;
+        return [
+          f.name,
+          STATUS_CFG[f.status]?.label ?? f.status,
+          f.currency,
+          formatNumber(f.amount, 0),
+          formatNumber(paid, 0),
+          formatNumber(Math.max(0, f.amount - paid), 0),
+          f.amount > 0 ? `${Math.round((paid / f.amount) * 100)}%` : '—',
+        ];
+      }),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [15, 32, 65] },
       alternateRowStyles: { fillColor: [245, 247, 250] },
@@ -551,21 +563,24 @@ export default function PreFundingReport() {
     });
 
     // Fund totals for fund detail sheet
-    const fundDetailData = filteredFunds.map(f => ({
-      'Fund Name': f.name,
-      'Project': f.project_name ?? '—',
-      'Source / Donor': f.source ?? '—',
-      Status: STATUS_CFG[f.status]?.label ?? f.status,
-      Currency: f.currency,
-      'Fund Amount': f.amount,
-      'Total Disbursed': f.paid_amount ?? 0,
-      'Committed': f.committed_amount ?? 0,
-      'Available Balance': f.available_balance ?? 0,
-      'Utilization %': f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0,
-      'Start Date': f.start_date ?? '',
-      'End Date': f.end_date ?? '',
-      'Created Date': f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
-    }));
+    const fundDetailData = filteredFunds.map(f => {
+      const paid = fundPaidMap.get(f.id) ?? 0;
+      return {
+        'Fund Name': f.name,
+        'Project': f.project_name ?? '—',
+        'Source / Donor': f.source ?? '—',
+        Status: STATUS_CFG[f.status]?.label ?? f.status,
+        Currency: f.currency,
+        'Fund Amount': f.amount,
+        'Total Disbursed': paid,
+        'Committed': f.committed_amount ?? 0,
+        'Available Balance': Math.max(0, f.amount - paid),
+        'Utilization %': f.amount > 0 ? Math.round((paid / f.amount) * 100) : 0,
+        'Start Date': f.start_date ?? '',
+        'End Date': f.end_date ?? '',
+        'Created Date': f.created_at ? format(parseISO(f.created_at), 'yyyy-MM-dd') : '',
+      };
+    });
     // Add totals row to fund detail
     fundDetailData.push({
       'Fund Name': 'TOTAL',
@@ -574,9 +589,9 @@ export default function PreFundingReport() {
       Status: `${filteredFunds.length} funds`,
       Currency: currency,
       'Fund Amount': filteredFunds.reduce((s, f) => s + f.amount, 0),
-      'Total Disbursed': filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0),
+      'Total Disbursed': filteredFunds.reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0),
       'Committed': filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0),
-      'Available Balance': filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0),
+      'Available Balance': filteredFunds.reduce((s, f) => s + Math.max(0, f.amount - (fundPaidMap.get(f.id) ?? 0)), 0),
       'Utilization %': kpis.utilPct,
       'Start Date': '',
       'End Date': '',
@@ -755,7 +770,7 @@ export default function PreFundingReport() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiCard('Total SDG Funded', `SDG ${formatNumber(kpis.totalFunded, 0)}`, kpis.totalUsdEquiv > 0 ? `≈ USD ${formatNumber(kpis.totalUsdEquiv, 0)}` : `${filteredFunds.length} fund${filteredFunds.length !== 1 ? 's' : ''}`, Wallet, 'bg-sky-100 dark:bg-sky-900/30 text-sky-600')}
+          {kpiCard('Total SDG Funded', `SDG ${formatNumber(kpis.totalFunded, 0)}`, `${filteredFunds.length} fund${filteredFunds.length !== 1 ? 's' : ''}`, Wallet, 'bg-sky-100 dark:bg-sky-900/30 text-sky-600')}
           {kpiCard('Available Balance', `SDG ${formatNumber(kpis.totalBalance, 0)}`, `${kpis.utilPct}% utilization`, DollarSign, 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600')}
           {kpiCard('Total SDG Paid', kpis.totalSdgPaid > 0 ? `SDG ${formatNumber(kpis.totalSdgPaid, 0)}` : `USD ${formatNumber(kpis.totalPaid, 0)}`, `${filteredTxns.filter(t => t.transaction_type === 'payment').length} payments (SDG)`, TrendingDown, 'bg-rose-100 dark:bg-rose-900/30 text-rose-600')}
           {kpiCard('Active Funds', String(kpis.activeFunds.length), `of ${filteredFunds.length} total`, CheckCircle2, 'bg-amber-100 dark:bg-amber-900/30 text-amber-600')}
@@ -888,7 +903,6 @@ export default function PreFundingReport() {
                         <TableHead className="font-semibold">Project</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
                         <TableHead className="font-semibold text-right">SDG Amount</TableHead>
-                        <TableHead className="font-semibold text-right">USD Equiv.</TableHead>
                         <TableHead className="font-semibold text-right">Disbursed</TableHead>
                         <TableHead className="font-semibold text-right">Balance</TableHead>
                         <TableHead className="font-semibold text-right">Util %</TableHead>
@@ -897,7 +911,9 @@ export default function PreFundingReport() {
                     </TableHeader>
                     <TableBody>
                       {filteredFunds.map(f => {
-                        const util = f.amount > 0 ? Math.round(((f.paid_amount ?? 0) / f.amount) * 100) : 0;
+                        const paid = fundPaidMap.get(f.id) ?? 0;
+                        const balance = Math.max(0, f.amount - paid);
+                        const util = f.amount > 0 ? Math.round((paid / f.amount) * 100) : 0;
                         const statusCfg = STATUS_CFG[f.status];
                         return (
                           <TableRow key={f.id} className="hover:bg-muted/30">
@@ -916,20 +932,11 @@ export default function PreFundingReport() {
                             <TableCell className="text-right text-sm font-medium tabular-nums">
                               SDG {formatNumber(f.amount, 0)}
                             </TableCell>
-                            <TableCell className="text-right text-sm tabular-nums text-sky-600">
-                              {f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0
-                                ? `USD ${formatNumber(f.amount / f.usd_to_sdg_rate, 2)}`
-                                : <span className="text-muted-foreground text-xs">—</span>
-                              }
-                              {f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 && (
-                                <div className="text-[10px] text-muted-foreground">@ {f.usd_to_sdg_rate.toLocaleString()}</div>
-                              )}
-                            </TableCell>
                             <TableCell className="text-right text-sm tabular-nums text-rose-600">
-                              SDG {formatNumber(f.paid_amount ?? 0, 0)}
+                              SDG {formatNumber(paid, 0)}
                             </TableCell>
                             <TableCell className="text-right text-sm tabular-nums text-emerald-600">
-                              SDG {formatNumber(f.available_balance ?? 0, 0)}
+                              SDG {formatNumber(balance, 0)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -952,10 +959,10 @@ export default function PreFundingReport() {
                     {/* Totals footer row */}
                     {filteredFunds.length > 1 && (() => {
                       const cur = filteredFunds[0]?.currency ?? '';
-                      const totAmount   = filteredFunds.reduce((s, f) => s + f.amount, 0);
-                      const totDisbursed = filteredFunds.reduce((s, f) => s + (f.paid_amount ?? 0), 0);
-                      const totBalance  = filteredFunds.reduce((s, f) => s + (f.available_balance ?? 0), 0);
-                      const totUtil     = totAmount > 0 ? Math.round((totDisbursed / totAmount) * 100) : 0;
+                      const totAmount    = filteredFunds.reduce((s, f) => s + f.amount, 0);
+                      const totDisbursed = filteredFunds.reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0);
+                      const totBalance   = filteredFunds.reduce((s, f) => s + Math.max(0, f.amount - (fundPaidMap.get(f.id) ?? 0)), 0);
+                      const totUtil      = totAmount > 0 ? Math.round((totDisbursed / totAmount) * 100) : 0;
                       return (
                         <tfoot>
                           <TableRow className="bg-muted/40 border-t font-semibold text-[12px]">
@@ -966,12 +973,6 @@ export default function PreFundingReport() {
                             <TableCell />
                             <TableCell className="text-right tabular-nums font-mono">
                               SDG {formatNumber(totAmount, 0)}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums font-mono text-sky-600">
-                              {(() => {
-                                const totUsd = filteredFunds.reduce((s, f) => s + (f.usd_to_sdg_rate && f.usd_to_sdg_rate > 0 ? f.amount / f.usd_to_sdg_rate : 0), 0);
-                                return totUsd > 0 ? `USD ${formatNumber(totUsd, 0)}` : '—';
-                              })()}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-rose-600">
                               SDG {formatNumber(totDisbursed, 0)}
