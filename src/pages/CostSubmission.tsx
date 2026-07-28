@@ -1932,8 +1932,8 @@ const CostSubmission = () => {
   };
 
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
-    // Direct delete: Admin and SuperAdmin only. FinancialAdmin uses the approve/reject workflow.
-    if (!isSuperAdmin && !isAdmin) return false;
+    // Direct delete: SuperAdmin only. Admins use the delete-request workflow.
+    if (!isSuperAdmin) return false;
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus === 'reconciled') return false;
     return true;
@@ -3390,23 +3390,30 @@ const CostSubmission = () => {
     }
   };
 
-  // Delete all items in a group (Admin / SuperAdmin only)
+  // Delete all items in a group (SuperAdmin only) — parallel unlink + single batch delete
   const handleDeleteGroup = async () => {
     if (!groupDeleteConfirm) return;
     setActionProcessing(true);
     try {
       const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
       const deletableItems = groupDeleteConfirm.items.filter(o => getOperationalDerivedStatus(o) !== 'reconciled');
-      for (const item of deletableItems) {
-        await unlinkPaymentFromPreFund('operational_cost_submissions', item.id);
-        let q = supabase.from('operational_cost_submissions').delete().eq('id', item.id);
-        if (!isSuperAdmin) q = q.eq('tier1_status', 'pending').eq('tier2_status', 'pending');
-        await q;
+      if (deletableItems.length === 0) {
+        toast({ title: 'Nothing to delete', description: 'All items in this group are reconciled and cannot be deleted.' });
+        return;
       }
-      toast({ title: 'Group Deleted / تم حذف المجموعة', description: `${deletableItems.length} item${deletableItems.length !== 1 ? 's' : ''} deleted.` });
+      // Unlink all pre-fund payments in parallel
+      await Promise.all(deletableItems.map(item => unlinkPaymentFromPreFund('operational_cost_submissions', item.id).catch(() => {})));
+      // Single batch delete — SuperAdmin bypasses tier-status guards
+      const ids = deletableItems.map(o => o.id);
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .delete()
+        .in('id', ids);
+      if (error) throw error;
+      toast({ title: 'Group Deleted / تم حذف المجموعة', description: `${ids.length} item${ids.length !== 1 ? 's' : ''} deleted.` });
       fetchOperationalCosts();
-    } catch (err) {
-      toast({ title: 'Error / خطأ', description: 'Failed to delete group. / فشل في حذف المجموعة.', variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Error / خطأ', description: err?.message || 'Failed to delete group.', variant: 'destructive' });
     } finally {
       setActionProcessing(false);
       setGroupDeleteConfirm(null);
@@ -5935,8 +5942,8 @@ const CostSubmission = () => {
                                 </div>
                               </div>
                             </div>
-                            {/* Group-level Delete button — Admin / SuperAdmin only */}
-                            {(isSuperAdmin || isAdmin) && groupItems.some(o => getOperationalDerivedStatus(o) !== 'reconciled') && (
+                            {/* Group-level Delete button — SuperAdmin only */}
+                            {isSuperAdmin && groupItems.some(o => getOperationalDerivedStatus(o) !== 'reconciled') && (
                               <div
                                 className="flex-none flex items-center px-3 border-l border-white/10 hover:bg-red-900/40 transition-colors"
                                 onClick={e => { e.stopPropagation(); setGroupDeleteConfirm({ groupId: groupId!, items: groupItems, title: groupTitle }); }}
