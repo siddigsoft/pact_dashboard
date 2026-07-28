@@ -8139,9 +8139,10 @@ const CostSubmission = () => {
             const mineRejected = mine.filter(o => o.status === 'rejected').length;
             const minePaidCount = mine.filter(o => ['paid','reconciled'].includes(o.status)).length;
 
-            // Category breakdown (my submissions)
+            // Category breakdown — admins/approvers see ALL submissions; others see own only
+            const catSource = isApproverRole ? operationalCosts : mine;
             const catMap = new Map<string, { count: number; requested: number; paid: number; approved: number }>();
-            for (const o of mine) {
+            for (const o of catSource) {
               const cat = catLabel[o.expense_category] || o.expense_category || 'Other';
               if (!catMap.has(cat)) catMap.set(cat, { count: 0, requested: 0, paid: 0, approved: 0 });
               const row = catMap.get(cat)!;
@@ -8151,6 +8152,25 @@ const CostSubmission = () => {
               if (['approved','partially_paid','paid','reconciled'].includes(o.status)) row.approved++;
             }
             const catRows = [...catMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
+            const catTotal = { count: catSource.length, requested: catSource.reduce((s,o)=>s+(o.amount_cents??0),0), paid: catSource.filter(o=>['paid','reconciled'].includes(o.status)).reduce((s,o)=>s+(o.amount_paid_cents??o.amount_cents??0),0) };
+
+            // By Users breakdown — admins/approvers only
+            const userMap = new Map<string, { name: string; role: string; count: number; requested: number; paid: number; balance: number }>();
+            if (isApproverRole) {
+              for (const o of operationalCosts) {
+                const sid = o.submitted_by ?? 'unknown';
+                if (!userMap.has(sid)) {
+                  const u = users.find(x => x.id === sid);
+                  userMap.set(sid, { name: u?.name || '—', role: u?.role?.replace(/_/g,' ') || '', count: 0, requested: 0, paid: 0, balance: 0 });
+                }
+                const row = userMap.get(sid)!;
+                row.count++;
+                row.requested += o.amount_cents ?? 0;
+                if (['paid','reconciled'].includes(o.status)) row.paid += o.amount_paid_cents ?? o.amount_cents ?? 0;
+              }
+              userMap.forEach(r => { r.balance = Math.max(0, r.requested - r.paid); });
+            }
+            const userRows = [...userMap.values()].sort((a,b) => b.requested - a.requested);
 
             // ── My Approvals ──────────────────────────────────────────────
             const myApprovals = operationalCosts.filter(o =>
@@ -8333,16 +8353,64 @@ const CostSubmission = () => {
                                 ))}
                                 <tr className="bg-muted/40 font-semibold">
                                   <td className="px-4 py-2.5">Total</td>
-                                  <td className="text-right px-4 py-2.5">{mine.length}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(mineTotal)}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(minePaid)}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, mineTotal - minePaid))}</td>
+                                  <td className="text-right px-4 py-2.5">{catTotal.count}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(catTotal.requested)}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(catTotal.paid)}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, catTotal.requested - catTotal.paid))}</td>
                                 </tr>
                               </tbody>
                             </table>
                           </div>
                         </CardContent>
                       </Card>
+
+                      {/* By Users breakdown — visible to approver/admin roles */}
+                      {isApproverRole && userRows.length > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Users className="h-4 w-4 text-sky-600" />
+                              By Users / حسب المستخدمين
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">User</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {userRows.map((row, i) => (
+                                    <tr key={i} className="border-b hover:bg-muted/20 transition-colors">
+                                      <td className="px-4 py-2.5">
+                                        <div className="font-medium text-xs">{row.name}</div>
+                                        <div className="text-[10px] text-muted-foreground capitalize">{row.role}</div>
+                                      </td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{row.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(row.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(row.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(row.balance)}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/40 font-semibold">
+                                    <td className="px-4 py-2.5 text-xs">Total</td>
+                                    <td className="text-right px-4 py-2.5">{userRows.reduce((s,r)=>s+r.count,0)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(userRows.reduce((s,r)=>s+r.requested,0))}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(userRows.reduce((s,r)=>s+r.paid,0))}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(userRows.reduce((s,r)=>s+r.balance,0))}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
 
                       {/* Time-to-Approval Metrics — by Role */}
                       {roleTimeRows.length > 0 && (
