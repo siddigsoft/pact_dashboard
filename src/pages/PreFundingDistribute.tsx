@@ -119,23 +119,27 @@ export default function PreFundingDistribute() {
     if (allocPayments.has(allocId)) return; // already loaded
     setAllocPaymentsLoading(prev => { const s = new Set(prev); s.add(allocId); return s; });
     try {
-      // Fetch paid/approved cost submissions for this staff member linked to this fund
-      // via pre_fund_transactions table
+      // Fetch all payment transactions for this fund
       const { data: txnData } = await (supabase as any)
         .from('pre_fund_transactions')
-        .select('id,source_table,source_id,amount,transaction_date,description')
+        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id')
         .eq('pre_fund_request_id', fundId)
         .eq('transaction_type', 'payment')
         .order('transaction_date', { ascending: false });
 
-      // For OCS-sourced transactions, get submission details
-      const ocsTxns = (txnData ?? []).filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
-      const dpTxns  = (txnData ?? []).filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
+      // Partition by source type
+      const ocsTxns    = (txnData ?? []).filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
+      const dpTxns     = (txnData ?? []).filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
+      const otherTxns  = (txnData ?? []).filter((t: any) =>
+        t.source_table !== 'operational_cost_submissions' &&
+        t.source_table !== 'down_payment_requests'
+      );
       const ocsIds  = ocsTxns.map((t: any) => t.source_id as string);
       const dpIds   = dpTxns.map((t: any) => t.source_id as string);
 
       let payments: any[] = [];
 
+      // Enrich OCS-linked transactions
       if (ocsIds.length > 0) {
         const { data: ocsData } = await (supabase as any)
           .from('operational_cost_submissions')
@@ -147,6 +151,7 @@ export default function PreFundingDistribute() {
         })];
       }
 
+      // Enrich DP-linked transactions
       if (dpIds.length > 0) {
         const { data: dpData } = await (supabase as any)
           .from('down_payment_requests')
@@ -157,6 +162,17 @@ export default function PreFundingDistribute() {
           return { ...dp, _type: 'dp', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
         })];
       }
+
+      // Add manual / other transactions directly from pre_fund_transactions
+      payments = [...payments, ...otherTxns.map((t: any) => ({
+        ...t,
+        _type: 'manual',
+        _txn_amount: t.amount,
+        _txn_date: t.transaction_date,
+        amount: t.amount,
+        description: t.description,
+        status: 'paid',
+      }))];
 
       // Sort by transaction date desc
       payments.sort((a, b) => new Date(b._txn_date || b.paid_at || b.submitted_at || 0).getTime()
@@ -801,14 +817,20 @@ export default function PreFundingDistribute() {
                                         const date = p._txn_date || p.paid_at || p.submitted_at || p.approved_at || p.created_at;
                                         const amt = p._type === 'ocs'
                                           ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
-                                          : (p.amount ?? p._txn_amount ?? 0);
+                                          : p._type === 'manual'
+                                            ? (p._txn_amount ?? p.amount ?? 0)
+                                            : (p.amount ?? p._txn_amount ?? 0);
                                         const category = p._type === 'ocs'
                                           ? (catLabel[p.expense_category] ?? p.expense_category ?? '—')
-                                          : 'Down Payment';
+                                          : p._type === 'manual'
+                                            ? (p.reference ? `Manual · ${p.reference}` : 'Manual Entry')
+                                            : 'Down Payment';
                                         const desc = p._type === 'ocs'
                                           ? (p.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '—')
-                                          : (p.purpose || '—');
-                                        const status = p.status || '—';
+                                          : p._type === 'manual'
+                                            ? (p.description || '—')
+                                            : (p.purpose || '—');
+                                        const status = p.status || 'paid';
                                         const statusCls = status === 'paid' || status === 'reconciled' || status === 'approved'
                                           ? 'text-emerald-700 dark:text-emerald-400'
                                           : status === 'rejected'

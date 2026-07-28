@@ -2618,12 +2618,14 @@ export default function PreFundingReconciliation() {
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
-                          <TableCell colSpan={8} className="text-xs">Totals</TableCell>
+                          <TableCell colSpan={8} className="text-xs">Totals (payments only)</TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {selectedFund.currency} {formatNumber(accountingTxns.reduce((s, t) => s + t.amount, 0), 0)}
+                            {selectedFund.currency} {formatNumber(displayTxns.filter(t => t.transaction_type === 'payment').reduce((s, t) => s + t.amount, 0), 0)}
                           </TableCell>
                           <TableCell />
-                          <TableCell className="text-center text-xs text-muted-foreground">{accountingTxns.filter(t => t.reconciled).length}/{accountingTxns.length}</TableCell>
+                          <TableCell className="text-center text-xs text-muted-foreground">
+                            {displayTxns.filter(t => t.transaction_type === 'payment' && t.reconciled).length}/{displayTxns.filter(t => t.transaction_type === 'payment').length}
+                          </TableCell>
                           <TableCell />
                         </TableRow>
                       </TableBody>
