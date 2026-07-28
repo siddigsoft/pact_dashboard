@@ -114,9 +114,11 @@ function kpiCard(title: string, value: string, sub: string, icon: React.ElementT
 export default function PreFundingReport() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
-  // When not a finance admin, scope all data to funds where this user is the holder
-  const holderUserId = canAccess ? null : (currentUser?.id ?? null);
+  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const isCD = hasAnyRole(['countryDirector']);
+  const canAccess = isFinanceAdmin || isCD;
+  // Finance admins see all funds; CDs (and other holders) see only their assigned fund(s)
+  const holderUserId = isFinanceAdmin ? null : (currentUser?.id ?? null);
 
   const [funds, setFunds]           = useState<FundRow[]>([]);
   const [txns, setTxns]             = useState<TxnRow[]>([]);

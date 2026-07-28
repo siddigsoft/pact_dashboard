@@ -301,11 +301,28 @@ export default function PreFundingDistribute() {
         if (!uploaded) { setTopUpSaving(false); return; }
         receiptUrl = uploaded;
       }
+      const fund = funds.find(f => f.id === fundId);
       const { error } = await (supabase as any)
         .from('pre_fund_allocations')
         .update({ allocated_amount: newAmt, receipt_url: receiptUrl })
         .eq('id', alloc.id);
       if (error) throw error;
+      // Notify the allocated staff member that their allocation has been updated
+      const diff = newAmt - alloc.allocated_amount;
+      const changeDesc = diff > 0
+        ? `increased by ${formatNumber(diff, 0)} ${alloc.currency} (new total: ${formatNumber(newAmt, 0)})`
+        : diff < 0
+          ? `reduced by ${formatNumber(Math.abs(diff), 0)} ${alloc.currency} (new total: ${formatNumber(newAmt, 0)})`
+          : `updated to ${formatNumber(newAmt, 0)} ${alloc.currency}`;
+      dispatchNotification({
+        event: 'pre_fund_allocation_updated', recipientIds: [alloc.user_id],
+        titleEn: 'Fund Allocation Updated', titleAr: 'تم تحديث تخصيص الصندوق',
+        messageEn: `Your allocation from fund "${fund?.name ?? fundId}" has been ${changeDesc}.`,
+        messageAr: `تم تحديث تخصيصك من صندوق "${fund?.name ?? fundId}" إلى ${formatNumber(newAmt, 0)} ${alloc.currency}.`,
+        entityType: 'pre_fund_request', entityId: fundId,
+        triggeredBy: currentUser?.id, priority: 'normal',
+        metadata: { fund_id: fundId, fund_name: fund?.name, old_amount: alloc.allocated_amount, new_amount: newAmt, currency: alloc.currency },
+      }).catch(() => null);
       toast({ title: 'Allocation updated', description: `Amount set to ${formatNumber(newAmt, 0)} ${alloc.currency}.` });
       setTopUpDialog({ open: false, alloc: null, fundId: '' });
       setTopUpReceiptFile(null);
@@ -412,6 +429,28 @@ export default function PreFundingDistribute() {
                     <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', STATUS_BADGE[fund.status] ?? 'bg-slate-100 text-slate-600')}>
                       {fund.status.replace(/_/g, ' ')}
                     </Badge>
+                    {!isFinanceAdmin && currentUser?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
+                        disabled={fund.status === 'closed' || fund.status === 'paused'}
+                        data-testid={`button-self-topup-${fund.id}`}
+                        onClick={() => {
+                          const myAlloc = (fundAllocs.get(fund.id) ?? []).find(a => a.user_id === currentUser.id);
+                          if (myAlloc) {
+                            openTopUp(myAlloc, fund.id);
+                          } else {
+                            setAddForm({ userId: currentUser.id, amount: '', notes: 'Self top-up from held fund' });
+                            setUserSearch('');
+                            setAddDialog({ open: true, fund });
+                            if (!fundAllocs.has(fund.id)) loadAllocations(fund.id);
+                          }
+                        }}
+                      >
+                        <Wallet className="h-3.5 w-3.5" />Self Top-Up
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"

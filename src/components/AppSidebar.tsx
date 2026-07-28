@@ -1204,7 +1204,7 @@
                       const isActive = isNavPathActive(pathname, item.url);
                       const isItemFavorite = isFavorite(item.url);
                       return (
-                        <SidebarMenuSubItem key={item.id}>
+                        <SidebarMenuSubItem key={item.id} className="group/subitem relative">
                           <SidebarMenuSubButton
                             asChild
                             isActive={isActive}
@@ -1214,7 +1214,7 @@
                                 "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
                             )}
                           >
-                            <Link to={item.url} className="flex items-center gap-2" data-testid={`nav-link-${item.id}`}>
+                            <Link to={item.url} className="flex items-center gap-2 pr-6" data-testid={`nav-link-${item.id}`}>
                               <item.icon
                                 className={cn(
                                   "h-3.5 w-3.5 shrink-0",
@@ -1227,11 +1227,16 @@
                               {renderItemBadge(item.id)}
                             </Link>
                           </SidebarMenuSubButton>
-                          <SidebarMenuAction
-                            showOnHover={!isItemFavorite}
-                            className={isItemFavorite ? "opacity-100" : undefined}
+                          <button
+                            className={cn(
+                              "absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded transition-opacity",
+                              isItemFavorite
+                                ? "opacity-100"
+                                : "opacity-0 group-hover/subitem:opacity-100"
+                            )}
                             onClick={(e) => {
                               e.stopPropagation();
+                              e.preventDefault();
                               toggleFavorite(item.url, item.title, item.icon?.name || 'Star');
                             }}
                             aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -1245,7 +1250,7 @@
                                   : "text-muted-foreground"
                               )}
                             />
-                          </SidebarMenuAction>
+                          </button>
                         </SidebarMenuSubItem>
                       );
                     })}

@@ -96,7 +96,7 @@ const LS_KEY = 'hub_last_tab_prefunding';
 // Coordinator/Supervisor/FOM → overview, approvals, allocations, distribute, report (scoped)
 // Everyone else (fund holders) → overview, allocations, distribute, report (scoped to their fund)
 const FINANCE_TABS: PFTab[] = ['overview', 'registry', 'approvals', 'reconciliation', 'allocations', 'settings', 'report', 'distribute'];
-const CD_TABS: PFTab[]       = ['overview', 'allocations', 'distribute', 'report'];
+const CD_TABS: PFTab[]       = ['overview', 'allocations', 'distribute', 'reconciliation', 'report'];
 const APPROVER_TABS: PFTab[] = ['overview', 'approvals', 'allocations', 'distribute', 'report'];
 const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute', 'report'];
 
@@ -161,7 +161,7 @@ export default function PreFundingHub() {
         {tab === 'overview'        && <Suspense fallback={<PanelLoader />}><OverviewPanel /></Suspense>}
         {tab === 'registry'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><RegistryPanel /></Suspense>}
         {tab === 'approvals'       && <Suspense fallback={<PanelLoader />}><ApprovalFlowPanel /></Suspense>}
-        {tab === 'reconciliation'  && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
+        {tab === 'reconciliation'  && (isFinanceAdmin || isCD) && <Suspense fallback={<PanelLoader />}><ReconciliationPanel /></Suspense>}
         {tab === 'allocations'     && <Suspense fallback={<PanelLoader />}><AllocationsPanel /></Suspense>}
         {tab === 'settings'        && isFinanceAdmin && <Suspense fallback={<PanelLoader />}><SettingsPanel /></Suspense>}
         {tab === 'report'          && <Suspense fallback={<PanelLoader />}><ReportPanel /></Suspense>}

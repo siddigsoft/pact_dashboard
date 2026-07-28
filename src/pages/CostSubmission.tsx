@@ -428,7 +428,44 @@ const CostSubmission = () => {
         setOpsGlLogMap(map);
       });
   }, [operationalCosts]);
-  
+
+  // ── Receipt Confirmation Gate ──────────────────────────────────────────────
+  // When the current user has paid submissions where they haven't confirmed
+  // receiving the funds, show a blocking confirmation dialog.
+  const [receiptConfirmDialog, setReceiptConfirmDialog] = useState<{
+    open: boolean;
+    submission: OperationalCostSubmission | null;
+  }>({ open: false, submission: null });
+  const [confirmingReceipt, setConfirmingReceipt] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id || operationalCosts.length === 0) return;
+    // Only show for the requester (person who submitted)
+    const pending = operationalCosts.find(
+      o => o.status === 'paid' && !(o as any).fund_receipt_confirmed && o.submitted_by === currentUser.id
+    );
+    if (pending) setReceiptConfirmDialog({ open: true, submission: pending });
+  }, [operationalCosts, currentUser?.id]);
+
+  const handleConfirmReceipt = async () => {
+    const sub = receiptConfirmDialog.submission;
+    if (!sub) return;
+    setConfirmingReceipt(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions' as any)
+        .update({ fund_receipt_confirmed: true, fund_receipt_confirmed_at: new Date().toISOString() })
+        .eq('id', sub.id);
+      if (error) throw error;
+      toast({ title: 'Receipt confirmed', description: 'Thank you for confirming you received the payment.' });
+      setReceiptConfirmDialog({ open: false, submission: null });
+    } catch (e: any) {
+      toast({ title: 'Confirmation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setConfirmingReceipt(false);
+    }
+  };
+
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
     action: 'approve' | 'reject';
@@ -4115,7 +4152,7 @@ const CostSubmission = () => {
             >
               <ClipboardCheck className="h-4 w-4" />
               <span className="hidden sm:inline">
-                {(isAdmin || isSuperAdmin) ? "All Submissions" : isFOM ? "Approvals" : isSupervisor ? "Team" : "My Submissions"}
+                {(isAdmin || isSuperAdmin) ? "All Submissions" : isCountryDirector ? "All Approvals" : isFOM ? "Approvals" : isSupervisor ? "Team" : "My Submissions"}
               </span>
               <span className="sm:hidden">History</span>
               {submissionStats.total > 0 && activeTab !== "history" && (
@@ -4811,17 +4848,19 @@ const CostSubmission = () => {
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-slate-600" />
                 <CardTitle>
-                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isFOM ? "Approval Queue" : isSupervisor ? "Team Submissions" : "My Submissions"}
+                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isCountryDirector ? "All Approvals" : isFOM ? "Approval Queue" : isSupervisor ? "Team Submissions" : "My Submissions"}
                 </CardTitle>
               </div>
               <CardDescription>
                 {(isAdmin || isSuperAdmin)
                   ? "Review and manage all cost submissions across the organization. Approve, reject, or request more information."
-                  : isFOM
-                    ? "Review and approve cost submissions from Supervisors and Coordinators. Your approval is required before Finance can process payment."
-                    : isSupervisor
-                      ? "Review cost submissions from your team members. Verify and forward for admin approval."
-                      : "Track the status of your submitted costs and view approval history."
+                  : isCountryDirector
+                    ? "Review and manage all cost submissions you oversee. Approve or reject as the final decision-maker."
+                    : isFOM
+                      ? "Review and approve cost submissions from Supervisors and Coordinators. Your approval is required before Finance can process payment."
+                      : isSupervisor
+                        ? "Review cost submissions from your team members. Verify and forward for admin approval."
+                        : "Track the status of your submitted costs and view approval history."
                 }
               </CardDescription>
             </CardHeader>
@@ -11454,6 +11493,79 @@ const CostSubmission = () => {
           document.body
         );
       })()}
+
+      {/* ── Receipt Confirmation Gate Dialog ─────────────────────────── */}
+      <Dialog open={receiptConfirmDialog.open} onOpenChange={() => {}}>
+        <DialogContent
+          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          onInteractOutside={e => e.preventDefault()}
+          onEscapeKeyDown={e => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <CheckCircle className="h-5 w-5" />
+              Confirm Payment Receipt / تأكيد استلام الدفع
+            </DialogTitle>
+            <DialogDescription>
+              A payment has been processed for your cost submission. Please confirm you have received the funds before continuing.
+            </DialogDescription>
+          </DialogHeader>
+          {receiptConfirmDialog.submission && (() => {
+            const sub = receiptConfirmDialog.submission;
+            const proofUrl = (sub as any).payment_proof_url || (sub as any).payment_proof_urls?.[0];
+            const isImg = proofUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(proofUrl);
+            return (
+              <div className="space-y-4 py-1">
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Submission</span>
+                    <span className="font-medium">{(sub as any).title || sub.description || `#${sub.id.slice(0, 8)}`}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {(sub as any).currency || 'SDG'} {new Intl.NumberFormat().format((sub as any).total_amount || (sub as any).amount || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className="capitalize font-medium text-emerald-600">{sub.status}</span>
+                  </div>
+                </div>
+                {proofUrl && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payment Receipt / إيصال الدفع</p>
+                    {isImg ? (
+                      <img src={proofUrl} alt="Payment proof" className="w-full max-h-64 object-contain rounded-lg border" />
+                    ) : (
+                      <a href={proofUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sky-600 hover:text-sky-700 underline text-sm"
+                      >
+                        <ExternalLink className="h-4 w-4" />View Payment Receipt Document
+                      </a>
+                    )}
+                  </div>
+                )}
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+                  By clicking <strong>Confirm Receipt</strong>, you acknowledge that you have received the payment for this cost submission.
+                  You cannot take any action on this submission until you confirm.
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2">
+            <Button
+              onClick={handleConfirmReceipt}
+              disabled={confirmingReceipt}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="button-confirm-receipt"
+            >
+              <CheckCircle className="h-4 w-4 mr-1.5" />
+              {confirmingReceipt ? 'Confirming…' : 'Confirm Receipt / تأكيد الاستلام'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       </>)}
     </div>
