@@ -2007,16 +2007,18 @@ export default function PreFundingReconciliation() {
                       the full fund to Available.
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-900/40"
-                    disabled={resettingBalance}
-                    onClick={handleResetBalance}
-                  >
-                    {resettingBalance ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                    Reset Balance
-                  </Button>
+                  {!isCD && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-900/40"
+                      disabled={resettingBalance}
+                      onClick={handleResetBalance}
+                    >
+                      {resettingBalance ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                      Reset Balance
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -2054,26 +2056,30 @@ export default function PreFundingReconciliation() {
                             <p className="text-[11px] text-muted-foreground">{sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}</p>
                           </div>
                           <span className="font-mono text-xs shrink-0 text-muted-foreground">{sub.currency} {formatNumber(sub.amount, 0)}</span>
-                          <Input
-                            type="date"
-                            defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
-                            className="h-6 text-xs w-28 px-1.5 shrink-0"
-                            id={`link-date-${sub.id}`}
-                            data-testid={`input-link-date-${sub.id}`}
-                            title="Override the transaction date for this link"
-                          />
-                          <Button
-                            size="sm" variant="outline"
-                            className="h-6 text-xs shrink-0 px-2"
-                            onClick={() => {
-                              const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
-                              handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
-                            }}
-                            disabled={retryingId === sub.id}
-                            data-testid={`button-link-${sub.id}`}
-                          >
-                            <Link2 className="h-3 w-3 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
-                          </Button>
+                          {!isCD && (
+                            <>
+                              <Input
+                                type="date"
+                                defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                                className="h-6 text-xs w-28 px-1.5 shrink-0"
+                                id={`link-date-${sub.id}`}
+                                data-testid={`input-link-date-${sub.id}`}
+                                title="Override the transaction date for this link"
+                              />
+                              <Button
+                                size="sm" variant="outline"
+                                className="h-6 text-xs shrink-0 px-2"
+                                onClick={() => {
+                                  const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
+                                  handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
+                                }}
+                                disabled={retryingId === sub.id}
+                                data-testid={`button-link-${sub.id}`}
+                              >
+                                <Link2 className="h-3 w-3 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
+                              </Button>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2161,18 +2167,20 @@ export default function PreFundingReconciliation() {
                       );
                     })()}
                   </h3>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCsvImport(true)} data-testid="button-csv-import">
-                      <Upload className="h-3.5 w-3.5 mr-1" />Import CSV
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddTxn(true)}>
-                      <Plus className="h-3.5 w-3.5 mr-1" />Add Transaction
-                    </Button>
-                  </div>
+                  {!isCD && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCsvImport(true)} data-testid="button-csv-import">
+                        <Upload className="h-3.5 w-3.5 mr-1" />Import CSV
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowAddTxn(true)}>
+                        <Plus className="h-3.5 w-3.5 mr-1" />Add Transaction
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Group-select + bulk action toolbar ─────────────────── */}
-                {transactions.length > 0 && (() => {
+                {!isCD && transactions.length > 0 && (() => {
                   const allSelected = transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id));
                   const someSelected = selectedTxnIds.size > 0;
                   const selectedTotal = transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0);
@@ -2433,7 +2441,9 @@ export default function PreFundingReconciliation() {
                           <TableHead className="text-right">Amount</TableHead>
                           <TableHead className="text-center w-8"><Receipt className="h-3 w-3 mx-auto" /></TableHead>
                           <TableHead className="text-center" onClick={e => e.stopPropagation()}>
-                            {(() => {
+                            {isCD ? (
+                              <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Recon</span>
+                            ) : (() => {
                               const total = transactions.length;
                               const reconciled = transactions.filter(t => t.reconciled).length;
                               const allDone = total > 0 && reconciled === total;
@@ -2515,7 +2525,7 @@ export default function PreFundingReconciliation() {
                                   <User className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                                   {profileMap.get(t.user_id) ?? <span className="text-muted-foreground italic">Unknown</span>}
                                 </span>
-                              ) : t.transaction_type === 'payment' && allocUsers.length > 0 ? (
+                              ) : !isCD && t.transaction_type === 'payment' && allocUsers.length > 0 ? (
                                 <button
                                   onClick={() => { setAssignTxn(t); setAssignUserId(''); }}
                                   className="flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-[10px] font-medium border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
@@ -2574,27 +2584,37 @@ export default function PreFundingReconciliation() {
                               )}
                             </TableCell>
                             <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                              <button
-                                onClick={() => handleReconcileTxn(t.id, !t.reconciled)}
-                                className={cn('h-5 w-5 rounded-full border-2 transition-colors mx-auto flex items-center justify-center',
-                                  t.reconciled ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-muted-foreground hover:border-emerald-500'
-                                )}
-                                data-testid={`button-reconcile-${t.id}`}
-                              >
-                                {t.reconciled && <CheckCircle2 className="h-3 w-3" />}
-                              </button>
+                              {isCD ? (
+                                <div className={cn('h-5 w-5 rounded-full border-2 mx-auto flex items-center justify-center',
+                                  t.reconciled ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-muted-foreground/30'
+                                )}>
+                                  {t.reconciled && <CheckCircle2 className="h-3 w-3" />}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleReconcileTxn(t.id, !t.reconciled)}
+                                  className={cn('h-5 w-5 rounded-full border-2 transition-colors mx-auto flex items-center justify-center',
+                                    t.reconciled ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-muted-foreground hover:border-emerald-500'
+                                  )}
+                                  data-testid={`button-reconcile-${t.id}`}
+                                >
+                                  {t.reconciled && <CheckCircle2 className="h-3 w-3" />}
+                                </button>
+                              )}
                             </TableCell>
-                            <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                              <button
-                                onClick={() => setConfirmUnlinkTxn(t)}
-                                disabled={unlinkingId === t.id}
-                                title="Unlink — removes this transaction and restores the fund balance"
-                                className="h-6 w-6 flex items-center justify-center mx-auto rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-40"
-                                data-testid={`button-unlink-${t.id}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </TableCell>
+                            {!isCD && (
+                              <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setConfirmUnlinkTxn(t)}
+                                  disabled={unlinkingId === t.id}
+                                  title="Unlink — removes this transaction and restores the fund balance"
+                                  className="h-6 w-6 flex items-center justify-center mx-auto rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-40"
+                                  data-testid={`button-unlink-${t.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
