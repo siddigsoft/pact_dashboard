@@ -8168,6 +8168,9 @@ const CostSubmission = () => {
             const mineRejected = mine.filter(o => o.status === 'rejected').length;
             const minePaidCount = mine.filter(o => ['paid','reconciled'].includes(o.status)).length;
 
+            // Role guard — must be declared before catSource and all breakdown blocks
+            const isApproverRole = isFOM || isSupervisor || isCountryDirector || isFinanceAdmin || isAdmin || isSuperAdmin;
+
             // Category breakdown — admins/approvers see ALL submissions; others see own only
             const catSource = isApproverRole ? operationalCosts : mine;
             const catMap = new Map<string, { count: number; requested: number; paid: number; approved: number }>();
@@ -8226,8 +8229,6 @@ const CostSubmission = () => {
               o.tier1_approved_by === currentUser?.id || o.tier2_approved_by === currentUser?.id ||
               o.tier3_approved_by === currentUser?.id || o.tier4_approved_by === currentUser?.id
             );
-            const isApproverRole = isFOM || isSupervisor || isCountryDirector || isFinanceAdmin || isAdmin || isSuperAdmin;
-
             // ── Approval Time Metrics (for my OWN submissions) ───────────
             const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10 : null;
             const fmtDays = (d: number | null) => d === null ? '—' : d < 1 ? `${Math.round(d*24)}h` : `${d}d`;
