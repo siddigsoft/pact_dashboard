@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -673,6 +673,110 @@ export default function PreFundingReport() {
     </div>
   );
 
+  // Approvals tab body — only for Finance Admin, hidden from CD
+  let approvalsTabBody: ReactNode = null;
+  if (!isCD) {
+    if (loading) {
+      approvalsTabBody = (
+        <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
+      );
+    } else if (approvalSummary.length === 0) {
+      approvalsTabBody = (
+        <div className="p-10 text-center text-muted-foreground text-sm">
+          <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-30" />No approval chains configured for the current filters.
+        </div>
+      );
+    } else {
+      const byFund: Record<string, StepRow[]> = {};
+      filteredSteps.forEach(s => {
+        if (!byFund[s.pre_fund_request_id]) byFund[s.pre_fund_request_id] = [];
+        byFund[s.pre_fund_request_id].push(s);
+      });
+      approvalsTabBody = Object.keys(byFund).map(fid => {
+        const fundSteps = byFund[fid].sort((a, b) => a.step_order - b.step_order);
+        const fund = filteredFunds.find(f => f.id === fid);
+        const fundStatus = fund ? STATUS_CFG[fund.status] : null;
+        const allDone     = fundSteps.every(s => s.status !== 'pending');
+        const anyRej      = fundSteps.some(s => s.status === 'rejected');
+        const approvedCount = fundSteps.filter(s => s.status === 'approved').length;
+        const pct = fundSteps.length > 0 ? Math.round((approvedCount / fundSteps.length) * 100) : 0;
+        return (
+          <Card key={fid} className="border overflow-hidden">
+            <div className={cn('flex items-center justify-between px-4 py-2.5 border-b',
+              anyRej ? 'bg-rose-50 dark:bg-rose-950/30' : allDone ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-sky-50 dark:bg-sky-950/20')}>
+              <div className="flex items-center gap-2 min-w-0">
+                <GitBranch className={cn('h-4 w-4 shrink-0', anyRej ? 'text-rose-500' : allDone ? 'text-emerald-500' : 'text-sky-500')} />
+                <span className="font-semibold text-sm truncate">{fundSteps[0].fund_name}</span>
+                {fundStatus && <Badge variant="outline" className={cn('text-[10px] shrink-0', fundStatus.cls)}>{fundStatus.label}</Badge>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-muted-foreground">{approvedCount}/{fundSteps.length} steps</span>
+                <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className={cn('h-full rounded-full', anyRej ? 'bg-rose-500' : pct === 100 ? 'bg-emerald-500' : 'bg-sky-500')} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            </div>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-0 overflow-x-auto pb-1">
+                {fundSteps.map((step, idx) => {
+                  const isApproved = step.status === 'approved';
+                  const isRejected = step.status === 'rejected';
+                  const isPending  = step.status === 'pending';
+                  const isActive   = isPending && (idx === 0 || fundSteps[idx - 1].status === 'approved');
+                  const stepColor  = isApproved ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
+                    : isRejected ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/30'
+                    : isActive   ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-300/50'
+                    : 'border-border bg-muted/30';
+                  const numColor   = isApproved ? 'bg-emerald-500 text-white' : isRejected ? 'bg-rose-500 text-white'
+                    : isActive ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground';
+                  return (
+                    <div key={step.id} className="flex items-center shrink-0">
+                      <div className={cn('border rounded-xl p-3 w-44 flex flex-col gap-1.5 relative', stepColor)}>
+                        <div className="flex items-center gap-2">
+                          <span className={cn('h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0', numColor)}>{step.step_order}</span>
+                          <span className="text-xs font-semibold leading-tight truncate">{step.step_label}</span>
+                        </div>
+                        {!step.is_required && <span className="text-[9px] text-muted-foreground bg-muted rounded px-1 py-0.5 w-fit">optional</span>}
+                        <div className="flex items-center gap-1"><span className="text-[10px] text-muted-foreground truncate">{step.assignee_names}</span></div>
+                        <Badge variant="outline" className={cn('text-[10px] w-fit px-1.5 py-0',
+                          isApproved ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                          : isRejected ? 'bg-rose-100 text-rose-700 border-rose-300'
+                          : isActive ? 'bg-amber-100 text-amber-700 border-amber-300'
+                          : 'bg-muted text-muted-foreground')}>
+                          {isApproved ? '✓ Approved' : isRejected ? '✗ Rejected'
+                            : isActive ? <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Active</>
+                            : <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Waiting</>}
+                        </Badge>
+                        {step.approved_at && <span className="text-[9px] text-muted-foreground">{format(parseISO(step.approved_at), 'MMM d, yyyy')}</span>}
+                      </div>
+                      {idx < fundSteps.length - 1 && (
+                        <div className="flex items-center shrink-0 mx-1">
+                          <div className="h-px w-5 bg-border" />
+                          <div className="w-0 h-0 border-t-4 border-b-4 border-l-6 border-t-transparent border-b-transparent border-l-border" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {fundSteps.length > 0 && (
+                  <div className="flex items-center shrink-0 mx-1">
+                    <div className="h-px w-5 bg-border" />
+                    <div className={cn('rounded-full px-2.5 py-1 text-[10px] font-semibold border',
+                      anyRej ? 'bg-rose-100 text-rose-700 border-rose-300'
+                      : allDone ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                      : 'bg-muted text-muted-foreground border-border')}>
+                      {anyRej ? 'Rejected' : allDone ? '✓ All Clear' : 'In Progress'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      });
+    }
+  }
+
   return (
     <div className="space-y-5 p-4 md:p-6">
 
@@ -881,9 +985,11 @@ export default function PreFundingReport() {
           <TabsTrigger value="reconciliation" className="text-xs gap-1">
             <Users className="h-3.5 w-3.5" />By User ({reconciliationByUser.length})
           </TabsTrigger>
-          <TabsTrigger value="approvals" className="text-xs gap-1">
-            <GitBranch className="h-3.5 w-3.5" />Approvals ({filteredSteps.length})
-          </TabsTrigger>
+          {!isCD && (
+            <TabsTrigger value="approvals" className="text-xs gap-1">
+              <GitBranch className="h-3.5 w-3.5" />Approvals ({filteredSteps.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Funds table ── */}
@@ -1205,8 +1311,8 @@ export default function PreFundingReport() {
                 const txnTotal = u.txns.reduce((s, t) => s + t.amount, 0);
                 const currency = u.currency || u.txns[0]?.currency || 'USD';
                 const hasAlloc = u.allocated > 0;
-                const remaining = hasAlloc ? u.allocated - u.spent : null;
-                const pct = hasAlloc && u.allocated > 0 ? Math.min((u.spent / u.allocated) * 100, 100) : null;
+                const remaining = hasAlloc ? u.allocated - txnTotal : null;
+                const pct = hasAlloc && u.allocated > 0 ? Math.min((txnTotal / u.allocated) * 100, 100) : null;
                 const reconciledCount = u.txns.filter(t => t.reconciled).length;
                 const unreconciled = u.txns.length - reconciledCount;
 
@@ -1261,7 +1367,7 @@ export default function PreFundingReport() {
                         <div className="shrink-0 text-right hidden sm:block">
                           <div className="text-[10px] text-muted-foreground mb-0.5">Spent</div>
                           <div className="text-xs font-mono font-semibold text-rose-600">
-                            {currency} {formatNumber(hasAlloc ? u.spent : txnTotal, 0)}
+                            {currency} {formatNumber(txnTotal, 0)}
                           </div>
                         </div>
 
@@ -1398,145 +1504,9 @@ export default function PreFundingReport() {
           )}
         </TabsContent>
 
-        {/* ── Approvals tab — visual chain flow ── */}
+        {/* ── Approvals tab — visual chain flow (Finance Admin only, not CD) ── */}
         <TabsContent value="approvals" className="mt-3 space-y-4">
-          {loading ? (
-            <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
-          ) : approvalSummary.length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground text-sm">
-              <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-30" />No approval chains configured for the current filters.
-            </div>
-          ) : (() => {
-            // Group steps by fund
-            const byFund: Record<string, StepRow[]> = {};
-            filteredSteps.forEach(s => {
-              if (!byFund[s.pre_fund_request_id]) byFund[s.pre_fund_request_id] = [];
-              byFund[s.pre_fund_request_id].push(s);
-            });
-            const fundIds = Object.keys(byFund);
-            return fundIds.map(fid => {
-              const fundSteps = byFund[fid].sort((a, b) => a.step_order - b.step_order);
-              const fund = filteredFunds.find(f => f.id === fid);
-              const fundStatus = fund ? STATUS_CFG[fund.status] : null;
-              const allDone  = fundSteps.every(s => s.status !== 'pending');
-              const anyRej   = fundSteps.some(s => s.status === 'rejected');
-              const approvedCount = fundSteps.filter(s => s.status === 'approved').length;
-              const pct = fundSteps.length > 0 ? Math.round((approvedCount / fundSteps.length) * 100) : 0;
-
-              return (
-                <Card key={fid} className="border overflow-hidden">
-                  {/* Fund header */}
-                  <div className={cn(
-                    'flex items-center justify-between px-4 py-2.5 border-b',
-                    anyRej ? 'bg-rose-50 dark:bg-rose-950/30' :
-                    allDone ? 'bg-emerald-50 dark:bg-emerald-950/30' :
-                    'bg-sky-50 dark:bg-sky-950/20'
-                  )}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <GitBranch className={cn('h-4 w-4 shrink-0', anyRej ? 'text-rose-500' : allDone ? 'text-emerald-500' : 'text-sky-500')} />
-                      <span className="font-semibold text-sm truncate">{fundSteps[0].fund_name}</span>
-                      {fundStatus && (
-                        <Badge variant="outline" className={cn('text-[10px] shrink-0', fundStatus.cls)}>
-                          {fundStatus.label}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] text-muted-foreground">{approvedCount}/{fundSteps.length} steps</span>
-                      <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className={cn('h-full rounded-full', anyRej ? 'bg-rose-500' : pct === 100 ? 'bg-emerald-500' : 'bg-sky-500')}
-                          style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step flow — horizontal scroll on mobile */}
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-0 overflow-x-auto pb-1">
-                      {fundSteps.map((step, idx) => {
-                        const isApproved = step.status === 'approved';
-                        const isRejected = step.status === 'rejected';
-                        const isPending  = step.status === 'pending';
-                        const isActive   = isPending && (idx === 0 || fundSteps[idx - 1].status === 'approved');
-
-                        const stepColor = isApproved ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
-                          : isRejected ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/30'
-                          : isActive   ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-300/50'
-                          : 'border-border bg-muted/30';
-                        const numColor = isApproved ? 'bg-emerald-500 text-white'
-                          : isRejected ? 'bg-rose-500 text-white'
-                          : isActive   ? 'bg-amber-500 text-white'
-                          : 'bg-muted text-muted-foreground';
-
-                        return (
-                          <div key={step.id} className="flex items-center shrink-0">
-                            {/* Step card */}
-                            <div className={cn('border rounded-xl p-3 w-44 flex flex-col gap-1.5 relative', stepColor)}>
-                              {/* Number + label row */}
-                              <div className="flex items-center gap-2">
-                                <span className={cn('h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0', numColor)}>
-                                  {step.step_order}
-                                </span>
-                                <span className="text-xs font-semibold leading-tight truncate">{step.step_label}</span>
-                              </div>
-                              {/* Optional badge */}
-                              {!step.is_required && (
-                                <span className="text-[9px] text-muted-foreground bg-muted rounded px-1 py-0.5 w-fit">optional</span>
-                              )}
-                              {/* Assignee */}
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-muted-foreground truncate">{step.assignee_names}</span>
-                              </div>
-                              {/* Status badge */}
-                              <Badge variant="outline" className={cn('text-[10px] w-fit px-1.5 py-0',
-                                isApproved ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                                : isRejected ? 'bg-rose-100 text-rose-700 border-rose-300'
-                                : isActive   ? 'bg-amber-100 text-amber-700 border-amber-300'
-                                : 'bg-muted text-muted-foreground')}>
-                                {isApproved ? '✓ Approved'
-                                  : isRejected ? '✗ Rejected'
-                                  : isActive ? <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Active</>
-                                  : <><Clock className="inline h-2.5 w-2.5 mr-0.5" />Waiting</>}
-                              </Badge>
-                              {/* Date */}
-                              {step.approved_at && (
-                                <span className="text-[9px] text-muted-foreground">
-                                  {format(parseISO(step.approved_at), 'MMM d, yyyy')}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Arrow connector */}
-                            {idx < fundSteps.length - 1 && (
-                              <div className="flex items-center shrink-0 mx-1">
-                                <div className="h-px w-5 bg-border" />
-                                <div className="w-0 h-0 border-t-4 border-b-4 border-l-6 border-t-transparent border-b-transparent border-l-border" />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* Final outcome bubble */}
-                      {fundSteps.length > 0 && (
-                        <div className="flex items-center shrink-0 mx-1">
-                          <div className="h-px w-5 bg-border" />
-                          <div className={cn(
-                            'rounded-full px-2.5 py-1 text-[10px] font-semibold border',
-                            anyRej ? 'bg-rose-100 text-rose-700 border-rose-300'
-                            : allDone ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                            : 'bg-muted text-muted-foreground border-border'
-                          )}>
-                            {anyRej ? 'Rejected' : allDone ? '✓ All Clear' : 'In Progress'}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            });
-          })()}
+          {approvalsTabBody}
         </TabsContent>
       </Tabs>
     </div>
