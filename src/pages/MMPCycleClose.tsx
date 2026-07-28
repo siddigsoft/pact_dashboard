@@ -2555,7 +2555,18 @@ const MMPCycleClose = () => {
         .eq('mmp_file_id', mmpId)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 
-      if (svError) throw svError;
+      // If not_covered_flag column is missing (migration not applied yet) we
+      // log a warning and continue — the cycle still moves to 'closing' and
+      // the wizard opens. Apply migration 20260727c_mmp_site_entries_not_covered_columns.sql
+      // in Supabase to enable full site-flagging.
+      if (svError) {
+        const isMissingCol = svError.message?.includes('column') || (svError as any).code === '42703';
+        if (isMissingCol) {
+          console.warn('[handleStartClosingCycle] not_covered_flag column not found — migration not applied. Skipping flag step and continuing cycle close.');
+        } else {
+          throw svError;
+        }
+      }
 
       const mmp = mmpFiles?.find(m => m.id === mmpId);
       const mmpName = mmp?.name || 'MMP';
@@ -6638,57 +6649,81 @@ const MMPCycleClose = () => {
       {(!checklistMmpId || checklistMmpStatus === 'active') && (
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); }} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="h-auto flex flex-nowrap gap-1 p-1.5 overflow-x-auto w-full justify-start bg-muted/60 rounded-xl border border-border/60">
-          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <Activity className="h-3.5 w-3.5" />
-            <span>Active Cycles</span>
-            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
+          <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5" />
+              <span className="font-medium">Active Cycles</span>
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Click "Close Full MMP" here</span>
           </TabsTrigger>
-          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span>Uncovered Sites</span>
-            {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
+          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span className="font-medium">Uncovered Sites</span>
+              {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Assign a reason to each site</span>
           </TabsTrigger>
-          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <DollarSign className="h-3.5 w-3.5 text-amber-500" />
-            <span>Pending Finance</span>
-            {(financeCosts.length + financeAdvances.length) > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
-            )}
+          <TabsTrigger value="finance" data-testid="tab-finance" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <DollarSign className="h-3.5 w-3.5 text-amber-500" />
+              <span className="font-medium">Pending Finance</span>
+              {(financeCosts.length + financeAdvances.length) > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
+              )}
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Settle costs &amp; advances</span>
           </TabsTrigger>
-          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <Shield className="h-3.5 w-3.5 text-blue-500" />
-            <span>WFP Confirmation</span>
-            {wfpAppliedUpload && (
-              <Badge className="ml-0.5 text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>
-            )}
-            {!wfpAppliedUpload && wfpSummary && wfpSummary.pendingReview > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
-            )}
+          <TabsTrigger value="wfp" data-testid="tab-wfp" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <Shield className="h-3.5 w-3.5 text-blue-500" />
+              <span className="font-medium">WFP Confirmation</span>
+              {wfpAppliedUpload && <Badge className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>}
+              {!wfpAppliedUpload && wfpSummary && wfpSummary.pendingReview > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
+              )}
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Upload WFP payment proof</span>
           </TabsTrigger>
-          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-            <span>Exceptions</span>
-            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
-              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
-                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
-              </Badge>
-            )}
+          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              <span className="font-medium">Exceptions</span>
+              {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                  {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
+                </Badge>
+              )}
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Handle advance recovery cases</span>
           </TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span>Reports</span>
+          <TabsTrigger value="reports" data-testid="tab-reports" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span className="font-medium">Reports</span>
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Export cycle summary PDF/Excel</span>
           </TabsTrigger>
-          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <MapPin className="h-3.5 w-3.5 text-emerald-500" />
-            <span>Ad-hoc Visits</span>
+          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="font-medium">Ad-hoc Visits</span>
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Unplanned/extra site visits</span>
           </TabsTrigger>
-          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <Layers className="h-3.5 w-3.5" />
-            <span>Comparison</span>
+          <TabsTrigger value="comparison" data-testid="tab-comparison" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5" />
+              <span className="font-medium">Comparison</span>
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Compare two MMP cycles</span>
           </TabsTrigger>
-          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
-            <Star className="h-3.5 w-3.5" />
-            <span>Scorecard</span>
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
+            <div className="flex items-center gap-1.5">
+              <Star className="h-3.5 w-3.5" />
+              <span className="font-medium">Scorecard</span>
+            </div>
+            <span className="text-[10px] font-normal text-muted-foreground text-left">Cycle performance score</span>
           </TabsTrigger>
           <TabsTrigger value="archive" data-testid="tab-archive" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0">
             <BookOpen className="h-3.5 w-3.5" />
@@ -6784,11 +6819,7 @@ const MMPCycleClose = () => {
                           }
                         }}
                         handleStartClosingCycle={(mmpId) => {
-                          if (cycleStatus === 'active' && canManageCycle) {
-                            setChecklistMmpId(mmpId);
-                          } else {
-                            handleStartClosingCycle(mmpId);
-                          }
+                          handleStartClosingCycle(mmpId);
                         }}
                         onOpenGuide={() => setChecklistMmpId(mmp.id)}
                         handleScopedClose={handleScopedClose}
