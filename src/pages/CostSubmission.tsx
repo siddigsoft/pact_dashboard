@@ -307,8 +307,8 @@ const CostSubmission = () => {
   } = useQuery({
     queryKey: _opsQueryKey,
     enabled: !!currentUser?.id,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 20 * 60 * 1000,
     retry: 1,
     queryFn: async (): Promise<OperationalCostSubmission[]> => {
       if (!currentUser?.id) return [];
@@ -349,7 +349,6 @@ const CostSubmission = () => {
 
   const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
-  const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
@@ -360,9 +359,10 @@ const CostSubmission = () => {
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
   const toggleRole = (role: string) => setExpandedRoles(prev => { const n = new Set(prev); n.has(role) ? n.delete(role) : n.add(role); return n; });
 
-  // Maps pre_fund_transaction_id → fund name for the reports tab
+  // Maps pre_fund_transaction_id → fund name for the reports tab (lazy — only when Reports is open)
   const [txnToFundMap, setTxnToFundMap] = useState<Map<string, string>>(new Map());
   useEffect(() => {
+    if (activeTab !== 'reports') return;
     const txnIds = [...new Set(
       operationalCosts.map(o => (o as any).pre_fund_transaction_id).filter(Boolean)
     )] as string[];
@@ -389,18 +389,11 @@ const CostSubmission = () => {
       });
   }, [operationalCosts]);
 
-   // Derive distinct MMP options from loaded cost data
-   useEffect(() => {
-     const ids = [...new Set(operationalCosts.map(o => o.mmp_file_id).filter(Boolean))] as string[];
-     if (ids.length === 0) { setMmpOptions([]); return; }
-    supabase
-      .from('mmp_files')
-      .select('id, name')
-      .in('id', ids)
-      .then(({ data }) => {
-        setMmpOptions((data || []).map((m: { id: string; name: string }) => ({ id: m.id, name: m.name })));
-      });
-  }, [operationalCosts]);
+  // Derive MMP filter options from already-loaded mmpNameMap — no extra query needed
+  const mmpOptions = useMemo(() => {
+    const ids = [...new Set(operationalCosts.map(o => o.mmp_file_id).filter(Boolean))] as string[];
+    return ids.map(id => ({ id, name: mmpNameMap.get(id) || 'MMP' }));
+  }, [operationalCosts, mmpNameMap]);
 
   // Derived submitter options (from role-filtered pool, before user/state filter so the list stays full)
   const userOptions = useMemo(() => {
@@ -445,8 +438,9 @@ const CostSubmission = () => {
     }
   }, [openSubmissionId, operationalCosts]);
 
-  // Fetch GL bridge log for paid/reconciled operational cost submissions
+  // Fetch GL bridge log for paid/reconciled operational cost submissions — lazy on Reports tab
   useEffect(() => {
+    if (activeTab !== 'reports') return;
     const paidIds = operationalCosts
       .filter(o => o.status === 'paid' || o.status === 'reconciled')
       .map(o => o.id);
@@ -2878,19 +2872,10 @@ const CostSubmission = () => {
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
   const [ccContacts, setCcContacts] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
-
-  useEffect(() => {
-    const preloadRecipients = async () => {
-      try {
-        const { data: financeUsers } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, role')
-          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-          .eq('status', 'approved');
-        cachedRecipientsRef.current = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-      } catch {}
-    };
-    preloadRecipients();
+  const ccContactsLoadedRef = useRef(false);
+  const loadCcContacts = useCallback(() => {
+    if (ccContactsLoadedRef.current) return;
+    ccContactsLoadedRef.current = true;
     supabase
       .from('profiles')
       .select('id, email, full_name, role')
@@ -2905,7 +2890,10 @@ const CostSubmission = () => {
       });
   }, []);
 
+  // cc contacts and recipients are loaded lazily when the payment dialog is first opened
+
   const openPaymentRequestDialog = async (oc: OperationalCostSubmission) => {
+    loadCcContacts(); // lazy — only fetches once, no-op on subsequent calls
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
       setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
