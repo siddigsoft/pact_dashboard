@@ -621,6 +621,7 @@ const CostSubmission = () => {
   const [cdExceptionReviewDialog, setCDExceptionReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; note: string; action: 'approved' | 'rejected' }>({ open: false, submission: null, note: '', action: 'approved' });
   // Deletion audit log — what has actually been permanently deleted
   const [deletionLog, setDeletionLog] = useState<any[]>([]);
+  const [restoreLogEntry, setRestoreLogEntry] = useState<any | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -3630,6 +3631,45 @@ const CostSubmission = () => {
       }
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to approve deletion.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+    }
+  };
+
+  // SuperAdmin restores a record from the deletion_audit_log back into the table
+  const handleRestoreFromLog = async (logEntry: any) => {
+    if (!logEntry?.record_data) return;
+    setActionProcessing(true);
+    try {
+      const rd = { ...logEntry.record_data };
+      // Strip audit/system fields that shouldn't carry over
+      delete rd.delete_request_status;
+      delete rd.delete_request_reason;
+      delete rd.delete_requested_by;
+      delete rd.delete_requested_at;
+      delete rd.delete_request_reviewed_by;
+      delete rd.delete_request_reviewed_at;
+      delete rd.delete_request_notes;
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .insert(rd);
+      if (error) {
+        toast({ title: 'Restore Failed', description: error.message, variant: 'destructive' });
+      } else {
+        // Mark the log entry as restored
+        await supabase.from('deletion_audit_log').update({
+          is_restorable: false,
+          restored_at: new Date().toISOString(),
+          restored_by: currentUser?.id,
+          restoration_notes: `Restored by ${(currentUser as any)?.full_name || (currentUser as any)?.name || currentUser?.email || 'SuperAdmin'} on ${new Date().toLocaleString()}`,
+        }).eq('id', logEntry.id);
+        setDeletionLog(prev => prev.map(l => l.id === logEntry.id ? { ...l, restored_at: new Date().toISOString() } : l));
+        setRestoreLogEntry(null);
+        fetchOperationalCosts();
+        toast({ title: '✅ Submission Restored', description: 'The submission has been brought back successfully.', variant: 'default' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to restore the submission.', variant: 'destructive' });
     } finally {
       setActionProcessing(false);
     }
@@ -9280,7 +9320,27 @@ const CostSubmission = () => {
                           <p className="font-medium text-slate-600 dark:text-slate-300 italic">{l.deletion_reason}</p>
                         </div>
                       )}
+                      {l.restored_at && (
+                        <div className="col-span-2 mt-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300">
+                            <CheckCircle className="h-2.5 w-2.5" />Already Restored
+                          </span>
+                        </div>
+                      )}
                     </div>
+                    {/* Restore action — only if not already restored */}
+                    {!l.restored_at && (
+                      <div className="flex items-center justify-end px-4 py-2 border-t border-slate-100 dark:border-slate-700/50">
+                        <button
+                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                          disabled={actionProcessing}
+                          onClick={() => setRestoreLogEntry(l)}
+                          data-testid={`button-restore-log-${l.id}`}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />Restore Submission
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               };
@@ -10796,6 +10856,47 @@ const CostSubmission = () => {
       </AlertDialog>
 
       {/* ── Review Delete Request dialog (Admin / FinancialAdmin) ───────── */}
+      {/* ── Restore from Deletion Log Confirmation ── */}
+      <AlertDialog open={!!restoreLogEntry} onOpenChange={(open) => { if (!open) setRestoreLogEntry(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-blue-600" />Restore Deleted Submission?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {restoreLogEntry && (() => {
+                  const rd = restoreLogEntry.record_data ?? {};
+                  return (
+                    <>
+                      <p className="font-medium text-foreground">
+                        {rd.currency} {((rd.amount_cents ?? 0) / 100).toLocaleString()} — {rd.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                      </p>
+                      <p className="text-xs">
+                        Deleted by <strong>{restoreLogEntry.deleted_by_name}</strong> on {new Date(restoreLogEntry.deleted_at).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        This will re-insert the submission exactly as it was. Its approval status will be the same as when it was deleted.
+                      </p>
+                    </>
+                  );
+                })()}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={actionProcessing}
+              onClick={() => restoreLogEntry && handleRestoreFromLog(restoreLogEntry)}
+            >
+              {actionProcessing ? 'Restoring…' : 'Yes, Restore It'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={deleteReviewDialog.open} onOpenChange={(open) => !open && setDeleteReviewDialog({ open: false, submission: null, notes: '', action: 'approve' })}>
         <AlertDialogContent>
           <AlertDialogHeader>
