@@ -9446,6 +9446,12 @@ const CostSubmission = () => {
                 );
               };
 
+              const emptyRow = (msg: string) => (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-5 text-center">
+                  <p className="text-xs text-slate-400 italic">{msg}</p>
+                </div>
+              );
+
               return (
                 <div className="space-y-6">
                   {/* Page header */}
@@ -9460,64 +9466,61 @@ const CostSubmission = () => {
                     </p>
                   </div>
 
-                  {/* ── MY TODAY'S DELETIONS — most prominent ── */}
-                  {myTodayDeletions.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-none w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                          My Deletions Today ({myTodayDeletions.length})
-                        </span>
-                        <span dir="rtl" className="text-xs text-slate-400">ما حذفته اليوم</span>
-                        <div className="flex-1 h-px bg-red-200 dark:bg-red-900" />
-                        <span className="text-xs text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                      </div>
-                      {myTodayDeletions.map(renderLogRow)}
+                  {/* ── SECTION 1: MY TODAY'S DELETIONS ── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-none w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                        My Deletions Today {myTodayDeletions.length > 0 ? `(${myTodayDeletions.length})` : ''}
+                      </span>
+                      <span dir="rtl" className="text-xs text-slate-400">ما حذفته اليوم</span>
+                      <div className="flex-1 h-px bg-red-200 dark:bg-red-900" />
+                      <span className="text-xs text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
                     </div>
-                  )}
+                    {myTodayDeletions.length > 0
+                      ? myTodayDeletions.map(renderLogRow)
+                      : emptyRow('No submissions deleted by you today')}
+                  </div>
 
-                  {/* ── PENDING REQUESTS ── */}
-                  {pendingItems.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-300">
-                          <AlertTriangle className="h-3 w-3" />{pendingItems.length} Pending Requests
-                        </span>
-                        <div className="flex-1 h-px bg-amber-200 dark:bg-amber-900" />
-                      </div>
-                      {pendingItems.map(renderRequestRow)}
+                  {/* ── SECTION 2: PENDING REQUESTS ── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${pendingItems.length > 0 ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <AlertTriangle className="h-3 w-3" />
+                        Pending Requests {pendingItems.length > 0 ? `(${pendingItems.length})` : '(0)'}
+                      </span>
+                      <div className="flex-1 h-px bg-amber-200 dark:bg-amber-900/40" />
                     </div>
-                  )}
+                    {pendingItems.length > 0
+                      ? pendingItems.map(renderRequestRow)
+                      : emptyRow('No pending deletion requests')}
+                  </div>
 
-                  {/* ── ALL OTHER DELETIONS (from audit log, excluding today's mine) ── */}
-                  {otherDeletions.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">All Deletions ({otherDeletions.length})</span>
-                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
-                      </div>
-                      {otherDeletions.map(renderLogRow)}
+                  {/* ── SECTION 3: ALL DELETIONS LOG ── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        All Deletions ({otherDeletions.length})
+                      </span>
+                      <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                     </div>
-                  )}
+                    {otherDeletions.length > 0
+                      ? otherDeletions.map(renderLogRow)
+                      : emptyRow('No other deletions recorded — future permanent deletions will appear here with a Restore button')}
+                  </div>
 
-                  {/* ── RESOLVED REQUESTS ── */}
-                  {resolvedItems.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved Requests ({resolvedItems.length})</span>
-                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
-                      </div>
-                      {resolvedItems.map(renderRequestRow)}
+                  {/* ── SECTION 4: RESOLVED REQUESTS ── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Resolved Requests ({resolvedItems.length})
+                      </span>
+                      <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                     </div>
-                  )}
-
-                  {deletionLog.length === 0 && allRequests.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <Trash2 className="h-10 w-10 text-slate-300 mb-3" />
-                      <p className="text-slate-500 font-medium">No deletions or requests yet</p>
-                      <p className="text-xs text-slate-400 mt-1">Permanently deleted items and delete requests will appear here.</p>
-                    </div>
-                  )}
+                    {resolvedItems.length > 0
+                      ? resolvedItems.map(renderRequestRow)
+                      : emptyRow('No approved or rejected requests yet')}
+                  </div>
                 </div>
               );
             })()}
