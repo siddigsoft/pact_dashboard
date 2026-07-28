@@ -4119,21 +4119,23 @@ const CostSubmission = () => {
               </TabsTrigger>
             )}
             
-            {/* Outstanding */}
-            <TabsTrigger 
-              value="outstanding" 
-              data-testid="tab-outstanding" 
-              className="relative flex-1 min-w-[120px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
-            >
-              <CircleDollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Outstanding</span>
-              <span className="sm:hidden">Due</span>
-              {submissionStats.approved > 0 && activeTab !== "outstanding" && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-0">
-                  {submissionStats.approved}
-                </Badge>
-              )}
-            </TabsTrigger>
+            {/* Outstanding — hidden for Country Director */}
+            {!isCountryDirector && (
+              <TabsTrigger 
+                value="outstanding" 
+                data-testid="tab-outstanding" 
+                className="relative flex-1 min-w-[120px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+              >
+                <CircleDollarSign className="h-4 w-4" />
+                <span className="hidden sm:inline">Outstanding</span>
+                <span className="sm:hidden">Due</span>
+                {submissionStats.approved > 0 && activeTab !== "outstanding" && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-0">
+                    {submissionStats.approved}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
             
             {/* Reconciliation — Finance Admin / Admin / SuperAdmin only */}
             {canViewReconciliationTab && (
@@ -8158,20 +8160,59 @@ const CostSubmission = () => {
             const isApproverRole = isFOM || isSupervisor || isCountryDirector || isFinanceAdmin || isAdmin || isSuperAdmin;
 
             // ── Approval Time Metrics (for my OWN submissions) ───────────
-            const t1Times: number[] = []; const t2Times: number[] = [];
-            const t3Times: number[] = []; const t4Times: number[] = [];
-            for (const o of mine) {
-              const d1 = daysBetween(o.submitted_at, o.tier1_approved_at);
-              if (d1 !== null && d1 >= 0) t1Times.push(d1);
-              const d2 = daysBetween(o.tier1_approved_at, o.tier2_approved_at);
-              if (d2 !== null && d2 >= 0) t2Times.push(d2);
-              const d3 = daysBetween(o.tier2_approved_at, o.tier3_approved_at);
-              if (d3 !== null && d3 >= 0) t3Times.push(d3);
-              const d4 = daysBetween(o.tier3_approved_at, o.tier4_approved_at);
-              if (d4 !== null && d4 >= 0) t4Times.push(d4);
-            }
             const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10 : null;
             const fmtDays = (d: number | null) => d === null ? '—' : d < 1 ? `${Math.round(d*24)}h` : `${d}d`;
+
+            // Map approver userId → role label (Supervisor / Hub Manager / FOM / CD / Finance / Admin)
+            const approverRoleLabel = (userId: string | null | undefined): string => {
+              if (!userId) return '—';
+              const u = users.find(x => x.id === userId);
+              const r = (u?.role || '').toLowerCase().replace(/[_\s]/g, '');
+              if (r === 'supervisor') return 'Supervisor';
+              if (r === 'hubmanager' || r === 'hub_manager') return 'Hub Manager';
+              if (r === 'fom' || r.includes('fieldoperations')) return 'FOM';
+              if (r === 'countrydirector' || r === 'country_director') return 'Country Director (CD)';
+              if (r === 'financialadmin' || r === 'financial_admin') return 'Finance Admin';
+              if (r === 'superadmin' || r === 'super_admin') return 'Super Admin';
+              if (r === 'admin') return 'Admin';
+              return u?.role || '—';
+            };
+            // Canonical role order for display
+            const ROLE_ORDER = ['Supervisor','Hub Manager','FOM','Country Director (CD)','Finance Admin','Admin','Super Admin'];
+
+            // Build role-level and user-level timing maps
+            const roleTimes = new Map<string, number[]>();
+            const userTimesMap = new Map<string, { name: string; role: string; times: number[] }>();
+            const addTiming = (approvedBy: string | null | undefined, prevAt: string | null | undefined, approvedAt: string | null | undefined) => {
+              if (!approvedBy || !prevAt || !approvedAt) return;
+              const d = daysBetween(prevAt, approvedAt);
+              if (d === null || d < 0) return;
+              // role bucket
+              const rl = approverRoleLabel(approvedBy);
+              if (!roleTimes.has(rl)) roleTimes.set(rl, []);
+              roleTimes.get(rl)!.push(d);
+              // user bucket
+              if (!userTimesMap.has(approvedBy)) {
+                const u = users.find(x => x.id === approvedBy);
+                userTimesMap.set(approvedBy, { name: u?.name || '—', role: rl, times: [] });
+              }
+              userTimesMap.get(approvedBy)!.times.push(d);
+            };
+            for (const o of mine) {
+              addTiming(o.tier1_approved_by, o.submitted_at,       o.tier1_approved_at);
+              addTiming(o.tier2_approved_by, o.tier1_approved_at,  o.tier2_approved_at);
+              addTiming(o.tier3_approved_by, o.tier2_approved_at,  o.tier3_approved_at);
+              addTiming(o.tier4_approved_by, o.tier3_approved_at,  o.tier4_approved_at);
+            }
+            const roleTimeRows = ROLE_ORDER
+              .filter(rl => roleTimes.has(rl))
+              .map(rl => ({ label: rl, times: roleTimes.get(rl)! }));
+            // Also include any unlisted roles
+            roleTimes.forEach((times, rl) => {
+              if (!ROLE_ORDER.includes(rl)) roleTimeRows.push({ label: rl, times });
+            });
+            const userTimeRows = [...userTimesMap.values()]
+              .sort((a, b) => (avg(b.times) ?? 0) - (avg(a.times) ?? 0)); // slowest first
 
             return (
               <>
@@ -8303,22 +8344,22 @@ const CostSubmission = () => {
                         </CardContent>
                       </Card>
 
-                      {/* Time-to-Approval Metrics */}
-                      {(t1Times.length + t2Times.length + t3Times.length + t4Times.length) > 0 && (
+                      {/* Time-to-Approval Metrics — by Role */}
+                      {roleTimeRows.length > 0 && (
                         <Card>
                           <CardHeader className="pb-3 pt-4 px-4">
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Clock className="h-4 w-4 text-blue-600" />
-                              Approval Timeline / مدة الموافقة
+                              Approval Timeline by Role / مدة الموافقة حسب الدور
                             </CardTitle>
-                            <CardDescription>Average time each tier takes to process your requests</CardDescription>
+                            <CardDescription>How long each approver role takes to process your requests (FOM and CD are shown separately)</CardDescription>
                           </CardHeader>
                           <CardContent className="px-0 pb-2">
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Tier</th>
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Approver Role</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Samples</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
@@ -8326,12 +8367,7 @@ const CostSubmission = () => {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {([
-                                    { label: 'Tier 1 (Supervisor / Hub)', times: t1Times },
-                                    { label: 'Tier 2 (FOM / CD)', times: t2Times },
-                                    { label: 'Tier 3 (Finance)', times: t3Times },
-                                    { label: 'Tier 4 (Payment)', times: t4Times },
-                                  ] as const).filter(r => r.times.length > 0).map(row => (
+                                  {roleTimeRows.map(row => (
                                     <tr key={row.label} className="border-b hover:bg-muted/20">
                                       <td className="px-4 py-2.5 font-medium">{row.label}</td>
                                       <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
@@ -8340,6 +8376,53 @@ const CostSubmission = () => {
                                       <td className="text-right px-4 py-2.5 text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
                                     </tr>
                                   ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Time-to-Approval — by Individual Approver */}
+                      {userTimeRows.length > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-violet-600" />
+                              Approval Timeline by Approver / مدة الموافقة حسب الشخص
+                            </CardTitle>
+                            <CardDescription>Individual approver performance — who is taking longest to act on your requests</CardDescription>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Approver</th>
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Role</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requests</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Slowest</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {userTimeRows.map((row, i) => {
+                                    const avgT = avg(row.times);
+                                    const isSlow = avgT !== null && avgT > 3;
+                                    return (
+                                      <tr key={i} className="border-b hover:bg-muted/20">
+                                        <td className="px-4 py-2.5 font-medium text-xs">{row.name}</td>
+                                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.role}</td>
+                                        <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
+                                        <td className={`text-right px-4 py-2.5 font-semibold text-xs ${isSlow ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                                          {fmtDays(avgT)}
+                                        </td>
+                                        <td className="text-right px-4 py-2.5 text-xs text-emerald-700 dark:text-emerald-400">{fmtDays(Math.min(...row.times))}</td>
+                                        <td className="text-right px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -8385,7 +8468,87 @@ const CostSubmission = () => {
                       </Card>
                     </div>
 
-                    {/* Approvals table */}
+                    {/* Per-submitter totals */}
+                    {(() => {
+                      const submitterMap = new Map<string, {
+                        name: string; role: string; count: number;
+                        totalCents: number; paidCents: number; avgTaken: number[];
+                      }>();
+                      for (const o of myApprovals) {
+                        const sid = o.submitted_by ?? 'unknown';
+                        if (!submitterMap.has(sid)) {
+                          const u = users.find(x => x.id === sid);
+                          submitterMap.set(sid, { name: u?.name || '—', role: u?.role || '', count: 0, totalCents: 0, paidCents: 0, avgTaken: [] });
+                        }
+                        const row = submitterMap.get(sid)!;
+                        row.count++;
+                        row.totalCents += o.amount_cents ?? 0;
+                        if (['paid','reconciled'].includes(o.status)) row.paidCents += o.amount_paid_cents ?? o.amount_cents ?? 0;
+                        // time taken at my tier
+                        const myTier = o.tier1_approved_by === currentUser?.id ? 1
+                          : o.tier2_approved_by === currentUser?.id ? 2
+                          : o.tier3_approved_by === currentUser?.id ? 3 : 4;
+                        const prevAt = myTier === 1 ? o.submitted_at : myTier === 2 ? o.tier1_approved_at : myTier === 3 ? o.tier2_approved_at : o.tier3_approved_at;
+                        const myAt   = myTier === 1 ? o.tier1_approved_at : myTier === 2 ? o.tier2_approved_at : myTier === 3 ? o.tier3_approved_at : o.tier4_approved_at;
+                        const d = daysBetween(prevAt, myAt);
+                        if (d !== null && d >= 0) row.avgTaken.push(d);
+                      }
+                      const rows = [...submitterMap.values()].sort((a, b) => b.totalCents - a.totalCents);
+                      return (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Users className="h-4 w-4 text-sky-600" />
+                              Totals by Submitter / إجمالي حسب مقدم الطلب
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Submitter</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requests</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Total Requested</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Total Paid</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Approval Time</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row, i) => (
+                                    <tr key={i} className="border-b hover:bg-muted/20">
+                                      <td className="px-4 py-2.5">
+                                        <div className="font-medium text-xs">{row.name}</div>
+                                        <div className="text-xs text-muted-foreground">{row.role}</div>
+                                      </td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{row.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(row.totalCents)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(row.paidCents)}</td>
+                                      <td className="text-right px-4 py-2.5 text-xs">
+                                        {row.avgTaken.length > 0 ? (
+                                          <span className={avg(row.avgTaken)! > 3 ? 'text-amber-600' : 'text-emerald-600'}>
+                                            {fmtDays(avg(row.avgTaken))}
+                                          </span>
+                                        ) : '—'}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/40 font-semibold">
+                                    <td className="px-4 py-2.5 text-xs">Total</td>
+                                    <td className="text-right px-4 py-2.5">{myApprovals.length}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(rows.reduce((s,r)=>s+r.totalCents,0))}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(rows.reduce((s,r)=>s+r.paidCents,0))}</td>
+                                    <td />
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })()}
+
+                    {/* Detailed approvals table */}
                     <Card>
                       <CardHeader className="pb-3 pt-4 px-4">
                         <CardTitle className="text-sm flex items-center gap-2">
