@@ -8224,6 +8224,23 @@ const CostSubmission = () => {
             const fundRows = [...fundBreakMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
             const fundTotal = fundRows.reduce((s,[,r]) => ({ count: s.count+r.count, requested: s.requested+r.requested, paid: s.paid+r.paid, pending: s.pending+r.pending }), { count:0, requested:0, paid:0, pending:0 });
 
+            // By Role breakdown — admins/approvers only
+            const roleBreakMap = new Map<string, { count: number; requested: number; paid: number; pending: number }>();
+            if (isApproverRole) {
+              for (const o of catSource) {
+                const role = (o.submitter_role || users.find(u => u.id === o.submitted_by)?.role || 'unknown')
+                  .replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                if (!roleBreakMap.has(role)) roleBreakMap.set(role, { count: 0, requested: 0, paid: 0, pending: 0 });
+                const row = roleBreakMap.get(role)!;
+                row.count++;
+                row.requested += o.amount_cents ?? 0;
+                if (['paid','reconciled'].includes(o.status)) row.paid += o.amount_paid_cents ?? o.amount_cents ?? 0;
+                if (['pending','under_review'].includes(o.status)) row.pending += o.amount_cents ?? 0;
+              }
+            }
+            const roleRows = [...roleBreakMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
+            const roleBreakTotal = roleRows.reduce((s,[,r]) => ({ count: s.count+r.count, requested: s.requested+r.requested, paid: s.paid+r.paid, pending: s.pending+r.pending }), { count:0, requested:0, paid:0, pending:0 });
+
             // ── My Approvals ──────────────────────────────────────────────
             const myApprovals = operationalCosts.filter(o =>
               o.tier1_approved_by === currentUser?.id || o.tier2_approved_by === currentUser?.id ||
@@ -8508,6 +8525,54 @@ const CostSubmission = () => {
                                     <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(fundTotal.paid)}</td>
                                     <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(fundTotal.pending)}</td>
                                     <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, fundTotal.requested - fundTotal.paid))}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* By Role breakdown — visible to approver/admin roles */}
+                      {isApproverRole && roleRows.length > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Shield className="h-4 w-4 text-indigo-600" />
+                              By Role / حسب الدور
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Role / الدور</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {roleRows.map(([role, data]) => (
+                                    <tr key={role} className="border-b hover:bg-muted/20 transition-colors">
+                                      <td className="px-4 py-2.5 font-medium text-xs capitalize">{role}</td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/40 font-semibold">
+                                    <td className="px-4 py-2.5 text-xs">Total</td>
+                                    <td className="text-right px-4 py-2.5">{roleBreakTotal.count}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(roleBreakTotal.requested)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(roleBreakTotal.paid)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(roleBreakTotal.pending)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, roleBreakTotal.requested - roleBreakTotal.paid))}</td>
                                   </tr>
                                 </tbody>
                               </table>
