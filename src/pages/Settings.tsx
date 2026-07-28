@@ -42,6 +42,7 @@ import {
   CreditCard,
   CheckCircle2,
   Megaphone,
+  Mail,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
@@ -1750,102 +1751,115 @@ const Settings = () => {
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-4">
-          <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-800/20 border-b p-4 sm:p-6">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-orange-500 rounded-lg">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Profile Settings</CardTitle>
-                  <CardDescription>
-                    Manage your personal information
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
-              {/* Profile Picture Section */}
-              <div className="flex flex-col items-center gap-4 pb-6 border-b">
-                <Label className="text-base font-medium">
-                  Profile Picture <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative group">
-                  <Avatar className="h-24 w-24 border-2 border-border">
+          <Card className="border shadow-sm overflow-hidden">
+            {/* ── Hero / Banner ─────────────────────────────────────────── */}
+            <div className="relative h-36 bg-gradient-to-br from-orange-400 via-rose-400 to-purple-500 dark:from-orange-600 dark:via-rose-600 dark:to-purple-700">
+              <div className="absolute inset-0 opacity-20"
+                style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+            </div>
+
+            {/* ── Avatar overlapping banner ─────────────────────────────── */}
+            <div className="flex flex-col items-center -mt-16 pb-4 px-6">
+              <div className="relative group">
+                <div className="rounded-full p-1 bg-background shadow-xl ring-4 ring-background">
+                  <Avatar className="h-28 w-28">
                     {avatar ? (
-                      <AvatarImage
-                        src={avatar}
-                        alt={name}
-                        className="object-cover"
-                      />
+                      <AvatarImage src={avatar} alt={name} className="object-cover" />
                     ) : null}
-                    <AvatarFallback className="text-2xl font-semibold bg-primary/10">
+                    <AvatarFallback className="text-3xl font-bold bg-gradient-to-br from-orange-400 to-rose-500 text-white">
                       {getInitials(name || currentUser?.name || "U")}
                     </AvatarFallback>
                   </Avatar>
-                  <div
-                    className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer min-h-[96px] min-w-[96px]"
-                    onClick={() => avatarInputRef.current?.click()}
-                  >
-                    {isUploadingAvatar ? (
-                      <Upload className="h-6 w-6 text-white animate-pulse" />
-                    ) : (
-                      <Camera className="h-6 w-6 text-white" />
-                    )}
-                  </div>
                 </div>
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                  data-testid="input-avatar"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
+                {/* Camera overlay */}
+                <div
+                  className="absolute inset-1 bg-black/55 rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity"
                   onClick={() => avatarInputRef.current?.click()}
-                  disabled={isUploadingAvatar}
-                  className="min-h-[44px] px-6"
-                  data-testid="button-upload-avatar"
                 >
                   {isUploadingAvatar ? (
-                    <>
-                      <Upload className="mr-2 h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
+                    <Upload className="h-6 w-6 text-white animate-pulse" />
                   ) : (
                     <>
-                      <Camera className="mr-2 h-4 w-4" />
-                      {avatar ? "Change Photo" : "Upload Photo"}
+                      <Camera className="h-5 w-5 text-white" />
+                      <span className="text-white text-[10px] mt-0.5 font-medium">Change</span>
                     </>
                   )}
-                </Button>
-                {!avatar && (
-                  <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>Profile picture is required for site claiming</span>
-                  </div>
+                </div>
+                {/* Upload progress ring */}
+                {isUploadingAvatar && (
+                  <div className="absolute -inset-1 rounded-full border-2 border-orange-400 border-t-transparent animate-spin" />
                 )}
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-base font-medium">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+                data-testid="input-avatar"
+              />
+
+              {/* Name & Role display */}
+              <div className="mt-3 text-center space-y-1.5">
+                <h2 className="text-xl font-bold tracking-tight">{name || currentUser?.name}</h2>
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <RoleBadge role={currentUser?.role || "User"} size="md" />
+                  {currentUser && (
+                    <UserClassificationBadge userId={currentUser.id} size="md" showUnassigned={false} />
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">{email || currentUser?.email}</p>
+              </div>
+
+              {/* Upload button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="mt-3 h-8 px-4 text-xs border-dashed"
+                data-testid="button-upload-avatar"
+              >
+                {isUploadingAvatar ? (
+                  <><Upload className="mr-1.5 h-3.5 w-3.5 animate-spin" />Uploading...</>
+                ) : (
+                  <><Camera className="mr-1.5 h-3.5 w-3.5" />{avatar ? "Change Photo" : "Upload Photo"}</>
+                )}
+              </Button>
+
+              {!avatar && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>Profile photo required for site claiming</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Divider ───────────────────────────────────────────────── */}
+            <div className="border-t mx-6" />
+
+            {/* ── Edit fields ───────────────────────────────────────────── */}
+            <CardContent className="space-y-5 p-5 sm:p-6 pt-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-sm font-semibold flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
                     Full Name
                   </Label>
                   <Input
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="h-11"
+                    className="h-10"
+                    placeholder="Your full name"
                     data-testid="input-name"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-base font-medium">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-sm font-semibold flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                     Email Address
                   </Label>
                   <Input
@@ -1853,41 +1867,18 @@ const Settings = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-11"
+                    className="h-10"
+                    placeholder="your@email.com"
                     data-testid="input-email"
                   />
                 </div>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
-                  <Label className="text-base font-medium">Current Role</Label>
-                  <div className="flex items-center gap-2 pt-1">
-                    <RoleBadge role={currentUser?.role || "User"} size="md" />
-                  </div>
-                </div>
-
-                <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
-                  <Label className="text-base font-medium">
-                    Classification
-                  </Label>
-                  <div className="flex items-center gap-2 pt-1">
-                    {currentUser && (
-                      <UserClassificationBadge
-                        userId={currentUser.id}
-                        size="md"
-                        showUnassigned={true}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t">
+              <div className="flex flex-col sm:flex-row justify-between gap-3 pt-2 border-t">
                 <Button
                   variant="outline"
                   onClick={() => setShowChangePassword(true)}
-                  className="min-h-[44px] px-6"
+                  className="min-h-[40px] px-5"
                   data-testid="button-change-password"
                 >
                   <Lock className="mr-2 h-4 w-4" />
@@ -1895,7 +1886,7 @@ const Settings = () => {
                 </Button>
                 <Button
                   onClick={handleSaveProfile}
-                  className="min-h-[44px] px-6"
+                  className="min-h-[40px] px-6 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white border-0"
                   data-testid="button-save-profile"
                 >
                   <Save className="mr-2 h-4 w-4" />

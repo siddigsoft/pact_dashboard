@@ -21,8 +21,11 @@ import {
   DollarSign, TrendingDown, CheckCircle2, Clock,
   FileSpreadsheet, Wallet, Activity, GitBranch,
   Users, Receipt, ExternalLink, ChevronDown, ChevronRight,
-  Search,
+  Search, X, FileText,
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -145,6 +148,7 @@ export default function PreFundingReport() {
   // Reconciliation expand state
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
   const [userSearch, setUserSearch] = useState('');
+  const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1225,16 +1229,13 @@ export default function PreFundingReport() {
                           {/* Receipt */}
                           <TableCell className="text-center py-2.5">
                             {t.receipt_url ? (
-                              <a
-                                href={t.receipt_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                onClick={() => setViewReceiptUrl(t.receipt_url)}
                                 className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-800 text-xs font-medium"
                                 title="View receipt"
                               >
                                 <Receipt className="h-3.5 w-3.5" />
-                                <ExternalLink className="h-2.5 w-2.5" />
-                              </a>
+                              </button>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
@@ -1469,11 +1470,13 @@ export default function PreFundingReport() {
                                     {/* Receipt */}
                                     <TableCell className="text-center py-2">
                                       {t.receipt_url ? (
-                                        <a href={t.receipt_url} target="_blank" rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-800 text-xs font-medium">
+                                        <button
+                                          onClick={() => setViewReceiptUrl(t.receipt_url)}
+                                          className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-800 text-xs font-medium"
+                                          title="View receipt"
+                                        >
                                           <Receipt className="h-3.5 w-3.5" />
-                                          <ExternalLink className="h-2.5 w-2.5" />
-                                        </a>
+                                        </button>
                                       ) : <span className="text-muted-foreground text-xs">—</span>}
                                     </TableCell>
                                     {/* Amount */}
@@ -1509,6 +1512,52 @@ export default function PreFundingReport() {
           {approvalsTabBody}
         </TabsContent>
       </Tabs>
+
+      {/* ── Receipt Viewer Dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!viewReceiptUrl} onOpenChange={(o) => { if (!o) setViewReceiptUrl(null); }}>
+        <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+          <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Receipt className="h-4 w-4 text-sky-500" />
+              Transaction Receipt
+            </DialogTitle>
+            <div className="flex items-center gap-2 ml-auto">
+              {viewReceiptUrl && (
+                <a
+                  href={viewReceiptUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded px-2 py-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open in new tab
+                </a>
+              )}
+            </div>
+          </DialogHeader>
+          <div className="w-full" style={{ height: '70vh' }}>
+            {viewReceiptUrl && (() => {
+              const lower = viewReceiptUrl.toLowerCase().split('?')[0];
+              const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].some(ext => lower.endsWith(ext));
+              return isImage ? (
+                <div className="flex items-center justify-center h-full bg-muted/30 p-4">
+                  <img
+                    src={viewReceiptUrl}
+                    alt="Receipt"
+                    className="max-h-full max-w-full object-contain rounded shadow-md"
+                  />
+                </div>
+              ) : (
+                <iframe
+                  src={viewReceiptUrl}
+                  className="w-full h-full border-0"
+                  title="Receipt"
+                />
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
