@@ -1555,13 +1555,27 @@ const MMPCycleClose = () => {
         'approved', 'cancelled', 'completed', 'verified',
       ]);
 
+      // Try with the full not_covered_* columns first.
+      // If those columns don't exist yet (migration not applied), fall back to
+      // base columns only — the filter then uses status alone.
       const fetchAllPagesForIds = async (ids: string[]): Promise<any[]> => {
         if (ids.length === 0) return [];
+        const FULL_COLS = 'id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by';
+        const BASE_COLS = 'id, site_name, site_code, state, locality, status, mmp_file_id';
+
+        // Probe: try one row with full columns to detect missing columns
+        let useFull = true;
+        const probe = await supabase.from('mmp_site_entries').select(FULL_COLS).in('mmp_file_id', ids.slice(0,1)).limit(1);
+        if (probe.error && probe.error.message?.includes('column')) {
+          useFull = false;
+          console.warn('[fetchUncoveredSites] not_covered_* columns not found — apply migration 20260727c_mmp_site_entries_not_covered_columns.sql in Supabase. Falling back to status-only filter.');
+        }
+
         let all: any[] = [];
         for (let from = 0; ; from += PAGE) {
           const { data: pageData, error } = await supabase
             .from('mmp_site_entries')
-            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+            .select(useFull ? FULL_COLS : BASE_COLS)
             .in('mmp_file_id', ids)
             .range(from, from + PAGE - 1);
           if (error) throw error;
@@ -6573,12 +6587,43 @@ const MMPCycleClose = () => {
                   )}
                 </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-muted/70 p-8 text-center mb-4" data-testid="wizard-prompt">
-          <div className="flex items-center justify-center h-12 w-12 mx-auto mb-3 rounded-full bg-muted/40">
-            <ArrowRight className="h-5 w-5 text-muted-foreground" />
+        {/* ── Clear "How to start" action guide — shown when no cycle is open ── */}
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 mb-4" data-testid="wizard-prompt">
+          <div className="px-4 py-3 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
+            <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">How to close a cycle — start here</span>
+            <span dir="rtl" className="text-xs text-blue-500 mr-1">كيف تغلق الدورة</span>
           </div>
-          <p className="font-semibold text-foreground">No cycle selected</p>
-          <p className="text-sm text-muted-foreground mt-1">On any MMP card below, click <strong>Close Full MMP</strong> to start, or <strong>Continue in Close Wizard</strong> if a cycle is already in progress.</p>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Step A */}
+            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
+              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">1</span>
+              <div>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Click the Active Cycles tab below</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Find the MMP whose monitoring month has ended. Its row shows live coverage counts.</p>
+              </div>
+            </div>
+            {/* Step B */}
+            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
+              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">2</span>
+              <div>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Click <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px]">Close Full MMP</span> on that row</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">The system flags all unvisited sites automatically and opens the step-by-step wizard.</p>
+              </div>
+            </div>
+            {/* Step C */}
+            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
+              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">3</span>
+              <div>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Follow the wizard steps until ✓ Submit</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Assign reasons → pass readiness checklist → submit for FOM approval → done.</p>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 pb-3 flex items-center gap-2">
+            <ArrowRight className="h-3.5 w-3.5 text-blue-500 animate-bounce" style={{ animationDirection: 'alternate' }} />
+            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Scroll down to the Active Cycles tab and find your MMP ↓</span>
+          </div>
         </div>
       )}
       {(!checklistMmpId || checklistMmpStatus === 'active') && (
