@@ -8760,13 +8760,14 @@ const CostSubmission = () => {
                       const rows = [...submitterMap.values()].sort((a, b) => b.totalCents - a.totalCents);
                       return (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('approvals-submitters')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Users className="h-4 w-4 text-sky-600" />
                               Totals by Submitter / إجمالي حسب مقدم الطلب
+                              <span className="ml-auto text-muted-foreground">{collapsedCards.has('approvals-submitters') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="px-0 pb-2">
+                          {!collapsedCards.has('approvals-submitters') && <CardContent className="px-0 pb-2">
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
@@ -8807,20 +8808,21 @@ const CostSubmission = () => {
                                 </tbody>
                               </table>
                             </div>
-                          </CardContent>
+                          </CardContent>}
                         </Card>
                       );
                     })()}
 
                     {/* Detailed approvals table */}
                     <Card>
-                      <CardHeader className="pb-3 pt-4 px-4">
+                      <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('approvals-detail')}>
                         <CardTitle className="text-sm flex items-center gap-2">
                           <ClipboardCheck className="h-4 w-4" />
                           Requests Through My Approval / الطلبات عبر موافقتي
+                          <span className="ml-auto text-muted-foreground">{collapsedCards.has('approvals-detail') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="px-0 pb-2">
+                      {!collapsedCards.has('approvals-detail') && <CardContent className="px-0 pb-2">
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
@@ -8895,7 +8897,7 @@ const CostSubmission = () => {
                             <p className="text-xs text-center text-muted-foreground py-2">Showing 50 of {myApprovals.length} entries</p>
                           )}
                         </div>
-                      </CardContent>
+                      </CardContent>}
                     </Card>
                   </div>
                 )}
