@@ -96,6 +96,20 @@ export default function PreFundingDistribute() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
 
+  // My own allocations (staff member view — non-holder)
+  const [myAllocations, setMyAllocations] = useState<Array<{
+    id: string; pre_fund_request_id: string; allocated_amount: number;
+    spent_amount: number; currency: string; notes: string | null;
+    receipt_url: string | null; fund_name?: string; fund_source?: string;
+    fund_status?: string; holder_user_id?: string;
+  }>>([]);
+
+  // Request Top-Up dialog (staff → holder request)
+  const [reqDialog, setReqDialog] = useState<{ open: boolean; alloc: typeof myAllocations[0] | null }>({ open: false, alloc: null });
+  const [reqAmt, setReqAmt]       = useState('');
+  const [reqNotes, setReqNotes]   = useState('');
+  const [reqSaving, setReqSaving] = useState(false);
+
   // Payment details expansion per allocation
   const [expandedAllocId, setExpandedAllocId] = useState<string | null>(null);
   const [allocPayments, setAllocPayments] = useState<Map<string, any[]>>(new Map());
@@ -177,7 +191,7 @@ export default function PreFundingDistribute() {
         .select('id,name,source,amount,currency,available_balance,paid_amount,status')
         .order('created_at', { ascending: false });
       if (!isFinanceAdmin) q = q.eq('holder_user_id', currentUser.id);
-      else q = q.not('holder_user_id', 'is', null); // finance admin sees all assigned funds
+      else q = q.not('holder_user_id', 'is', null);
       const { data: fundsData, error: fErr } = await q;
       if (fErr && !fErr.message.includes('does not exist')) throw fErr;
       setFunds((fundsData as HeldFund[]) ?? []);
@@ -188,6 +202,32 @@ export default function PreFundingDistribute() {
         .select('id,full_name,email,role')
         .order('full_name');
       setStaff((profiles as any) ?? []);
+
+      // Load this user's OWN allocations (so staff can see what they received + request more)
+      const { data: myAllocs } = await (supabase as any)
+        .from('pre_fund_allocations')
+        .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+      if (myAllocs && myAllocs.length > 0) {
+        // Enrich with fund name/source/status/holder
+        const fundIds: string[] = [...new Set(myAllocs.map((a: any) => a.pre_fund_request_id as string))];
+        const { data: fundDetails } = await (supabase as any)
+          .from('pre_fund_requests')
+          .select('id,name,source,status,holder_user_id')
+          .in('id', fundIds);
+        const fundMap: Record<string, any> = {};
+        (fundDetails ?? []).forEach((f: any) => { fundMap[f.id] = f; });
+        setMyAllocations(myAllocs.map((a: any) => ({
+          ...a,
+          fund_name:      fundMap[a.pre_fund_request_id]?.name,
+          fund_source:    fundMap[a.pre_fund_request_id]?.source,
+          fund_status:    fundMap[a.pre_fund_request_id]?.status,
+          holder_user_id: fundMap[a.pre_fund_request_id]?.holder_user_id,
+        })));
+      } else {
+        setMyAllocations([]);
+      }
     } catch (e: any) {
       toast({ title: 'Error loading funds', description: e.message, variant: 'destructive' });
     } finally {
@@ -396,6 +436,39 @@ export default function PreFundingDistribute() {
     }
   };
 
+  const handleRequestTopUp = async () => {
+    const alloc = reqDialog.alloc;
+    if (!alloc) return;
+    const amt = parseFloat(reqAmt);
+    if (!amt || amt <= 0) {
+      toast({ title: 'Enter amount', description: 'Please enter the additional amount you need.', variant: 'destructive' });
+      return;
+    }
+    setReqSaving(true);
+    try {
+      const msg = `Staff member ${currentUser?.full_name ?? currentUser?.email} is requesting an additional ${formatNumber(amt, 0)} ${alloc.currency} on fund "${alloc.fund_name ?? alloc.pre_fund_request_id}". Reason: ${reqNotes || 'No reason provided.'}`;
+      if (alloc.holder_user_id) {
+        await dispatchNotification({
+          event: 'pre_fund_topup_request', recipientIds: [alloc.holder_user_id],
+          titleEn: 'Top-Up Request Received', titleAr: 'طلب تعبئة رصيد',
+          messageEn: msg,
+          messageAr: `طلب ${currentUser?.full_name ?? currentUser?.email} مبلغاً إضافياً ${formatNumber(amt, 0)} ${alloc.currency} من صندوق "${alloc.fund_name ?? ''}".`,
+          entityType: 'pre_fund_request', entityId: alloc.pre_fund_request_id,
+          triggeredBy: currentUser?.id, priority: 'high',
+          metadata: { alloc_id: alloc.id, requested_amount: amt, currency: alloc.currency, notes: reqNotes },
+        }).catch(() => null);
+      }
+      toast({ title: 'Request sent', description: `Your request for ${formatNumber(amt, 0)} ${alloc.currency} has been sent to the fund holder.` });
+      setReqDialog({ open: false, alloc: null });
+      setReqAmt('');
+      setReqNotes('');
+    } catch (e: any) {
+      toast({ title: 'Failed to send request', description: e.message, variant: 'destructive' });
+    } finally {
+      setReqSaving(false);
+    }
+  };
+
   const handleRemoveAlloc = async () => {
     if (!removeId) return;
     setRemoving(true);
@@ -458,6 +531,71 @@ export default function PreFundingDistribute() {
         </div>
       )}
 
+      {/* ── My Allocations (staff view — shown to anyone who has received allocations) ── */}
+      {myAllocations.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />My Received Allocations / تخصيصاتي
+          </p>
+          {myAllocations.map(alloc => {
+            const pct = alloc.allocated_amount > 0
+              ? Math.min(100, Math.round((alloc.spent_amount / alloc.allocated_amount) * 100))
+              : 0;
+            const rem = alloc.allocated_amount - alloc.spent_amount;
+            const isClosed = alloc.fund_status === 'closed';
+            return (
+              <div key={alloc.id} className="flex items-center gap-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-950/30 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[13px] truncate">{alloc.fund_name ?? '—'}</div>
+                  {alloc.fund_source && <div className="text-[11px] text-muted-foreground truncate">{alloc.fund_source}</div>}
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <div>
+                      <div className="text-[9px] font-medium uppercase text-muted-foreground">Allocated</div>
+                      <div className="font-mono text-[12px] font-bold text-violet-700 dark:text-violet-300">
+                        {alloc.currency} {formatNumber(alloc.allocated_amount, 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-medium uppercase text-muted-foreground">Spent</div>
+                      <div className="font-mono text-[12px] font-semibold">{alloc.currency} {formatNumber(alloc.spent_amount, 0)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-medium uppercase text-muted-foreground">Remaining</div>
+                      <div className={cn('font-mono text-[12px] font-semibold', rem < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                        {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Progress value={pct} className={cn('h-1.5 flex-1', pct >= 100 ? '[&>div]:bg-rose-500' : pct >= 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-violet-500')} />
+                    <span className="text-[10px] text-muted-foreground shrink-0">{pct}%</span>
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  {alloc.receipt_url && (
+                    <a href={alloc.receipt_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 underline mb-2"
+                    >
+                      <Paperclip className="h-3 w-3" />Receipt
+                    </a>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1 border-violet-400 text-violet-700 hover:bg-violet-100 dark:border-violet-600 dark:text-violet-300"
+                    disabled={isClosed}
+                    data-testid={`button-request-topup-${alloc.id}`}
+                    onClick={() => { setReqDialog({ open: true, alloc }); setReqAmt(''); setReqNotes(''); }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />Request More Funds
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Fund cards */}
       <div className="space-y-3">
         {funds.map(fund => {
@@ -491,28 +629,6 @@ export default function PreFundingDistribute() {
                     <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', STATUS_BADGE[fund.status] ?? 'bg-slate-100 text-slate-600')}>
                       {fund.status.replace(/_/g, ' ')}
                     </Badge>
-                    {!isFinanceAdmin && currentUser?.id && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs gap-1 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
-                        disabled={fund.status === 'closed' || fund.status === 'paused'}
-                        data-testid={`button-self-topup-${fund.id}`}
-                        onClick={() => {
-                          const myAlloc = (fundAllocs.get(fund.id) ?? []).find(a => a.user_id === currentUser.id);
-                          if (myAlloc) {
-                            openTopUp(myAlloc, fund.id);
-                          } else {
-                            setAddForm({ userId: currentUser.id, amount: '', notes: 'Self top-up from held fund' });
-                            setUserSearch('');
-                            setAddDialog({ open: true, fund });
-                            if (!fundAllocs.has(fund.id)) loadAllocations(fund.id);
-                          }
-                        }}
-                      >
-                        <Wallet className="h-3.5 w-3.5" />Self Top-Up
-                      </Button>
-                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -614,22 +730,20 @@ export default function PreFundingDistribute() {
                                 )}
                               </div>
                             </div>
-                            {/* Amount + top-up button */}
+                            {/* Amount + Add Funds button */}
                             <div className="text-right" onClick={e => e.stopPropagation()}>
-                              <div className="font-mono text-[12px] font-semibold flex items-center gap-1 justify-end">
-                                {fund.currency} {formatNumber(a.allocated_amount, 0)}
-                                <button
-                                  onClick={() => openTopUp(a, fund.id)}
-                                  className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
-                                  title="Edit amount / upload receipt"
-                                  data-testid={`button-topup-alloc-${a.id}`}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">
+                              <div className="font-mono text-[12px] font-semibold">{fund.currency} {formatNumber(a.allocated_amount, 0)}</div>
+                              <div className="text-[10px] text-muted-foreground mb-1">
                                 {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
                               </div>
+                              <button
+                                onClick={() => openTopUp(a, fund.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-400 dark:hover:bg-sky-950 transition-colors"
+                                title="Add more funds to this allocation"
+                                data-testid={`button-topup-alloc-${a.id}`}
+                              >
+                                <Plus className="h-2.5 w-2.5" />Add Funds
+                              </button>
                             </div>
                             {/* Mini progress */}
                             <div className="w-16 shrink-0 hidden sm:block">
@@ -893,8 +1007,8 @@ export default function PreFundingDistribute() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-4 w-4 text-sky-600" />
-              Edit Allocation — {topUpDialog.alloc?.user_name}
+              <Banknote className="h-4 w-4 text-sky-600" />
+              Add Funds — {topUpDialog.alloc?.user_name}
             </DialogTitle>
           </DialogHeader>
           {topUpDialog.alloc && (
@@ -948,6 +1062,67 @@ export default function PreFundingDistribute() {
             <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '' })}>Cancel</Button>
             <Button onClick={saveTopUp} disabled={topUpSaving} data-testid="button-confirm-topup">
               {topUpSaving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Top-Up Dialog (staff → fund holder) */}
+      <Dialog open={reqDialog.open} onOpenChange={o => !o && setReqDialog({ open: false, alloc: null })}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-violet-600" />
+              Request Additional Funds
+            </DialogTitle>
+          </DialogHeader>
+          {reqDialog.alloc && (
+            <div className="space-y-4 py-1">
+              <div className="rounded-md bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 px-3 py-2 text-sm">
+                <div className="font-medium text-violet-800 dark:text-violet-300">{reqDialog.alloc.fund_name}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Currently allocated: <span className="font-semibold">{reqDialog.alloc.currency} {formatNumber(reqDialog.alloc.allocated_amount, 0)}</span>
+                  &nbsp;·&nbsp;Spent: <span className="font-semibold">{formatNumber(reqDialog.alloc.spent_amount, 0)}</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Additional Amount Needed ({reqDialog.alloc.currency}) <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={reqAmt}
+                  onChange={e => setReqAmt(e.target.value)}
+                  className="h-8 text-sm"
+                  autoFocus
+                  data-testid="input-req-amount"
+                />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Reason / Justification (optional)</Label>
+                <textarea
+                  value={reqNotes}
+                  onChange={e => setReqNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Explain why you need more funds…"
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="input-req-notes"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                This will send a notification to the fund holder requesting the top-up. They will review and add the funds directly.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReqDialog({ open: false, alloc: null })}>Cancel</Button>
+            <Button
+              onClick={handleRequestTopUp}
+              disabled={reqSaving}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              data-testid="button-confirm-req-topup"
+            >
+              {reqSaving ? 'Sending…' : 'Send Request'}
             </Button>
           </DialogFooter>
         </DialogContent>
