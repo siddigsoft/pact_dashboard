@@ -4209,6 +4209,49 @@ const MMPCycleClose = () => {
         ]}
       />
 
+      {/* ── Prominent 7-Step Workflow Strip ── always visible, no collapsible ── */}
+      <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden" data-testid="cycle-close-steps-strip">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
+          <Layers className="h-4 w-4 text-slate-500" />
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Cycle Close Workflow — 7 Steps</span>
+          <span dir="rtl" className="text-xs text-slate-400 mr-1">خطوات إغلاق الدورة</span>
+        </div>
+        {/* Horizontal scrollable step list */}
+        <div className="flex overflow-x-auto gap-0 divide-x divide-slate-100 dark:divide-slate-800">
+          {([
+            { n: 1, role: 'Admin', roleColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', action: 'Start Close', detail: 'Find the MMP on Active Cycles tab → click "Start Close"', icon: PlayCircle },
+            { n: 2, role: 'Admin', roleColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', action: 'Assign Reasons', detail: 'Uncovered Sites tab → assign a reason to every flagged site', icon: MapPin },
+            { n: 3, role: 'Admin', roleColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', action: 'Readiness Check', detail: 'Open the cycle panel → all 6 checklist gates must be green ✓', icon: CheckCircle2 },
+            { n: 4, role: 'Admin', roleColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', action: 'Resolve Finance', detail: 'Fix any red gates: approve costs, reconcile advances', icon: DollarSign },
+            { n: 5, role: 'Admin', roleColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', action: 'Submit for Approval', detail: 'Checklist = 100% → click Submit. FOM is notified instantly.', icon: ArrowRight },
+            { n: 6, role: 'FOM', roleColor: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300', action: 'Approve or Reject', detail: 'FOM reviews coverage & finance → Approve to close, or Reject to send back', icon: Shield },
+            { n: 7, role: 'System', roleColor: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400', action: 'Cycle Archived', detail: 'Status → Closed. Stats permanently saved. PDF/Excel available.', icon: BookOpen },
+          ] as const).map((s, idx) => {
+            const Icon = s.icon;
+            const isLast = idx === 6;
+            return (
+              <div key={s.n} className={`flex-none w-[160px] sm:w-[170px] p-3 flex flex-col gap-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${isLast ? 'opacity-60' : ''}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="flex-none inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-[10px] font-bold">{s.n}</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${s.roleColor}`}>{s.role}</span>
+                </div>
+                <div className="flex items-start gap-1.5">
+                  <Icon className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 leading-tight">{s.action}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">{s.detail}</p>
+                {!isLast && (
+                  <div className="flex items-center gap-1 pt-0.5">
+                    <ArrowRight className="h-2.5 w-2.5 text-slate-300" />
+                    <span className="text-[9px] text-slate-300 italic">then →</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
         <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30 mb-4" data-testid="operational-guide">
           <CollapsibleTrigger asChild>
