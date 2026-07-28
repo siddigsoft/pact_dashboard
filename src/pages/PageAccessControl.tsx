@@ -236,7 +236,7 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── HR & People ───────────────────────────────────────────────────────────
   { slug:'hr-hub',              label:'HR Hub',                 path:'/hr',                     icon:Briefcase, group:'HR & People',
-    roles:['superAdmin','admin','financialAdmin'], note:'Payroll, Retainer, Performance & Salary tabs' },
+    roles:['all'], note:'All staff see their own payslip/leave/timesheet; admin-only tabs are gated in-page' },
   { slug:'hr-timesheet',        label:'Timesheet',              path:'/hr?tab=timesheet',       icon:ClipboardCheck, group:'HR & People',
     roles:['all'] },
   { slug:'hr-payslip',          label:'My Payslip',             path:'/hr?tab=payroll',         icon:Receipt, group:'HR & People',
@@ -304,7 +304,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'surveys',             label:'Surveys',                path:'/surveys',                icon:ClipboardEdit, group:'Surveys',
     roles:['all'] },
   { slug:'data-quality',        label:'Data Quality Control',   path:'/data-quality',           icon:PieChart, group:'Surveys',
-    roles:['superAdmin','admin','ict','fom','dataTeam','countryDirector'] },
+    roles:['superAdmin','admin'] },
   { slug:'questionnaire-analytics', label:'Questionnaire Analytics', path:'/questionnaire-analytics', icon:PieChart, group:'Surveys',
     roles:['superAdmin','admin','fom','dataTeam'] },
 
