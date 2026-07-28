@@ -599,7 +599,8 @@ export default function PreFundingReconciliation() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const isCD = hasAnyRole(['countryDirector']);
+  const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || isCD;
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
   const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());
@@ -746,10 +747,15 @@ export default function PreFundingReconciliation() {
   const loadFunds = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: e } = await supabase.from('pre_fund_requests')
+      let q = supabase.from('pre_fund_requests')
         .select('id,name,source,currency,amount,available_balance,committed_amount,paid_amount,status,start_date,end_date')
         .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
         .order('created_at', { ascending: false });
+      // CD sees only their own held funds
+      if (isCD && !hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
+        q = (q as any).eq('holder_user_id', currentUser?.id);
+      }
+      const { data, error: e } = await q;
       if (e && !e.message.includes('does not exist')) throw e;
       const loaded: PreFundSummary[] = (data as any) ?? [];
       setFunds(loaded);

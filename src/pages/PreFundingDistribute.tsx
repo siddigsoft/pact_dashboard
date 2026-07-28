@@ -96,6 +96,68 @@ export default function PreFundingDistribute() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
 
+  // Payment details expansion per allocation
+  const [expandedAllocId, setExpandedAllocId] = useState<string | null>(null);
+  const [allocPayments, setAllocPayments] = useState<Map<string, any[]>>(new Map());
+  const [allocPaymentsLoading, setAllocPaymentsLoading] = useState<Set<string>>(new Set());
+
+  const loadAllocPayments = useCallback(async (allocId: string, userId: string, fundId: string) => {
+    if (allocPayments.has(allocId)) return; // already loaded
+    setAllocPaymentsLoading(prev => { const s = new Set(prev); s.add(allocId); return s; });
+    try {
+      // Fetch paid/approved cost submissions for this staff member linked to this fund
+      // via pre_fund_transactions table
+      const { data: txnData } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .select('id,source_table,source_id,amount,transaction_date,description')
+        .eq('pre_fund_request_id', fundId)
+        .eq('transaction_type', 'payment')
+        .order('transaction_date', { ascending: false });
+
+      // For OCS-sourced transactions, get submission details
+      const ocsTxns = (txnData ?? []).filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
+      const dpTxns  = (txnData ?? []).filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
+      const ocsIds  = ocsTxns.map((t: any) => t.source_id as string);
+      const dpIds   = dpTxns.map((t: any) => t.source_id as string);
+
+      let payments: any[] = [];
+
+      if (ocsIds.length > 0) {
+        const { data: ocsData } = await (supabase as any)
+          .from('operational_cost_submissions')
+          .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
+          .in('id', ocsIds)
+          .eq('submitted_by', userId);
+        payments = [...payments, ...(ocsData ?? []).map((o: any) => {
+          const txn = ocsTxns.find((t: any) => t.source_id === o.id);
+          return { ...o, _type: 'ocs', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
+        })];
+      }
+
+      if (dpIds.length > 0) {
+        const { data: dpData } = await (supabase as any)
+          .from('down_payment_requests')
+          .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
+          .in('id', dpIds)
+          .eq('requested_by', userId);
+        payments = [...payments, ...(dpData ?? []).map((dp: any) => {
+          const txn = dpTxns.find((t: any) => t.source_id === dp.id);
+          return { ...dp, _type: 'dp', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
+        })];
+      }
+
+      // Sort by transaction date desc
+      payments.sort((a, b) => new Date(b._txn_date || b.paid_at || b.submitted_at || 0).getTime()
+        - new Date(a._txn_date || a.paid_at || a.submitted_at || 0).getTime());
+
+      setAllocPayments(prev => { const m = new Map(prev); m.set(allocId, payments); return m; });
+    } catch (e: any) {
+      setAllocPayments(prev => { const m = new Map(prev); m.set(allocId, []); return m; });
+    } finally {
+      setAllocPaymentsLoading(prev => { const s = new Set(prev); s.delete(allocId); return s; });
+    }
+  }, [allocPayments]);
+
   /** Upload a receipt file to Supabase storage and return the public URL. */
   const uploadReceipt = async (file: File, fundId: string, userId: string): Promise<string | null> => {
     const ext  = file.name.split('.').pop() ?? 'bin';
@@ -509,62 +571,168 @@ export default function PreFundingDistribute() {
                     {!isAllocLoading && allocs.map(a => {
                       const pct = a.allocated_amount > 0 ? Math.min(100, Math.round((a.spent_amount / a.allocated_amount) * 100)) : 0;
                       const rem = a.allocated_amount - a.spent_amount;
+                      const isExpanded = expandedAllocId === a.id;
+                      const payments = allocPayments.get(a.id) ?? [];
+                      const isPaymentsLoading = allocPaymentsLoading.has(a.id);
+                      const catLabel: Record<string, string> = {
+                        permits:'Permits', incentives:'Incentives', communications:'Comms',
+                        training:'Training', transport:'Transport', general_transport:'Transport',
+                        equipment:'Equipment', printing:'Printing', meetings:'Meetings',
+                        office_admin:'Office Admin', other:'Other',
+                      };
                       return (
-                        <div
-                          key={a.id}
-                          className="group/arow flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm bg-muted/20 hover:bg-muted/40 transition-colors"
-                          data-testid={`row-staff-alloc-${a.id}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-[13px] truncate">{a.user_name}</div>
-                            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
-                              {a.user_email} · {a.user_role?.replace(/_/g, ' ')}
-                              {a.receipt_url && (
-                                <a href={a.receipt_url} target="_blank" rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline shrink-0"
-                                  title="View receipt"
-                                  data-testid={`link-receipt-${a.id}`}
-                                  onClick={e => e.stopPropagation()}
+                        <div key={a.id} className="rounded-lg border border-border/50 bg-muted/20 overflow-hidden">
+                          {/* ── Main allocation row ── */}
+                          <div
+                            className="group/arow flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/40 transition-colors cursor-pointer"
+                            data-testid={`row-staff-alloc-${a.id}`}
+                            onClick={() => {
+                              const next = isExpanded ? null : a.id;
+                              setExpandedAllocId(next);
+                              if (next) loadAllocPayments(a.id, a.user_id, fund.id);
+                            }}
+                          >
+                            {/* Expand chevron */}
+                            <span className="shrink-0 text-muted-foreground">
+                              {isExpanded
+                                ? <ChevronDown className="h-3.5 w-3.5" />
+                                : <ChevronRight className="h-3.5 w-3.5" />}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-[13px] truncate">{a.user_name}</div>
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
+                                {a.user_email} · {a.user_role?.replace(/_/g, ' ')}
+                                {a.receipt_url && (
+                                  <a href={a.receipt_url} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline shrink-0"
+                                    title="View receipt"
+                                    data-testid={`link-receipt-${a.id}`}
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <Paperclip className="h-3 w-3" />Receipt
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            {/* Amount + top-up button */}
+                            <div className="text-right" onClick={e => e.stopPropagation()}>
+                              <div className="font-mono text-[12px] font-semibold flex items-center gap-1 justify-end">
+                                {fund.currency} {formatNumber(a.allocated_amount, 0)}
+                                <button
+                                  onClick={() => openTopUp(a, fund.id)}
+                                  className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
+                                  title="Edit amount / upload receipt"
+                                  data-testid={`button-topup-alloc-${a.id}`}
                                 >
-                                  <Paperclip className="h-3 w-3" />Receipt
-                                </a>
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
+                              </div>
+                            </div>
+                            {/* Mini progress */}
+                            <div className="w-16 shrink-0 hidden sm:block">
+                              <Progress
+                                value={pct}
+                                className={cn('h-1', pct >= 100 ? '[&>div]:bg-rose-500' : pct >= 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-sky-500')}
+                              />
+                              <span className="text-[9px] text-muted-foreground">{pct}%</span>
+                            </div>
+                            {/* Remove */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRemoveId(a.id); }}
+                              className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                              title="Remove allocation"
+                              data-testid={`button-remove-alloc-${a.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          {/* ── Payment details panel ── */}
+                          {isExpanded && (
+                            <div className="border-t border-border/40 bg-background/60 px-3 py-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3" />
+                                Payment Details / تفاصيل المدفوعات
+                              </p>
+                              {isPaymentsLoading && (
+                                <div className="space-y-1.5">
+                                  {[1,2,3].map(i => <div key={i} className="h-7 rounded bg-muted animate-pulse" />)}
+                                </div>
+                              )}
+                              {!isPaymentsLoading && payments.length === 0 && (
+                                <p className="text-xs text-muted-foreground text-center py-3">
+                                  No payment transactions recorded for this allocation yet.
+                                </p>
+                              )}
+                              {!isPaymentsLoading && payments.length > 0 && (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b">
+                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Date</th>
+                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Type / Category</th>
+                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Description</th>
+                                        <th className="text-right py-1.5 text-muted-foreground font-medium">Amount</th>
+                                        <th className="text-left py-1.5 pl-3 text-muted-foreground font-medium">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {payments.map((p, i) => {
+                                        const date = p._txn_date || p.paid_at || p.submitted_at || p.approved_at || p.created_at;
+                                        const amt = p._type === 'ocs'
+                                          ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
+                                          : (p.amount ?? p._txn_amount ?? 0);
+                                        const category = p._type === 'ocs'
+                                          ? (catLabel[p.expense_category] ?? p.expense_category ?? '—')
+                                          : 'Down Payment';
+                                        const desc = p._type === 'ocs'
+                                          ? (p.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '—')
+                                          : (p.purpose || '—');
+                                        const status = p.status || '—';
+                                        const statusCls = status === 'paid' || status === 'reconciled' || status === 'approved'
+                                          ? 'text-emerald-700 dark:text-emerald-400'
+                                          : status === 'rejected'
+                                            ? 'text-red-600'
+                                            : 'text-amber-700';
+                                        return (
+                                          <tr key={i} className="border-b border-border/30 hover:bg-muted/30">
+                                            <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                                              {date ? format(new Date(date), 'dd MMM yy') : '—'}
+                                            </td>
+                                            <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{category}</td>
+                                            <td className="py-1.5 pr-3 text-muted-foreground max-w-[180px] truncate">{desc}</td>
+                                            <td className="py-1.5 text-right font-mono font-semibold whitespace-nowrap">
+                                              {fund.currency} {formatNumber(amt, 0)}
+                                            </td>
+                                            <td className={`py-1.5 pl-3 capitalize whitespace-nowrap ${statusCls}`}>
+                                              {status.replace(/_/g, ' ')}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className="border-t font-semibold">
+                                        <td colSpan={3} className="py-1.5 text-muted-foreground text-xs">Total Payments</td>
+                                        <td className="py-1.5 text-right font-mono text-xs">
+                                          {fund.currency} {formatNumber(payments.reduce((s,p) => {
+                                            const amt = p._type === 'ocs'
+                                              ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
+                                              : (p.amount ?? p._txn_amount ?? 0);
+                                            return s + amt;
+                                          }, 0), 0)}
+                                        </td>
+                                        <td />
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                </div>
                               )}
                             </div>
-                          </div>
-                          {/* Amount + top-up button */}
-                          <div className="text-right">
-                            <div className="font-mono text-[12px] font-semibold flex items-center gap-1 justify-end">
-                              {fund.currency} {formatNumber(a.allocated_amount, 0)}
-                              <button
-                                onClick={() => openTopUp(a, fund.id)}
-                                className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
-                                title="Edit amount / upload receipt"
-                                data-testid={`button-topup-alloc-${a.id}`}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
-                            </div>
-                          </div>
-                          {/* Mini progress */}
-                          <div className="w-16 shrink-0 hidden sm:block">
-                            <Progress
-                              value={pct}
-                              className={cn('h-1', pct >= 100 ? '[&>div]:bg-rose-500' : pct >= 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-sky-500')}
-                            />
-                            <span className="text-[9px] text-muted-foreground">{pct}%</span>
-                          </div>
-                          {/* Remove */}
-                          <button
-                            onClick={() => setRemoveId(a.id)}
-                            className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
-                            title="Remove allocation"
-                            data-testid={`button-remove-alloc-${a.id}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          )}
                         </div>
                       );
                     })}
