@@ -8176,9 +8176,17 @@ const CostSubmission = () => {
 
             // Role guard — must be declared before catSource and all breakdown blocks
             const isApproverRole = isFOM || isSupervisor || isCountryDirector || isFinanceAdmin || isAdmin || isSuperAdmin;
+            // Org-level admins see ALL submissions in breakdowns; mid-tier flow approvers see only their own scope
+            const isOrgAdmin = isAdmin || isSuperAdmin || isFinanceAdmin;
+            const isFlowApprover = isApproverRole && !isOrgAdmin; // CD / FOM / Supervisor
 
-            // Category breakdown — admins/approvers see ALL submissions; others see own only
-            const catSource = isApproverRole ? operationalCosts : mine;
+            // Tier position in the approval flow (for the role banner)
+            const flowTier = isSupervisor ? 1 : isFOM ? 2 : isCountryDirector ? 3 : isFinanceAdmin ? 4 : null;
+            const flowTierLabel = flowTier ? `Tier ${flowTier}` : null;
+            const flowRoleLabel = isSupervisor ? 'Supervisor' : isFOM ? 'Field Operations Manager (FOM)' : isCountryDirector ? 'Country Director (CD)' : isFinanceAdmin ? 'Finance Admin' : '';
+
+            // Category breakdown — org admins see ALL; flow approvers & regular users see own submissions only
+            const catSource = isOrgAdmin ? operationalCosts : mine;
             const catMap = new Map<string, { count: number; requested: number; paid: number; approved: number }>();
             for (const o of catSource) {
               const cat = catLabel[o.expense_category] || o.expense_category || 'Other';
@@ -8192,10 +8200,10 @@ const CostSubmission = () => {
             const catRows = [...catMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
             const catTotal = { count: catSource.length, requested: catSource.reduce((s,o)=>s+(o.amount_cents??0),0), paid: catSource.filter(o=>['paid','reconciled'].includes(o.status)).reduce((s,o)=>s+(o.amount_paid_cents??o.amount_cents??0),0) };
 
-            // By Users breakdown — admins/approvers only
+            // By Users breakdown — org admins only (scoped to catSource)
             const userMap = new Map<string, { name: string; role: string; count: number; requested: number; paid: number; balance: number }>();
-            if (isApproverRole) {
-              for (const o of operationalCosts) {
+            if (isOrgAdmin) {
+              for (const o of catSource) {
                 const sid = o.submitted_by ?? 'unknown';
                 if (!userMap.has(sid)) {
                   const u = users.find(x => x.id === sid);
@@ -8210,13 +8218,13 @@ const CostSubmission = () => {
             }
             const userRows = [...userMap.values()].sort((a,b) => b.requested - a.requested);
 
-            // By Fund breakdown — admins/approvers only
+            // By Fund breakdown — org admins only
             const getFundName = (o: OperationalCostSubmission): string => {
               const txnId = (o as any).pre_fund_transaction_id as string | null | undefined;
               return txnId ? (txnToFundMap.get(txnId) ?? '—') : '—';
             };
             const fundBreakMap = new Map<string, { count: number; requested: number; paid: number; pending: number }>();
-            if (isApproverRole) {
+            if (isOrgAdmin) {
               for (const o of catSource) {
                 const fund = getFundName(o);
                 if (!fundBreakMap.has(fund)) fundBreakMap.set(fund, { count: 0, requested: 0, paid: 0, pending: 0 });
@@ -8230,9 +8238,9 @@ const CostSubmission = () => {
             const fundRows = [...fundBreakMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
             const fundTotal = fundRows.reduce((s,[,r]) => ({ count: s.count+r.count, requested: s.requested+r.requested, paid: s.paid+r.paid, pending: s.pending+r.pending }), { count:0, requested:0, paid:0, pending:0 });
 
-            // By Role breakdown — admins/approvers only
+            // By Role breakdown — org admins only
             const roleBreakMap = new Map<string, { count: number; requested: number; paid: number; pending: number }>();
-            if (isApproverRole) {
+            if (isOrgAdmin) {
               for (const o of catSource) {
                 const role = (o.submitter_role || users.find(u => u.id === o.submitted_by)?.role || 'unknown')
                   .replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -8291,8 +8299,8 @@ const CostSubmission = () => {
               }
               userTimesMap.get(approvedBy)!.times.push(d);
             };
-            // Use all submissions for admins/approvers, own submissions only for regular users
-            const timingSource = isApproverRole ? catSource : mine;
+            // Timing source: org admins → all submissions; flow approvers → requests they acted on; others → own
+            const timingSource = isOrgAdmin ? catSource : (isFlowApprover ? myApprovals : mine);
             for (const o of timingSource) {
               addTiming(o.tier1_approved_by, o.submitted_at,       o.tier1_approved_at);
               addTiming(o.tier2_approved_by, o.tier1_approved_at,  o.tier2_approved_at);
@@ -8383,25 +8391,25 @@ const CostSubmission = () => {
                             <DollarSign className="h-4 w-4 text-emerald-600" />
                             Financial Summary / الملخص المالي
                           </CardTitle>
-                          {isApproverRole && (
-                            <p className="text-xs text-muted-foreground mt-0.5">All submissions / جميع الطلبات</p>
-                          )}
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {isOrgAdmin ? 'All submissions / جميع الطلبات' : 'My submissions / طلباتي'}
+                          </p>
                         </CardHeader>
                         <CardContent className="px-4 pb-4">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="text-center p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 space-y-1">
                               <p className="text-xs text-muted-foreground">Total Requested</p>
-                              <p className="text-lg font-bold">{fmtAmt(isApproverRole ? catTotal.requested : mineTotal)}</p>
-                              {isApproverRole && <p className="text-xs text-muted-foreground">{catTotal.count} requests</p>}
+                              <p className="text-lg font-bold">{fmtAmt(isOrgAdmin ? catTotal.requested : mineTotal)}</p>
+                              {isOrgAdmin && <p className="text-xs text-muted-foreground">{catTotal.count} requests</p>}
                             </div>
                             <div className="text-center p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 space-y-1">
                               <p className="text-xs text-muted-foreground">Total Paid</p>
-                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmtAmt(isApproverRole ? catTotal.paid : minePaid)}</p>
+                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmtAmt(isOrgAdmin ? catTotal.paid : minePaid)}</p>
                             </div>
                             <div className="text-center p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 space-y-1">
                               <p className="text-xs text-muted-foreground">Remaining / Approved</p>
                               <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
-                                {isApproverRole
+                                {isOrgAdmin
                                   ? fmtAmt(Math.max(0, catTotal.requested - catTotal.paid))
                                   : fmtAmt(Math.max(0, mine.filter(o=>o.status==='approved').reduce((s,o)=>s+(o.amount_cents??0),0)))}
                               </p>
@@ -8456,8 +8464,8 @@ const CostSubmission = () => {
                         )}
                       </Card>
 
-                      {/* By Users breakdown — visible to approver/admin roles */}
-                      {isApproverRole && userRows.length > 0 && (
+                      {/* By Users breakdown — org admins only */}
+                      {isOrgAdmin && userRows.length > 0 && (
                         <Card>
                           <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('users')}>
                             <CardTitle className="text-sm flex items-center gap-2">
@@ -8507,8 +8515,8 @@ const CostSubmission = () => {
                         </Card>
                       )}
 
-                      {/* By Fund breakdown — visible to approver/admin roles */}
-                      {isApproverRole && fundRows.length > 0 && (
+                      {/* By Fund breakdown — org admins only */}
+                      {isOrgAdmin && fundRows.length > 0 && (
                         <Card>
                           <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('fund')}>
                             <CardTitle className="text-sm flex items-center gap-2">
@@ -8558,8 +8566,8 @@ const CostSubmission = () => {
                         </Card>
                       )}
 
-                      {/* By Role breakdown — visible to approver/admin roles */}
-                      {isApproverRole && roleRows.length > 0 && (
+                      {/* By Role breakdown — org admins only */}
+                      {isOrgAdmin && roleRows.length > 0 && (
                         <Card>
                           <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('role')}>
                             <CardTitle className="text-sm flex items-center gap-2">
@@ -8696,6 +8704,51 @@ const CostSubmission = () => {
                     </>
                   )}
                 </div>
+
+                {/* ── My Role in the Flow banner (flow approvers: CD / FOM / Supervisor) ── */}
+                {isFlowApprover && flowTierLabel && (
+                  <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                    <CardContent className="px-4 py-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        {/* Role + tier */}
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                            T{flowTier}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm">{flowRoleLabel}</p>
+                            <p className="text-xs text-muted-foreground">{flowTierLabel} Approver in the Cost Submission Flow</p>
+                          </div>
+                        </div>
+                        {/* Quick stats */}
+                        <div className="flex gap-4 sm:gap-6 text-center">
+                          <div>
+                            <p className="text-xl font-bold text-blue-700 dark:text-blue-400">{myApprovals.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Requests Acted On</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+                              {myApprovals.filter(o => !['rejected'].includes(o.status)).length}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">Approved / Passed</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-amber-700 dark:text-amber-400">
+                              {myApprovals.filter(o => ['pending','under_review'].includes(o.status)).length}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">Pending Action</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-violet-700 dark:text-violet-400">
+                              {fmtAmt(myApprovals.filter(o=>!['rejected'].includes(o.status)).reduce((s,o)=>s+(o.amount_cents??0),0))}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">Value Processed</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* ── My Approval Activity (approver roles) ──────────────────── */}
                 {isApproverRole && myApprovals.length > 0 && (
