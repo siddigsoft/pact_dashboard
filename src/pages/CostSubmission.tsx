@@ -354,6 +354,12 @@ const CostSubmission = () => {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
 
+  // Reports tab: which cards are collapsed (card IDs), and which role rows are expanded in the timeline
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+  const toggleCard = (id: string) => setCollapsedCards(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
+  const toggleRole = (role: string) => setExpandedRoles(prev => { const n = new Set(prev); n.has(role) ? n.delete(role) : n.add(role); return n; });
+
   // Maps pre_fund_transaction_id → fund name for the reports tab
   const [txnToFundMap, setTxnToFundMap] = useState<Map<string, string>>(new Map());
   useEffect(() => {
@@ -8285,7 +8291,9 @@ const CostSubmission = () => {
               }
               userTimesMap.get(approvedBy)!.times.push(d);
             };
-            for (const o of mine) {
+            // Use all submissions for admins/approvers, own submissions only for regular users
+            const timingSource = isApproverRole ? catSource : mine;
+            for (const o of timingSource) {
               addTiming(o.tier1_approved_by, o.submitted_at,       o.tier1_approved_at);
               addTiming(o.tier2_approved_by, o.tier1_approved_at,  o.tier2_approved_at);
               addTiming(o.tier3_approved_by, o.tier2_approved_at,  o.tier3_approved_at);
@@ -8297,6 +8305,14 @@ const CostSubmission = () => {
             // Also include any unlisted roles
             roleTimes.forEach((times, rl) => {
               if (!ROLE_ORDER.includes(rl)) roleTimeRows.push({ label: rl, times });
+            });
+            // Build nested role → users map for the drilled-down timeline card
+            const roleNestedMap = new Map<string, { times: number[]; users: Array<{name: string; times: number[]}> }>();
+            roleTimeRows.forEach(({ label, times }) => {
+              const users_in_role = [...userTimesMap.values()]
+                .filter(u => u.role === label)
+                .sort((a, b) => (avg(b.times) ?? 0) - (avg(a.times) ?? 0));
+              roleNestedMap.set(label, { times, users: users_in_role });
             });
             const userTimeRows = [...userTimesMap.values()]
               .sort((a, b) => (avg(b.times) ?? 0) - (avg(a.times) ?? 0)); // slowest first
@@ -8396,62 +8412,20 @@ const CostSubmission = () => {
 
                       {/* By Category breakdown */}
                       <Card>
-                        <CardHeader className="pb-3 pt-4 px-4">
+                        <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('cat')}>
                           <CardTitle className="text-sm flex items-center gap-2">
                             <Layers className="h-4 w-4 text-violet-600" />
                             By Category / حسب الفئة
+                            <span className="ml-auto text-muted-foreground">{collapsedCards.has('cat') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="px-0 pb-2">
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b bg-muted/30">
-                                  <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Category</th>
-                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
-                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
-                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
-                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {catRows.map(([cat, data]) => (
-                                  <tr key={cat} className="border-b hover:bg-muted/20 transition-colors">
-                                    <td className="px-4 py-2.5 font-medium">{cat}</td>
-                                    <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
-                                  </tr>
-                                ))}
-                                <tr className="bg-muted/40 font-semibold">
-                                  <td className="px-4 py-2.5">Total</td>
-                                  <td className="text-right px-4 py-2.5">{catTotal.count}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(catTotal.requested)}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(catTotal.paid)}</td>
-                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, catTotal.requested - catTotal.paid))}</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* By Users breakdown — visible to approver/admin roles */}
-                      {isApproverRole && userRows.length > 0 && (
-                        <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
-                            <CardTitle className="text-sm flex items-center gap-2">
-                              <Users className="h-4 w-4 text-sky-600" />
-                              By Users / حسب المستخدمين
-                            </CardTitle>
-                          </CardHeader>
+                        {!collapsedCards.has('cat') && (
                           <CardContent className="px-0 pb-2">
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">User</th>
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Category</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
                                     <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
@@ -8459,211 +8433,264 @@ const CostSubmission = () => {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {userRows.map((row, i) => (
-                                    <tr key={i} className="border-b hover:bg-muted/20 transition-colors">
-                                      <td className="px-4 py-2.5">
-                                        <div className="font-medium text-xs">{row.name}</div>
-                                        <div className="text-[10px] text-muted-foreground capitalize">{row.role}</div>
-                                      </td>
-                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{row.count}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(row.requested)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(row.paid)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(row.balance)}</td>
+                                  {catRows.map(([cat, data]) => (
+                                    <tr key={cat} className="border-b hover:bg-muted/20 transition-colors">
+                                      <td className="px-4 py-2.5 font-medium">{cat}</td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
                                     </tr>
                                   ))}
                                   <tr className="bg-muted/40 font-semibold">
-                                    <td className="px-4 py-2.5 text-xs">Total</td>
-                                    <td className="text-right px-4 py-2.5">{userRows.reduce((s,r)=>s+r.count,0)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(userRows.reduce((s,r)=>s+r.requested,0))}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(userRows.reduce((s,r)=>s+r.paid,0))}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(userRows.reduce((s,r)=>s+r.balance,0))}</td>
+                                    <td className="px-4 py-2.5">Total</td>
+                                    <td className="text-right px-4 py-2.5">{catTotal.count}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(catTotal.requested)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(catTotal.paid)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, catTotal.requested - catTotal.paid))}</td>
                                   </tr>
                                 </tbody>
                               </table>
                             </div>
                           </CardContent>
+                        )}
+                      </Card>
+
+                      {/* By Users breakdown — visible to approver/admin roles */}
+                      {isApproverRole && userRows.length > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('users')}>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Users className="h-4 w-4 text-sky-600" />
+                              By Users / حسب المستخدمين
+                              <span className="ml-auto text-muted-foreground">{collapsedCards.has('users') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
+                            </CardTitle>
+                          </CardHeader>
+                          {!collapsedCards.has('users') && (
+                            <CardContent className="px-0 pb-2">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/30">
+                                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">User</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {userRows.map((row, i) => (
+                                      <tr key={i} className="border-b hover:bg-muted/20 transition-colors">
+                                        <td className="px-4 py-2.5">
+                                          <div className="font-medium text-xs">{row.name}</div>
+                                          <div className="text-[10px] text-muted-foreground capitalize">{row.role}</div>
+                                        </td>
+                                        <td className="text-right px-4 py-2.5 text-muted-foreground">{row.count}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(row.requested)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(row.paid)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(row.balance)}</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-muted/40 font-semibold">
+                                      <td className="px-4 py-2.5 text-xs">Total</td>
+                                      <td className="text-right px-4 py-2.5">{userRows.reduce((s,r)=>s+r.count,0)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(userRows.reduce((s,r)=>s+r.requested,0))}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(userRows.reduce((s,r)=>s+r.paid,0))}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(userRows.reduce((s,r)=>s+r.balance,0))}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </CardContent>
+                          )}
                         </Card>
                       )}
 
                       {/* By Fund breakdown — visible to approver/admin roles */}
                       {isApproverRole && fundRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('fund')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Wallet className="h-4 w-4 text-teal-600" />
                               By Fund / حسب الصندوق
+                              <span className="ml-auto text-muted-foreground">{collapsedCards.has('fund') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="px-0 pb-2">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Fund / الصندوق</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {fundRows.map(([fund, data]) => (
-                                    <tr key={fund} className="border-b hover:bg-muted/20 transition-colors">
-                                      <td className="px-4 py-2.5 font-medium text-xs max-w-[200px] truncate" title={fund}>{fund}</td>
-                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                          {!collapsedCards.has('fund') && (
+                            <CardContent className="px-0 pb-2">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/30">
+                                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Fund / الصندوق</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
                                     </tr>
-                                  ))}
-                                  <tr className="bg-muted/40 font-semibold">
-                                    <td className="px-4 py-2.5 text-xs">Total</td>
-                                    <td className="text-right px-4 py-2.5">{fundTotal.count}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(fundTotal.requested)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(fundTotal.paid)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(fundTotal.pending)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, fundTotal.requested - fundTotal.paid))}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </CardContent>
+                                  </thead>
+                                  <tbody>
+                                    {fundRows.map(([fund, data]) => (
+                                      <tr key={fund} className="border-b hover:bg-muted/20 transition-colors">
+                                        <td className="px-4 py-2.5 font-medium text-xs max-w-[200px] truncate" title={fund}>{fund}</td>
+                                        <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-muted/40 font-semibold">
+                                      <td className="px-4 py-2.5 text-xs">Total</td>
+                                      <td className="text-right px-4 py-2.5">{fundTotal.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(fundTotal.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(fundTotal.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(fundTotal.pending)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, fundTotal.requested - fundTotal.paid))}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </CardContent>
+                          )}
                         </Card>
                       )}
 
                       {/* By Role breakdown — visible to approver/admin roles */}
                       {isApproverRole && roleRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('role')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Shield className="h-4 w-4 text-indigo-600" />
                               By Role / حسب الدور
+                              <span className="ml-auto text-muted-foreground">{collapsedCards.has('role') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="px-0 pb-2">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Role / الدور</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {roleRows.map(([role, data]) => (
-                                    <tr key={role} className="border-b hover:bg-muted/20 transition-colors">
-                                      <td className="px-4 py-2.5 font-medium text-xs capitalize">{role}</td>
-                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
-                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                          {!collapsedCards.has('role') && (
+                            <CardContent className="px-0 pb-2">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/30">
+                                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Role / الدور</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
                                     </tr>
-                                  ))}
-                                  <tr className="bg-muted/40 font-semibold">
-                                    <td className="px-4 py-2.5 text-xs">Total</td>
-                                    <td className="text-right px-4 py-2.5">{roleBreakTotal.count}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(roleBreakTotal.requested)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(roleBreakTotal.paid)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(roleBreakTotal.pending)}</td>
-                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, roleBreakTotal.requested - roleBreakTotal.paid))}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </CardContent>
+                                  </thead>
+                                  <tbody>
+                                    {roleRows.map(([role, data]) => (
+                                      <tr key={role} className="border-b hover:bg-muted/20 transition-colors">
+                                        <td className="px-4 py-2.5 font-medium text-xs capitalize">{role}</td>
+                                        <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
+                                        <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-muted/40 font-semibold">
+                                      <td className="px-4 py-2.5 text-xs">Total</td>
+                                      <td className="text-right px-4 py-2.5">{roleBreakTotal.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(roleBreakTotal.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(roleBreakTotal.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(roleBreakTotal.pending)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, roleBreakTotal.requested - roleBreakTotal.paid))}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </CardContent>
+                          )}
                         </Card>
                       )}
 
-                      {/* Time-to-Approval Metrics — by Role */}
+                      {/* Approval Timeline — Role → Users nested, collapsible per role */}
                       {roleTimeRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('timeline')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Clock className="h-4 w-4 text-blue-600" />
                               Approval Timeline by Role / مدة الموافقة حسب الدور
+                              <span className="ml-auto text-muted-foreground">{collapsedCards.has('timeline') ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
                             </CardTitle>
-                            <CardDescription>How long each approver role takes to process your requests (FOM and CD are shown separately)</CardDescription>
+                            <CardDescription>Click a role row to expand individual approvers · Avg &gt; 3d shown in amber</CardDescription>
                           </CardHeader>
-                          <CardContent className="px-0 pb-2">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Approver Role</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Samples</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Slowest</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {roleTimeRows.map(row => (
-                                    <tr key={row.label} className="border-b hover:bg-muted/20">
-                                      <td className="px-4 py-2.5 font-medium">{row.label}</td>
-                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
-                                      <td className="text-right px-4 py-2.5 font-semibold text-blue-700 dark:text-blue-400">{fmtDays(avg(row.times))}</td>
-                                      <td className="text-right px-4 py-2.5 text-emerald-700 dark:text-emerald-400">{fmtDays(Math.min(...row.times))}</td>
-                                      <td className="text-right px-4 py-2.5 text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
+                          {!collapsedCards.has('timeline') && (
+                            <CardContent className="px-0 pb-2">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b bg-muted/30">
+                                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium w-5"></th>
+                                      <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Approver Role / الدور</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Approvals</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
+                                      <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Slowest</th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Time-to-Approval — by Individual Approver */}
-                      {userTimeRows.length > 0 && (
-                        <Card>
-                          <CardHeader className="pb-3 pt-4 px-4">
-                            <CardTitle className="text-sm flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-violet-600" />
-                              Approval Timeline by Approver / مدة الموافقة حسب الشخص
-                            </CardTitle>
-                            <CardDescription>Individual approver performance — who is taking longest to act on your requests</CardDescription>
-                          </CardHeader>
-                          <CardContent className="px-0 pb-2">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="border-b bg-muted/30">
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Approver</th>
-                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Role</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requests</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
-                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Slowest</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {userTimeRows.map((row, i) => {
-                                    const avgT = avg(row.times);
-                                    const isSlow = avgT !== null && avgT > 3;
-                                    return (
-                                      <tr key={i} className="border-b hover:bg-muted/20">
-                                        <td className="px-4 py-2.5 font-medium text-xs">{row.name}</td>
-                                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.role}</td>
-                                        <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
-                                        <td className={`text-right px-4 py-2.5 font-semibold text-xs ${isSlow ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
-                                          {fmtDays(avgT)}
-                                        </td>
-                                        <td className="text-right px-4 py-2.5 text-xs text-emerald-700 dark:text-emerald-400">{fmtDays(Math.min(...row.times))}</td>
-                                        <td className="text-right px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </CardContent>
+                                  </thead>
+                                  <tbody>
+                                    {roleTimeRows.map(row => {
+                                      const nested = roleNestedMap.get(row.label);
+                                      const isExpanded = expandedRoles.has(row.label);
+                                      const avgT = avg(row.times);
+                                      const isSlow = avgT !== null && avgT > 3;
+                                      return (
+                                        <>
+                                          {/* Role row — clickable to expand */}
+                                          <tr
+                                            key={row.label}
+                                            className="border-b hover:bg-muted/20 cursor-pointer"
+                                            onClick={() => toggleRole(row.label)}
+                                          >
+                                            <td className="px-4 py-2.5 text-muted-foreground w-5">
+                                              {nested && nested.users.length > 0
+                                                ? (isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)
+                                                : null}
+                                            </td>
+                                            <td className="px-4 py-2.5 font-semibold text-xs">{row.label}</td>
+                                            <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
+                                            <td className={`text-right px-4 py-2.5 font-bold text-xs ${isSlow ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                                              {fmtDays(avgT)}
+                                            </td>
+                                            <td className="text-right px-4 py-2.5 text-xs text-emerald-700 dark:text-emerald-400">{fmtDays(Math.min(...row.times))}</td>
+                                            <td className="text-right px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
+                                          </tr>
+                                          {/* Expanded user rows under this role */}
+                                          {isExpanded && nested?.users.map((u, ui) => {
+                                            const uAvg = avg(u.times);
+                                            const uSlow = uAvg !== null && uAvg > 3;
+                                            return (
+                                              <tr key={`${row.label}-${ui}`} className="border-b bg-muted/10 hover:bg-muted/20">
+                                                <td className="px-4 py-2 w-5"></td>
+                                                <td className="px-6 py-2 text-xs text-muted-foreground">
+                                                  <span className="inline-flex items-center gap-1">
+                                                    <User className="h-3 w-3" />
+                                                    {u.name}
+                                                  </span>
+                                                </td>
+                                                <td className="text-right px-4 py-2 text-xs text-muted-foreground">{u.times.length}</td>
+                                                <td className={`text-right px-4 py-2 text-xs font-semibold ${uSlow ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                                  {fmtDays(uAvg)}
+                                                </td>
+                                                <td className="text-right px-4 py-2 text-xs text-emerald-600 dark:text-emerald-400">{fmtDays(Math.min(...u.times))}</td>
+                                                <td className="text-right px-4 py-2 text-xs text-amber-600 dark:text-amber-400">{fmtDays(Math.max(...u.times))}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </CardContent>
+                          )}
                         </Card>
                       )}
                     </>
