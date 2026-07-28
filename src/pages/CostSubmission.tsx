@@ -203,6 +203,15 @@ interface OperationalCostSubmission {
   delete_request_notes?: string | null;
   delete_request_reviewed_by?: string | null;
   delete_request_reviewed_at?: string | null;
+  // CD Exception Transfer
+  transferred_to_cd?: boolean | null;
+  transferred_by?: string | null;
+  transferred_at?: string | null;
+  transfer_note?: string | null;
+  cd_exception_status?: 'pending' | 'approved' | 'rejected' | null;
+  cd_exception_note?: string | null;
+  cd_exception_reviewed_by?: string | null;
+  cd_exception_reviewed_at?: string | null;
 }
 
 const CostSubmission = () => {
@@ -596,6 +605,8 @@ const CostSubmission = () => {
   const [groupDeleteConfirm, setGroupDeleteConfirm] = useState<{ groupId: string; items: OperationalCostSubmission[]; title: string } | null>(null);
   const [deleteRequestDialog, setDeleteRequestDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; reason: string }>({ open: false, submission: null, reason: '' });
   const [deleteReviewDialog, setDeleteReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; notes: string; action: 'approve' | 'reject' }>({ open: false, submission: null, notes: '', action: 'approve' });
+  const [transferToCDDialog, setTransferToCDDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; note: string }>({ open: false, submission: null, note: '' });
+  const [cdExceptionReviewDialog, setCDExceptionReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; note: string; action: 'approved' | 'rejected' }>({ open: false, submission: null, note: '', action: 'approved' });
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -3417,6 +3428,62 @@ const CostSubmission = () => {
     } finally {
       setActionProcessing(false);
       setGroupDeleteConfirm(null);
+    }
+  };
+
+  // SuperAdmin transfers a submission to CD as an exception for review
+  const handleTransferToCD = async () => {
+    const { submission, note } = transferToCDDialog;
+    if (!submission || !note.trim()) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          transferred_to_cd: true,
+          transferred_by: currentUser?.id,
+          transferred_at: new Date().toISOString(),
+          transfer_note: note.trim(),
+          cd_exception_status: 'pending',
+        })
+        .eq('id', submission.id);
+      if (error) throw error;
+      toast({ title: 'Sent to CD / أُرسل إلى المدير القُطري', description: 'Flagged as an exception — Country Director will review it.' });
+      fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Transfer failed.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setTransferToCDDialog({ open: false, submission: null, note: '' });
+    }
+  };
+
+  // CD approves or rejects an exception transferred to them
+  const handleCDExceptionDecision = async () => {
+    const { submission, note, action } = cdExceptionReviewDialog;
+    if (!submission) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          cd_exception_status: action,
+          cd_exception_note: note.trim() || null,
+          cd_exception_reviewed_by: currentUser?.id,
+          cd_exception_reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', submission.id);
+      if (error) throw error;
+      toast({
+        title: action === 'approved' ? 'Exception Approved / تمت الموافقة' : 'Exception Rejected / تم الرفض',
+        description: action === 'approved' ? 'Submission approved as a CD exception.' : 'Exception request has been rejected.',
+      });
+      fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to update exception.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setCDExceptionReviewDialog({ open: false, submission: null, note: '', action: 'approved' });
     }
   };
 
@@ -6947,6 +7014,49 @@ const CostSubmission = () => {
                                 Request Again
                               </Button>
                             )}
+                            {/* CD Exception Transfer — SuperAdmin sends, CD reviews */}
+                            {isSuperAdmin && !oc.transferred_to_cd && getOperationalDerivedStatus(oc) !== 'reconciled' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-purple-400 text-purple-700 hover:bg-purple-50"
+                                onClick={() => setTransferToCDDialog({ open: true, submission: oc, note: '' })}
+                                data-testid={`button-transfer-cd-${oc.id}`}
+                              >
+                                <Send className="h-3 w-3 mr-1" />Send to CD
+                              </Button>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'pending' && isCountryDirector && (
+                              <div className="flex gap-1">
+                                <Button size="sm" className="h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                  onClick={() => setCDExceptionReviewDialog({ open: true, submission: oc, note: '', action: 'approved' })}
+                                  data-testid={`button-approve-exception-${oc.id}`}>
+                                  <CheckCircle className="h-3 w-3 mr-1" />Approve Exception
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                                  onClick={() => setCDExceptionReviewDialog({ open: true, submission: oc, note: '', action: 'rejected' })}
+                                  data-testid={`button-reject-exception-${oc.id}`}>
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'pending' && !isCountryDirector && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-purple-100 text-purple-700 border border-purple-300">
+                                <Send className="h-3 w-3" />CD Exception Pending
+                              </span>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'approved' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-green-100 text-green-700 border border-green-300"
+                                title={oc.cd_exception_note || ''}>
+                                <CheckCircle className="h-3 w-3" />CD Approved Exception
+                              </span>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-red-100 text-red-700 border border-red-300"
+                                title={oc.cd_exception_note || ''}>
+                                <XCircle className="h-3 w-3" />CD Rejected Exception
+                              </span>
+                            )}
                             {canApproveDeleteRequest(oc) && (
                               <div className="flex gap-1">
                                 <Button size="sm" variant="destructive" className="h-7 px-2.5 text-xs"
@@ -7855,6 +7965,46 @@ const CostSubmission = () => {
                                 data-testid={`button-request-delete-again-${oc.id}`}>
                                 <Trash2 className="h-3.5 w-3.5" />Request Again
                               </button>
+                            )}
+                            {/* CD Exception Transfer — SuperAdmin sends, CD reviews */}
+                            {isSuperAdmin && !oc.transferred_to_cd && getOperationalDerivedStatus(oc) !== 'reconciled' && (
+                              <button
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-purple-400 text-purple-700 hover:bg-purple-50 transition-colors"
+                                onClick={() => setTransferToCDDialog({ open: true, submission: oc, note: '' })}
+                                data-testid={`button-transfer-cd-${oc.id}`}>
+                                <Send className="h-3.5 w-3.5" />Send to CD
+                              </button>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'pending' && isCountryDirector && (
+                              <div className="flex gap-1">
+                                <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                                  onClick={() => setCDExceptionReviewDialog({ open: true, submission: oc, note: '', action: 'approved' })}
+                                  data-testid={`button-approve-exception-${oc.id}`}>
+                                  <CheckCircle className="h-3.5 w-3.5" />Approve Exception
+                                </button>
+                                <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-red-300 text-red-700 hover:bg-red-50 transition-colors"
+                                  onClick={() => setCDExceptionReviewDialog({ open: true, submission: oc, note: '', action: 'rejected' })}
+                                  data-testid={`button-reject-exception-${oc.id}`}>
+                                  <XCircle className="h-3.5 w-3.5" />Reject
+                                </button>
+                              </div>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'pending' && !isCountryDirector && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-purple-100 text-purple-700 border border-purple-300">
+                                <Send className="h-3.5 w-3.5" />CD Exception Pending
+                              </span>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'approved' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-green-100 text-green-700 border border-green-300"
+                                title={oc.cd_exception_note || ''}>
+                                <CheckCircle className="h-3.5 w-3.5" />CD Approved Exception
+                              </span>
+                            )}
+                            {oc.transferred_to_cd && oc.cd_exception_status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-red-100 text-red-700 border border-red-300"
+                                title={oc.cd_exception_note || ''}>
+                                <XCircle className="h-3.5 w-3.5" />CD Rejected
+                              </span>
                             )}
                             {canApproveDeleteRequest(oc) && (
                               <div className="flex gap-1">
@@ -10367,6 +10517,87 @@ const CostSubmission = () => {
               data-testid="button-confirm-delete-review"
             >
               {actionProcessing ? 'Processing…' : deleteReviewDialog.action === 'approve' ? 'Approve & Delete' : 'Reject & Notify'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Transfer to CD Dialog (SuperAdmin) ── */}
+      <AlertDialog open={transferToCDDialog.open} onOpenChange={(open) => !open && setTransferToCDDialog({ open: false, submission: null, note: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Send to CD as Exception / إرسال للمدير القُطري
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">سيظهر هذا الطلب للمدير القُطري كاستثناء يتطلب مراجعته</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {transferToCDDialog.submission && (
+                <span className="block text-xs font-medium text-foreground mb-2">
+                  {transferToCDDialog.submission.currency} {((transferToCDDialog.submission.amount_cents ?? 0) / 100).toLocaleString()} — {transferToCDDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+              The Country Director will see this submission under their <strong>Exception Requests</strong> tab and can approve or reject it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 pb-2">
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Reason / context for this exception (required) — السبب أو السياق"
+              value={transferToCDDialog.note}
+              onChange={(e) => setTransferToCDDialog(prev => ({ ...prev, note: e.target.value }))}
+              data-testid="input-transfer-cd-note"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing}>Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionProcessing || !transferToCDDialog.note.trim()}
+              onClick={(e) => { e.preventDefault(); handleTransferToCD(); }}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              data-testid="button-confirm-transfer-cd"
+            >
+              {actionProcessing ? 'Sending…' : 'Send to CD / إرسال'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── CD Exception Review Dialog (Country Director) ── */}
+      <AlertDialog open={cdExceptionReviewDialog.open} onOpenChange={(open) => !open && setCDExceptionReviewDialog({ open: false, submission: null, note: '', action: 'approved' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {cdExceptionReviewDialog.action === 'approved' ? '✅ Approve Exception / الموافقة على الاستثناء' : '❌ Reject Exception / رفض الاستثناء'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {cdExceptionReviewDialog.submission && (
+                <span className="block text-xs font-medium text-foreground mb-1">
+                  {cdExceptionReviewDialog.submission.currency} {((cdExceptionReviewDialog.submission.amount_cents ?? 0) / 100).toLocaleString()} — {cdExceptionReviewDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+              {cdExceptionReviewDialog.submission?.transfer_note && (
+                <span className="block text-xs text-muted-foreground italic mt-1">SuperAdmin note: "{cdExceptionReviewDialog.submission.transfer_note}"</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 pb-2">
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[70px] focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder={cdExceptionReviewDialog.action === 'approved' ? 'Approval note (optional)' : 'Rejection reason (recommended)'}
+              value={cdExceptionReviewDialog.note}
+              onChange={(e) => setCDExceptionReviewDialog(prev => ({ ...prev, note: e.target.value }))}
+              data-testid="input-cd-exception-note"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing}>Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionProcessing}
+              onClick={(e) => { e.preventDefault(); handleCDExceptionDecision(); }}
+              className={cdExceptionReviewDialog.action === 'approved' ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-destructive text-destructive-foreground'}
+              data-testid="button-confirm-cd-exception"
+            >
+              {actionProcessing ? 'Processing…' : cdExceptionReviewDialog.action === 'approved' ? 'Approve / موافقة' : 'Reject / رفض'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
