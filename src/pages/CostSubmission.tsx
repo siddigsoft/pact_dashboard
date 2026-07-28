@@ -354,6 +354,35 @@ const CostSubmission = () => {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
 
+  // Maps pre_fund_transaction_id → fund name for the reports tab
+  const [txnToFundMap, setTxnToFundMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    const txnIds = [...new Set(
+      operationalCosts.map(o => (o as any).pre_fund_transaction_id).filter(Boolean)
+    )] as string[];
+    if (txnIds.length === 0) { setTxnToFundMap(new Map()); return; }
+    (supabase as any)
+      .from('pre_fund_transactions')
+      .select('id, pre_fund_request_id')
+      .in('id', txnIds)
+      .then(({ data: txns }: { data: any[] | null }) => {
+        if (!txns?.length) return;
+        const fundIds = [...new Set(txns.map((t: any) => t.pre_fund_request_id).filter(Boolean))] as string[];
+        (supabase as any)
+          .from('pre_fund_requests')
+          .select('id, name')
+          .in('id', fundIds)
+          .then(({ data: funds }: { data: any[] | null }) => {
+            const fundById = new Map((funds ?? []).map((f: any) => [f.id, f.name as string]));
+            const map = new Map<string, string>();
+            txns.forEach((t: any) => {
+              if (t.id && t.pre_fund_request_id) map.set(t.id, fundById.get(t.pre_fund_request_id) ?? 'Unknown Fund');
+            });
+            setTxnToFundMap(map);
+          });
+      });
+  }, [operationalCosts]);
+
    // Derive distinct MMP options from loaded cost data
    useEffect(() => {
      const ids = [...new Set(operationalCosts.map(o => o.mmp_file_id).filter(Boolean))] as string[];
@@ -8172,6 +8201,26 @@ const CostSubmission = () => {
             }
             const userRows = [...userMap.values()].sort((a,b) => b.requested - a.requested);
 
+            // By Fund breakdown — admins/approvers only
+            const getFundName = (o: OperationalCostSubmission): string => {
+              const txnId = (o as any).pre_fund_transaction_id as string | null | undefined;
+              return txnId ? (txnToFundMap.get(txnId) ?? '—') : '—';
+            };
+            const fundBreakMap = new Map<string, { count: number; requested: number; paid: number; pending: number }>();
+            if (isApproverRole) {
+              for (const o of catSource) {
+                const fund = getFundName(o);
+                if (!fundBreakMap.has(fund)) fundBreakMap.set(fund, { count: 0, requested: 0, paid: 0, pending: 0 });
+                const row = fundBreakMap.get(fund)!;
+                row.count++;
+                row.requested += o.amount_cents ?? 0;
+                if (['paid','reconciled'].includes(o.status)) row.paid += o.amount_paid_cents ?? o.amount_cents ?? 0;
+                if (['pending','under_review'].includes(o.status)) row.pending += o.amount_cents ?? 0;
+              }
+            }
+            const fundRows = [...fundBreakMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
+            const fundTotal = fundRows.reduce((s,[,r]) => ({ count: s.count+r.count, requested: s.requested+r.requested, paid: s.paid+r.paid, pending: s.pending+r.pending }), { count:0, requested:0, paid:0, pending:0 });
+
             // ── My Approvals ──────────────────────────────────────────────
             const myApprovals = operationalCosts.filter(o =>
               o.tier1_approved_by === currentUser?.id || o.tier2_approved_by === currentUser?.id ||
@@ -8300,21 +8349,27 @@ const CostSubmission = () => {
                             <DollarSign className="h-4 w-4 text-emerald-600" />
                             Financial Summary / الملخص المالي
                           </CardTitle>
+                          {isApproverRole && (
+                            <p className="text-xs text-muted-foreground mt-0.5">All submissions / جميع الطلبات</p>
+                          )}
                         </CardHeader>
                         <CardContent className="px-4 pb-4">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="text-center p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 space-y-1">
                               <p className="text-xs text-muted-foreground">Total Requested</p>
-                              <p className="text-lg font-bold">{fmtAmt(mineTotal)}</p>
+                              <p className="text-lg font-bold">{fmtAmt(isApproverRole ? catTotal.requested : mineTotal)}</p>
+                              {isApproverRole && <p className="text-xs text-muted-foreground">{catTotal.count} requests</p>}
                             </div>
                             <div className="text-center p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 space-y-1">
                               <p className="text-xs text-muted-foreground">Total Paid</p>
-                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmtAmt(minePaid)}</p>
+                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmtAmt(isApproverRole ? catTotal.paid : minePaid)}</p>
                             </div>
                             <div className="text-center p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 space-y-1">
                               <p className="text-xs text-muted-foreground">Remaining / Approved</p>
                               <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
-                                {fmtAmt(Math.max(0, mine.filter(o=>o.status==='approved').reduce((s,o)=>s+(o.amount_cents??0),0)))}
+                                {isApproverRole
+                                  ? fmtAmt(Math.max(0, catTotal.requested - catTotal.paid))
+                                  : fmtAmt(Math.max(0, mine.filter(o=>o.status==='approved').reduce((s,o)=>s+(o.amount_cents??0),0)))}
                               </p>
                             </div>
                           </div>
@@ -8404,6 +8459,54 @@ const CostSubmission = () => {
                                     <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(userRows.reduce((s,r)=>s+r.requested,0))}</td>
                                     <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(userRows.reduce((s,r)=>s+r.paid,0))}</td>
                                     <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(userRows.reduce((s,r)=>s+r.balance,0))}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* By Fund breakdown — visible to approver/admin roles */}
+                      {isApproverRole && fundRows.length > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Wallet className="h-4 w-4 text-teal-600" />
+                              By Fund / حسب الصندوق
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Fund / الصندوق</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Pending</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {fundRows.map(([fund, data]) => (
+                                    <tr key={fund} className="border-b hover:bg-muted/20 transition-colors">
+                                      <td className="px-4 py-2.5 font-medium text-xs max-w-[200px] truncate" title={fund}>{fund}</td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(data.pending)}</td>
+                                      <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/40 font-semibold">
+                                    <td className="px-4 py-2.5 text-xs">Total</td>
+                                    <td className="text-right px-4 py-2.5">{fundTotal.count}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(fundTotal.requested)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(fundTotal.paid)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(fundTotal.pending)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-400">{fmtAmt(Math.max(0, fundTotal.requested - fundTotal.paid))}</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -8629,6 +8732,7 @@ const CostSubmission = () => {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b bg-muted/30">
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Fund / الصندوق</th>
                                 <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Submitter</th>
                                 <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Category</th>
                                 <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Amount</th>
@@ -8641,6 +8745,7 @@ const CostSubmission = () => {
                             <tbody>
                               {myApprovals.slice().sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50).map(o => {
                                 const submitter = users.find(u => u.id === o.submitted_by);
+                                const fundName = getFundName(o);
                                 const myTier = o.tier1_approved_by === currentUser?.id ? 1
                                   : o.tier2_approved_by === currentUser?.id ? 2
                                   : o.tier3_approved_by === currentUser?.id ? 3 : 4;
@@ -8653,6 +8758,15 @@ const CostSubmission = () => {
                                 const taken = daysBetween(prevAt, myApprovedAt);
                                 return (
                                   <tr key={o.id} className="border-b hover:bg-muted/20">
+                                    <td className="px-4 py-2.5 text-xs max-w-[160px]">
+                                      {fundName !== '—' ? (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium truncate max-w-full" title={fundName}>
+                                          {fundName}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </td>
                                     <td className="px-4 py-2.5">
                                       <div className="font-medium text-xs">{submitter?.name || '—'}</div>
                                       <div className="text-xs text-muted-foreground">{submitter?.role || ''}</div>
