@@ -140,8 +140,7 @@ export default function PreFundingDistribute() {
         const { data: ocsData } = await (supabase as any)
           .from('operational_cost_submissions')
           .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-          .in('id', ocsIds)
-          .eq('submitted_by', userId);
+          .in('id', ocsIds);
         payments = [...payments, ...(ocsData ?? []).map((o: any) => {
           const txn = ocsTxns.find((t: any) => t.source_id === o.id);
           return { ...o, _type: 'ocs', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
@@ -152,8 +151,7 @@ export default function PreFundingDistribute() {
         const { data: dpData } = await (supabase as any)
           .from('down_payment_requests')
           .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
-          .in('id', dpIds)
-          .eq('requested_by', userId);
+          .in('id', dpIds);
         payments = [...payments, ...(dpData ?? []).map((dp: any) => {
           const txn = dpTxns.find((t: any) => t.source_id === dp.id);
           return { ...dp, _type: 'dp', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
@@ -705,7 +703,12 @@ export default function PreFundingDistribute() {
                             onClick={() => {
                               const next = isExpanded ? null : a.id;
                               setExpandedAllocId(next);
-                              if (next) loadAllocPayments(a.id, a.user_id, fund.id);
+                              if (next) {
+                                loadAllocPayments(a.id, a.user_id, fund.id);
+                                setTimeout(() => {
+                                  document.getElementById(`alloc-detail-${a.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                }, 120);
+                              }
                             }}
                           >
                             {/* Expand chevron */}
@@ -766,10 +769,10 @@ export default function PreFundingDistribute() {
 
                           {/* ── Payment details panel ── */}
                           {isExpanded && (
-                            <div className="border-t border-border/40 bg-background/60 px-3 py-3">
+                            <div id={`alloc-detail-${a.id}`} className="border-t border-border/40 bg-background/60 px-3 py-3">
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
                                 <ExternalLink className="h-3 w-3" />
-                                Payment Details / تفاصيل المدفوعات
+                                Fund Payment History / سجل المدفوعات
                               </p>
                               {isPaymentsLoading && (
                                 <div className="space-y-1.5">
@@ -778,7 +781,7 @@ export default function PreFundingDistribute() {
                               )}
                               {!isPaymentsLoading && payments.length === 0 && (
                                 <p className="text-xs text-muted-foreground text-center py-3">
-                                  No payment transactions recorded for this allocation yet.
+                                  No payment transactions recorded for this fund yet.
                                 </p>
                               )}
                               {!isPaymentsLoading && payments.length > 0 && (

@@ -1919,17 +1919,17 @@ export default function PreFundingReconciliation() {
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportExcel} disabled={exportingExcel} data-testid="button-export-excel">
                         <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />{exportingExcel ? 'Exporting…' : 'Export Excel'}
                       </Button>
-                      {['active', 'low_balance'].includes(selectedFund.status) && (
+                      {!isCD && ['active', 'low_balance'].includes(selectedFund.status) && (
                         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleMatchBankFeed} disabled={matchingFeed} data-testid="button-match-bank-feed">
                           <Shuffle className="h-3.5 w-3.5 mr-1" />{matchingFeed ? 'Matching…' : 'Match Bank Feed'}
                         </Button>
                       )}
-                      {matchResults && (
+                      {!isCD && matchResults && (
                         <span className="text-[11px] text-muted-foreground self-center">
                           ✓ {matchResults.matched} matched{matchResults.unmatched > 0 ? `, ${matchResults.unmatched} unmatched` : ''}
                         </span>
                       )}
-                      {['active', 'low_balance'].includes(selectedFund.status) && (
+                      {!isCD && ['active', 'low_balance'].includes(selectedFund.status) && (
                         <Button size="sm" className="h-7 text-xs bg-rose-600 hover:bg-rose-700" onClick={() => setShowClose(true)}>
                           <Lock className="h-3.5 w-3.5 mr-1" />Close Period
                         </Button>
