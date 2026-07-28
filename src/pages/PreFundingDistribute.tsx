@@ -16,7 +16,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Banknote, RefreshCw, Users, Search, Plus, Pencil, Trash2,
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
-  TrendingDown, Info, Paperclip, ExternalLink, Upload,
+  TrendingDown, Info, Paperclip, ExternalLink, Upload, Receipt,
+  FileImage, FileText,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -83,14 +84,17 @@ export default function PreFundingDistribute() {
   const [userSearch, setUserSearch] = useState('');
   const [addSaving, setAddSaving] = useState(false);
 
-  // Add dialog receipt
-  const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null);
+  // Add dialog receipt (multi-file)
+  const [addReceiptFiles, setAddReceiptFiles] = useState<File[]>([]);
 
   // Top-up dialog (replaces inline edit — also collects a receipt)
   const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string }>({ open: false, alloc: null, fundId: '' });
   const [topUpAmt, setTopUpAmt]           = useState('');
-  const [topUpReceiptFile, setTopUpReceiptFile] = useState<File | null>(null);
+  const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
   const [topUpSaving, setTopUpSaving]     = useState(false);
+
+  // Receipt viewer popup
+  const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
 
   // Remove confirmation
   const [removeId, setRemoveId] = useState<string | null>(null);
@@ -186,13 +190,35 @@ export default function PreFundingDistribute() {
     }
   }, [allocPayments]);
 
-  /** Upload a receipt file to Supabase storage and return the public URL. */
+  /** Parse receipt_url which may be a JSON array string or a plain URL. */
+  const parseReceiptUrls = (url: string | null): string[] => {
+    if (!url) return [];
+    try {
+      const parsed = JSON.parse(url);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch {}
+    return [url];
+  };
+
+  /** Upload a single receipt file to Supabase storage and return the public URL. */
   const uploadReceipt = async (file: File, fundId: string, userId: string): Promise<string | null> => {
     const ext  = file.name.split('.').pop() ?? 'bin';
-    const path = `pre-fund-alloc-receipts/${fundId}/${userId}-${Date.now()}.${ext}`;
+    const path = `pre-fund-alloc-receipts/${fundId}/${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true });
     if (error) { toast({ title: 'Receipt upload failed', description: error.message, variant: 'destructive' }); return null; }
     return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl;
+  };
+
+  /** Upload multiple receipt files; returns JSON array string if >1, or plain URL if 1. */
+  const uploadMultipleReceipts = async (files: File[], fundId: string, userId: string): Promise<string | null> => {
+    const urls: string[] = [];
+    for (const file of files) {
+      const url = await uploadReceipt(file, fundId, userId);
+      if (!url) return null;
+      urls.push(url);
+    }
+    if (urls.length === 0) return null;
+    return urls.length === 1 ? urls[0] : JSON.stringify(urls);
   };
 
   const load = useCallback(async () => {
@@ -342,17 +368,14 @@ export default function PreFundingDistribute() {
       await loadAllocations(fund.id); // refresh so UI shows it
       return;
     }
-    if (!addReceiptFile) {
-      toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
+    if (!addReceiptFiles.length) {
+      toast({ title: 'Receipt required', description: 'Please attach at least one receipt or supporting document before saving.', variant: 'destructive' });
       return;
     }
     setAddSaving(true);
     try {
-      let receiptUrl: string | null = null;
-      if (addReceiptFile) {
-        receiptUrl = await uploadReceipt(addReceiptFile, fund.id, addForm.userId);
-        if (!receiptUrl) { setAddSaving(false); return; }
-      }
+      const receiptUrl = await uploadMultipleReceipts(addReceiptFiles, fund.id, addForm.userId);
+      if (!receiptUrl) { setAddSaving(false); return; }
       const { error } = await (supabase as any).from('pre_fund_allocations').insert({
         pre_fund_request_id: fund.id,
         user_id: addForm.userId,
@@ -385,7 +408,7 @@ export default function PreFundingDistribute() {
       });
       toast({ title: 'Allocation added', description: `${formatNumber(amt, 0)} ${fund.currency} assigned.` });
       setAddDialog({ open: false, fund: null });
-      setAddReceiptFile(null);
+      setAddReceiptFiles([]);
       await loadAllocations(fund.id);
     } catch (e: any) {
       toast({ title: 'Failed to add allocation', description: e.message, variant: 'destructive' });
@@ -396,7 +419,7 @@ export default function PreFundingDistribute() {
 
   const openTopUp = (alloc: Allocation, fundId: string) => {
     setTopUpAmt(String(alloc.allocated_amount));
-    setTopUpReceiptFile(null);
+    setTopUpReceiptFiles([]);
     setTopUpDialog({ open: true, alloc, fundId });
   };
 
@@ -405,15 +428,15 @@ export default function PreFundingDistribute() {
     if (!alloc) return;
     const newAmt = parseFloat(topUpAmt);
     if (isNaN(newAmt) || newAmt < 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
-    if (!topUpReceiptFile && !alloc.receipt_url) {
+    if (!topUpReceiptFiles.length && !alloc.receipt_url) {
       toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
       return;
     }
     setTopUpSaving(true);
     try {
       let receiptUrl: string | null = alloc.receipt_url ?? null;
-      if (topUpReceiptFile) {
-        const uploaded = await uploadReceipt(topUpReceiptFile, fundId, alloc.user_id);
+      if (topUpReceiptFiles.length) {
+        const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
         if (!uploaded) { setTopUpSaving(false); return; }
         receiptUrl = uploaded;
       }
@@ -441,7 +464,7 @@ export default function PreFundingDistribute() {
       }).catch(() => null);
       toast({ title: 'Allocation updated', description: `Amount set to ${formatNumber(newAmt, 0)} ${alloc.currency}.` });
       setTopUpDialog({ open: false, alloc: null, fundId: '' });
-      setTopUpReceiptFile(null);
+      setTopUpReceiptFiles([]);
       await loadAllocations(fundId);
     } catch (e: any) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
@@ -587,11 +610,19 @@ export default function PreFundingDistribute() {
                 </div>
                 <div className="shrink-0">
                   {alloc.receipt_url && (
-                    <a href={alloc.receipt_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 underline mb-2"
-                    >
-                      <Paperclip className="h-3 w-3" />Receipt
-                    </a>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {parseReceiptUrls(alloc.receipt_url).map((url, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setViewReceiptUrl(url)}
+                          className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 underline"
+                          title={`View receipt ${parseReceiptUrls(alloc.receipt_url).length > 1 ? i + 1 : ''}`}
+                        >
+                          <Receipt className="h-3 w-3" />
+                          {parseReceiptUrls(alloc.receipt_url).length > 1 ? `Receipt ${i + 1}` : 'Receipt'}
+                        </button>
+                      ))}
+                    </div>
                   )}
                   <Button
                     size="sm"
@@ -737,16 +768,18 @@ export default function PreFundingDistribute() {
                               <div className="font-medium text-[13px] truncate">{a.user_name}</div>
                               <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
                                 {a.user_email} · {a.user_role?.replace(/_/g, ' ')}
-                                {a.receipt_url && (
-                                  <a href={a.receipt_url} target="_blank" rel="noopener noreferrer"
+                                {a.receipt_url && parseReceiptUrls(a.receipt_url).map((url, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={e => { e.stopPropagation(); setViewReceiptUrl(url); }}
                                     className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline shrink-0"
                                     title="View receipt"
-                                    data-testid={`link-receipt-${a.id}`}
-                                    onClick={e => e.stopPropagation()}
+                                    data-testid={`link-receipt-${a.id}-${i}`}
                                   >
-                                    <Paperclip className="h-3 w-3" />Receipt
-                                  </a>
-                                )}
+                                    <Receipt className="h-3 w-3" />
+                                    {parseReceiptUrls(a.receipt_url).length > 1 ? `R${i + 1}` : 'Receipt'}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                             {/* Amount + Add Funds button */}
@@ -995,31 +1028,41 @@ export default function PreFundingDistribute() {
                 />
               </div>
 
-              {/* Receipt upload */}
+              {/* Receipt upload — multi-file */}
               <div>
-                <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document <span className="text-destructive">*</span>
+                <Label className="text-xs mb-2 block flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />Receipts / Supporting Documents <span className="text-destructive">*</span>
                 </Label>
-                {addReceiptFile ? (
-                  <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30 text-sm">
-                    <Paperclip className="h-3.5 w-3.5 text-sky-600 shrink-0" />
-                    <span className="truncate flex-1 text-[12px]">{addReceiptFile.name}</span>
-                    <button onClick={() => setAddReceiptFile(null)} className="text-muted-foreground hover:text-destructive shrink-0" data-testid="button-clear-add-receipt">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                {/* Staged files list */}
+                {addReceiptFiles.length > 0 && (
+                  <div className="space-y-1 mb-2">
+                    {addReceiptFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
+                        {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
+                        <span className="truncate flex-1 text-[12px]">{f.name}</span>
+                        <button onClick={() => setAddReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-add-receipt-upload">
-                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[12px] text-muted-foreground">Click to attach a receipt (image or PDF)</span>
-                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setAddReceiptFile(e.target.files?.[0] ?? null)} data-testid="input-add-receipt-file" />
-                  </label>
                 )}
+                <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-add-receipt-upload">
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-[12px] text-muted-foreground">
+                    {addReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt(s) — images or PDFs'}
+                  </span>
+                  <input
+                    type="file" accept="image/*,.pdf" multiple className="hidden"
+                    onChange={e => setAddReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+                    data-testid="input-add-receipt-file"
+                  />
+                </label>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setAddDialog({ open: false, fund: null }); setAddReceiptFile(null); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setAddDialog({ open: false, fund: null }); setAddReceiptFiles([]); }}>Cancel</Button>
             <Button onClick={handleAddAllocation} disabled={addSaving} data-testid="button-confirm-add-alloc">
               {addSaving ? 'Saving…' : 'Add Allocation'}
             </Button>
@@ -1053,33 +1096,49 @@ export default function PreFundingDistribute() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />Receipt / Supporting Document <span className="text-destructive">*</span>
+                <Label className="text-xs mb-2 block flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />Receipts / Supporting Documents <span className="text-destructive">*</span>
                 </Label>
-                {topUpDialog.alloc.receipt_url && !topUpReceiptFile && (
-                  <a href={topUpDialog.alloc.receipt_url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-sky-600 hover:text-sky-700 text-[12px] underline mb-1"
-                  >
-                    <ExternalLink className="h-3 w-3" />View current receipt
-                  </a>
-                )}
-                {topUpReceiptFile ? (
-                  <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30 text-sm">
-                    <Paperclip className="h-3.5 w-3.5 text-sky-600 shrink-0" />
-                    <span className="truncate flex-1 text-[12px]">{topUpReceiptFile.name}</span>
-                    <button onClick={() => setTopUpReceiptFile(null)} className="text-muted-foreground hover:text-destructive shrink-0" data-testid="button-clear-topup-receipt">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                {/* Existing receipts (click to view in popup) */}
+                {topUpDialog.alloc.receipt_url && topUpReceiptFiles.length === 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {parseReceiptUrls(topUpDialog.alloc.receipt_url).map((url, i, arr) => (
+                      <button
+                        key={i}
+                        onClick={() => setViewReceiptUrl(url)}
+                        className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 border border-sky-200 rounded px-2 py-0.5"
+                      >
+                        <Receipt className="h-3 w-3" />
+                        {arr.length > 1 ? `Receipt ${i + 1}` : 'View current receipt'}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
-                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[12px] text-muted-foreground">
-                      {topUpDialog.alloc.receipt_url ? 'Replace receipt…' : 'Attach receipt (image or PDF)'}
-                    </span>
-                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setTopUpReceiptFile(e.target.files?.[0] ?? null)} data-testid="input-topup-receipt-file" />
-                  </label>
                 )}
+                {/* Staged new files */}
+                {topUpReceiptFiles.length > 0 && (
+                  <div className="space-y-1 mb-2">
+                    {topUpReceiptFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
+                        {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
+                        <span className="truncate flex-1 text-[12px]">{f.name}</span>
+                        <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
+                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-[12px] text-muted-foreground">
+                    {topUpDialog.alloc.receipt_url || topUpReceiptFiles.length > 0 ? 'Add / replace receipts…' : 'Attach receipt(s) — images or PDFs'}
+                  </span>
+                  <input
+                    type="file" accept="image/*,.pdf" multiple className="hidden"
+                    onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+                    data-testid="input-topup-receipt-file"
+                  />
+                </label>
               </div>
             </div>
           )}
@@ -1150,6 +1209,39 @@ export default function PreFundingDistribute() {
               {reqSaving ? 'Sending…' : 'Send Request'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt Viewer Dialog */}
+      <Dialog open={!!viewReceiptUrl} onOpenChange={o => { if (!o) setViewReceiptUrl(null); }}>
+        <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+          <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Receipt className="h-4 w-4 text-sky-500" />
+              Receipt
+            </DialogTitle>
+            {viewReceiptUrl && (
+              <a
+                href={viewReceiptUrl} target="_blank" rel="noopener noreferrer"
+                className="ml-auto inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded px-2 py-1"
+              >
+                <ExternalLink className="h-3 w-3" />Open in new tab
+              </a>
+            )}
+          </DialogHeader>
+          <div className="w-full" style={{ height: '70vh' }}>
+            {viewReceiptUrl && (() => {
+              const lower = viewReceiptUrl.toLowerCase().split('?')[0];
+              const isImage = ['.png','.jpg','.jpeg','.gif','.webp','.bmp'].some(e => lower.endsWith(e));
+              return isImage ? (
+                <div className="flex items-center justify-center h-full bg-muted/30 p-4">
+                  <img src={viewReceiptUrl} alt="Receipt" className="max-h-full max-w-full object-contain rounded shadow-md" />
+                </div>
+              ) : (
+                <iframe src={viewReceiptUrl} className="w-full h-full border-0" title="Receipt" />
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
 

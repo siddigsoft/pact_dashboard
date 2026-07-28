@@ -1050,9 +1050,6 @@ export default function PreFundingOverview() {
                   {/* ── Action bar ──────────────────────────────────────── */}
                   <div className="flex items-center justify-between gap-3 pt-1 border-t">
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/pre-funding?tab=registry')} data-testid={`button-view-fund-${f.id}`}>
-                        View
-                      </Button>
                       {isFinanceAdmin && ['active', 'low_balance'].includes(f.status) && (
                         <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={() => navigate('/pre-funding?tab=reconciliation')}>
                           Reconcile <ChevronRight className="h-3.5 w-3.5 ml-1" />
