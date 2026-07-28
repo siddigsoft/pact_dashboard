@@ -358,6 +358,7 @@ const MMPCycleClose = () => {
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
   const [wizardStep, setWizardStep] = useState<string>('');
   const skipMmpResetRef = useRef(false);
+  const wizardRef = useRef<HTMLDivElement>(null);
 
   // Defined early (right after its state deps) to prevent any temporal dead zone issues
   const fetchCycleSummary = useCallback(async (mmpId: string) => {
@@ -1229,6 +1230,15 @@ const MMPCycleClose = () => {
     };
     fetchFinance();
   }, [activeTab, selectedMmpId]);
+
+  // Scroll wizard into view whenever it opens (checklistMmpId transitions null → value)
+  useEffect(() => {
+    if (checklistMmpId) {
+      setTimeout(() => {
+        wizardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+  }, [checklistMmpId]);
 
   // Called from the Pre-Close Checklist to resolve an item without leaving the page
   const handleChecklistResolveItem = (itemId: string) => {
@@ -4572,7 +4582,7 @@ const MMPCycleClose = () => {
 
       {/* ── Full Guided Wizard (inline) ─────────────────────────────────── */}
       {checklistMmpId ? (
-      <div className="rounded-xl border-2 border-primary/20 bg-card shadow-sm overflow-hidden" data-testid="section-cycle-close-checklist">
+      <div ref={wizardRef} className="rounded-xl border-2 border-primary/20 bg-card shadow-sm overflow-hidden" data-testid="section-cycle-close-checklist">
         <div className="px-6 pt-4 pb-4 border-b">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
