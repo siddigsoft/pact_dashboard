@@ -356,7 +356,7 @@ const CostSubmission = () => {
 
   // Reports tab: which cards are collapsed (card IDs), and which role rows are expanded in the timeline
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
-  const toggleCard = (id: string) => setCollapsedCards(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleReportCard = (id: string) => setCollapsedCards(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
   const toggleRole = (role: string) => setExpandedRoles(prev => { const n = new Set(prev); n.has(role) ? n.delete(role) : n.add(role); return n; });
 
@@ -8412,7 +8412,7 @@ const CostSubmission = () => {
 
                       {/* By Category breakdown */}
                       <Card>
-                        <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('cat')}>
+                        <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('cat')}>
                           <CardTitle className="text-sm flex items-center gap-2">
                             <Layers className="h-4 w-4 text-violet-600" />
                             By Category / حسب الفئة
@@ -8459,7 +8459,7 @@ const CostSubmission = () => {
                       {/* By Users breakdown — visible to approver/admin roles */}
                       {isApproverRole && userRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('users')}>
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('users')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Users className="h-4 w-4 text-sky-600" />
                               By Users / حسب المستخدمين
@@ -8510,7 +8510,7 @@ const CostSubmission = () => {
                       {/* By Fund breakdown — visible to approver/admin roles */}
                       {isApproverRole && fundRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('fund')}>
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('fund')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Wallet className="h-4 w-4 text-teal-600" />
                               By Fund / حسب الصندوق
@@ -8561,7 +8561,7 @@ const CostSubmission = () => {
                       {/* By Role breakdown — visible to approver/admin roles */}
                       {isApproverRole && roleRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('role')}>
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('role')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Shield className="h-4 w-4 text-indigo-600" />
                               By Role / حسب الدور
@@ -8612,7 +8612,7 @@ const CostSubmission = () => {
                       {/* Approval Timeline — Role → Users nested, collapsible per role */}
                       {roleTimeRows.length > 0 && (
                         <Card>
-                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleCard('timeline')}>
+                          <CardHeader className="pb-3 pt-4 px-4 cursor-pointer select-none" onClick={() => toggleReportCard('timeline')}>
                             <CardTitle className="text-sm flex items-center gap-2">
                               <Clock className="h-4 w-4 text-blue-600" />
                               Approval Timeline by Role / مدة الموافقة حسب الدور
