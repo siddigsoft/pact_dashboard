@@ -487,7 +487,7 @@
       // without waiting for the async isFundHolder DB check.
       // PreFundingRoute handles the holder-only gate for non-holders.
       // isFundHolder covers other roles (FOM, etc.) granted via page override.
-      if (!isHidden('/pre-funding')) preFundItems.push({ id: 'pre-funding-overview', title: 'My Fund', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
+      if (!isHidden('/pre-funding')) preFundItems.push({ id: 'pre-funding-overview', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 1, isPinned: isPinned('/pre-funding') });
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 

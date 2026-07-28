@@ -250,6 +250,8 @@ const CostSubmission = () => {
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
+  // Reconciliation tab: Finance Admin, Admin, Super Admin only (+ role-management overrides)
+  const canViewReconciliationTab = isFinanceAdmin || isAdmin || isSuperAdmin;
   const { perms: costSubmitPerms } = useRestrictedAction('cost-submission');
 
   // Pre-Fund gate — provides allocation context for auto-linking; does NOT block submission
@@ -258,7 +260,7 @@ const CostSubmission = () => {
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
   // FOM, Admin, SuperAdmin, CountryDirector default to "All Submissions"; submitters default to Submit Request
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">(
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit" | "reports">(
     (isFOM || isSuperAdmin || isAdmin || isCountryDirector || canViewTeamSubmissions) ? "history" : "submit"
   );
   // Task #56 — top-of-page expense-type selector (operational vs personal reimbursement)
@@ -4133,15 +4135,28 @@ const CostSubmission = () => {
               )}
             </TabsTrigger>
             
-            {/* Reconciliation */}
-            <TabsTrigger 
-              value="reconciliation" 
-              data-testid="tab-reconciliation" 
-              className="relative flex-1 min-w-[130px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+            {/* Reconciliation — Finance Admin / Admin / SuperAdmin only */}
+            {canViewReconciliationTab && (
+              <TabsTrigger 
+                value="reconciliation" 
+                data-testid="tab-reconciliation" 
+                className="relative flex-1 min-w-[130px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">Reconciliation</span>
+                <span className="sm:hidden">Reconcile</span>
+              </TabsTrigger>
+            )}
+
+            {/* Reports — available to all users with access to this page */}
+            <TabsTrigger
+              value="reports"
+              data-testid="tab-reports"
+              className="relative flex-1 min-w-[110px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-cyan-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-sky-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
             >
-              <RefreshCw className="h-4 w-4" />
-              <span className="hidden sm:inline">Reconciliation</span>
-              <span className="sm:hidden">Reconcile</span>
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Reports</span>
+              <span className="sm:hidden">Reports</span>
             </TabsTrigger>
             
             {/* History */}
@@ -4404,6 +4419,58 @@ const CostSubmission = () => {
                         <Receipt className="h-4 w-4" />
                         Reconciliation Details / تفاصيل التسوية
                       </h4>
+
+                      {/* ── Payment Receipt from Finance (read-only reference) ── */}
+                      {activeReconciliation.payment_proof_url && (
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-emerald-600" />
+                            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                              Payment Receipt (Reference) / إيصال الدفع للمرجعية
+                            </p>
+                            <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400">
+                              Paid / مدفوع
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                            This is the payment receipt uploaded by Finance when processing your advance. Use it as reference while reconciling. / هذا هو إيصال الدفع الذي رفعته الإدارة المالية عند تحويل السلفة. استخدمه كمرجع أثناء التسوية.
+                          </p>
+                          {(() => {
+                            const urls = (() => {
+                              try {
+                                const parsed = JSON.parse(activeReconciliation.payment_proof_url!);
+                                return Array.isArray(parsed) ? parsed : [activeReconciliation.payment_proof_url!];
+                              } catch { return [activeReconciliation.payment_proof_url!]; }
+                            })();
+                            return (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {urls.map((url, i) => {
+                                  const isImg = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
+                                  return isImg ? (
+                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                      <img src={url} alt={`Payment receipt ${i + 1}`}
+                                        className="w-full max-h-48 object-contain rounded border border-emerald-200 bg-white hover:opacity-90 transition-opacity cursor-zoom-in" />
+                                    </a>
+                                  ) : (
+                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-2 p-3 rounded border border-emerald-200 bg-white dark:bg-emerald-950/30 hover:bg-emerald-50 transition-colors text-sm text-emerald-700 dark:text-emerald-400 font-medium"
+                                    >
+                                      <FileText className="h-4 w-4 shrink-0" />
+                                      <span className="truncate">Payment Receipt {i + 1}</span>
+                                      <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
+                                    </a>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                          {activeReconciliation.payment_proof_notes && (
+                            <p className="text-xs text-muted-foreground border-t border-emerald-200 pt-2 mt-2">
+                              Note: {activeReconciliation.payment_proof_notes}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
@@ -8034,6 +8101,370 @@ const CostSubmission = () => {
             })()}
           </TabsContent>
         )}
+
+        {/* ─── Reports Tab ─────────────────────────────────────────────── */}
+        <TabsContent value="reports" className="space-y-6">
+          {(() => {
+            const catLabel: Record<string, string> = {
+              permits: 'Permits', incentives: 'Incentives', communications: 'Communications',
+              training: 'Training', transport: 'Transport', general_transport: 'Transport',
+              equipment: 'Equipment', printing: 'Printing', meetings: 'Meetings',
+              office_admin: 'Office Admin', other: 'Other',
+            };
+            const statusColors: Record<string, string> = {
+              pending: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+              under_review: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+              approved: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+              partially_paid: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+              paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+              rejected: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+              reconciled: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+            };
+            const fmtAmt = (cents: number, currency = 'SDG') =>
+              `${currency} ${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+            const daysBetween = (a?: string | null, b?: string | null): number | null => {
+              if (!a || !b) return null;
+              return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000 * 10) / 10;
+            };
+
+            // ── My Submissions ───────────────────────────────────────────
+            const mine = operationalCosts.filter(o => o.submitted_by === currentUser?.id);
+            const mineTotal = mine.reduce((s, o) => s + (o.amount_cents ?? 0), 0);
+            const minePaid = mine.filter(o => ['paid','reconciled'].includes(o.status)).reduce((s, o) => s + (o.amount_paid_cents ?? o.amount_cents ?? 0), 0);
+            const mineApproved = mine.filter(o => ['approved','partially_paid','paid','reconciled'].includes(o.status));
+            const minePending = mine.filter(o => o.status === 'pending').length;
+            const mineUnderReview = mine.filter(o => o.status === 'under_review').length;
+            const mineRejected = mine.filter(o => o.status === 'rejected').length;
+            const minePaidCount = mine.filter(o => ['paid','reconciled'].includes(o.status)).length;
+
+            // Category breakdown (my submissions)
+            const catMap = new Map<string, { count: number; requested: number; paid: number; approved: number }>();
+            for (const o of mine) {
+              const cat = catLabel[o.expense_category] || o.expense_category || 'Other';
+              if (!catMap.has(cat)) catMap.set(cat, { count: 0, requested: 0, paid: 0, approved: 0 });
+              const row = catMap.get(cat)!;
+              row.count++;
+              row.requested += o.amount_cents ?? 0;
+              if (['paid','reconciled'].includes(o.status)) row.paid += o.amount_paid_cents ?? o.amount_cents ?? 0;
+              if (['approved','partially_paid','paid','reconciled'].includes(o.status)) row.approved++;
+            }
+            const catRows = [...catMap.entries()].sort((a,b) => b[1].requested - a[1].requested);
+
+            // ── My Approvals ──────────────────────────────────────────────
+            const myApprovals = operationalCosts.filter(o =>
+              o.tier1_approved_by === currentUser?.id || o.tier2_approved_by === currentUser?.id ||
+              o.tier3_approved_by === currentUser?.id || o.tier4_approved_by === currentUser?.id
+            );
+            const isApproverRole = isFOM || isSupervisor || isCountryDirector || isFinanceAdmin || isAdmin || isSuperAdmin;
+
+            // ── Approval Time Metrics (for my OWN submissions) ───────────
+            const t1Times: number[] = []; const t2Times: number[] = [];
+            const t3Times: number[] = []; const t4Times: number[] = [];
+            for (const o of mine) {
+              const d1 = daysBetween(o.submitted_at, o.tier1_approved_at);
+              if (d1 !== null && d1 >= 0) t1Times.push(d1);
+              const d2 = daysBetween(o.tier1_approved_at, o.tier2_approved_at);
+              if (d2 !== null && d2 >= 0) t2Times.push(d2);
+              const d3 = daysBetween(o.tier2_approved_at, o.tier3_approved_at);
+              if (d3 !== null && d3 >= 0) t3Times.push(d3);
+              const d4 = daysBetween(o.tier3_approved_at, o.tier4_approved_at);
+              if (d4 !== null && d4 >= 0) t4Times.push(d4);
+            }
+            const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10 : null;
+            const fmtDays = (d: number | null) => d === null ? '—' : d < 1 ? `${Math.round(d*24)}h` : `${d}d`;
+
+            return (
+              <>
+                {/* ── Header ─────────────────────────────────────────────── */}
+                <Card className="bg-gradient-to-r from-sky-50 via-cyan-50 to-sky-50 dark:from-sky-950/30 dark:via-cyan-950/20 dark:to-sky-950/30 border-sky-200 dark:border-sky-800">
+                  <CardContent className="pt-6 pb-5">
+                    <div className="flex items-start justify-between flex-wrap gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5 text-sky-600" />
+                          <h2 className="text-xl font-bold text-sky-900 dark:text-sky-200">
+                            Cost Submission Reports / تقارير طلبات التكلفة
+                          </h2>
+                        </div>
+                        <p className="text-sm text-sky-700 dark:text-sky-400">
+                          Comprehensive financial statements across all your submissions and approvals
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-sky-700 dark:text-sky-400">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Generated: {format(new Date(), 'dd MMM yyyy, HH:mm')}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* ── My Submissions Section ──────────────────────────────── */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-slate-600" />
+                    <h3 className="font-semibold text-base">My Submissions / طلباتي</h3>
+                    <Badge variant="secondary" className="text-xs">{mine.length} total</Badge>
+                  </div>
+
+                  {mine.length === 0 ? (
+                    <Card><CardContent className="py-10 text-center text-muted-foreground text-sm">No submissions found for your account.</CardContent></Card>
+                  ) : (
+                    <>
+                      {/* Status KPI row */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                          { label: 'Total', count: mine.length, color: 'from-slate-500 to-slate-600', icon: <ClipboardCheck className="h-4 w-4" /> },
+                          { label: 'Pending', count: minePending, color: 'from-slate-400 to-slate-500', icon: <Clock className="h-4 w-4" /> },
+                          { label: 'Under Review', count: mineUnderReview, color: 'from-blue-500 to-blue-600', icon: <Eye className="h-4 w-4" /> },
+                          { label: 'Approved', count: mineApproved.length, color: 'from-green-500 to-green-600', icon: <CheckCircle className="h-4 w-4" /> },
+                          { label: 'Paid', count: minePaidCount, color: 'from-emerald-500 to-teal-600', icon: <DollarSign className="h-4 w-4" /> },
+                          { label: 'Rejected', count: mineRejected, color: 'from-red-500 to-red-600', icon: <XCircle className="h-4 w-4" /> },
+                        ].map(kpi => (
+                          <Card key={kpi.label} className="overflow-hidden">
+                            <div className={`bg-gradient-to-br ${kpi.color} p-3 text-white`}>
+                              <div className="flex items-center justify-between">
+                                {kpi.icon}
+                                <span className="text-2xl font-bold">{kpi.count}</span>
+                              </div>
+                              <p className="text-xs mt-1 opacity-90">{kpi.label}</p>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Financial Summary */}
+                      <Card>
+                        <CardHeader className="pb-3 pt-4 px-4">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <DollarSign className="h-4 w-4 text-emerald-600" />
+                            Financial Summary / الملخص المالي
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="text-center p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 space-y-1">
+                              <p className="text-xs text-muted-foreground">Total Requested</p>
+                              <p className="text-lg font-bold">{fmtAmt(mineTotal)}</p>
+                            </div>
+                            <div className="text-center p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 space-y-1">
+                              <p className="text-xs text-muted-foreground">Total Paid</p>
+                              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{fmtAmt(minePaid)}</p>
+                            </div>
+                            <div className="text-center p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 space-y-1">
+                              <p className="text-xs text-muted-foreground">Remaining / Approved</p>
+                              <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                                {fmtAmt(Math.max(0, mine.filter(o=>o.status==='approved').reduce((s,o)=>s+(o.amount_cents??0),0)))}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* By Category breakdown */}
+                      <Card>
+                        <CardHeader className="pb-3 pt-4 px-4">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-violet-600" />
+                            By Category / حسب الفئة
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-0 pb-2">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-muted/30">
+                                  <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Category</th>
+                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Count</th>
+                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Requested</th>
+                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Paid</th>
+                                  <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Balance</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {catRows.map(([cat, data]) => (
+                                  <tr key={cat} className="border-b hover:bg-muted/20 transition-colors">
+                                    <td className="px-4 py-2.5 font-medium">{cat}</td>
+                                    <td className="text-right px-4 py-2.5 text-muted-foreground">{data.count}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(data.requested)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(data.paid)}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, data.requested - data.paid))}</td>
+                                  </tr>
+                                ))}
+                                <tr className="bg-muted/40 font-semibold">
+                                  <td className="px-4 py-2.5">Total</td>
+                                  <td className="text-right px-4 py-2.5">{mine.length}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(mineTotal)}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-emerald-700 dark:text-emerald-400">{fmtAmt(minePaid)}</td>
+                                  <td className="text-right px-4 py-2.5 font-mono text-xs text-amber-700 dark:text-amber-400">{fmtAmt(Math.max(0, mineTotal - minePaid))}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Time-to-Approval Metrics */}
+                      {(t1Times.length + t2Times.length + t3Times.length + t4Times.length) > 0 && (
+                        <Card>
+                          <CardHeader className="pb-3 pt-4 px-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-blue-600" />
+                              Approval Timeline / مدة الموافقة
+                            </CardTitle>
+                            <CardDescription>Average time each tier takes to process your requests</CardDescription>
+                          </CardHeader>
+                          <CardContent className="px-0 pb-2">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Tier</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Samples</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Avg Time</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Fastest</th>
+                                    <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Slowest</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {([
+                                    { label: 'Tier 1 (Supervisor / Hub)', times: t1Times },
+                                    { label: 'Tier 2 (FOM / CD)', times: t2Times },
+                                    { label: 'Tier 3 (Finance)', times: t3Times },
+                                    { label: 'Tier 4 (Payment)', times: t4Times },
+                                  ] as const).filter(r => r.times.length > 0).map(row => (
+                                    <tr key={row.label} className="border-b hover:bg-muted/20">
+                                      <td className="px-4 py-2.5 font-medium">{row.label}</td>
+                                      <td className="text-right px-4 py-2.5 text-muted-foreground">{row.times.length}</td>
+                                      <td className="text-right px-4 py-2.5 font-semibold text-blue-700 dark:text-blue-400">{fmtDays(avg(row.times))}</td>
+                                      <td className="text-right px-4 py-2.5 text-emerald-700 dark:text-emerald-400">{fmtDays(Math.min(...row.times))}</td>
+                                      <td className="text-right px-4 py-2.5 text-amber-700 dark:text-amber-400">{fmtDays(Math.max(...row.times))}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* ── My Approval Activity (approver roles) ──────────────────── */}
+                {isApproverRole && myApprovals.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ThumbsUp className="h-4 w-4 text-slate-600" />
+                      <h3 className="font-semibold text-base">My Approvals / موافقاتي</h3>
+                      <Badge variant="secondary" className="text-xs">{myApprovals.length} requests</Badge>
+                    </div>
+
+                    {/* Approvals financial summary */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Card>
+                        <CardContent className="pt-4 pb-4 text-center space-y-1">
+                          <p className="text-xs text-muted-foreground">Requests Processed</p>
+                          <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">{myApprovals.length}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4 pb-4 text-center space-y-1">
+                          <p className="text-xs text-muted-foreground">Total Value Approved</p>
+                          <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                            {fmtAmt(myApprovals.filter(o => !['rejected'].includes(o.status)).reduce((s,o)=>s+(o.amount_cents??0),0))}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4 pb-4 text-center space-y-1">
+                          <p className="text-xs text-muted-foreground">Total Paid Out</p>
+                          <p className="text-lg font-bold text-violet-700 dark:text-violet-400">
+                            {fmtAmt(myApprovals.filter(o => ['paid','reconciled'].includes(o.status)).reduce((s,o)=>s+(o.amount_paid_cents??o.amount_cents??0),0))}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Approvals table */}
+                    <Card>
+                      <CardHeader className="pb-3 pt-4 px-4">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <ClipboardCheck className="h-4 w-4" />
+                          Requests Through My Approval / الطلبات عبر موافقتي
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-0 pb-2">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Submitter</th>
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Category</th>
+                                <th className="text-right px-4 py-2 text-xs text-muted-foreground font-medium">Amount</th>
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Submitted</th>
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">My Tier</th>
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Time Taken</th>
+                                <th className="text-left px-4 py-2 text-xs text-muted-foreground font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {myApprovals.slice().sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50).map(o => {
+                                const submitter = users.find(u => u.id === o.submitted_by);
+                                const myTier = o.tier1_approved_by === currentUser?.id ? 1
+                                  : o.tier2_approved_by === currentUser?.id ? 2
+                                  : o.tier3_approved_by === currentUser?.id ? 3 : 4;
+                                const prevAt = myTier === 1 ? o.submitted_at
+                                  : myTier === 2 ? o.tier1_approved_at
+                                  : myTier === 3 ? o.tier2_approved_at : o.tier3_approved_at;
+                                const myApprovedAt = myTier === 1 ? o.tier1_approved_at
+                                  : myTier === 2 ? o.tier2_approved_at
+                                  : myTier === 3 ? o.tier3_approved_at : o.tier4_approved_at;
+                                const taken = daysBetween(prevAt, myApprovedAt);
+                                return (
+                                  <tr key={o.id} className="border-b hover:bg-muted/20">
+                                    <td className="px-4 py-2.5">
+                                      <div className="font-medium text-xs">{submitter?.name || '—'}</div>
+                                      <div className="text-xs text-muted-foreground">{submitter?.role || ''}</div>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs">{catLabel[o.expense_category] || o.expense_category}</td>
+                                    <td className="text-right px-4 py-2.5 font-mono text-xs">{fmtAmt(o.amount_cents)}</td>
+                                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                                      {o.submitted_at ? format(parseISO(o.submitted_at), 'dd MMM yy') : '—'}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                        T{myTier}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs">
+                                      {taken === null ? '—' : (
+                                        <span className={taken > 3 ? 'text-amber-600' : 'text-emerald-600'}>
+                                          {fmtDays(taken)}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[o.status] || ''}`}>
+                                        {o.status.replace(/_/g,' ')}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {myApprovals.length > 50 && (
+                            <p className="text-xs text-center text-muted-foreground py-2">Showing 50 of {myApprovals.length} entries</p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </TabsContent>
       </Tabs>
 
       {/* ── Request Detail Sheet ─────────────────────────────────────────── */}
