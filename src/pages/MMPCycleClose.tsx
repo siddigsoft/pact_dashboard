@@ -6587,7 +6587,6 @@ const MMPCycleClose = () => {
                   )}
                 </div>
       ) : (
-        {/* ── Clear "How to start" action guide — shown when no cycle is open ── */}
         <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 mb-4" data-testid="wizard-prompt">
           <div className="px-4 py-3 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
             <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
