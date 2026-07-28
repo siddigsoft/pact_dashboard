@@ -599,6 +599,7 @@ const CostSubmission = () => {
 
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [groupDeleteConfirm, setGroupDeleteConfirm] = useState<{ groupId: string; items: OperationalCostSubmission[]; title: string } | null>(null);
   const [deleteRequestDialog, setDeleteRequestDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; reason: string }>({ open: false, submission: null, reason: '' });
   const [deleteReviewDialog, setDeleteReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; notes: string; action: 'approve' | 'reject' }>({ open: false, submission: null, notes: '', action: 'approve' });
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -3401,6 +3402,29 @@ const CostSubmission = () => {
     }
   };
 
+  // Delete all items in a group (Admin / SuperAdmin only)
+  const handleDeleteGroup = async () => {
+    if (!groupDeleteConfirm) return;
+    setActionProcessing(true);
+    try {
+      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
+      const deletableItems = groupDeleteConfirm.items.filter(o => getOperationalDerivedStatus(o) !== 'reconciled');
+      for (const item of deletableItems) {
+        await unlinkPaymentFromPreFund('operational_cost_submissions', item.id);
+        let q = supabase.from('operational_cost_submissions').delete().eq('id', item.id);
+        if (!isSuperAdmin) q = q.eq('tier1_status', 'pending').eq('tier2_status', 'pending');
+        await q;
+      }
+      toast({ title: 'Group Deleted / تم حذف المجموعة', description: `${deletableItems.length} item${deletableItems.length !== 1 ? 's' : ''} deleted.` });
+      fetchOperationalCosts();
+    } catch (err) {
+      toast({ title: 'Error / خطأ', description: 'Failed to delete group. / فشل في حذف المجموعة.', variant: 'destructive' });
+    } finally {
+      setActionProcessing(false);
+      setGroupDeleteConfirm(null);
+    }
+  };
+
   // Submit a deletion request — any user, any status, with a required reason
   const handleRequestDeletion = async () => {
     const { submission, reason } = deleteRequestDialog;
@@ -5923,6 +5947,17 @@ const CostSubmission = () => {
                                 </div>
                               </div>
                             </div>
+                            {/* Group-level Delete button — Admin / SuperAdmin only */}
+                            {(isSuperAdmin || isAdmin) && groupItems.some(o => getOperationalDerivedStatus(o) !== 'reconciled') && (
+                              <div
+                                className="flex-none flex items-center px-3 border-l border-white/10 hover:bg-red-900/40 transition-colors"
+                                onClick={e => { e.stopPropagation(); setGroupDeleteConfirm({ groupId: groupId!, items: groupItems, title: groupTitle }); }}
+                                data-testid={`button-group-delete-${groupId}`}
+                                title="Delete entire group"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
+                              </div>
+                            )}
                           </div>
 
                           {/* Progress bar — 5 segments: done / partial / pending / rejected */}
@@ -10206,6 +10241,45 @@ const CostSubmission = () => {
               data-testid="button-delete-confirm"
             >
               {actionProcessing ? 'Deleting... / جارٍ الحذف...' : 'Delete / حذف'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Group Delete confirmation dialog ────────────────────────────── */}
+      <AlertDialog open={!!groupDeleteConfirm} onOpenChange={(open) => !open && setGroupDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Delete Group / حذف المجموعة
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>This will permanently delete <strong>all {groupDeleteConfirm?.items.filter(o => getOperationalDerivedStatus(o) !== 'reconciled').length} items</strong> in this group. This cannot be undone.</p>
+                {groupDeleteConfirm && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm font-medium text-foreground">
+                    {groupDeleteConfirm.title}
+                    <span className="block text-xs text-muted-foreground mt-0.5">
+                      {groupDeleteConfirm.items.length} item{groupDeleteConfirm.items.length !== 1 ? 's' : ''} · {groupDeleteConfirm.items[0]?.currency} {(groupDeleteConfirm.items.reduce((s, o) => s + o.amount_cents, 0) / 100).toLocaleString()} total
+                    </span>
+                    {groupDeleteConfirm.items.some(o => getOperationalDerivedStatus(o) === 'reconciled') && (
+                      <span className="block text-xs text-amber-600 mt-1">⚠ Reconciled items will be skipped.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-group-delete-cancel">Cancel / إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={e => { e.preventDefault(); handleDeleteGroup(); }}
+              disabled={actionProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-group-delete-confirm"
+            >
+              {actionProcessing ? 'Deleting... / جارٍ الحذف...' : 'Delete Group / حذف المجموعة'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
