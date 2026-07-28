@@ -448,6 +448,18 @@ const CostSubmission = () => {
   }, [openSubmissionId, operationalCosts]);
 
   // Fetch GL bridge log for paid/reconciled operational cost submissions — lazy on Reports tab
+  // Load deletion audit log whenever the Delete Requests tab is opened
+  useEffect(() => {
+    if (activeTab !== 'delete_requests' || !isSuperAdmin) return;
+    supabase
+      .from('deletion_audit_log')
+      .select('*')
+      .eq('table_name', 'operational_cost_submissions')
+      .order('deleted_at', { ascending: false })
+      .limit(300)
+      .then(({ data }) => setDeletionLog(data || []));
+  }, [activeTab, isSuperAdmin]);
+
   useEffect(() => {
     if (activeTab !== 'reports') return;
     const paidIds = operationalCosts
@@ -607,6 +619,8 @@ const CostSubmission = () => {
   const [deleteReviewDialog, setDeleteReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; notes: string; action: 'approve' | 'reject' }>({ open: false, submission: null, notes: '', action: 'approve' });
   const [transferToCDDialog, setTransferToCDDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; note: string }>({ open: false, submission: null, note: '' });
   const [cdExceptionReviewDialog, setCDExceptionReviewDialog] = useState<{ open: boolean; submission: OperationalCostSubmission | null; note: string; action: 'approved' | 'rejected' }>({ open: false, submission: null, note: '', action: 'approved' });
+  // Deletion audit log — what has actually been permanently deleted
+  const [deletionLog, setDeletionLog] = useState<any[]>([]);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertConfirm, setRevertConfirm] = useState<OperationalCostSubmission | null>(null);
   const [revertPaidConfirm, setRevertPaidConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -3391,6 +3405,16 @@ const CostSubmission = () => {
         toast({ title: "Delete Failed / فشل الحذف", description: error.message, variant: "destructive" });
       } else {
         toast({ title: "Deleted / تم الحذف", description: "The submission has been deleted. / تم حذف الطلب." });
+        // Log to deletion_audit_log (non-blocking, best-effort)
+        supabase.from('deletion_audit_log').insert({
+          table_name: 'operational_cost_submissions',
+          record_id: deleteConfirm.id,
+          record_data: deleteConfirm,
+          deleted_by: currentUser?.id,
+          deleted_by_role: (currentUser as any)?.role || 'superAdmin',
+          deleted_by_name: (currentUser as any)?.full_name || (currentUser as any)?.name || currentUser?.email || 'SuperAdmin',
+          deletion_reason: 'Direct SuperAdmin deletion',
+        }).then(() => setDeletionLog(prev => [{ ...deleteConfirm, _log_type: 'direct', deleted_at: new Date().toISOString(), deleted_by_name: (currentUser as any)?.full_name || currentUser?.email }, ...prev]));
         fetchOperationalCosts();
       }
     } catch (err) {
@@ -3422,6 +3446,27 @@ const CostSubmission = () => {
         .in('id', ids);
       if (error) throw error;
       toast({ title: 'Group Deleted / تم حذف المجموعة', description: `${ids.length} item${ids.length !== 1 ? 's' : ''} deleted.` });
+      // Log all to deletion_audit_log in parallel (non-blocking)
+      const groupTitle = groupDeleteConfirm.title;
+      const deleterName = (currentUser as any)?.full_name || (currentUser as any)?.name || currentUser?.email || 'SuperAdmin';
+      const deleterRole = (currentUser as any)?.role || 'superAdmin';
+      Promise.all(deletableItems.map(item =>
+        supabase.from('deletion_audit_log').insert({
+          table_name: 'operational_cost_submissions',
+          record_id: item.id,
+          record_data: item,
+          deleted_by: currentUser?.id,
+          deleted_by_role: deleterRole,
+          deleted_by_name: deleterName,
+          deletion_reason: `Group deletion — ${groupTitle}`,
+        })
+      )).then(() => {
+        const now = new Date().toISOString();
+        setDeletionLog(prev => [
+          ...deletableItems.map(item => ({ ...item, _log_type: 'group', deleted_at: now, deleted_by_name: deleterName })),
+          ...prev,
+        ]);
+      });
       fetchOperationalCosts();
     } catch (err: any) {
       toast({ title: 'Error / خطأ', description: err?.message || 'Failed to delete group.', variant: 'destructive' });
@@ -3556,6 +3601,17 @@ const CostSubmission = () => {
         toast({ title: 'Approve Failed', description: error.message, variant: 'destructive' });
       } else {
         toast({ title: 'Deletion Approved', description: 'The submission has been deleted.' });
+        // Log to deletion_audit_log (non-blocking)
+        const deleterName = (currentUser as any)?.full_name || (currentUser as any)?.name || currentUser?.email || 'SuperAdmin';
+        supabase.from('deletion_audit_log').insert({
+          table_name: 'operational_cost_submissions',
+          record_id: submission.id,
+          record_data: submission,
+          deleted_by: currentUser?.id,
+          deleted_by_role: (currentUser as any)?.role || 'superAdmin',
+          deleted_by_name: deleterName,
+          deletion_reason: `Approved delete request — ${submission.delete_request_reason || 'no reason provided'}`,
+        }).then(() => setDeletionLog(prev => [{ ...submission, _log_type: 'approved_request', deleted_at: new Date().toISOString(), deleted_by_name: deleterName }, ...prev]));
         // Notify the original requester
         if (submission.delete_requested_by) {
           dispatchNotification({
@@ -9160,32 +9216,92 @@ const CostSubmission = () => {
           })()}
         </TabsContent>
 
-        {/* ── Delete Requests Tab — SuperAdmin only ── */}
+        {/* ── Delete Requests + Deletion Audit Log Tab — SuperAdmin only ── */}
         {isSuperAdmin && (
-          <TabsContent value="delete_requests" className="space-y-4">
+          <TabsContent value="delete_requests" className="space-y-6">
             {(() => {
+              const todayStr = new Date().toDateString();
+              const myId = currentUser?.id;
+
+              // ── SECTION 1: Actual Deletions (from audit log) ──────────────
+              const myTodayDeletions = deletionLog.filter(l =>
+                l.deleted_by === myId && new Date(l.deleted_at).toDateString() === todayStr
+              );
+              const otherDeletions = deletionLog.filter(l =>
+                !(l.deleted_by === myId && new Date(l.deleted_at).toDateString() === todayStr)
+              );
+
+              const renderLogRow = (l: any) => {
+                const rd = l.record_data ?? {};
+                const catMeta = EXPENSE_CATEGORY_MAP[rd.expense_category];
+                const CatIcon = catMeta?.icon;
+                const typeLabel: Record<string, string> = {
+                  direct: 'Direct Delete',
+                  group: 'Group Delete',
+                  approved_request: 'Approved Request',
+                };
+                const isMine = l.deleted_by === myId;
+                return (
+                  <div key={l.id ?? l.record_id} className={`rounded-xl border shadow-sm overflow-hidden ${isMine ? 'border-red-300 dark:border-red-800' : 'border-slate-200 dark:border-slate-700'} bg-white dark:bg-slate-900`}>
+                    <div className={`flex items-center gap-3 px-4 py-3 border-b ${isMine ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'}`}>
+                      <div className="flex-none w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                        {CatIcon ? <CatIcon className="h-4 w-4 text-red-500" /> : <Trash2 className="h-4 w-4 text-red-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                          {rd.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || rd.request_title || 'Untitled submission'}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {rd.currency} {((rd.amount_cents ?? 0) / 100).toLocaleString()}
+                          {catMeta ? ` · ${catMeta.label}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">
+                          <Trash2 className="h-2.5 w-2.5" />Deleted
+                        </span>
+                        <span className="text-[10px] text-slate-400">{typeLabel[l._log_type] || 'Deleted'}</span>
+                      </div>
+                    </div>
+                    <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                      <div>
+                        <span className="text-slate-400">Deleted by</span>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{l.deleted_by_name || '—'}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Deleted at</span>
+                        <p className="font-medium text-slate-700 dark:text-slate-200">
+                          {l.deleted_at ? new Date(l.deleted_at).toLocaleString() : '—'}
+                        </p>
+                      </div>
+                      {l.deletion_reason && (
+                        <div className="col-span-2 mt-1">
+                          <span className="text-slate-400">Reason</span>
+                          <p className="font-medium text-slate-600 dark:text-slate-300 italic">{l.deletion_reason}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              };
+
+              // ── SECTION 2: Delete Requests (from live data) ──────────────
               const allRequests = operationalCosts.filter(o => o.delete_request_status != null);
-              const [drFilter, setDrFilter] = [
-                (activeTab === 'delete_requests' ? (window as any).__drFilter ?? 'pending' : 'pending'),
-                (v: string) => { (window as any).__drFilter = v; },
-              ];
               const pendingItems  = allRequests.filter(o => o.delete_request_status === 'pending');
               const resolvedItems = allRequests.filter(o => o.delete_request_status !== 'pending');
 
-              const renderRow = (o: OperationalCostSubmission) => {
+              const renderRequestRow = (o: OperationalCostSubmission) => {
                 const requester = users.find(u => u.id === o.delete_requested_by);
                 const reviewer  = users.find(u => u.id === o.delete_request_reviewed_by);
                 const catMeta   = EXPENSE_CATEGORY_MAP[o.expense_category];
                 const CatIcon   = catMeta?.icon;
-                const statusColors: Record<string, string> = {
-                  pending:  'bg-amber-100 text-amber-700 border-amber-300',
-                  approved: 'bg-green-100 text-green-700 border-green-300',
-                  rejected: 'bg-red-100 text-red-700 border-red-300',
-                };
-                const sc = statusColors[o.delete_request_status ?? 'pending'] ?? '';
+                const sc = o.delete_request_status === 'pending'
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : o.delete_request_status === 'rejected'
+                  ? 'bg-red-100 text-red-700 border-red-300'
+                  : 'bg-green-100 text-green-700 border-green-300';
                 return (
                   <div key={o.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-                    {/* Header row */}
                     <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
                       <div className="flex-none w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                         {CatIcon && <CatIcon className="h-4 w-4 text-slate-500" />}
@@ -9202,8 +9318,6 @@ const CostSubmission = () => {
                         {o.delete_request_status}
                       </span>
                     </div>
-
-                    {/* Body */}
                     <div className="px-4 py-3 space-y-2">
                       <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                         <div>
@@ -9240,42 +9354,30 @@ const CostSubmission = () => {
                         </div>
                       )}
                     </div>
-
-                    {/* Actions — only for pending */}
                     {o.delete_request_status === 'pending' && (
                       <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-700">
-                        <button
-                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                        <button className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                           disabled={actionProcessing}
                           onClick={() => setDeleteReviewDialog({ open: true, submission: o, notes: '', action: 'approve' })}
-                          data-testid={`button-dr-approve-${o.id}`}
-                        >
+                          data-testid={`button-dr-approve-${o.id}`}>
                           <CheckCircle className="h-3.5 w-3.5" />Approve & Delete
                         </button>
-                        <button
-                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        <button className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                           disabled={actionProcessing}
                           onClick={() => setDeleteReviewDialog({ open: true, submission: o, notes: '', action: 'reject' })}
-                          data-testid={`button-dr-reject-${o.id}`}
-                        >
+                          data-testid={`button-dr-reject-${o.id}`}>
                           <XCircle className="h-3.5 w-3.5" />Reject
                         </button>
-                        <button
-                          className="ml-auto inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                          onClick={() => setViewingSubmission(o)}
-                          data-testid={`button-dr-view-${o.id}`}
-                        >
+                        <button className="ml-auto inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                          onClick={() => setViewingSubmission(o)} data-testid={`button-dr-view-${o.id}`}>
                           <Eye className="h-3.5 w-3.5" />View Details
                         </button>
                       </div>
                     )}
                     {o.delete_request_status !== 'pending' && (
                       <div className="flex items-center justify-end px-4 py-2 border-t border-slate-100 dark:border-slate-700/50">
-                        <button
-                          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                          onClick={() => setViewingSubmission(o)}
-                          data-testid={`button-dr-view-${o.id}`}
-                        >
+                        <button className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                          onClick={() => setViewingSubmission(o)} data-testid={`button-dr-view-resolved-${o.id}`}>
                           <Eye className="h-3.5 w-3.5" />View Details
                         </button>
                       </div>
@@ -9285,49 +9387,75 @@ const CostSubmission = () => {
               };
 
               return (
-                <div className="space-y-4">
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        <Trash2 className="h-5 w-5 text-red-500" />
-                        Delete Requests
-                        <span dir="rtl" className="text-sm font-normal text-slate-400 mr-1">طلبات الحذف</span>
-                      </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {pendingItems.length} pending · {resolvedItems.length} resolved
-                      </p>
-                    </div>
+                <div className="space-y-6">
+                  {/* Page header */}
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <Trash2 className="h-5 w-5 text-red-500" />
+                      Deletions &amp; Requests
+                      <span dir="rtl" className="text-sm font-normal text-slate-400">الحذف والطلبات</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {deletionLog.length} permanently deleted · {pendingItems.length} pending requests
+                    </p>
                   </div>
 
-                  {/* Pending section */}
+                  {/* ── MY TODAY'S DELETIONS — most prominent ── */}
+                  {myTodayDeletions.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-none w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                          My Deletions Today ({myTodayDeletions.length})
+                        </span>
+                        <span dir="rtl" className="text-xs text-slate-400">ما حذفته اليوم</span>
+                        <div className="flex-1 h-px bg-red-200 dark:bg-red-900" />
+                        <span className="text-xs text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                      </div>
+                      {myTodayDeletions.map(renderLogRow)}
+                    </div>
+                  )}
+
+                  {/* ── PENDING REQUESTS ── */}
                   {pendingItems.length > 0 && (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-300">
-                          <AlertTriangle className="h-3 w-3" />{pendingItems.length} Pending Review
+                          <AlertTriangle className="h-3 w-3" />{pendingItems.length} Pending Requests
                         </span>
+                        <div className="flex-1 h-px bg-amber-200 dark:bg-amber-900" />
                       </div>
-                      {pendingItems.map(renderRow)}
+                      {pendingItems.map(renderRequestRow)}
                     </div>
                   )}
 
-                  {/* Resolved section */}
-                  {resolvedItems.length > 0 && (
+                  {/* ── ALL OTHER DELETIONS (from audit log, excluding today's mine) ── */}
+                  {otherDeletions.length > 0 && (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2 pt-2">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved ({resolvedItems.length})</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">All Deletions ({otherDeletions.length})</span>
                         <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                       </div>
-                      {resolvedItems.map(renderRow)}
+                      {otherDeletions.map(renderLogRow)}
                     </div>
                   )}
 
-                  {allRequests.length === 0 && (
+                  {/* ── RESOLVED REQUESTS ── */}
+                  {resolvedItems.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved Requests ({resolvedItems.length})</span>
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                      </div>
+                      {resolvedItems.map(renderRequestRow)}
+                    </div>
+                  )}
+
+                  {deletionLog.length === 0 && allRequests.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <Trash2 className="h-10 w-10 text-slate-300 mb-3" />
-                      <p className="text-slate-500 font-medium">No deletion requests yet</p>
-                      <p className="text-xs text-slate-400 mt-1">When users request to delete a submission, it will appear here.</p>
+                      <p className="text-slate-500 font-medium">No deletions or requests yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Permanently deleted items and delete requests will appear here.</p>
                     </div>
                   )}
                 </div>
