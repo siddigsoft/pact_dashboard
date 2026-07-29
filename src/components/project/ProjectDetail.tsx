@@ -267,6 +267,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [tabDropOpen, setTabDropOpen] = useState(false);
   const tabDropRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+  useEffect(() => {
     const h = (e: MouseEvent) => { if (tabDropRef.current && !tabDropRef.current.contains(e.target as Node)) setTabDropOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);

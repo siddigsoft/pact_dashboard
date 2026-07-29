@@ -6026,8 +6026,17 @@ export default function MyTasksV2() {
                               return (
                                 <div
                                   key={ft.id}
+                                  role="button"
+                                  tabIndex={0}
                                   data-testid={`field-task-card-${ft.id}`}
-                                  className={`flex items-start gap-3 px-3.5 py-2.5 bg-white border rounded-xl transition-all ${isOverdueTask ? 'border-red-200' : 'border-slate-200 hover:border-indigo-300'}`}
+                                  onClick={() => navigate(`/projects/${ft.projectId}?tab=field_tasks&task=${ft.id}`)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      navigate(`/projects/${ft.projectId}?tab=field_tasks&task=${ft.id}`);
+                                    }
+                                  }}
+                                  className={`flex items-start gap-3 px-3.5 py-2.5 bg-white border rounded-xl transition-all cursor-pointer hover:shadow-sm ${isOverdueTask ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-indigo-300'}`}
                                 >
                                   <div className={`w-1 h-full min-h-[2.5rem] rounded-full flex-shrink-0 ${priorityBar[ft.priority] ?? 'bg-slate-300'}`} />
                                   <div className="flex-1 min-w-0">

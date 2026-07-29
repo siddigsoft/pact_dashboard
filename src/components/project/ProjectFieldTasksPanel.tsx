@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, X, MapPin, Calendar, User, Flag, Trash2,
   CheckCircle2, Clock, AlertTriangle, Circle, Loader2, Edit2,
@@ -2649,6 +2650,7 @@ export function ProjectFieldTasksPanel({
   completedStageIds = new Set<string>(),
 }: Props) {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } =
     useProjectTasks(projectId);
   const { dependencies: typedDepsAll, upsertDependency, deleteDependency, predecessorsOf } =
@@ -2693,6 +2695,21 @@ export function ProjectFieldTasksPanel({
   const [filterPriority, setFilterPriority] = useState<FieldTaskPriority | 'all'>('all');
   const [filterAssignee, setFilterAssignee] = useState<'all' | 'mine'>('all');
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+  const deepLinkHandled = useRef<string | null>(null);
+
+  // Deep-link from My Tasks: ?tab=field_tasks&task=<id>
+  useEffect(() => {
+    const taskParam = searchParams.get('task');
+    if (!taskParam || isLoading || tasks.length === 0) return;
+    if (deepLinkHandled.current === taskParam) return;
+    const found = tasks.find(t => t.id === taskParam);
+    if (!found) return;
+    deepLinkHandled.current = taskParam;
+    setDetailTask(found);
+    const next = new URLSearchParams(searchParams);
+    next.delete('task');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, tasks, isLoading]);
 
   const handleAddToStage = (stageId: string) => {
     setDefaultStageId(stageId);
