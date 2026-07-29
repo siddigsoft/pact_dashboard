@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Search, Filter } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, HelpCircle, ChevronDown, Search, Filter, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { MatchResult, MatchTier, MatchOutcome } from '@/utils/wfpMatcher';
+import { COMPLETE_STATUSES } from '@/utils/wfpMatcher';
 
 interface Props {
   results: MatchResult[];
@@ -27,7 +28,18 @@ const OUTCOME_CONFIG: Record<MatchOutcome, { label: string; color: string }> = {
   pending:   { label: 'Pending',   color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
 };
 
-type FilterTier = 'all' | MatchTier;
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  completed:     { label: 'Completed',   color: 'text-emerald-600 dark:text-emerald-400' },
+  submitted:     { label: 'Submitted',   color: 'text-emerald-600 dark:text-emerald-400' },
+  verified:      { label: 'Verified',    color: 'text-emerald-600 dark:text-emerald-400' },
+  approved:      { label: 'Approved',    color: 'text-emerald-600 dark:text-emerald-400' },
+  wfp_confirmed: { label: 'WFP Confirmed', color: 'text-emerald-600 dark:text-emerald-400' },
+  dispatched:    { label: 'Dispatched',  color: 'text-amber-600 dark:text-amber-400' },
+  assigned:      { label: 'Assigned',    color: 'text-amber-600 dark:text-amber-400' },
+  not_covered:   { label: 'Not Covered', color: 'text-red-500 dark:text-red-400' },
+};
+
+type FilterTier = 'all' | MatchTier | 'incomplete';
 
 function ReviewRow({ result, onUpdate, disabled }: { result: MatchResult; onUpdate: (r: MatchResult) => void; disabled?: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -35,45 +47,55 @@ function ReviewRow({ result, onUpdate, disabled }: { result: MatchResult; onUpda
   const tier = TIER_CONFIG[result.match_tier];
   const outcome = OUTCOME_CONFIG[result.outcome];
   const canOverride = result.match_tier === 'weak' || result.match_tier === 'fuzzy';
+  const siteStatus = (result.site_status || '').toLowerCase();
+  const isIncomplete = result.outcome === 'confirmed' && result.site_entry_id && !COMPLETE_STATUSES.has(siteStatus);
+  const statusCfg = siteStatus ? STATUS_LABELS[siteStatus] : null;
 
   const setOutcome = (o: MatchOutcome) => {
     onUpdate({ ...result, outcome: o, review_note: note });
   };
 
   return (
-    <div className={cn('border rounded-lg mb-2 overflow-hidden transition-colors', expanded && 'ring-1 ring-blue-500/30')}>
+    <div className={cn('border rounded-lg mb-2 overflow-hidden transition-colors', expanded && 'ring-1 ring-blue-500/30', isIncomplete && 'border-amber-300 dark:border-amber-700')}>
       {/* Row header */}
       <div
         className={cn('flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40', expanded && 'bg-muted/30')}
         onClick={() => setExpanded(v => !v)}
         data-testid={`wfp-row-${result.wfp_row_number}`}
       >
-        {/* Row # */}
         <span className="text-xs text-muted-foreground w-8 shrink-0">#{result.wfp_row_number}</span>
 
-        {/* WFP site name */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{result.wfp_site_name || '—'}</p>
           <p className="text-xs text-muted-foreground truncate">{[result.wfp_state, result.wfp_locality].filter(Boolean).join(' · ')}</p>
         </div>
 
-        {/* Match tier badge */}
         <Badge className={cn('gap-1 shrink-0 text-xs', tier.color)}>
           {tier.icon} {tier.label}
         </Badge>
 
-        {/* Score */}
         <span className="text-xs text-muted-foreground w-12 text-right shrink-0">
           {(result.match_score * 100).toFixed(0)}%
         </span>
 
-        {/* Outcome badge */}
         <Badge className={cn('shrink-0 text-xs w-22 text-center', outcome.color)}>{outcome.label}</Badge>
 
-        {/* Matched site name */}
-        <div className="w-40 shrink-0 hidden md:block">
+        {/* Site status in system */}
+        <div className="w-32 shrink-0 hidden md:block">
           {result.matched_site ? (
-            <p className="text-xs truncate text-muted-foreground">{result.matched_site.site_name}</p>
+            <div>
+              <p className="text-xs truncate text-muted-foreground">{result.matched_site.site_name}</p>
+              {statusCfg ? (
+                <p className={cn('text-[10px] font-medium', statusCfg.color)}>{statusCfg.label}</p>
+              ) : siteStatus ? (
+                <p className="text-[10px] text-muted-foreground capitalize">{siteStatus}</p>
+              ) : null}
+              {isIncomplete && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
+                  <Clock className="h-2.5 w-2.5" /> Not complete
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground/50 italic">No site matched</p>
           )}
@@ -85,38 +107,35 @@ function ReviewRow({ result, onUpdate, disabled }: { result: MatchResult; onUpda
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t px-4 py-3 bg-muted/10 space-y-3">
+          {/* Not complete warning */}
+          {isIncomplete && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+              <div>
+                <strong>Site not yet complete in the system.</strong> This site was matched in the WFP file but the visit is currently <em>{siteStatus || 'unfinished'}</em> in PACT.
+                It will <strong>not</strong> be promoted to WFP Confirmed until the data collector submits the visit.
+                After submission, re-upload this WFP file to confirm.
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div>
-              <p className="text-muted-foreground">WFP Site</p>
-              <p className="font-medium">{result.wfp_site_name || '—'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">WFP State</p>
-              <p className="font-medium">{result.wfp_state || '—'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">WFP Locality</p>
-              <p className="font-medium">{result.wfp_locality || '—'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">WFP Partner</p>
-              <p className="font-medium">{result.wfp_partner || '—'}</p>
-            </div>
+            <div><p className="text-muted-foreground">WFP Site</p><p className="font-medium">{result.wfp_site_name || '—'}</p></div>
+            <div><p className="text-muted-foreground">WFP State</p><p className="font-medium">{result.wfp_state || '—'}</p></div>
+            <div><p className="text-muted-foreground">WFP Locality</p><p className="font-medium">{result.wfp_locality || '—'}</p></div>
+            <div><p className="text-muted-foreground">WFP Partner</p><p className="font-medium">{result.wfp_partner || '—'}</p></div>
           </div>
 
           {result.matched_site && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs border-t pt-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs border-t pt-3">
+              <div><p className="text-muted-foreground">Matched MMP Site</p><p className="font-medium">{result.matched_site.site_name}</p></div>
+              <div><p className="text-muted-foreground">MMP State</p><p className="font-medium">{result.matched_site.state || '—'}</p></div>
+              <div><p className="text-muted-foreground">MMP Locality</p><p className="font-medium">{result.matched_site.locality || '—'}</p></div>
               <div>
-                <p className="text-muted-foreground">Matched MMP Site</p>
-                <p className="font-medium">{result.matched_site.site_name}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">MMP State</p>
-                <p className="font-medium">{result.matched_site.state || '—'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">MMP Locality</p>
-                <p className="font-medium">{result.matched_site.locality || '—'}</p>
+                <p className="text-muted-foreground">Visit Status in System</p>
+                <p className={cn('font-medium capitalize', statusCfg?.color || 'text-foreground')}>
+                  {siteStatus || '—'}
+                </p>
               </div>
             </div>
           )}
@@ -125,7 +144,6 @@ function ReviewRow({ result, onUpdate, disabled }: { result: MatchResult; onUpda
             <span className="font-medium">Match scores: </span>{result.match_notes}
           </div>
 
-          {/* Manual override for weak/fuzzy */}
           {canOverride && !disabled && (
             <div className="border-t pt-3 space-y-2">
               <p className="text-xs font-semibold">Manual Review Decision</p>
@@ -172,7 +190,12 @@ export function WFPMatchReviewTable({ results, onChange, disabled }: Props) {
 
   const filtered = useMemo(() => {
     return results.filter(r => {
-      if (tierFilter !== 'all' && r.match_tier !== tierFilter) return false;
+      if (tierFilter === 'incomplete') {
+        const st = (r.site_status || '').toLowerCase();
+        if (!(r.outcome === 'confirmed' && r.site_entry_id && !COMPLETE_STATUSES.has(st))) return false;
+      } else if (tierFilter !== 'all' && r.match_tier !== tierFilter) {
+        return false;
+      }
       if (search) {
         const s = search.toLowerCase();
         return (r.wfp_site_name || '').toLowerCase().includes(s)
@@ -188,7 +211,11 @@ export function WFPMatchReviewTable({ results, onChange, disabled }: Props) {
     onChange(results.map(r => r.wfp_row_number === updated.wfp_row_number ? updated : r));
   };
 
-  const pendingCount = results.filter(r => r.outcome === 'pending').length;
+  const pendingCount     = results.filter(r => r.outcome === 'pending').length;
+  const incompleteCount  = results.filter(r => {
+    const st = (r.site_status || '').toLowerCase();
+    return r.outcome === 'confirmed' && r.site_entry_id && !COMPLETE_STATUSES.has(st);
+  }).length;
 
   return (
     <div className="space-y-3">
@@ -205,7 +232,7 @@ export function WFPMatchReviewTable({ results, onChange, disabled }: Props) {
           />
         </div>
         <Select value={tierFilter} onValueChange={v => setTierFilter(v as FilterTier)}>
-          <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-wfp-tier-filter">
+          <SelectTrigger className="w-40 h-8 text-sm" data-testid="select-wfp-tier-filter">
             <Filter className="h-3.5 w-3.5 mr-1.5" />
             <SelectValue />
           </SelectTrigger>
@@ -215,11 +242,17 @@ export function WFPMatchReviewTable({ results, onChange, disabled }: Props) {
             <SelectItem value="weak">Weak</SelectItem>
             <SelectItem value="fuzzy">Fuzzy</SelectItem>
             <SelectItem value="none">No Match</SelectItem>
+            {incompleteCount > 0 && <SelectItem value="incomplete">Not Complete in System</SelectItem>}
           </SelectContent>
         </Select>
         {pendingCount > 0 && (
           <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs">
             {pendingCount} need review
+          </Badge>
+        )}
+        {incompleteCount > 0 && (
+          <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 text-xs gap-1">
+            <Clock className="h-3 w-3" /> {incompleteCount} not complete
           </Badge>
         )}
       </div>
@@ -231,7 +264,7 @@ export function WFPMatchReviewTable({ results, onChange, disabled }: Props) {
         <span className="w-20">Tier</span>
         <span className="w-12 text-right">Score</span>
         <span className="w-22 text-center">Outcome</span>
-        <span className="w-40">Matched MMP Site</span>
+        <span className="w-32">System Site / Status</span>
         <span className="w-4" />
       </div>
 

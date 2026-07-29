@@ -48,11 +48,12 @@ import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
 import { WFPUploadZone } from '@/components/cycle/WFPUploadZone';
 import { WFPMatchReviewTable } from '@/components/cycle/WFPMatchReviewTable';
 import { WFPBulkActions } from '@/components/cycle/WFPBulkActions';
+import { WFPColumnMapper } from '@/components/cycle/WFPColumnMapper';
 import { CycleCloseGuide } from '@/components/cycle/CycleCloseGuide';
 import { EnumeratorReconciliation } from '@/components/cycle/EnumeratorReconciliation';
 import { RolledAllocationsPanel } from '@/components/cycle/RolledAllocationsPanel';
-import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
-import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
+import { parseWFPRow, parseWFPRowWithMapping, matchAll, summarise, detectColumns, findSitesNotInWfp, COMPLETE_STATUSES } from '@/utils/wfpMatcher';
+import type { MatchResult, MatchSummary, SiteEntry } from '@/utils/wfpMatcher';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
@@ -686,6 +687,12 @@ const MMPCycleClose = () => {
   const [wfpSaving, setWfpSaving] = useState(false);
   const [loadingWFP, setLoadingWFP] = useState(false);
   const [wfpAppliedUpload, setWfpAppliedUpload] = useState<{ filename: string; applied_at: string } | null>(null);
+  const [wfpNotInWfpSites, setWfpNotInWfpSites] = useState<SiteEntry[]>([]);
+  const [wfpMatchedIncomplete, setWfpMatchedIncomplete] = useState<MatchResult[]>([]);
+  const [wfpRawRows, setWfpRawRows] = useState<Record<string, unknown>[] | null>(null);
+  const [wfpRawHeaders, setWfpRawHeaders] = useState<string[]>([]);
+  const [wfpDetectedCols, setWfpDetectedCols] = useState<Record<string, string>>({});
+  const [showColumnMapper, setShowColumnMapper] = useState(false);
   const [userHubName, setUserHubName] = useState<string>('');
   const [bannerRejectMmpId, setBannerRejectMmpId] = useState<string | null>(null);
   const [bannerRejectNote, setBannerRejectNote] = useState('');
@@ -1875,26 +1882,51 @@ const MMPCycleClose = () => {
   }, [activeTab, checklistMmpId, loadWFPTab]);
 
   // Phase C: parse file → run matching → show review table
-  const handleWFPFileParsed = useCallback(async (rawRows: Record<string, unknown>[], filename: string, mmpId: string) => {
+  // Internal helper that does the actual matching after columns are known
+  const runWFPMatching = useCallback(async (
+    rawRows: Record<string, unknown>[],
+    filename: string,
+    mmpId: string,
+    columnMapping?: Record<string, string>,
+  ) => {
     setWfpSaving(true);
+    setShowColumnMapper(false);
     try {
-      // 1. Parse WFP rows
+      // 1. Parse WFP rows (with optional column mapping)
       const wfpRows = rawRows
-        .map((r, i) => parseWFPRow(r, i + 2)) // row 1 = headers
+        .map((r, i) => columnMapping
+          ? parseWFPRowWithMapping(r, i + 2, columnMapping)
+          : parseWFPRow(r, i + 2))
         .filter(Boolean) as ReturnType<typeof parseWFPRow>[];
 
-      // 2. Fetch all site entries for this MMP
+      if (wfpRows.length === 0) {
+        toast({ title: 'No rows parsed', description: 'Could not find any site rows in the file. Check column headers and try again.', variant: 'destructive' });
+        return;
+      }
+
+      // 2. Fetch all site entries for this MMP — include status for completion check
       const { data: siteEntries } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality')
+        .select('id, site_name, site_code, state, locality, status')
         .eq('mmp_file_id', mmpId)
         .limit(10000);
 
-      const sites = (siteEntries || []) as { id: string; site_name: string; site_code: string | null; state: string | null; locality: string | null }[];
+      const sites = (siteEntries || []) as SiteEntry[];
 
       // 3. Run matching
       const results = matchAll(wfpRows as NonNullable<typeof wfpRows[0]>[], sites);
       const summary = summarise(results);
+
+      // 3b. Compute "sites not in WFP file" — MMP sites with no WFP match
+      const notInWfp = findSitesNotInWfp(results, sites);
+      setWfpNotInWfpSites(notInWfp);
+
+      // 3c. Compute "matched but not yet complete in system"
+      const matchedIncomplete = results.filter(r => {
+        const st = (r.site_status || '').toLowerCase();
+        return r.outcome === 'confirmed' && r.site_entry_id && !COMPLETE_STATUSES.has(st);
+      });
+      setWfpMatchedIncomplete(matchedIncomplete);
 
       // 4. Save upload record
       const { data: uploadData, error: uploadErr } = await supabase
@@ -1938,17 +1970,41 @@ const MMPCycleClose = () => {
       setWfpUploadId(uploadId);
       setWfpFilename(filename);
 
+      const incompletePart = matchedIncomplete.length > 0
+        ? ` · ${matchedIncomplete.length} matched but not yet complete in system`
+        : '';
+      const notInWfpPart = notInWfp.length > 0
+        ? ` · ${notInWfp.length} MMP sites not in WFP file`
+        : '';
       toast({
-        title: 'WFP file parsed',
-        description: `${summary.strong} auto-confirmed, ${summary.weak + summary.fuzzy} need review, ${summary.none} no match`,
+        title: 'WFP file matched',
+        description: `${summary.confirmed - matchedIncomplete.length} ready to confirm · ${summary.weak + summary.fuzzy} need review · ${summary.none} no match${incompletePart}${notInWfpPart}`,
       });
     } catch (err) {
-      console.error('[WFP] handleWFPFileParsed error:', err);
-      toast({ title: 'Error', description: 'Failed to save WFP match data', variant: 'destructive' });
+      console.error('[WFP] runWFPMatching error:', err);
+      toast({ title: 'Error', description: 'Failed to process WFP file', variant: 'destructive' });
     } finally {
       setWfpSaving(false);
     }
   }, [toast]);
+
+  // Public handler: detect columns first, show mapper if needed, else run matching directly
+  const handleWFPFileParsed = useCallback((rawRows: Record<string, unknown>[], filename: string, mmpId: string, headers: string[]) => {
+    setWfpRawRows(rawRows);
+    setWfpRawHeaders(headers);
+    setWfpFilename(filename);
+
+    const detection = detectColumns(rawRows);
+    setWfpDetectedCols(detection.found);
+
+    if (detection.missing.length > 0) {
+      // Required columns not found — show the column mapper
+      setShowColumnMapper(true);
+    } else {
+      // Auto-detected — proceed immediately
+      runWFPMatching(rawRows, filename, mmpId);
+    }
+  }, [runWFPMatching]);
 
   // Phase C: save manual review decisions then apply all outcomes to mmp_site_entries
   const handleWFPApply = useCallback(async (mmpId: string) => {
@@ -1967,10 +2023,21 @@ const MMPCycleClose = () => {
       }
 
       // 2. Apply outcomes to mmp_site_entries + log events
-      const confirmed = wfpResults.filter(r => r.outcome === 'confirmed' && r.site_entry_id);
-      const rejected  = wfpResults.filter(r => r.outcome === 'rejected'  && r.site_entry_id);
+      // CRITICAL: only promote sites that are actually complete in the system.
+      // Sites matched in WFP but not yet submitted/completed stay as-is and are
+      // shown in the "Matched but Not Complete" panel so the team can follow up.
+      const confirmedAndComplete = wfpResults.filter(r =>
+        r.outcome === 'confirmed' && r.site_entry_id && r.visit_complete === true,
+      );
+      const matchedButStillIncomplete = wfpResults.filter(r =>
+        r.outcome === 'confirmed' && r.site_entry_id && !r.visit_complete,
+      );
+      const rejected = wfpResults.filter(r => r.outcome === 'rejected' && r.site_entry_id);
 
-      for (const r of confirmed) {
+      // Update local state so the panel stays accurate after apply
+      setWfpMatchedIncomplete(matchedButStillIncomplete);
+
+      for (const r of confirmedAndComplete) {
         await supabase.from('mmp_site_entries')
           .update({ status: 'wfp_confirmed' })
           .eq('id', r.site_entry_id!);
@@ -2066,9 +2133,11 @@ const MMPCycleClose = () => {
       setWfpAppliedUpload({ filename: wfpFilename || '', applied_at: new Date().toISOString() });
       cycleReadiness.refresh();
 
+      const skipped = matchedButStillIncomplete.length;
+      const skipNote = skipped > 0 ? ` · ${skipped} matched-but-incomplete site${skipped > 1 ? 's' : ''} skipped — visit not yet complete` : '';
       toast({
         title: 'WFP results applied',
-        description: `${confirmed.length} confirmed, ${rejected.length} rejected. Status updated on all sites.`,
+        description: `${confirmedAndComplete.length} confirmed · ${rejected.length} rejected${skipNote}`,
       });
     } catch (err) {
       console.error('[WFP] handleWFPApply error:', err);
@@ -7896,7 +7965,7 @@ const MMPCycleClose = () => {
                   <CardContent>
                     <WFPUploadZone
                       disabled={wfpSaving}
-                      onFileParsed={(rows, filename) => handleWFPFileParsed(rows, filename, checklistMmpId)}
+                      onFileParsed={(rows, filename, headers) => handleWFPFileParsed(rows, filename, checklistMmpId, headers)}
                     />
                     {wfpSaving && (
                       <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
@@ -7906,6 +7975,19 @@ const MMPCycleClose = () => {
                     )}
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Column Mapper — shown when auto-detection fails */}
+              {showColumnMapper && wfpRawRows && wfpRawHeaders.length > 0 && (
+                <WFPColumnMapper
+                  allHeaders={wfpRawHeaders}
+                  autoDetected={wfpDetectedCols}
+                  onConfirm={(mapping) => {
+                    setShowColumnMapper(false);
+                    runWFPMatching(wfpRawRows!, wfpFilename || 'wfp_file.xlsx', checklistMmpId, mapping);
+                  }}
+                  onCancel={() => setShowColumnMapper(false)}
+                />
               )}
 
               {/* Summary KPI cards */}
@@ -7950,6 +8032,12 @@ const MMPCycleClose = () => {
                             {wfpSummary.pendingReview} pending decisions
                           </Badge>
                         )}
+                        {wfpMatchedIncomplete.length > 0 && (
+                          <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 text-xs gap-1">
+                            <Clock className="h-3 w-3" />
+                            {wfpMatchedIncomplete.length} not yet complete
+                          </Badge>
+                        )}
                         <Button
                           size="sm"
                           disabled={wfpApplying || (wfpSummary?.pendingReview ?? 0) > 0}
@@ -7962,7 +8050,7 @@ const MMPCycleClose = () => {
                       </div>
                     </div>
                     <CardDescription className="text-xs">
-                      Strong matches are auto-confirmed. Review weak and fuzzy matches manually before applying.
+                      Strong matches are auto-confirmed. Review weak and fuzzy matches manually. Only sites that are <strong>completed</strong> in the system will be promoted to WFP Confirmed — matched-but-incomplete sites are held and shown below.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -7971,9 +8059,154 @@ const MMPCycleClose = () => {
                       onChange={updated => {
                         setWfpResults(updated);
                         setWfpSummary(summarise(updated));
+                        // Recompute incomplete list when user changes outcomes
+                        const newIncomplete = updated.filter(r => {
+                          const st = (r.site_status || '').toLowerCase();
+                          return r.outcome === 'confirmed' && r.site_entry_id && !COMPLETE_STATUSES.has(st);
+                        });
+                        setWfpMatchedIncomplete(newIncomplete);
                       }}
                       disabled={wfpApplying}
                     />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Matched-but-Incomplete panel ───────────────────────────── */}
+              {wfpMatchedIncomplete.length > 0 && (
+                <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                        <Clock className="h-4 w-4" />
+                        Matched in WFP — Not Yet Complete in System
+                        <span dir="rtl" className="text-xs font-normal text-muted-foreground">مطابق في WFP، غير مكتمل في النظام</span>
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
+                        onClick={() => {
+                          const rows = wfpMatchedIncomplete.map(r => ({
+                            'WFP Site': r.wfp_site_name || '',
+                            'WFP State': r.wfp_state || '',
+                            'WFP Locality': r.wfp_locality || '',
+                            'WFP Partner': r.wfp_partner || '',
+                            'System Site': r.matched_site?.site_name || '',
+                            'System Status': r.site_status || '',
+                            'Match Score': `${(r.match_score * 100).toFixed(0)}%`,
+                          }));
+                          exportToExcel(rows, `wfp_incomplete_${checklistMmpId}`);
+                        }}
+                        data-testid="button-wfp-incomplete-export"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Export for Team
+                      </Button>
+                    </div>
+                    <CardDescription className="text-xs text-amber-700 dark:text-amber-400">
+                      These sites appear in the WFP file but the data collector hasn't submitted the visit yet.
+                      They are <strong>not</strong> promoted to WFP Confirmed until the visit is complete.
+                      Share this list with your field team, then re-upload the WFP file once visits are submitted.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md border border-amber-200 dark:border-amber-800 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-amber-100 dark:bg-amber-900/40">
+                          <tr>
+                            {['WFP Site', 'State / Locality', 'System Site', 'Current Status', 'Match Score'].map(h => (
+                              <th key={h} className="px-3 py-2 text-left font-medium text-amber-800 dark:text-amber-300">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wfpMatchedIncomplete.map((r, idx) => (
+                            <tr key={r.wfp_row_number} className={idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-amber-50/60 dark:bg-amber-950/10'}>
+                              <td className="px-3 py-2 font-medium">{r.wfp_site_name || '—'}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{[r.wfp_state, r.wfp_locality].filter(Boolean).join(' / ') || '—'}</td>
+                              <td className="px-3 py-2">{r.matched_site?.site_name || '—'}</td>
+                              <td className="px-3 py-2">
+                                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-[10px] capitalize">
+                                  {r.site_status || 'unknown'}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground">{(r.match_score * 100).toFixed(0)}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Not in WFP panel ──────────────────────────────────────── */}
+              {wfpNotInWfpSites.length > 0 && (
+                <Card className="border-slate-200 dark:border-slate-700">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <XCircle className="h-4 w-4 text-slate-500" />
+                        MMP Sites Not Found in WFP File
+                        <span dir="rtl" className="text-xs font-normal text-muted-foreground">مواقع غير موجودة في ملف WFP</span>
+                        <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 text-xs">
+                          {wfpNotInWfpSites.length}
+                        </Badge>
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => {
+                          const rows = wfpNotInWfpSites.map(s => ({
+                            'Site Name': s.site_name,
+                            'State': s.state || '',
+                            'Locality': s.locality || '',
+                            'System Status': s.status || '',
+                            'Site Code': s.site_code || '',
+                          }));
+                          exportToExcel(rows, `wfp_not_in_wfp_${checklistMmpId}`);
+                        }}
+                        data-testid="button-wfp-notinwfp-export"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Export List
+                      </Button>
+                    </div>
+                    <CardDescription className="text-xs">
+                      These MMP sites had no matching row in the WFP file. They will proceed to <strong>Step 4 — Mark Uncovered</strong>.
+                      If these sites were visited, check with WFP to confirm the data is in their system.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md border overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            {['Site Name', 'State / Locality', 'System Status', 'Site Code'].map(h => (
+                              <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wfpNotInWfpSites.map((s, idx) => (
+                            <tr key={s.id} className={idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-muted/20'}>
+                              <td className="px-3 py-2 font-medium">{s.site_name}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{[s.state, s.locality].filter(Boolean).join(' / ') || '—'}</td>
+                              <td className="px-3 py-2">
+                                {s.status ? (
+                                  <Badge className="text-[10px] capitalize bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                    {s.status}
+                                  </Badge>
+                                ) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground font-mono">{s.site_code || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </CardContent>
                 </Card>
               )}

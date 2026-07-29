@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface Props {
-  onFileParsed: (rows: Record<string, unknown>[], filename: string) => void;
+  onFileParsed: (rows: Record<string, unknown>[], filename: string, headers: string[]) => void;
   disabled?: boolean;
 }
 
@@ -18,6 +18,11 @@ export function WFPUploadZone({ onFileParsed, disabled }: Props) {
     setError(null);
     setLoading(true);
     try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+        throw new Error('This file type is not supported. Upload an .xlsx, .xls, or .csv file.');
+      }
+
       const XLSX = await import('xlsx');
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });
@@ -25,8 +30,9 @@ export function WFPUploadZone({ onFileParsed, disabled }: Props) {
       if (!sheetName) throw new Error('No sheets found in workbook.');
       const ws = wb.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-      if (rows.length === 0) throw new Error('Sheet is empty or has no data rows.');
-      onFileParsed(rows, file.name);
+      if (rows.length === 0) throw new Error('The file appears to be empty. Check the file and try again.');
+      const headers = Object.keys(rows[0] || {});
+      onFileParsed(rows, file.name, headers);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to parse file.');
     } finally {
