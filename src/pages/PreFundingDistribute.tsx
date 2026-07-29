@@ -89,6 +89,12 @@ export default function PreFundingDistribute() {
   const [addReceiptFiles, setAddReceiptFiles] = useState<File[]>([]);
 
   // Top-up dialog (replaces inline edit — also collects a receipt)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, { funds: boolean; expenditure: boolean }>>({});
+  const toggleSection = (allocId: string, section: 'funds' | 'expenditure') =>
+    setCollapsedSections(prev => ({
+      ...prev,
+      [allocId]: { funds: false, expenditure: false, ...prev[allocId], [section]: !prev[allocId]?.[section] },
+    }));
   const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string; fund: HeldFund | null }>({ open: false, alloc: null, fundId: '', fund: null });
   const [topUpAmt, setTopUpAmt]           = useState('');
   const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
@@ -1180,9 +1186,17 @@ export default function PreFundingDistribute() {
                                 const totalDisbursed = rows.reduce((s, r) => s + r.amount, 0);
                                 const missingReceiptCount = rows.filter(r => !r.receipt_url).length;
 
+                                const fundsSectionCollapsed = collapsedSections[a.id]?.funds ?? false;
                                 return (
                                   <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => toggleSection(a.id, 'funds')}
+                                      className="w-full text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5 hover:text-foreground transition-colors group"
+                                    >
+                                      {fundsSectionCollapsed
+                                        ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                        : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                      }
                                       <Banknote className="h-3.5 w-3.5 text-emerald-600" />
                                       <span>Funds Sent to {a.user_name?.split(' ')[0]}</span>
                                       <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold border border-emerald-200 dark:border-emerald-700">
@@ -1194,8 +1208,10 @@ export default function PreFundingDistribute() {
                                           {missingReceiptCount} receipt{missingReceiptCount > 1 ? 's' : ''} missing
                                         </span>
                                       )}
-                                    </p>
+                                    </button>
 
+                                    {!fundsSectionCollapsed && (
+                                    <>
                                     {/* Missing-receipt warning banner */}
                                     {missingReceiptCount > 0 && (
                                       <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
@@ -1318,6 +1334,8 @@ export default function PreFundingDistribute() {
                                         </tfoot>
                                       </table>
                                     </div>
+                                    </>
+                                    )}
                                   </div>
                                 );
                               })()}
@@ -1326,8 +1344,18 @@ export default function PreFundingDistribute() {
                                   SECTION 2 — EXPENDITURE HISTORY
                                   Transactions spent FROM this person's fund
                               ════════════════════════════════════════════════ */}
+                              {(() => {
+                                const expenditureSectionCollapsed = collapsedSections[a.id]?.expenditure ?? false;
+                                return (
                               <div>
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                <button
+                                  onClick={() => toggleSection(a.id, 'expenditure')}
+                                  className="w-full text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5 hover:text-foreground transition-colors group"
+                                >
+                                  {expenditureSectionCollapsed
+                                    ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                    : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                  }
                                   <TrendingDown className="h-3.5 w-3.5 text-rose-500" />
                                   Expenditure History / سجل المصروفات
                                   {!isPaymentsLoading && payments.length > 0 && (
@@ -1335,7 +1363,9 @@ export default function PreFundingDistribute() {
                                       {payments.length} transaction{payments.length > 1 ? 's' : ''}
                                     </span>
                                   )}
-                                </p>
+                                </button>
+                                {!expenditureSectionCollapsed && (
+                                <>
                                 {isPaymentsLoading && (
                                   <div className="space-y-1.5">
                                     {[1,2,3].map(i => <div key={i} className="h-7 rounded bg-muted animate-pulse" />)}
@@ -1418,7 +1448,11 @@ export default function PreFundingDistribute() {
                                   </table>
                                 </div>
                               )}
+                                </>
+                                )}
                             </div>
+                                );
+                              })()}
                           </div>
                           )}
                         </div>
