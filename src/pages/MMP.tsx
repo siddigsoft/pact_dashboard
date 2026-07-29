@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { 
   Upload, ChevronLeft, ChevronRight, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
-  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X, RefreshCw, User, ArrowRight
+  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X, RefreshCw, User, ArrowRight, Archive
 } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
@@ -56,6 +56,7 @@ import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
 import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
+import CycleCloseWizard from '@/components/cycle/CycleCloseWizard';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
   siteRows: SiteVisitRow[]; 
@@ -2187,6 +2188,7 @@ const MMP = () => {
   // PRIORITY RULE: admin/ICT/FOM always override DataCollector, even when DataCollector appears
   // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
   const canClaimSites = !isAdmin && !isICT && !isFOM && (isDataCollector || isCoordinator);
+  const [showCycleWizard, setShowCycleWizard] = useState(false);
   
   // Hub-based access control for supervisors
   // Supervisors should only see operations within their assigned hub
@@ -4548,6 +4550,17 @@ const MMP = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {(isFOM || isAdmin || isSuperAdmin) && (
+              <Button
+                onClick={() => setShowCycleWizard(true)}
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-white shadow-md flex items-center gap-1.5 text-xs"
+                data-testid="button-open-cycle-wizard"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Close Cycle
+              </Button>
+            )}
             {isAdmin && (
               <Button 
                 onClick={() => navigate('/mmp/upload')} 
@@ -7657,6 +7670,17 @@ const MMP = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cycle Close Wizard — full-screen overlay */}
+      {showCycleWizard && (
+        <CycleCloseWizard
+          onClose={() => setShowCycleWizard(false)}
+          isFOM={isFOM}
+          isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
+          currentUser={currentUser}
+        />
+      )}
     </div>
   );
 };
