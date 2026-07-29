@@ -292,7 +292,14 @@ export default function PreFundingDistribute() {
     by_name: string;
     receipt_url: string | null;
   }
-  interface AllocMeta { text: string; top_up_count: number; top_up_log: TopUpLogEntry[] }
+  interface AllocMeta {
+    text: string;
+    top_up_count: number;
+    top_up_log: TopUpLogEntry[];
+    /** The original receipt URL saved when the first top-up overwrites receipt_url */
+    initial_receipt_url?: string | null;
+    initial_created_at?: string | null;
+  }
 
   /** Parse the notes field — may be plain text or JSON-encoded audit metadata. */
   const parseAllocMeta = (notes: string | null): AllocMeta => {
@@ -300,16 +307,40 @@ export default function PreFundingDistribute() {
     try {
       const p = JSON.parse(notes);
       if (p && typeof p === 'object' && !Array.isArray(p)) {
-        return { text: p.text ?? '', top_up_count: Number(p.top_up_count ?? 0), top_up_log: p.top_up_log ?? [] };
+        return {
+          text: p.text ?? '',
+          top_up_count: Number(p.top_up_count ?? 0),
+          top_up_log: p.top_up_log ?? [],
+          initial_receipt_url: p.initial_receipt_url ?? null,
+          initial_created_at: p.initial_created_at ?? null,
+        };
       }
     } catch {}
     return { text: notes, top_up_count: 0, top_up_log: [] };
   };
 
-  /** Append a top-up entry to notes JSON and return the updated notes string. */
-  const buildAllocMeta = (existing: string | null, entry: TopUpLogEntry): string => {
+  /** Append a top-up entry. On first top-up, also preserves the original receipt URL. */
+  const buildAllocMeta = (
+    existing: string | null,
+    entry: TopUpLogEntry,
+    originalReceiptUrl?: string | null,
+    originalCreatedAt?: string | null,
+  ): string => {
     const m = parseAllocMeta(existing);
-    return JSON.stringify({ text: m.text, top_up_count: m.top_up_count + 1, top_up_log: [...m.top_up_log, entry] });
+    const payload: any = {
+      text: m.text,
+      top_up_count: m.top_up_count + 1,
+      top_up_log: [...m.top_up_log, entry],
+    };
+    // Preserve original receipt on first top-up
+    if (m.top_up_count === 0) {
+      payload.initial_receipt_url = originalReceiptUrl ?? null;
+      payload.initial_created_at = originalCreatedAt ?? null;
+    } else {
+      payload.initial_receipt_url = m.initial_receipt_url ?? null;
+      payload.initial_created_at = m.initial_created_at ?? null;
+    }
+    return JSON.stringify(payload);
   };
 
   /** Upload a single receipt file to Supabase storage and return the public URL. */
@@ -610,15 +641,20 @@ export default function PreFundingDistribute() {
       const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
       if (!uploaded) { setTopUpSaving(false); return; }
       const newTotal = alloc.allocated_amount + increment;
-      const newNotes = buildAllocMeta(alloc.notes, {
-        date: new Date().toISOString(),
-        amount: increment,
-        previous_total: alloc.allocated_amount,
-        new_total: newTotal,
-        by_user_id: currentUser?.id ?? '',
-        by_name: currentUser?.full_name ?? currentUser?.email ?? 'Unknown',
-        receipt_url: uploaded,
-      });
+      const newNotes = buildAllocMeta(
+        alloc.notes,
+        {
+          date: new Date().toISOString(),
+          amount: increment,
+          previous_total: alloc.allocated_amount,
+          new_total: newTotal,
+          by_user_id: currentUser?.id ?? '',
+          by_name: currentUser?.full_name ?? currentUser?.email ?? 'Unknown',
+          receipt_url: uploaded,
+        },
+        alloc.receipt_url,     // preserve original receipt on first top-up
+        alloc.created_at,      // preserve original allocation date
+      );
       const { error } = await (supabase as any)
         .from('pre_fund_allocations')
         .update({ allocated_amount: newTotal, receipt_url: uploaded, notes: newNotes })
@@ -1017,76 +1053,178 @@ export default function PreFundingDistribute() {
                             )}
                           </div>
 
-                          {/* ── Payment details panel ── */}
+                          {/* ── Expanded detail panel ── */}
                           {isExpanded && (
-                            <div id={`alloc-detail-${a.id}`} className="border-t border-border/40 bg-background/60 px-3 py-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
-                                <ExternalLink className="h-3 w-3" />
-                                Fund Payment History / سجل المدفوعات
-                              </p>
-                              {isPaymentsLoading && (
-                                <div className="space-y-1.5">
-                                  {[1,2,3].map(i => <div key={i} className="h-7 rounded bg-muted animate-pulse" />)}
-                                </div>
-                              )}
-                              {!isPaymentsLoading && payments.length === 0 && (
-                                <p className="text-xs text-muted-foreground text-center py-3">
-                                  No payment transactions recorded for this fund yet.
-                                </p>
-                              )}
-                              {/* ── Top-Up Audit Log ── */}
+                            <div id={`alloc-detail-${a.id}`} className="border-t border-border/40 bg-background/60 px-3 py-3 space-y-4">
+
+                              {/* ═══════════════════════════════════════════════
+                                  SECTION 1 — FUNDS SENT (distributions received)
+                                  Each time money was transferred TO this person
+                              ════════════════════════════════════════════════ */}
                               {(() => {
                                 const m = parseAllocMeta(a.notes);
-                                if (m.top_up_log.length === 0) return null;
+
+                                // Build the full disbursement timeline
+                                type Disbursement = {
+                                  seq: number;
+                                  date: string | null;
+                                  amount: number;
+                                  running_total: number;
+                                  by_name: string;
+                                  receipt_url: string | null;
+                                  is_initial: boolean;
+                                };
+
+                                const rows: Disbursement[] = [];
+
+                                // Row 0 — Initial allocation
+                                const initialAmount = m.top_up_count > 0
+                                  ? m.top_up_log[0]?.previous_total ?? a.allocated_amount
+                                  : a.allocated_amount;
+                                const initialReceipt = m.top_up_count > 0
+                                  ? (m.initial_receipt_url ?? null)
+                                  : a.receipt_url;
+                                const initialDate = m.top_up_count > 0
+                                  ? (m.initial_created_at ?? a.created_at)
+                                  : a.created_at;
+                                rows.push({
+                                  seq: 1,
+                                  date: initialDate,
+                                  amount: initialAmount,
+                                  running_total: initialAmount,
+                                  by_name: '—',  // initial creator not stored in notes
+                                  receipt_url: initialReceipt,
+                                  is_initial: true,
+                                });
+
+                                // Rows 1+ — Top-ups from audit log
+                                m.top_up_log.forEach((entry, i) => {
+                                  rows.push({
+                                    seq: i + 2,
+                                    date: entry.date,
+                                    amount: entry.amount,
+                                    running_total: entry.new_total,
+                                    by_name: entry.by_name,
+                                    receipt_url: entry.receipt_url,
+                                    is_initial: false,
+                                  });
+                                });
+
+                                const totalDisbursed = rows.reduce((s, r) => s + r.amount, 0);
+
                                 return (
-                                  <div className="mt-3 pt-3 border-t border-border/30">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-2">
-                                      <History className="h-3 w-3" />Top-Up Audit Log ({m.top_up_log.length} change{m.top_up_log.length > 1 ? 's' : ''})
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                      <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Funds Sent to {a.user_name?.split(' ')[0]}</span>
+                                      <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold border border-emerald-200 dark:border-emerald-700">
+                                        {rows.length} disbursement{rows.length > 1 ? 's' : ''}
+                                      </span>
                                     </p>
-                                    <div className="space-y-1.5">
-                                      {m.top_up_log.map((entry, i) => (
-                                        <div key={i} className="flex items-start gap-2 rounded-md border border-violet-200/60 dark:border-violet-800/60 bg-violet-50/40 dark:bg-violet-950/20 px-2.5 py-1.5 text-[11px]">
-                                          <Clock className="h-3 w-3 mt-0.5 text-violet-500 shrink-0" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between gap-1 flex-wrap">
-                                              <span className="font-semibold text-violet-700 dark:text-violet-300">
-                                                +{fund.currency} {formatNumber(entry.amount, 0)}
-                                              </span>
-                                              <span className="text-muted-foreground">
-                                                {format(new Date(entry.date), 'dd MMM yyyy HH:mm')}
-                                              </span>
-                                            </div>
-                                            <div className="text-muted-foreground mt-0.5">
-                                              by <span className="font-medium">{entry.by_name}</span>
-                                            </div>
-                                            <div className="text-[10px] text-muted-foreground">
-                                              {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {fund.currency}
-                                            </div>
-                                            {entry.receipt_url && (
-                                              <button
-                                                onClick={() => setViewReceiptUrl(parseReceiptUrls(entry.receipt_url)[0] ?? null)}
-                                                className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline mt-0.5"
-                                              >
-                                                <Receipt className="h-2.5 w-2.5" />View receipt
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
+                                    <div className="overflow-x-auto rounded-lg border border-emerald-200/60 dark:border-emerald-800/40">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-emerald-50/80 dark:bg-emerald-950/40">
+                                          <tr>
+                                            <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">#</th>
+                                            <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">Date</th>
+                                            <th className="text-right py-2 px-2.5 text-muted-foreground font-semibold">Amount Sent</th>
+                                            <th className="text-right py-2 px-2.5 text-muted-foreground font-semibold">Running Total</th>
+                                            <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold hidden sm:table-cell">Sent By</th>
+                                            <th className="text-center py-2 px-2.5 text-muted-foreground font-semibold">Receipt</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {rows.map((row) => (
+                                            <tr key={row.seq} className={cn('border-t border-border/30', row.is_initial ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : 'hover:bg-muted/30')}>
+                                              <td className="py-2 px-2.5">
+                                                <span className={cn('inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold', row.is_initial ? 'bg-emerald-500 text-white' : 'bg-sky-500 text-white')}>
+                                                  {row.seq}
+                                                </span>
+                                              </td>
+                                              <td className="py-2 px-2.5 text-muted-foreground whitespace-nowrap">
+                                                {row.date ? format(new Date(row.date), 'dd MMM yyyy') : '—'}
+                                                {row.is_initial && (
+                                                  <span className="ml-1.5 text-[9px] font-semibold text-emerald-600 uppercase">Initial</span>
+                                                )}
+                                              </td>
+                                              <td className="py-2 px-2.5 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                                                {row.is_initial ? '' : '+'}{fund.currency} {formatNumber(row.amount, 0)}
+                                              </td>
+                                              <td className="py-2 px-2.5 text-right font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                                                {fund.currency} {formatNumber(row.running_total, 0)}
+                                              </td>
+                                              <td className="py-2 px-2.5 text-muted-foreground hidden sm:table-cell truncate max-w-[120px]">
+                                                {row.by_name}
+                                              </td>
+                                              <td className="py-2 px-2.5 text-center">
+                                                {row.receipt_url ? (
+                                                  <button
+                                                    onClick={() => setViewReceiptUrl(parseReceiptUrls(row.receipt_url!)[0] ?? null)}
+                                                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 hover:underline"
+                                                    data-testid={`link-dist-receipt-${a.id}-${row.seq}`}
+                                                  >
+                                                    <Receipt className="h-3 w-3" />View
+                                                  </button>
+                                                ) : (
+                                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                                                    <AlertCircle className="h-3 w-3" />Missing
+                                                  </span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                        <tfoot className="border-t-2 border-emerald-300/60 dark:border-emerald-700/60 bg-emerald-50/60 dark:bg-emerald-950/30">
+                                          <tr>
+                                            <td colSpan={2} className="py-2 px-2.5 text-[11px] font-semibold text-muted-foreground">
+                                              Total Disbursed
+                                            </td>
+                                            <td className="py-2 px-2.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                                              {fund.currency} {formatNumber(totalDisbursed, 0)}
+                                            </td>
+                                            <td colSpan={3} />
+                                          </tr>
+                                        </tfoot>
+                                      </table>
                                     </div>
                                   </div>
                                 );
                               })()}
-                              {!isPaymentsLoading && payments.length > 0 && (
-                                <div className="overflow-x-auto">
+
+                              {/* ═══════════════════════════════════════════════
+                                  SECTION 2 — EXPENDITURE HISTORY
+                                  Transactions spent FROM this person's fund
+                              ════════════════════════════════════════════════ */}
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                  <TrendingDown className="h-3.5 w-3.5 text-rose-500" />
+                                  Expenditure History / سجل المصروفات
+                                  {!isPaymentsLoading && payments.length > 0 && (
+                                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-[9px] font-bold border border-rose-200 dark:border-rose-700">
+                                      {payments.length} transaction{payments.length > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </p>
+                                {isPaymentsLoading && (
+                                  <div className="space-y-1.5">
+                                    {[1,2,3].map(i => <div key={i} className="h-7 rounded bg-muted animate-pulse" />)}
+                                  </div>
+                                )}
+                                {!isPaymentsLoading && payments.length === 0 && (
+                                  <div className="text-center py-5 text-muted-foreground text-xs border border-dashed rounded-lg">
+                                    No expenditure transactions recorded yet.
+                                  </div>
+                                )}
+                                {!isPaymentsLoading && payments.length > 0 && (
+                                <div className="overflow-x-auto rounded-lg border border-rose-200/60 dark:border-rose-800/40">
                                   <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="border-b">
-                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Date</th>
-                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Type / Category</th>
-                                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Description</th>
-                                        <th className="text-right py-1.5 text-muted-foreground font-medium">Amount</th>
-                                        <th className="text-left py-1.5 pl-3 text-muted-foreground font-medium">Status</th>
+                                    <thead className="bg-rose-50/80 dark:bg-rose-950/40">
+                                      <tr>
+                                        <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">Date</th>
+                                        <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">Type / Category</th>
+                                        <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">Description</th>
+                                        <th className="text-right py-2 px-2.5 text-muted-foreground font-semibold">Amount</th>
+                                        <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold">Status</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -1150,6 +1288,7 @@ export default function PreFundingDistribute() {
                                 </div>
                               )}
                             </div>
+                          </div>
                           )}
                         </div>
                       );
