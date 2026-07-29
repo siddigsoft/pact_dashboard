@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
@@ -4671,8 +4672,8 @@ const MMPCycleClose = () => {
 
 
       {/* ── Full Guided Wizard — fixed full-screen overlay ─────────────── */}
-      {checklistMmpId ? (
-      <div ref={wizardRef} className="fixed inset-0 z-[200] bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
+      {checklistMmpId ? createPortal(
+      <div ref={wizardRef} className="fixed inset-0 z-[9999] bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
         {/* Wizard header */}
         <div className="px-6 pt-4 pb-4 border-b bg-background shrink-0 shadow-sm">
           <div className="flex items-start justify-between gap-4">
@@ -6749,7 +6750,7 @@ const MMPCycleClose = () => {
                   </div>
                   )}
                 </div>
-      ) : (
+      , document.body) : (
         <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 mb-4" data-testid="wizard-prompt">
           <div className="px-4 py-3 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
             <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
