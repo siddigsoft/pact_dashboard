@@ -14,10 +14,11 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Banknote, RefreshCw, Users, Search, Plus, Pencil, Trash2,
+  Banknote, RefreshCw, Users, Search, Plus, Trash2,
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
   TrendingDown, Info, Paperclip, ExternalLink, Upload, Receipt,
   FileImage, FileText, CheckCircle2, ArrowLeft, ShieldCheck,
+  AlertCircle, Clock, History, Lock,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -88,7 +89,7 @@ export default function PreFundingDistribute() {
   const [addReceiptFiles, setAddReceiptFiles] = useState<File[]>([]);
 
   // Top-up dialog (replaces inline edit — also collects a receipt)
-  const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string }>({ open: false, alloc: null, fundId: '' });
+  const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string; fund: HeldFund | null }>({ open: false, alloc: null, fundId: '', fund: null });
   const [topUpAmt, setTopUpAmt]           = useState('');
   const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
   const [topUpSaving, setTopUpSaving]     = useState(false);
@@ -250,6 +251,35 @@ export default function PreFundingDistribute() {
       if (Array.isArray(parsed)) return parsed.filter(Boolean);
     } catch {}
     return [url];
+  };
+
+  interface TopUpLogEntry {
+    date: string;
+    amount: number;
+    previous_total: number;
+    new_total: number;
+    by_user_id: string;
+    by_name: string;
+    receipt_url: string | null;
+  }
+  interface AllocMeta { text: string; top_up_count: number; top_up_log: TopUpLogEntry[] }
+
+  /** Parse the notes field — may be plain text or JSON-encoded audit metadata. */
+  const parseAllocMeta = (notes: string | null): AllocMeta => {
+    if (!notes) return { text: '', top_up_count: 0, top_up_log: [] };
+    try {
+      const p = JSON.parse(notes);
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        return { text: p.text ?? '', top_up_count: Number(p.top_up_count ?? 0), top_up_log: p.top_up_log ?? [] };
+      }
+    } catch {}
+    return { text: notes, top_up_count: 0, top_up_log: [] };
+  };
+
+  /** Append a top-up entry to notes JSON and return the updated notes string. */
+  const buildAllocMeta = (existing: string | null, entry: TopUpLogEntry): string => {
+    const m = parseAllocMeta(existing);
+    return JSON.stringify({ text: m.text, top_up_count: m.top_up_count + 1, top_up_log: [...m.top_up_log, entry] });
   };
 
   /** Upload a single receipt file to Supabase storage and return the public URL. */
@@ -508,10 +538,11 @@ export default function PreFundingDistribute() {
   };
 
   const openTopUp = (alloc: Allocation, fundId: string) => {
+    const fund = funds.find(f => f.id === fundId) ?? null;
     setTopUpAmt('');
     setTopUpReceiptFiles([]);
     setTopUpConfirmStep(false);
-    setTopUpDialog({ open: true, alloc, fundId });
+    setTopUpDialog({ open: true, alloc, fundId, fund });
   };
 
   const handleTopUpReview = () => {
@@ -530,7 +561,7 @@ export default function PreFundingDistribute() {
   };
 
   const saveTopUp = async () => {
-    const { alloc, fundId } = topUpDialog;
+    const { alloc, fundId, fund } = topUpDialog;
     if (!alloc) return;
     const increment = parseFloat(topUpAmt);
     if (isNaN(increment) || increment <= 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
@@ -538,15 +569,29 @@ export default function PreFundingDistribute() {
       toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
       return;
     }
+    // Enforce one-time limit for non-admins
+    const meta = parseAllocMeta(alloc.notes);
+    if (!isFinanceAdmin && meta.top_up_count >= 1) {
+      toast({ title: 'Update limit reached', description: 'You can only top up once. Contact Finance Admin for further changes.', variant: 'destructive' });
+      return;
+    }
     setTopUpSaving(true);
     try {
       const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
       if (!uploaded) { setTopUpSaving(false); return; }
       const newTotal = alloc.allocated_amount + increment;
-      const fund = funds.find(f => f.id === fundId);
+      const newNotes = buildAllocMeta(alloc.notes, {
+        date: new Date().toISOString(),
+        amount: increment,
+        previous_total: alloc.allocated_amount,
+        new_total: newTotal,
+        by_user_id: currentUser?.id ?? '',
+        by_name: currentUser?.full_name ?? currentUser?.email ?? 'Unknown',
+        receipt_url: uploaded,
+      });
       const { error } = await (supabase as any)
         .from('pre_fund_allocations')
-        .update({ allocated_amount: newTotal, receipt_url: uploaded })
+        .update({ allocated_amount: newTotal, receipt_url: uploaded, notes: newNotes })
         .eq('id', alloc.id);
       if (error) throw error;
       dispatchNotification({
@@ -559,7 +604,7 @@ export default function PreFundingDistribute() {
         metadata: { fund_id: fundId, fund_name: fund?.name, top_up_amount: increment, new_total: newTotal, currency: alloc.currency },
       }).catch(() => null);
       toast({ title: 'Funds added', description: `${formatNumber(increment, 0)} ${alloc.currency} added. New total: ${formatNumber(newTotal, 0)}.` });
-      setTopUpDialog({ open: false, alloc: null, fundId: '' });
+      setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null });
       setTopUpReceiptFiles([]);
       setTopUpConfirmStep(false);
       await loadAllocations(fundId);
@@ -862,9 +907,18 @@ export default function PreFundingDistribute() {
                                 : <ChevronRight className="h-3.5 w-3.5" />}
                             </span>
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-[13px] truncate">{a.user_name}</div>
-                              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
-                                {a.user_email} · {a.user_role?.replace(/_/g, ' ')}
+                              <div className="font-medium text-[13px] truncate flex items-center gap-1.5">
+                                {a.user_name}
+                                {/* Top-up count badge */}
+                                {(() => { const m = parseAllocMeta(a.notes); return m.top_up_count > 0 ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0 rounded-full bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700 shrink-0">
+                                    <History className="h-2.5 w-2.5" />{m.top_up_count}× topped up
+                                  </span>
+                                ) : null; })()}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                                <span className="truncate">{a.user_email} · {a.user_role?.replace(/_/g, ' ')}</span>
+                                {/* Receipt links */}
                                 {a.receipt_url && parseReceiptUrls(a.receipt_url).map((url, i) => (
                                   <button
                                     key={i}
@@ -877,6 +931,12 @@ export default function PreFundingDistribute() {
                                     {parseReceiptUrls(a.receipt_url).length > 1 ? `R${i + 1}` : 'Receipt'}
                                   </button>
                                 ))}
+                                {/* No-receipt warning */}
+                                {!a.receipt_url && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shrink-0" title="No receipt attached to this allocation">
+                                    <AlertCircle className="h-3 w-3" />No receipt
+                                  </span>
+                                )}
                               </div>
                             </div>
                             {/* Amount + Add Funds button */}
@@ -885,14 +945,26 @@ export default function PreFundingDistribute() {
                               <div className="text-[10px] text-muted-foreground mb-1">
                                 {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
                               </div>
-                              <button
-                                onClick={() => openTopUp(a, fund.id)}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-400 dark:hover:bg-sky-950 transition-colors"
-                                title="Add more funds to this allocation"
-                                data-testid={`button-topup-alloc-${a.id}`}
-                              >
-                                <Plus className="h-2.5 w-2.5" />Add Funds
-                              </button>
+                              {(() => {
+                                const rowMeta = parseAllocMeta(a.notes);
+                                const rowLocked = !isFinanceAdmin && rowMeta.top_up_count >= 1;
+                                return (
+                                  <button
+                                    onClick={() => openTopUp(a, fund.id)}
+                                    className={cn(
+                                      'inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border transition-colors',
+                                      rowLocked
+                                        ? 'border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400 cursor-not-allowed opacity-70'
+                                        : 'border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-400 dark:hover:bg-sky-950'
+                                    )}
+                                    title={rowLocked ? 'Update limit reached — contact Finance Admin' : 'Add more funds to this allocation'}
+                                    data-testid={`button-topup-alloc-${a.id}`}
+                                  >
+                                    {rowLocked ? <Lock className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                                    {rowLocked ? 'Locked' : 'Add Funds'}
+                                  </button>
+                                );
+                              })()}
                             </div>
                             {/* Mini progress */}
                             <div className="w-16 shrink-0 hidden sm:block">
@@ -902,15 +974,17 @@ export default function PreFundingDistribute() {
                               />
                               <span className="text-[9px] text-muted-foreground">{pct}%</span>
                             </div>
-                            {/* Remove */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setRemoveId(a.id); }}
-                              className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
-                              title="Remove allocation"
-                              data-testid={`button-remove-alloc-${a.id}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {/* Remove — admins always, holders only if no top-ups yet */}
+                            {(isFinanceAdmin || parseAllocMeta(a.notes).top_up_count === 0) && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setRemoveId(a.id); }}
+                                className="opacity-0 group-hover/arow:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                                title="Remove allocation"
+                                data-testid={`button-remove-alloc-${a.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
 
                           {/* ── Payment details panel ── */}
@@ -930,6 +1004,49 @@ export default function PreFundingDistribute() {
                                   No payment transactions recorded for this fund yet.
                                 </p>
                               )}
+                              {/* ── Top-Up Audit Log ── */}
+                              {(() => {
+                                const m = parseAllocMeta(a.notes);
+                                if (m.top_up_log.length === 0) return null;
+                                return (
+                                  <div className="mt-3 pt-3 border-t border-border/30">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-2">
+                                      <History className="h-3 w-3" />Top-Up Audit Log ({m.top_up_log.length} change{m.top_up_log.length > 1 ? 's' : ''})
+                                    </p>
+                                    <div className="space-y-1.5">
+                                      {m.top_up_log.map((entry, i) => (
+                                        <div key={i} className="flex items-start gap-2 rounded-md border border-violet-200/60 dark:border-violet-800/60 bg-violet-50/40 dark:bg-violet-950/20 px-2.5 py-1.5 text-[11px]">
+                                          <Clock className="h-3 w-3 mt-0.5 text-violet-500 shrink-0" />
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between gap-1 flex-wrap">
+                                              <span className="font-semibold text-violet-700 dark:text-violet-300">
+                                                +{fund.currency} {formatNumber(entry.amount, 0)}
+                                              </span>
+                                              <span className="text-muted-foreground">
+                                                {format(new Date(entry.date), 'dd MMM yyyy HH:mm')}
+                                              </span>
+                                            </div>
+                                            <div className="text-muted-foreground mt-0.5">
+                                              by <span className="font-medium">{entry.by_name}</span>
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground">
+                                              {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {fund.currency}
+                                            </div>
+                                            {entry.receipt_url && (
+                                              <button
+                                                onClick={() => setViewReceiptUrl(parseReceiptUrls(entry.receipt_url)[0] ?? null)}
+                                                className="inline-flex items-center gap-0.5 text-sky-600 hover:text-sky-700 underline mt-0.5"
+                                              >
+                                                <Receipt className="h-2.5 w-2.5" />View receipt
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {!isPaymentsLoading && payments.length > 0 && (
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-xs">
@@ -1170,7 +1287,7 @@ export default function PreFundingDistribute() {
       </Dialog>
 
       {/* Top-Up / Add Funds Dialog */}
-      <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '' }); setTopUpConfirmStep(false); } }}>
+      <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); } }}>
         <DialogContent className="max-w-sm">
           {topUpDialog.alloc && (() => {
             const alloc = topUpDialog.alloc;
@@ -1234,6 +1351,14 @@ export default function PreFundingDistribute() {
             }
 
             /* ── Entry step ── */
+            const allocMeta = parseAllocMeta(alloc.notes);
+            const holderLocked = !isFinanceAdmin && allocMeta.top_up_count >= 1;
+            const fundDialogData = topUpDialog.fund;
+            const totalAllocatedForFund = Array.from(fundAllocs.values()).flat()
+              .filter(fa => fundDialogData && fa.pre_fund_request_id === fundDialogData.id)
+              .reduce((s, fa) => s + Number(fa.allocated_amount), 0);
+            const fundAvailable = fundDialogData ? Math.max(0, fundDialogData.amount - totalAllocatedForFund) : null;
+
             return (
               <>
                 <DialogHeader>
@@ -1243,7 +1368,52 @@ export default function PreFundingDistribute() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-1">
-                  {/* Current balance summary */}
+
+                  {/* ── Fund pool balance ── */}
+                  {fundDialogData && (
+                    <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-950/30 px-3 py-2 text-[11px]">
+                      <p className="font-semibold text-sky-700 dark:text-sky-300 mb-1.5 flex items-center gap-1">
+                        <Wallet className="h-3 w-3" />Fund Pool — {fundDialogData.name}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Total</p>
+                          <p className="font-mono font-bold text-sky-700 dark:text-sky-300 mt-0.5">{formatNumber(fundDialogData.amount, 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Allocated</p>
+                          <p className="font-mono font-semibold text-violet-600 mt-0.5">{formatNumber(totalAllocatedForFund, 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Available</p>
+                          <p className={cn('font-mono font-bold mt-0.5', (fundAvailable ?? 0) <= 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                            {formatNumber(fundAvailable ?? 0, 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Holder locked banner ── */}
+                  {holderLocked && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5 text-[12px] text-amber-800 dark:text-amber-300">
+                      <Lock className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Update limit reached</p>
+                        <p className="text-[11px] mt-0.5">You have already topped up this allocation once. Contact Finance Admin or Super Admin for further changes.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Admin multi-update notice ── */}
+                  {isFinanceAdmin && allocMeta.top_up_count > 0 && (
+                    <div className="flex items-start gap-2 rounded-lg border border-violet-200 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-950/30 px-3 py-2 text-[11px] text-violet-700 dark:text-violet-300">
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>Admin override — this allocation has been topped up <strong>{allocMeta.top_up_count}</strong> time{allocMeta.top_up_count > 1 ? 's' : ''}. Each change is recorded in the audit log below.</span>
+                    </div>
+                  )}
+
+                  {/* Current allocation balance summary */}
                   <div className="rounded-lg border bg-muted/30 px-3 py-2.5 grid grid-cols-3 gap-2 text-center">
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Allocated</p>
@@ -1261,64 +1431,96 @@ export default function PreFundingDistribute() {
                     </div>
                   </div>
 
-                  {/* Top-up amount */}
-                  <div>
-                    <Label className="text-xs mb-1 block">Top-Up Amount ({alloc.currency}) <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={topUpAmt}
-                      onChange={e => setTopUpAmt(e.target.value)}
-                      className="h-9 text-sm font-mono"
-                      autoFocus
-                      data-testid="input-topup-amount"
-                    />
-                    {increment > 0 && (
-                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                        New total: {alloc.currency} {formatNumber(alloc.allocated_amount, 0)} + {formatNumber(increment, 0)} = <span className="font-semibold text-emerald-600">{formatNumber(newTotal, 0)}</span>
-                      </p>
-                    )}
-                  </div>
+                  {/* Top-up amount — disabled when holder is locked */}
+                  {!holderLocked && (
+                    <div>
+                      <Label className="text-xs mb-1 block">Top-Up Amount ({alloc.currency}) <span className="text-destructive">*</span></Label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={topUpAmt}
+                        onChange={e => setTopUpAmt(e.target.value)}
+                        className="h-9 text-sm font-mono"
+                        autoFocus
+                        data-testid="input-topup-amount"
+                      />
+                      {increment > 0 && (
+                        <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                          New total: {alloc.currency} {formatNumber(alloc.allocated_amount, 0)} + {formatNumber(increment, 0)} = <span className="font-semibold text-emerald-600">{formatNumber(newTotal, 0)}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Receipt upload — required for each top-up */}
-                  <div>
-                    <Label className="text-xs mb-2 flex items-center gap-1">
-                      <Paperclip className="h-3 w-3" />Receipt of Fund Sent <span className="text-destructive">*</span>
-                    </Label>
-                    {topUpReceiptFiles.length > 0 && (
-                      <div className="space-y-1 mb-2">
-                        {topUpReceiptFiles.map((f, i) => (
-                          <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
-                            {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
-                            <span className="truncate flex-1 text-[12px]">{f.name}</span>
-                            <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                  {/* Receipt upload — only when not locked */}
+                  {!holderLocked && (
+                    <div>
+                      <Label className="text-xs mb-2 flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" />Receipt of Fund Sent <span className="text-destructive">*</span>
+                      </Label>
+                      {topUpReceiptFiles.length > 0 && (
+                        <div className="space-y-1 mb-2">
+                          {topUpReceiptFiles.map((f, i) => (
+                            <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
+                              {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
+                              <span className="truncate flex-1 text-[12px]">{f.name}</span>
+                              <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
+                        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-[12px] text-muted-foreground">
+                          {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt — image or PDF'}
+                        </span>
+                        <input
+                          type="file" accept="image/*,.pdf" multiple className="hidden"
+                          onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+                          data-testid="input-topup-receipt-file"
+                        />
+                      </label>
+                      <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                        <Info className="h-3 w-3" />A receipt is required for every top-up transaction.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ── Audit Log (shown to admins and when log exists) ── */}
+                  {(isFinanceAdmin || allocMeta.top_up_log.length > 0) && allocMeta.top_up_log.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-1.5">
+                        <History className="h-3 w-3" />Top-Up Audit Log
+                      </p>
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                        {allocMeta.top_up_log.map((entry, i) => (
+                          <div key={i} className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-2.5 py-1.5 text-[11px]">
+                            <Clock className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                <span className="font-medium text-sky-700 dark:text-sky-300">+{alloc.currency} {formatNumber(entry.amount, 0)}</span>
+                                <span className="text-muted-foreground">{format(new Date(entry.date), 'dd MMM yyyy HH:mm')}</span>
+                              </div>
+                              <div className="text-muted-foreground truncate">by {entry.by_name}</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {alloc.currency}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
-                    )}
-                    <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
-                      <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-[12px] text-muted-foreground">
-                        {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt — image or PDF'}
-                      </span>
-                      <input
-                        type="file" accept="image/*,.pdf" multiple className="hidden"
-                        onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
-                        data-testid="input-topup-receipt-file"
-                      />
-                    </label>
-                    <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                      <Info className="h-3 w-3" />A receipt is required for every top-up transaction.
-                    </p>
-                  </div>
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '' })}>Cancel</Button>
-                  <Button onClick={handleTopUpReview} className="gap-1" data-testid="button-review-topup">
-                    Review & Confirm →
-                  </Button>
+                  <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null })}>Cancel</Button>
+                  {!holderLocked && (
+                    <Button onClick={handleTopUpReview} className="gap-1" data-testid="button-review-topup">
+                      Review & Confirm →
+                    </Button>
+                  )}
                 </DialogFooter>
               </>
             );
