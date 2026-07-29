@@ -143,16 +143,6 @@ export const navigationConfig: NavigationGroup[] = [
     label: 'Cycle Management',
     items: [
       {
-        id: 'mmp-cycle-close',
-        icon: CheckCircle,
-        label: 'Close Cycle',
-        path: '/mmp/cycle-close',
-        category: 'secondary',
-        priority: 78,
-        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'Manage MMP cycle closures'
-      },
-      {
         id: 'data-export-center',
         icon: BarChart3,
         label: 'Data Export',

@@ -69,8 +69,6 @@ import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
 import { ProjectWeeklyDashboard } from './ProjectWeeklyDashboard';
 import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
-import { CloseReadinessChecklist } from '@/components/close/CloseReadinessChecklist';
-import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
@@ -298,7 +296,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
   const [showCloseChecklist, setShowCloseChecklist] = useState(false);
-  const projectReadiness = useProjectCloseReadiness(showCloseChecklist ? project.id : null);
+  const projectReadiness = useProjectCloseReadiness(null);
   const isSuperAdminUser = isSuperAdmin();
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
   const [partnerName, setPartnerName] = useState<string | null>(null);
@@ -1875,55 +1873,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           />
         </TabsContent>
       </Tabs>
-
-      <Dialog open={showCloseChecklist} onOpenChange={setShowCloseChecklist}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="dialog-project-close-checklist">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Archive className="h-4 w-4" />
-              Close Project — {project.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <CloseReadinessChecklist
-              title="Project Close Readiness"
-              items={projectReadiness.items}
-              score={projectReadiness.score}
-              allPassed={projectReadiness.allPassed}
-              loading={projectReadiness.loading}
-              isSuperAdmin={isSuperAdminUser}
-              onOverride={handleProjectCloseOverride}
-              overrideLabel="Override & Close Project"
-            />
-            <ReconciliationSummary projectId={project.id} className="mt-2" />
-            {projectReadiness.allPassed && !projectReadiness.loading && (
-              <div className="flex gap-2 justify-end pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCloseChecklist(false)}
-                  data-testid="button-cancel-project-close"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => {
-                    setShowCloseChecklist(false);
-                    handleArchiveToggle();
-                  }}
-                  disabled={isArchiving}
-                  data-testid="button-confirm-project-close"
-                >
-                  {isArchiving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-                  Confirm Close Project
-                </Button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Import CRM Contacts Dialog */}
       <Dialog open={showImportCrmContacts} onOpenChange={setShowImportCrmContacts}>
