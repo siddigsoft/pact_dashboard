@@ -1240,12 +1240,23 @@ const MMPCycleClose = () => {
   }, [activeTab, selectedMmpId]);
 
   // Scroll the wizard into view whenever it opens.
-  // scrollIntoView() traverses the ancestor scroll chain automatically, so it works
-  // correctly inside the SidebarInset overflow-y-auto container (window.scrollTo does not).
+  // We explicitly scroll the .global-scrollable container (the true overflow-y:auto ancestor)
+  // because scrollIntoView() does not reliably find custom scroll containers in all browsers.
   useEffect(() => {
     if (checklistMmpId) {
       const doScroll = () => {
-        if (wizardRef.current) {
+        if (!wizardRef.current) return;
+        // Primary: find the .global-scrollable container and scroll it
+        const scrollContainer = document.querySelector('.global-scrollable') as HTMLElement | null;
+        if (scrollContainer) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const wizardRect = wizardRef.current.getBoundingClientRect();
+          // delta < 0 means wizard is above the visible area → scroll up
+          // delta > 0 means wizard is below → scroll down
+          const delta = wizardRect.top - containerRect.top - 12;
+          scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
+        } else {
+          // Fallback
           wizardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       };
