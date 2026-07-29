@@ -95,8 +95,38 @@ export default function PreFundingDistribute() {
   const [topUpSaving, setTopUpSaving]     = useState(false);
   const [topUpConfirmStep, setTopUpConfirmStep] = useState(false);
 
-  // Receipt viewer popup
+  // Receipt viewer popup — fetch-first to avoid cross-origin iframe bucket errors
   const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
+  const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
+  const [receiptFetchLoading, setReceiptFetchLoading] = useState(false);
+  const [receiptFetchError, setReceiptFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!viewReceiptUrl) {
+      if (receiptBlobUrl) URL.revokeObjectURL(receiptBlobUrl);
+      setReceiptBlobUrl(null);
+      setReceiptFetchError(null);
+      return;
+    }
+    let cancelled = false;
+    setReceiptFetchLoading(true);
+    setReceiptFetchError(null);
+    setReceiptBlobUrl(null);
+    fetch(viewReceiptUrl)
+      .then(async res => {
+        if (cancelled) return;
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          setReceiptFetchError(text.includes('Bucket not found') ? 'bucket' : 'not_found');
+        } else {
+          const blob = await res.blob();
+          if (!cancelled) setReceiptBlobUrl(URL.createObjectURL(blob));
+        }
+      })
+      .catch(() => { if (!cancelled) setReceiptFetchError('failed'); })
+      .finally(() => { if (!cancelled) setReceiptFetchLoading(false); });
+    return () => { cancelled = true; };
+  }, [viewReceiptUrl]);
 
   // Remove confirmation
   const [removeId, setRemoveId] = useState<string | null>(null);
@@ -1597,7 +1627,7 @@ export default function PreFundingDistribute() {
               <Receipt className="h-4 w-4 text-sky-500" />
               Receipt
             </DialogTitle>
-            {viewReceiptUrl && (
+            {viewReceiptUrl && !receiptFetchError && (
               <a
                 href={viewReceiptUrl} target="_blank" rel="noopener noreferrer"
                 className="ml-auto inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded px-2 py-1"
@@ -1606,56 +1636,59 @@ export default function PreFundingDistribute() {
               </a>
             )}
           </DialogHeader>
-          <div className="w-full" style={{ height: '70vh' }}>
-            {viewReceiptUrl && (() => {
-              const lower = viewReceiptUrl.toLowerCase().split('?')[0];
+          <div className="w-full flex items-center justify-center" style={{ height: '70vh' }}>
+            {/* Loading state */}
+            {receiptFetchLoading && (
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <div className="h-8 w-8 rounded-full border-2 border-sky-400 border-t-transparent animate-spin" />
+                <p className="text-sm">Loading receipt…</p>
+              </div>
+            )}
+
+            {/* Error state */}
+            {!receiptFetchLoading && receiptFetchError && (
+              <div className="flex flex-col items-center gap-3 text-center px-6 text-muted-foreground">
+                <div className="text-4xl">📄</div>
+                <p className="font-semibold text-sm text-foreground">
+                  {receiptFetchError === 'bucket' ? 'Storage bucket not found' : 'Receipt unavailable'}
+                </p>
+                <p className="text-xs max-w-xs">
+                  {receiptFetchError === 'bucket'
+                    ? 'This receipt was uploaded to a storage bucket that no longer exists. Please re-upload the receipt using the Add Funds button.'
+                    : 'The receipt file could not be loaded. It may have been deleted or the link has expired.'}
+                </p>
+                {viewReceiptUrl && (
+                  <a
+                    href={viewReceiptUrl} target="_blank" rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs text-sky-600 hover:underline border border-sky-200 rounded px-3 py-1.5"
+                  >
+                    <ExternalLink className="h-3 w-3" />Try opening directly
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Success — show blob URL (same origin, no cross-origin restrictions) */}
+            {!receiptFetchLoading && !receiptFetchError && receiptBlobUrl && (() => {
+              const lower = viewReceiptUrl?.toLowerCase().split('?')[0] ?? '';
               const isImage = ['.png','.jpg','.jpeg','.gif','.webp','.bmp'].some(e => lower.endsWith(e));
               if (isImage) {
                 return (
-                  <div className="flex items-center justify-center h-full bg-muted/30 p-4">
+                  <div className="flex items-center justify-center h-full w-full bg-muted/30 p-4">
                     <img
-                      src={viewReceiptUrl}
+                      src={receiptBlobUrl}
                       alt="Receipt"
                       className="max-h-full max-w-full object-contain rounded shadow-md"
-                      onError={e => {
-                        const target = e.currentTarget;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent && !parent.querySelector('.receipt-error')) {
-                          const err = document.createElement('div');
-                          err.className = 'receipt-error flex flex-col items-center gap-2 text-muted-foreground text-sm';
-                          err.innerHTML = '<span class="text-3xl">🖼️</span><p>Image could not be loaded.</p><p class="text-xs">The file may have been stored in an older location. Please re-upload the receipt.</p>';
-                          parent.appendChild(err);
-                        }
-                      }}
                     />
                   </div>
                 );
               }
               return (
-                <div className="relative w-full h-full">
-                  <iframe
-                    src={viewReceiptUrl}
-                    className="w-full h-full border-0"
-                    title="Receipt"
-                    onLoad={e => {
-                      try {
-                        const doc = (e.currentTarget as HTMLIFrameElement).contentDocument;
-                        const text = doc?.body?.innerText ?? '';
-                        if (text.includes('Bucket not found') || text.includes('"error"')) {
-                          const body = doc?.body;
-                          if (body) {
-                            body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:#64748b;font-family:sans-serif;padding:24px;text-align:center">
-                              <div style="font-size:2.5rem">📄</div>
-                              <p style="font-weight:600;font-size:14px">Receipt not available</p>
-                              <p style="font-size:12px;max-width:280px">This receipt was stored in an older location. Please re-upload it using the Add Funds button.</p>
-                            </div>`;
-                          }
-                        }
-                      } catch {/* cross-origin — ignore */}
-                    }}
-                  />
-                </div>
+                <iframe
+                  src={receiptBlobUrl}
+                  className="w-full h-full border-0"
+                  title="Receipt"
+                />
               );
             })()}
           </div>
