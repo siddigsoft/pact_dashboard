@@ -1239,31 +1239,12 @@ const MMPCycleClose = () => {
     fetchFinance();
   }, [activeTab, selectedMmpId]);
 
-  // Scroll the wizard into view whenever it opens.
-  // We explicitly scroll the .global-scrollable container (the true overflow-y:auto ancestor)
-  // because scrollIntoView() does not reliably find custom scroll containers in all browsers.
+  // Wizard is now a fixed inset-0 overlay — no scroll needed.
+  // This effect prevents the background page from scrolling while the wizard is open.
   useEffect(() => {
     if (checklistMmpId) {
-      const doScroll = () => {
-        if (!wizardRef.current) return;
-        // Primary: find the .global-scrollable container and scroll it
-        const scrollContainer = document.querySelector('.global-scrollable') as HTMLElement | null;
-        if (scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const wizardRect = wizardRef.current.getBoundingClientRect();
-          // delta < 0 means wizard is above the visible area → scroll up
-          // delta > 0 means wizard is below → scroll down
-          const delta = wizardRect.top - containerRect.top - 12;
-          scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
-        } else {
-          // Fallback
-          wizardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      };
-      // Two attempts: 100ms (after first render) and 400ms (after data loads / DOM settles)
-      const t1 = setTimeout(doScroll, 100);
-      const t2 = setTimeout(doScroll, 400);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
     }
   }, [checklistMmpId]);
 
@@ -4174,12 +4155,14 @@ const MMPCycleClose = () => {
 
               <Button
                 size="sm"
-                className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs font-semibold shadow"
-                onClick={() => setChecklistMmpId(mmp.id)}
+                className={`shrink-0 text-white gap-1.5 text-xs font-semibold shadow ${checklistMmpId === mmp.id ? 'bg-primary hover:bg-primary/90' : 'bg-amber-600 hover:bg-amber-700'}`}
+                onClick={() => setChecklistMmpId(checklistMmpId === mmp.id ? null : mmp.id)}
                 data-testid={`button-resume-wizard-${mmp.id}`}
               >
-                <PlayCircle className="h-3.5 w-3.5" />
-                Resume — see what to do next
+                {checklistMmpId === mmp.id
+                  ? <><CheckCircle2 className="h-3.5 w-3.5" />Wizard is open — click to close</>
+                  : <><PlayCircle className="h-3.5 w-3.5" />Resume — see what to do next</>
+                }
               </Button>
             </div>
           ))}
@@ -4687,10 +4670,11 @@ const MMPCycleClose = () => {
       </>)} {/* end !checklistMmpId */}
 
 
-      {/* ── Full Guided Wizard (inline) ─────────────────────────────────── */}
+      {/* ── Full Guided Wizard — fixed full-screen overlay ─────────────── */}
       {checklistMmpId ? (
-      <div ref={wizardRef} className="rounded-xl border-2 border-primary/20 bg-card shadow-sm overflow-hidden" data-testid="section-cycle-close-checklist">
-        <div className="px-6 pt-4 pb-4 border-b">
+      <div ref={wizardRef} className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
+        {/* Wizard header */}
+        <div className="px-6 pt-4 pb-4 border-b bg-background shrink-0 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -4716,7 +4700,7 @@ const MMPCycleClose = () => {
                   : 'Each step must be completed in order. Progress is saved automatically — you can leave and return any time.'}
               </p>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mt-0.5" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard"><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mt-0.5" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard" title="Close wizard and return to page"><X className="h-4 w-4" /></Button>
           </div>
         </div>
 
@@ -4730,7 +4714,7 @@ const MMPCycleClose = () => {
                     const doneCnt = actionable.filter(s => s.passed).length;
                     const pct = actionable.length > 0 ? Math.round((doneCnt / actionable.length) * 100) : 0;
                     return (
-                    <div className="flex" style={{minHeight: '70vh'}}>
+                    <div className="flex flex-1 overflow-hidden">
                       {/* ── LEFT SIDEBAR: Step Navigation ── */}
                       <div className="w-52 border-r shrink-0 bg-muted/20 flex flex-col overflow-hidden">
                         <div className="px-4 py-3 border-b">
