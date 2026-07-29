@@ -2520,7 +2520,6 @@ const MMP = () => {
   const canExport  = checkPermission('mmp', 'export');
 
   useEffect(() => {
-  useEffect(() => {
     if (!isAdmin && !isSupervisor && !isDataTeam) return;
     import('@/services/verificationReminderService').then(({ checkAndSendVerificationReminders }) => {
       checkAndSendVerificationReminders().catch(console.error);
