@@ -406,10 +406,22 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
   const items: { label_en: string; label_ar: string; value: string }[] = []
 
   if (['cost_submitted', 'cost_approved', 'cost_rejected'].includes(eventType)) {
-    if (metadata.amount)     items.push({ label_en: 'Amount',          label_ar: 'المبلغ',          value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
-    if (metadata.category)   items.push({ label_en: 'Category',        label_ar: 'الفئة',           value: metadata.category })
-    if (metadata.submitted_by) items.push({ label_en: 'Submitted By',  label_ar: 'قُدِّم بواسطة',   value: metadata.submitted_by })
-    if (metadata.period)     items.push({ label_en: 'Period',          label_ar: 'الفترة',          value: metadata.period })
+    if (metadata.ref_number)   items.push({ label_en: 'Request ID',    label_ar: 'رقم الطلب',        value: metadata.ref_number })
+    if (metadata.amount)       items.push({ label_en: 'Amount',        label_ar: 'المبلغ',            value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
+    if (metadata.category)     items.push({ label_en: 'Category',      label_ar: 'الفئة',             value: metadata.category })
+    if (metadata.submitted_by) items.push({ label_en: 'Submitted By',  label_ar: 'قُدِّم بواسطة',    value: metadata.submitted_by })
+    if (metadata.approver_name) items.push({ label_en: 'Reviewed By',  label_ar: 'راجعه',             value: metadata.approver_name })
+    if (metadata.period)       items.push({ label_en: 'Period',        label_ar: 'الفترة',            value: metadata.period })
+  }
+
+  if (eventType === 'cost_action_required') {
+    if (metadata.ref_number)        items.push({ label_en: 'Request ID',      label_ar: 'رقم الطلب',          value: metadata.ref_number })
+    if (metadata.submission_title)  items.push({ label_en: 'Title',           label_ar: 'العنوان',             value: metadata.submission_title })
+    if (metadata.amount)            items.push({ label_en: 'Amount',          label_ar: 'المبلغ',              value: metadata.amount })
+    if (metadata.submitter_name)    items.push({ label_en: 'Submitted By',    label_ar: 'قُدِّم بواسطة',      value: metadata.submitter_name })
+    if (metadata.approval_flow)     items.push({ label_en: 'Approval Flow',   label_ar: 'مسار الموافقة',       value: metadata.approval_flow })
+    if (metadata.current_step)      items.push({ label_en: 'Your Action',     label_ar: 'إجراؤك المطلوب',      value: metadata.current_step })
+    if (metadata.next_step)         items.push({ label_en: 'Next Step',       label_ar: 'الخطوة التالية',       value: metadata.next_step })
   }
   if (['withdrawal_approved', 'withdrawal_rejected', 'wallet_updated', 'payment_processed'].includes(eventType)) {
     if (metadata.amount)     items.push({ label_en: 'Amount',          label_ar: 'المبلغ',          value: `${metadata.amount} ${metadata.currency || 'SDG'}` })

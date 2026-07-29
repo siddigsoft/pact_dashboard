@@ -1433,6 +1433,12 @@ const CostSubmission = () => {
                 .then(({ data }) => {
                   const ids = (data || []).map(r => r.id);
                   if (!ids.length) return;
+                  const totalTiersG = hasFourTiers(repSub) ? 4 : hasThreeTiers(repSub) ? 3 : 2;
+                  const flowPartsG: string[] = [];
+                  for (let t = 1; t <= tier; t++) flowPartsG.push(`Tier ${t}: ✓ Approved`);
+                  flowPartsG.push(`Tier ${nextTierNumG}: ⏳ Your Review`);
+                  for (let t = nextTierNumG + 1; t <= totalTiersG; t++) flowPartsG.push(`Tier ${t}: Pending`);
+                  const isLastTierG = nextTierNumG === totalTiersG;
                   dispatchNotification({
                     event: 'cost_action_required',
                     recipientIds: ids,
@@ -1443,10 +1449,20 @@ const CostSubmission = () => {
                     priority: 'high',
                     entityType: 'costSubmission',
                     entityId: repSub?.id,
-                    actionUrl: '/cost-submission',
+                    actionUrl: repSub?.id ? `/cost-submission?open=${repSub.id}` : '/cost-submission',
                     sendEmail: true,
                     sendWhatsApp: true,
-                    metadata: { ref_number: repRef, amount: amtStrG, item_count: count, tier: String(nextTierNumG) },
+                    metadata: {
+                      ref_number: repRef,
+                      submission_title: repSub?.request_title || repSub?.expense_category || `Group Request (${count} items)`,
+                      amount: amtStrG,
+                      submitter_name: repSub ? `${submitterName} (Group — ${count} items)` : submitterName,
+                      approval_flow: flowPartsG.join(' → '),
+                      current_step: `Tier ${nextTierNumG} Review — Approve or Reject`,
+                      next_step: isLastTierG ? 'Final approval — cleared for payment' : `Tier ${nextTierNumG + 1} approval`,
+                      item_count: count,
+                      tier: String(nextTierNumG),
+                    },
                   }).catch(console.warn);
                 }).catch(console.warn);
             }
@@ -1754,6 +1770,15 @@ const CostSubmission = () => {
               .then(({ data: nextApprovers }) => {
                 const ids = (nextApprovers || []).map(a => a.id);
                 if (ids.length === 0) return;
+                // Build approval flow string: "T1: ✓ Approved → T2: ✓ Approved → T3: ⏳ Your Review → T4: Pending"
+                const totalTiersInd = hasFourTiers(submission) ? 4 : hasThreeTiers(submission) ? 3 : isFomSubmission(submission) ? 2 : 2;
+                const flowPartsInd: string[] = [];
+                for (let t = 1; t <= tier; t++) flowPartsInd.push(`Tier ${t}: ✓ Approved`);
+                flowPartsInd.push(`Tier ${nextTierNum}: ⏳ Your Review`);
+                for (let t = nextTierNum + 1; t <= totalTiersInd; t++) flowPartsInd.push(`Tier ${t}: Pending`);
+                const approvalFlowInd = flowPartsInd.join(' → ');
+                const submissionTitle = submission.request_title || submission.expense_category || 'Cost Submission';
+                const isLastTierInd = nextTierNum === totalTiersInd;
                 dispatchNotification({
                   event: 'cost_action_required',
                   recipientIds: ids,
@@ -1764,10 +1789,19 @@ const CostSubmission = () => {
                   priority: 'high',
                   entityType: 'costSubmission',
                   entityId: submission.id,
-                  actionUrl: '/cost-submission',
+                  actionUrl: `/cost-submission?open=${submission.id}`,
                   sendEmail: true,
                   sendWhatsApp: true,
-                  metadata: { ref_number: refNum, amount: amountStr, submitter_name: submitterName, tier: String(nextTierNum) },
+                  metadata: {
+                    ref_number: refNum,
+                    submission_title: submissionTitle,
+                    amount: amountStr,
+                    submitter_name: submitterName,
+                    approval_flow: approvalFlowInd,
+                    current_step: `Tier ${nextTierNum} Review — Approve or Reject`,
+                    next_step: isLastTierInd ? 'Final approval — cleared for payment' : `Tier ${nextTierNum + 1} approval`,
+                    tier: String(nextTierNum),
+                  },
                 }).catch(console.warn);
               }).catch(console.warn);
           }
