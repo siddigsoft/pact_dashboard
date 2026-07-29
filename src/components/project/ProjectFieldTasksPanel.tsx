@@ -1103,9 +1103,10 @@ interface TaskDetailProps {
   onDelete: () => void;
   onStatusChange: (s: FieldTaskStatus) => void;
   typedDeps?: TaskDependency[];
+  initialTab?: string;
 }
 
-function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [] }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
+function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [], initialTab = 'overview' }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
   if (!task) return null;
   const { toast } = useToast();
   const overdue = isOverdue(task.dueDate, task.status);
@@ -1205,7 +1206,7 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden mt-2">
+        <Tabs defaultValue={initialTab === 'files' ? 'files' : initialTab === 'comments' ? 'comments' : 'overview'} key={`${task.id}-${initialTab}`} className="flex-1 flex flex-col overflow-hidden mt-2">
           <TabsList className="grid grid-cols-6 w-full flex-shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="timesheet">
@@ -2690,6 +2691,7 @@ export function ProjectFieldTasksPanel({
   const [defaultStageId, setDefaultStageId] = useState<string>('');
   const [editTask,       setEditTask]       = useState<FieldTask | null>(null);
   const [detailTask,     setDetailTask]     = useState<FieldTask | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState('overview');
   const [search,         setSearch]         = useState('');
   const [filterStatus,   setFilterStatus]   = useState<FieldTaskStatus | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<FieldTaskPriority | 'all'>('all');
@@ -2697,7 +2699,7 @@ export function ProjectFieldTasksPanel({
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
   const deepLinkHandled = useRef<string | null>(null);
 
-  // Deep-link from My Tasks: ?tab=field_tasks&task=<id>
+  // Deep-link from My Tasks / email: ?tab=field_tasks&task=<id>&panel=files
   useEffect(() => {
     const taskParam = searchParams.get('task');
     if (!taskParam || isLoading || tasks.length === 0) return;
@@ -2705,9 +2707,12 @@ export function ProjectFieldTasksPanel({
     const found = tasks.find(t => t.id === taskParam);
     if (!found) return;
     deepLinkHandled.current = taskParam;
+    const panel = searchParams.get('panel');
+    setDetailInitialTab(panel === 'files' || panel === 'comments' ? panel : 'overview');
     setDetailTask(found);
     const next = new URLSearchParams(searchParams);
     next.delete('task');
+    next.delete('panel');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, tasks, isLoading]);
 
@@ -3195,8 +3200,9 @@ export function ProjectFieldTasksPanel({
         projectId={projectId}
         projectName={projectName}
         typedDeps={typedDepsAll}
-        onClose={() => setDetailTask(null)}
-        onEdit={() => { setEditTask(detailTask); setDetailTask(null); }}
+        initialTab={detailInitialTab}
+        onClose={() => { setDetailTask(null); setDetailInitialTab('overview'); }}
+        onEdit={() => { setEditTask(detailTask); setDetailTask(null); setDetailInitialTab('overview'); }}
         onDelete={() => detailTask && handleDelete(detailTask)}
         onStatusChange={s => detailTask && handleStatusChange(detailTask, s)}
       />

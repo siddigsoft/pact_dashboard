@@ -462,7 +462,17 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.priority)     items.push({ label_en: 'Priority',        label_ar: 'الأولوية',        value: metadata.priority })
     if (metadata.assigned_to)  items.push({ label_en: 'Assigned To',     label_ar: 'المعيّن لـ',      value: metadata.assigned_to })
     if (metadata.status)       items.push({ label_en: 'Status',          label_ar: 'الحالة',          value: metadata.status })
-    if (metadata.file_name)    items.push({ label_en: 'File',            label_ar: 'الملف',           value: metadata.file_name })
+    if (metadata.file_name) {
+      const fileLabel = String(metadata.file_name).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const fileUrl = typeof metadata.file_url === 'string' ? metadata.file_url : ''
+      items.push({
+        label_en: 'File',
+        label_ar: 'الملف',
+        value: fileUrl
+          ? `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color:#1D3461;font-weight:700;text-decoration:underline;">${fileLabel} — Open / Download</a>`
+          : fileLabel,
+      })
+    }
     if (metadata.comment)      items.push({ label_en: 'Comment',         label_ar: 'التعليق',         value: metadata.comment })
   }
   if ([

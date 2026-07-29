@@ -157,7 +157,7 @@ export function useFieldTaskAttachments(
               priority: 'normal',
               entityType: 'project',
               entityId: notifyCtx.projectId,
-              actionUrl: `/projects/${notifyCtx.projectId}?tab=field_tasks`,
+              actionUrl: `/projects/${notifyCtx.projectId}?tab=field_tasks&task=${taskId}&panel=files`,
               sendEmail: true,
               triggeredBy: userId,
               triggeredByName: actor,
@@ -166,6 +166,7 @@ export function useFieldTaskAttachments(
                 project_name: notifyCtx.projectName,
                 actor,
                 file_name: file.name,
+                file_url: urlData.publicUrl,
               },
             }).catch(() => {});
           }

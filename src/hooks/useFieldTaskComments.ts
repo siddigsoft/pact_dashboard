@@ -101,7 +101,7 @@ export function useFieldTaskComments(
           priority: 'normal',
           entityType: 'project',
           entityId: notifyCtx.projectId,
-          actionUrl: `/projects/${notifyCtx.projectId}?tab=field_tasks`,
+          actionUrl: `/projects/${notifyCtx.projectId}?tab=field_tasks&task=${taskId}&panel=comments`,
           sendEmail: true,
           triggeredBy: authorId,
           triggeredByName: authorName,
