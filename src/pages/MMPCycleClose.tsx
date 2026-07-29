@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+
 import { cn } from '@/lib/utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
@@ -252,9 +252,9 @@ const MMPCycleClose = () => {
       setSelectedMmpId(mmpIdParam);
     }
     // When arriving from the "View Closing Guide" button (MMP page) or MMP Management
-    // banner, ?wizardFor=X auto-opens the guided wizard for that specific MMP.
-    // Do NOT guard on mmpFiles — set immediately so the wizard opens on first render;
-    // the wizard itself handles the loading state while data arrives.
+    // banner, ?wizardFor=X auto-selects that MMP and opens the close readiness checklist.
+    // Do NOT guard on mmpFiles — set immediately so the checklist opens on first render;
+    // the readiness hook handles the loading state while data arrives.
     const wizardForParam = searchParams.get('wizardFor');
     if (wizardForParam) {
       setChecklistMmpId(wizardForParam);
@@ -360,9 +360,9 @@ const MMPCycleClose = () => {
   const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
-  const [wizardStep, setWizardStep] = useState<string>('');
+
   const skipMmpResetRef = useRef(false);
-  const wizardRef = useRef<HTMLDivElement>(null);
+
 
   // Defined early (right after its state deps) to prevent any temporal dead zone issues
   const fetchCycleSummary = useCallback(async (mmpId: string) => {
@@ -1081,7 +1081,6 @@ const MMPCycleClose = () => {
       setExchangeRateInput(tracking.exchange_rate_applied ? String(tracking.exchange_rate_applied) : '');
       setWalletUpdateResults(null);
       setCycleSubmittedAt(tracking.submitted_at || null);
-      setWizardStep('');
       fetchCycleSummary(checklistMmpId);
       fetchAllSiteDetails(checklistMmpId);
     } else {
@@ -1093,7 +1092,6 @@ const MMPCycleClose = () => {
       setFeesLockedRate(null);
       setExchangeRateInput('');
       setCycleSubmittedAt(null);
-      setWizardStep('');
     }
   }, [checklistMmpId, mmpFiles, fetchCycleSummary, fetchAllSiteDetails]);
 
@@ -1247,15 +1245,6 @@ const MMPCycleClose = () => {
     fetchFinance();
   }, [activeTab, selectedMmpId]);
 
-  // Wizard is now a fixed inset-0 overlay — no scroll needed.
-  // This effect prevents the background page from scrolling while the wizard is open.
-  useEffect(() => {
-    if (checklistMmpId) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
-    }
-  }, [checklistMmpId]);
-
   // Called from the Pre-Close Checklist to resolve an item without leaving the page
   const handleChecklistResolveItem = (itemId: string) => {
     const mmpId = checklistMmpId;
@@ -1299,8 +1288,7 @@ const MMPCycleClose = () => {
     return (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status || 'active';
   }, [checklistMmpId, mmpFiles]);
 
-  // Role flags — declared here (before guideSteps) to avoid temporal dead zone.
-  // Previously declared after guideSteps which caused "Cannot access before initialization".
+  // Role flags — declared early to avoid temporal dead zone issues.
   const isSuperAdmin = isSuperAdminCheck();
   const isAdmin = isSuperAdmin || hasAnyRole(['admin']);
   const isSupervisor = hasAnyRole(['supervisor']);
@@ -1310,214 +1298,6 @@ const MMPCycleClose = () => {
   // FOM role is limited to receiving notifications and confirming (approve/reject) in Step 9.
   const canAssignReasons = canManageCycle;
 
-  // Five-step guided close flow derived from readiness items
-  const guideSteps = useMemo(() => {
-    const ri = cycleReadiness.items;
-    const get = (id: string) => ri.find(i => i.id === id);
-
-    const wfpItem = get('wfp_confirmation');
-    const svItem = get('site_visits');
-    const costRecoveryItem = get('cost_recovery');
-    const costSubsItem = get('cost_submissions');
-    const advancesItem = get('transport_advances');
-    const withdrawalsItem = get('withdrawal_requests');
-
-    const wfpPassed = wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false);
-    const reasonsPassed = svItem?.passed ?? false;
-    const svRemaining = svItem && !svItem.passed ? Math.max(0, svItem.total - svItem.count) : 0;
-    const costRecoveryPassed = costRecoveryItem?.passed ?? false;
-    const costRecoveryRemaining = costRecoveryItem?.total || 0;
-
-    const financeBlocking = [costSubsItem, advancesItem, withdrawalsItem].filter(i => i && !i.passed) as typeof ri;
-    const csRemaining = costSubsItem && !costSubsItem.passed ? costSubsItem.total : 0;
-    const financePassed = financeBlocking.length === 0;
-
-    const feesLocked = feesLockedAt !== null;
-    const paymentStepPassed = paymentsConfirmedAt !== null;
-    const exchangeRateBlocked = !wfpPassed || !reasonsPassed || !financePassed;
-    const paymentStepBlocked = exchangeRateBlocked || !feesLocked;
-
-    return [
-      {
-        id: 'wfp', number: 1,
-        title: 'Upload WFP Data', titleAr: 'رفع بيانات WFP',
-        desc: wfpItem?.notConfigured
-          ? 'WFP confirmation is not configured for this MMP — this step is skipped.'
-          : wfpPassed
-            ? 'WFP file applied — matched sites promoted to WFP Confirmed status.'
-            : 'Upload the WFP-provided clean data Excel or CSV file. The system will auto-match sites and flag any that need manual review.',
-        passed: wfpPassed,
-        blocked: false,
-        tab: 'wfp' as string | null, actionLabel: 'Open WFP Upload' as string | null,
-        sub: wfpItem ? [wfpItem] : [] as typeof ri,
-        remaining: 0,
-        howTo: [
-          'Upload the WFP-provided Excel (.xlsx, .xls) or CSV file for this cycle.',
-          'The system auto-matches sites by name, state, and locality — fuzzy matching handles spelling differences.',
-          'Review any "Needs Review" rows in the match table — confirm, link to the correct site, or reject.',
-          'Use the Match Review table to manually link rows the system could not auto-match.',
-          'Click "Apply" — all matched sites are promoted to WFP Confirmed status.',
-        ] as string[],
-      },
-      {
-        id: 'reasons', number: 2,
-        title: 'Mark Uncovered Sites', titleAr: 'المواقع غير المغطاة',
-        desc: reasonsPassed
-          ? 'All unvisited sites have a documented reason — this gate is clear.'
-          : svRemaining > 0
-            ? `${svRemaining} site${svRemaining !== 1 ? 's' : ''} still need a reason assigned. Every unvisited site must have an explanation before the cycle can close.`
-            : (svItem?.description || 'Every unvisited site needs a reason before the cycle can close.'),
-        passed: reasonsPassed,
-        blocked: false,
-        tab: 'uncovered', actionLabel: 'Open Uncovered Sites',
-        sub: svItem ? [svItem] : [],
-        remaining: svRemaining,
-        howTo: [
-          'Find every site below with an orange "No Reason" badge.',
-          'Select a reason: Not Distributed, Security Concerns, Access Denied, Staff Unavailable, etc.',
-          'Sites flagged Security Concerns or Access Denied generate a follow-up action for the next cycle.',
-          'Use "Select All" and "Bulk Assign" to set the same reason for multiple sites at once.',
-          'All sites must have a reason before you can proceed — the step turns green automatically.',
-        ],
-      },
-      {
-        id: 'exceptions', number: 3,
-        title: 'Resolve Advance Exceptions', titleAr: 'حل استثناءات السلف',
-        desc: costRecoveryPassed
-          ? 'All advance exceptions resolved — every site with an outstanding advance has a decision on record.'
-          : costRecoveryRemaining > 0
-            ? `${costRecoveryRemaining} not-covered site${costRecoveryRemaining !== 1 ? 's' : ''} received advance payments that need a recovery decision before closing.`
-            : 'No not-covered sites received advances — this step is clear.',
-        passed: costRecoveryPassed,
-        blocked: !reasonsPassed,
-        tab: 'exceptions', actionLabel: 'Open Exceptions',
-        sub: costRecoveryItem ? [costRecoveryItem] : [],
-        remaining: costRecoveryRemaining,
-        howTo: [
-          'This step applies when an enumerator received an advance for a site that ended up not covered.',
-          'For each such site, choose one of four actions:',
-          '  → Roll to Next MMP: treat as pre-payment for the next cycle.',
-          '  → Return Required: enumerator must repay the advance.',
-          '  → Write-Off: amount is unrecoverable (requires FOM approval + justification).',
-          '  → Redirect to Fees: reclassify advance as payment for actual work done.',
-          'All decisions are logged with your name and timestamp for audit.',
-        ],
-      },
-      {
-        id: 'finance', number: 4,
-        title: 'Financial Reconciliation', titleAr: 'التسوية المالية',
-        desc: financePassed
-          ? 'All financial items cleared — cost submissions, transport advances, and withdrawals are all settled.'
-          : `${financeBlocking.length} item${financeBlocking.length !== 1 ? 's' : ''} still need resolution before closing: ${financeBlocking.map(i => i.label).join(' • ')}.`,
-        passed: financePassed,
-        blocked: !costRecoveryPassed,
-        tab: 'finance', actionLabel: 'Open Finance',
-        sub: financeBlocking,
-        remaining: csRemaining,
-        howTo: [
-          'Approve or reject all pending cost submissions for this MMP.',
-          'Settle any partially-paid transport advances — go to Down Payment Approval and mark each as Reconciled or Paid.',
-          'Process any pending withdrawal requests in the Finance page.',
-          'Review the Enumerator Reconciliation table — generate balance payments or schedule recoveries.',
-          'Return here after each action; the step turns green once all items are cleared.',
-        ],
-      },
-      {
-        id: 'exchange_rate', number: 5,
-        title: 'Lock Exchange Rate', titleAr: 'تثبيت سعر الصرف',
-        desc: feesLockedAt
-          ? `Fees locked at 1 USD = ${feesLockedRate?.toLocaleString()} SDG on ${new Date(feesLockedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
-          : 'Enter the official USD → SDG exchange rate to lock final fee amounts. All dispatched site fees will be recalculated to the correct SDG amounts.',
-        passed: feesLocked,
-        blocked: exchangeRateBlocked,
-        tab: null, actionLabel: null,
-        sub: [],
-        remaining: 0,
-        howTo: [
-          'Check the official exchange rate from your finance team or central bank.',
-          'Enter the rate in the field below: 1 USD = X SDG.',
-          'Review the live preview — each dispatched site shows the calculated SDG fee.',
-          'Tick "Also update enumerator wallets" to update wallet balances immediately.',
-          'Click "Lock Fees & Apply Rate" — this freezes all site fees to the final SDG amounts.',
-          'Once locked, the payment sheet in the next step shows the correct final numbers.',
-        ],
-      },
-      {
-        id: 'payment_request', number: 6,
-        title: 'Confirm Payments Done', titleAr: 'تأكيد المدفوعات',
-        desc: paymentsConfirmedAt
-          ? `Payments confirmed on ${new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} — this step is complete.`
-          : paymentRequestedAt
-            ? `Payment request sent on ${new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. Once finance processes all payments, return here to confirm.`
-            : 'Review the per-site payment sheet in locked SDG amounts. Export for finance, request payment, then confirm once done.',
-        passed: paymentStepPassed,
-        blocked: paymentStepBlocked,
-        tab: null, actionLabel: null,
-        sub: [],
-        remaining: 0,
-        howTo: [
-          'Review the payment sheet below — each site shows: Total Fee − Advance Paid = Net to Pay.',
-          'Export the Payment Sheet PDF and/or Excel and send it to your finance team.',
-          'Click "Send Payment Request to Finance" to formally log the payment request.',
-          'Once finance processes all payments, return here and click "Confirm All Payments Done".',
-          'This step is complete once confirmed — you can then submit for final approval.',
-        ],
-      },
-      {
-        id: 'submit', number: 7,
-        title: 'Final Review & Close', titleAr: 'المراجعة النهائية',
-        desc: checklistMmpStatus === 'closed'
-          ? 'Cycle has been approved and permanently archived.'
-          : checklistMmpStatus === 'pending_approval'
-            ? 'Submitted — waiting for FOM / Director to approve or send back for corrections.'
-            : cycleReadiness.allPassed && paymentStepPassed && feesLocked
-              ? 'All checks passed and payments confirmed. Review the financial summary below, then submit for approval.'
-              : !feesLocked
-                ? 'Complete Step 5 (lock exchange rate) first.'
-                : !paymentStepPassed
-                  ? 'Complete Step 6 (confirm payments) before submitting.'
-                  : 'Complete all earlier steps first, then return here to submit.',
-        passed: checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed',
-        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && (!cycleReadiness.allPassed || !paymentStepPassed || !feesLocked),
-        tab: null, actionLabel: null,
-        sub: [],
-        remaining: 0,
-        howTo: [
-          'Review the full readiness checklist — all items must be green (or overridden with justification).',
-          'Check the financial summary: total sites confirmed, enumerator costs, advances, net payable amount.',
-          'Tick the confirmation checkbox at the bottom.',
-          'Click "Submit Cycle for Final Approval" — FOM and Director will be notified immediately.',
-        ],
-      },
-      {
-        id: 'approval', number: 8,
-        title: 'Final Approval', titleAr: 'الموافقة النهائية',
-        desc: checklistMmpStatus === 'closed'
-          ? 'Cycle approved and archived permanently.'
-          : checklistMmpStatus === 'pending_approval'
-            ? (isFOM || isAdmin || isSuperAdmin)
-              ? 'Your approval is required. Review the financial summary below, then approve or reject.'
-              : 'Waiting for FOM / Admin approval. You will be notified when a decision is made.'
-            : 'Unlocks after Step 7 is submitted.',
-        passed: checklistMmpStatus === 'closed',
-        blocked: false,
-        tab: null, actionLabel: null,
-        sub: [],
-        remaining: 0,
-        howTo: (isFOM || isAdmin || isSuperAdmin) ? [
-          'Review the "Cycle Financial Settlement" card — verify enumerator costs, transport, advances, and net payable.',
-          'If everything is correct, click "Approve & Close Cycle" to permanently archive this cycle.',
-          'If corrections are needed, click "Reject & Send Back" and enter the specific reason.',
-          'Once approved, the cycle becomes Closed, the financial snapshot is frozen, and the MMP is archived.',
-        ] : [
-          'The cycle is submitted and waiting for FOM, Admin, or Super Admin to review.',
-          'You will receive an in-app notification when the cycle is approved or sent back.',
-          'If approved → the cycle becomes Closed and appears in the Archive tab.',
-          'If rejected → the cycle returns to Closing state for corrections and re-submission.',
-        ],
-      },
-    ];
-  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin, paymentsConfirmedAt, paymentRequestedAt, feesLockedAt, feesLockedRate]);
 
   // Supervisor hub-filter removed — supervisors are no longer engaged in the cycle close flow.
 
@@ -1550,7 +1330,7 @@ const MMPCycleClose = () => {
 
   // includeActive=true fetches entries for ALL active MMPs (expensive — only
   // call this lazily when the Uncovered Sites tab is open). The default
-  // (false) fetches only closing MMP data so the wizard opens quickly.
+  // (false) fetches only closing MMP data so the checklist loads quickly.
   const fetchUncoveredSites = useCallback(async (includeActive = false) => {
     setLoading(true);
     try {
@@ -2435,7 +2215,7 @@ const MMPCycleClose = () => {
   };
 
   // Primary loading effect — fetch only closing MMP data eagerly so the
-  // wizard can open quickly. Active MMP uncovered data is loaded lazily
+  // checklist loads quickly. Active MMP uncovered data is loaded lazily
   // when the user opens the Uncovered Sites tab (see effect below).
   // Previously this depended on activeMmpsLength, which caused repeated
   // heavy fetches (9 active MMPs × 3000 entries) every time TanStack Query
@@ -2763,7 +2543,7 @@ const MMPCycleClose = () => {
 
       await refreshMMPFiles();
       await fetchUncoveredSites();
-      // Immediately open the guided closing wizard so the user starts the process in one flow
+      // Immediately select the MMP so the close readiness checklist opens in one flow
       setChecklistMmpId(mmpId);
     } catch (err: any) {
       console.error('Error starting cycle close:', err);
@@ -3453,8 +3233,7 @@ const MMPCycleClose = () => {
         if (!isMissingCol) throw flagResetErr;
         console.warn('[handleAbortClose] not_covered_flag column missing — apply migration 20260727c. Flag reset skipped.');
       }
-      // Close the guided wizard for this MMP so the user isn't left staring
-      // at a stale "Pre-Close Checklist" view now that status is back to active.
+      // Deselect this MMP so the checklist panel closes now that status is back to active.
       if (checklistMmpId === mmpId) setChecklistMmpId(null);
 
       await logMMPAudit({
@@ -4219,7 +3998,7 @@ const MMPCycleClose = () => {
                   Cycle closing in progress: <span className="text-amber-700 dark:text-amber-300">{mmp.name}</span>
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  You have unfinished closing steps. Open the wizard to see exactly what to do next.
+                  You have unfinished closing steps. Select this MMP below to see exactly what to do next.
                 </p>
               </div>
 
@@ -4230,7 +4009,7 @@ const MMPCycleClose = () => {
                 data-testid={`button-resume-wizard-${mmp.id}`}
               >
                 {checklistMmpId === mmp.id
-                  ? <><CheckCircle2 className="h-3.5 w-3.5" />Wizard is open — click to close</>
+                  ? <><CheckCircle2 className="h-3.5 w-3.5" />Checklist open — click to close</>
                   : <><PlayCircle className="h-3.5 w-3.5" />Resume — see what to do next</>
                 }
               </Button>
@@ -4317,7 +4096,7 @@ const MMPCycleClose = () => {
                   data-testid={`button-banner-review-${mmp.id}`}
                 >
                   <Eye className="h-3.5 w-3.5" />
-                  View Full Wizard &amp; Reports
+                  View Checklist &amp; Reports
                 </Button>
               </div>
             </div>
@@ -4389,9 +4168,8 @@ const MMPCycleClose = () => {
         ]}
       />
 
-      {/* ── 7-Step guide + summary cards: hidden while the guided wizard is open so the
-           wizard appears immediately below the amber banner without any scrolling ── */}
-      {!checklistMmpId && (<>
+      {/* ── 7-Step Workflow Strip + Summary Cards ── */}
+      {(<>
       {/* ── Prominent 7-Step Workflow Strip ── always visible, no collapsible ── */}
       <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden" data-testid="cycle-close-steps-strip">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
@@ -4737,2128 +4515,26 @@ const MMPCycleClose = () => {
           </Card>
         </div>
       )}
-      </>)} {/* end !checklistMmpId */}
+      </>)}
 
 
-      {/* ── Full Guided Wizard — fixed full-screen overlay ─────────────── */}
-      {checklistMmpId ? createPortal(
-      <div ref={wizardRef} className="fixed inset-0 z-[9999] bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
-        {/* Wizard header */}
-        <div className="px-6 pt-4 pb-4 border-b bg-background shrink-0 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                {checklistMmpStatus === 'active'
-                  ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                  : <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                }
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  {checklistMmpStatus === 'active' ? 'Pre-Close Checklist' : 'Guided Cycle Close'}
-                </span>
-                <span className="text-[11px] text-muted-foreground">·</span>
-                <span className="text-[11px] font-semibold truncate max-w-[260px]">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</span>
-              </div>
-              <h2 className="text-base font-bold mt-0.5 leading-tight">
-                {checklistMmpStatus === 'active'
-                  ? 'Complete all requirements before starting the close process'
-                  : 'Follow the 7 steps below to close and archive this cycle'
-                }
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {checklistMmpStatus === 'active'
-                  ? 'Once all items are green, a "Start Close Process" button will appear.'
-                  : 'Each step must be completed in order. Progress is saved automatically — you can leave and return any time.'}
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mt-0.5" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-close-wizard" title="Close wizard and return to page"><X className="h-4 w-4" /></Button>
+
+      {/* ── Selected MMP banner: shown when a cycle is being prepared for close ── */}
+      {checklistMmpId && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3 mb-2" data-testid="banner-mmp-close-context">
+          <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+              Closing: <span className="font-bold">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</span>
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Use the Active Cycles tab — the checklist below the MMP cards enforces step order.</p>
           </div>
-        </div>
-
-                  {/* ── GUIDED WIZARD (two-column: step sidebar + single-step view) ── */}
-                  {checklistMmpStatus !== 'active' ? (() => {
-                    const activeStepId = wizardStep || guideSteps.find(s => !s.passed)?.id || guideSteps[guideSteps.length - 1]?.id || '';
-                    const activeStepIdx = guideSteps.findIndex(s => s.id === activeStepId);
-                    const prevStepObj = activeStepIdx > 0 ? guideSteps[activeStepIdx - 1] : null;
-                    const nextStepObj = activeStepIdx < guideSteps.length - 1 ? guideSteps[activeStepIdx + 1] : null;
-                    const actionable = guideSteps.filter(s => s.id !== 'approval');
-                    const doneCnt = actionable.filter(s => s.passed).length;
-                    const pct = actionable.length > 0 ? Math.round((doneCnt / actionable.length) * 100) : 0;
-                    return (
-                    <div className="flex flex-1 overflow-hidden">
-                      {/* ── LEFT SIDEBAR: Step Navigation ── */}
-                      <div className="w-52 border-r shrink-0 bg-muted/20 flex flex-col overflow-hidden">
-                        <div className="px-4 py-3 border-b">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">7 Steps to Close</p>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div className="h-full bg-green-500 rounded-full transition-all duration-500" style={{width: `${pct}%`}} />
-                            </div>
-                            <span className="text-[10px] text-muted-foreground shrink-0 font-medium">{doneCnt}/{actionable.length}</span>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">{pct === 100 ? '✓ All steps complete' : `${100 - pct}% remaining`}</p>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                          {guideSteps.map((s) => {
-                            const isActive = activeStepId === s.id;
-                            return (
-                              <button key={s.id} onClick={() => setWizardStep(s.id)} data-testid={`sidebar-step-${s.id}`}
-                                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left border-b border-border/40 transition-all ${isActive ? 'bg-background border-l-[3px] border-l-primary' : s.blocked ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-muted/50'}`}
-                              >
-                                <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold mt-0.5 ${s.passed ? 'bg-green-500 text-white' : isActive ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground'}`}>
-                                  {s.passed ? '✓' : s.number}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className={`text-xs font-semibold leading-snug ${s.passed ? 'text-green-700 dark:text-green-400' : isActive ? 'text-foreground' : 'text-muted-foreground'}`}>{s.title}</div>
-                                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.passed ? 'Done ✓' : isActive ? '← You are here' : s.blocked ? '🔒 Blocked' : s.remaining > 0 ? `${s.remaining} pending` : 'Not started'}</div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      {/* ── RIGHT PANEL: Current Step Content ── */}
-                      <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6 space-y-4">
-                          {cycleReadiness.loading ? (
-                            <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
-                              <Loader2 className="h-5 w-5 animate-spin" /> Loading progress…
-                            </div>
-                          ) : (
-                            <>
-                            {/* Cycle is Closed — top banner */}
-                            {checklistMmpStatus === 'closed' && (
-                              <div className="flex items-center gap-3 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-2">
-                                <div className="shrink-0 w-9 h-9 rounded-full bg-green-500 flex items-center justify-center">
-                                  <CheckCircle2 className="h-5 w-5 text-white" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-bold text-green-800 dark:text-green-200">Cycle Closed &amp; Archived</p>
-                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                                    All steps are complete. The financial settlement has been frozen and this cycle is permanently archived.
-                                    {(() => {
-                                      const closedAt = mmpFiles?.find(m => m.id === checklistMmpId)?.cycle_closed_at;
-                                      return closedAt
-                                        ? ` Closed on ${new Date(closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.`
-                                        : '';
-                                    })()}
-                                  </p>
-                                </div>
-                                {isSuperAdmin && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="ml-auto shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 gap-1.5 text-xs"
-                                    onClick={() => { setChecklistMmpId(null); setReopenConfirmId(checklistMmpId!); setReopenReason(''); }}
-                                    data-testid="button-reopen-from-guide"
-                                  >
-                                    <RefreshCw className="h-3 w-3" /> Re-open
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                            {/* Rejection banner — shown when cycle was sent back by FOM/Admin */}
-                            {checklistMmpStatus === 'closing' && (() => {
-                              const rejNote = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_approval_note;
-                              if (!rejNote) return null;
-                              return (
-                                <div className="flex items-start gap-3 rounded-xl border-2 border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-3 mb-2" data-testid="banner-cycle-rejected">
-                                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-bold text-red-800 dark:text-red-200">Cycle Returned for Corrections</p>
-                                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                                      <span className="font-semibold">Reason:</span> {rejNote}
-                                    </p>
-                                    <p className="text-[11px] text-red-500 dark:text-red-400 mt-1.5">
-                                      Address the issues above, then re-submit using Step 7 (Final Review &amp; Close) below.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {/* ── Active Step Content (single step at a time) ── */}
-                            {guideSteps.filter(s => s.id === activeStepId && s.id !== 'approval').map((step) => {
-                              const isCurrentStep = !step.passed && !step.blocked;
-                              const isLocked = step.blocked;
-                              const isDone = step.passed;
-                              return (
-                                <div key={step.id} data-testid={`guide-step-${step.id}`} className="space-y-5">
-                                  {/* Step header */}
-                                  <div className="flex items-start gap-4 pb-4 border-b">
-                                    <div className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold ${
-                                      isDone ? 'bg-green-500 text-white' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-amber-500 text-white'
-                                    }`}>
-                                      {isDone ? <CheckCircle2 className="h-5 w-5" /> : step.number}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Step {step.number} of {actionable.length}</span>
-                                        {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
-                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500">👉 Do this now</Badge>}
-                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">🔒 Complete steps above first</Badge>}
-                                        {!isDone && step.remaining > 0 && (
-                                          <Badge variant="destructive" className="text-[10px] px-1.5">{step.remaining} remaining</Badge>
-                                        )}
-                                      </div>
-                                      <h3 className="text-lg font-bold mt-0.5">{step.title}</h3>
-                                      {step.titleAr && <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>}
-                                      <p className="text-sm text-muted-foreground mt-1">{step.desc}</p>
-
-                                      {/* Exact how-to instructions — shown for current step */}
-                                      {isCurrentStep && step.howTo.length > 0 && (
-                                        <div className="mt-3 rounded-lg bg-white dark:bg-amber-950/40 border border-amber-300/60 px-3 py-2.5">
-                                          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1.5">What to do:</p>
-                                          <ol className="space-y-1">
-                                            {step.howTo.map((instruction, i) => (
-                                              <li key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                                                <span className="shrink-0 font-bold text-amber-600">{i + 1}.</span>
-                                                <span>{instruction}</span>
-                                              </li>
-                                            ))}
-                                          </ol>
-                                        </div>
-                                      )}
-
-                                      {/* Sub-item detail for failed items */}
-                                      {!isDone && step.sub.length > 0 && (
-                                        <ul className="mt-2 space-y-0.5">
-                                          {step.sub.map(s => (
-                                            <li key={s.id} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                              <XCircle className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
-                                              <span>{s.description}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                      {/* ── Step 3: Uncovered Sites (inline) ── */}
-                                      {step.id === 'reasons' && (() => {
-                                        const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === checklistMmpId);
-                                        const pending = mmpUncovered.filter(s => !s.not_covered_reason);
-                                        return (
-                                          <div className="mt-3 space-y-3">
-                                            <div className="grid grid-cols-3 gap-2">
-                                              <div className="rounded-lg bg-muted/50 p-3 text-center">
-                                                <div className="text-2xl font-bold">{mmpUncovered.length}</div>
-                                                <div className="text-xs text-muted-foreground">Total Uncovered</div>
-                                              </div>
-                                              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 p-3 text-center">
-                                                <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{pending.length}</div>
-                                                <div className="text-xs text-amber-600 dark:text-amber-400">Need Reason</div>
-                                              </div>
-                                              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200/60 p-3 text-center">
-                                                <div className="text-2xl font-bold text-green-700 dark:text-green-300">{mmpUncovered.length - pending.length}</div>
-                                                <div className="text-xs text-green-600 dark:text-green-400">Assigned</div>
-                                              </div>
-                                            </div>
-                                            {mmpUncovered.length === 0 ? (
-                                              <div className="text-center py-6 text-muted-foreground">
-                                                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                                                <p className="text-sm font-medium">No uncovered sites for this MMP.</p>
-                                              </div>
-                                            ) : (
-                                              <div className="space-y-2 max-h-64 overflow-y-auto">
-                                                {mmpUncovered.map(site => (
-                                                  <div key={site.id} className="flex items-center gap-3 rounded-lg border bg-card p-2.5">
-                                                    <div className="flex-1 min-w-0">
-                                                      <div className="font-medium text-sm truncate">{site.site_name}</div>
-                                                      <div className="text-xs text-muted-foreground">{site.site_code}</div>
-                                                    </div>
-                                                    {canAssignReasons ? (
-                                                      <Select value={site.not_covered_reason || ''} onValueChange={val => handleAssignReason(site.id, val as NotCoveredReason)}>
-                                                        <SelectTrigger className="w-[200px] h-8 text-xs" data-testid={`select-reason-${site.id}`}>
-                                                          <SelectValue placeholder="Assign reason…" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          {NOT_COVERED_REASONS.map(r => (
-                                                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                                                          ))}
-                                                        </SelectContent>
-                                                      </Select>
-                                                    ) : (
-                                                      <Badge variant={site.not_covered_reason ? 'secondary' : 'destructive'} className="text-xs shrink-0">
-                                                        {site.not_covered_reason ? NOT_COVERED_REASONS.find(r => r.value === site.not_covered_reason)?.label || site.not_covered_reason : 'No reason yet'}
-                                                      </Badge>
-                                                    )}
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-
-                                      {/* ── Step 3: Advance Exceptions (inline) ── */}
-                                      {step.id === 'exceptions' && (() => {
-                                        const costRecovItem = cycleReadiness.items.find(i => i.id === 'cost_recovery');
-                                        const hasExceptions = (costRecovItem?.total ?? 0) > 0;
-                                        const exceptionsResolved = costRecovItem?.passed ?? true;
-                                        return (
-                                          <div className="mt-3 space-y-3">
-                                            {step.blocked ? (
-                                              <div className="flex items-center gap-3 rounded-lg border border-muted bg-muted/30 px-4 py-3">
-                                                <Clock className="h-5 w-5 text-muted-foreground shrink-0" />
-                                                <div>
-                                                  <p className="text-sm font-medium">Complete Step 2 first</p>
-                                                  <p className="text-xs text-muted-foreground mt-0.5">Assign reasons to all uncovered sites before resolving advance exceptions.</p>
-                                                </div>
-                                              </div>
-                                            ) : !hasExceptions ? (
-                                              <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
-                                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                                                <div>
-                                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">No advance exceptions for this cycle.</p>
-                                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">No not-covered sites received advance payments — this step is automatically clear.</p>
-                                                </div>
-                                              </div>
-                                            ) : exceptionsResolved ? (
-                                              <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
-                                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                                                <div>
-                                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">All advance exceptions resolved.</p>
-                                                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Every not-covered site with an advance has a recovery decision on record.</p>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="space-y-3">
-                                                <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-4">
-                                                  <div className="flex items-start gap-3">
-                                                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                                                    <div className="flex-1">
-                                                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                                                        {costRecovItem?.total ?? 0} site{(costRecovItem?.total ?? 0) !== 1 ? 's' : ''} with unresolved advance payments
-                                                      </p>
-                                                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                                                        These sites were marked not covered after receiving advance payments. You must decide what happens to each advance before closing the cycle.
-                                                      </p>
-                                                    </div>
-                                                  </div>
-                                                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
-                                                      <span className="font-semibold">Roll to Next MMP</span>
-                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Pre-payment for next cycle</p>
-                                                    </div>
-                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
-                                                      <span className="font-semibold">Return Required</span>
-                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Enumerator repays advance</p>
-                                                    </div>
-                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
-                                                      <span className="font-semibold">Write-Off</span>
-                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">FOM approval + justification</p>
-                                                    </div>
-                                                    <div className="rounded bg-amber-100 dark:bg-amber-900/40 p-2">
-                                                      <span className="font-semibold">Redirect to Fees</span>
-                                                      <p className="text-amber-700 dark:text-amber-300 mt-0.5">Reclassify as fee payment</p>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <Button
-                                                    variant="default"
-                                                    size="sm"
-                                                    className="gap-1.5"
-                                                    onClick={() => { setChecklistMmpId(null); setActiveTab('exceptions'); }}
-                                                    data-testid="button-open-exceptions-tab"
-                                                  >
-                                                    Go to Exceptions Tab <ArrowRight className="h-3.5 w-3.5" />
-                                                  </Button>
-                                                  <span className="text-xs text-muted-foreground">(exits wizard — you can re-enter from the MMP card)</span>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-
-                                      {/* ── Step 4: Finance Clearance (inline) ── */}
-                                      {step.id === 'finance' && (
-                                        <div className="mt-3 space-y-3">
-                                          {step.remaining > 0 ? (
-                                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2">
-                                              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">⚠ {step.remaining} item{step.remaining > 1 ? 's' : ''} need resolution</p>
-                                              <p className="text-xs text-amber-700 dark:text-amber-300">Approve or reject pending cost submissions and settle open advances in the Finance module, then return here.</p>
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="gap-1.5 border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-950/50"
-                                                onClick={() => { setChecklistMmpId(null); setActiveTab('finance'); }}
-                                                data-testid="button-go-to-finance-tab"
-                                              >
-                                                <ArrowRight className="h-3.5 w-3.5" /> Open Finance Tab
-                                              </Button>
-                                            </div>
-                                          ) : (
-                                            <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
-                                              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                                              <p className="text-sm font-medium text-green-800 dark:text-green-200">All finance items cleared for this MMP.</p>
-                                            </div>
-                                          )}
-                                          <ReconciliationSummary
-                                            mmpId={checklistMmpId ?? undefined}
-                                            mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
-                                          />
-                                        </div>
-                                      )}
-
-                                      {/* ── Step 5: WFP Confirmation (inline) ── */}
-                                      {step.id === 'wfp' && (
-                                        <div className="mt-3 space-y-3">
-                                          {wfpAppliedUpload ? (
-                                            <div className="flex items-center gap-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 p-4">
-                                              <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
-                                              <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-300">WFP Results Applied ✓</p>
-                                                <p className="text-xs text-emerald-600 dark:text-emerald-400 truncate">{wfpAppliedUpload.filename} · Applied {new Date(wfpAppliedUpload.applied_at).toLocaleString()}</p>
-                                              </div>
-                                            </div>
-                                          ) : loadingWFP ? (
-                                            <div className="flex items-center justify-center gap-3 py-6 text-muted-foreground">
-                                              <Loader2 className="h-5 w-5 animate-spin" /> Loading WFP data…
-                                            </div>
-                                          ) : (
-                                            <div className="rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-700 p-5 text-center space-y-3">
-                                              <Shield className="h-8 w-8 mx-auto text-blue-400" />
-                                              <div>
-                                                <p className="font-semibold">WFP Reconciliation Not Yet Applied</p>
-                                                <p className="text-sm text-muted-foreground mt-1">Upload the WFP confirmation file to verify sites confirmed by WFP for this cycle.</p>
-                                              </div>
-                                              {wfpSummary && (
-                                                <div className="grid grid-cols-3 gap-2 text-center">
-                                                  <div className="rounded-lg bg-muted/50 p-2">
-                                                    <div className="font-bold">{wfpSummary.total}</div>
-                                                    <div className="text-xs text-muted-foreground">WFP Rows</div>
-                                                  </div>
-                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-2">
-                                                    <div className="font-bold text-green-700">{wfpSummary.confirmed}</div>
-                                                    <div className="text-xs text-green-600">Confirmed</div>
-                                                  </div>
-                                                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2">
-                                                    <div className="font-bold text-amber-700">{wfpSummary.pendingReview}</div>
-                                                    <div className="text-xs text-amber-600">Pending Review</div>
-                                                  </div>
-                                                </div>
-                                              )}
-                                              <p className="text-xs text-muted-foreground">Use the <strong>WFP Confirmation</strong> tab to upload and review the WFP file.</p>
-                                              <Button
-                                                size="sm"
-                                                className="gap-1.5 mt-1"
-                                                onClick={() => { setChecklistMmpId(null); setActiveTab('wfp'); }}
-                                                data-testid="button-go-to-wfp-tab"
-                                              >
-                                                <ArrowRight className="h-3.5 w-3.5" /> Open WFP Confirmation Tab
-                                              </Button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* ── Site & Advance Review (shown in payment_request step) ── */}
-                                      {step.id === 'payment_request' && !step.blocked && (
-                                        <div className="mt-3 space-y-2">
-                                          {/* Search + filter bar */}
-                                          <div className="flex gap-2 flex-wrap">
-                                            <input
-                                              type="text"
-                                              placeholder="Search site or enumerator…"
-                                              value={siteReviewSearch}
-                                              onChange={e => setSiteReviewSearch(e.target.value)}
-                                              className="flex-1 min-w-[160px] rounded-md border border-input bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                                              data-testid="input-site-review-search"
-                                            />
-                                            <select
-                                              value={siteReviewStatusFilter}
-                                              onChange={e => setSiteReviewStatusFilter(e.target.value)}
-                                              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                                              data-testid="select-site-review-status-filter"
-                                            >
-                                              <option value="all">All Statuses</option>
-                                              <option value="wfp_confirmed">WFP Confirmed</option>
-                                              <option value="completed">Completed</option>
-                                              <option value="verified">Verified</option>
-                                              <option value="submitted">Submitted</option>
-                                              <option value="dispatched">Dispatched</option>
-                                              <option value="not_covered">Not Covered</option>
-                                              <option value="pending">Pending / Other</option>
-                                            </select>
-                                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 px-2" onClick={() => fetchAllSiteDetails(checklistMmpId!)} disabled={loadingAllSites} data-testid="button-site-review-refresh">
-                                              {loadingAllSites ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                              Refresh
-                                            </Button>
-                                          </div>
-                                          {loadingAllSites ? (
-                                            <div className="flex items-center gap-2 py-6 justify-center text-muted-foreground text-xs">
-                                              <Loader2 className="h-4 w-4 animate-spin" /> Loading all sites…
-                                            </div>
-                                          ) : (() => {
-                                            const q = siteReviewSearch.toLowerCase();
-                                            const filtered = allSiteReviewData.filter(s => {
-                                              const matchQ = !q || s.siteName.toLowerCase().includes(q) || s.enumeratorName.toLowerCase().includes(q) || s.siteCode.toLowerCase().includes(q);
-                                              if (!matchQ) return false;
-                                              if (siteReviewStatusFilter === 'all') return true;
-                                              if (siteReviewStatusFilter === 'pending') return !['wfp_confirmed','completed','verified','submitted','dispatched','not_covered'].includes(s.status);
-                                              return s.status === siteReviewStatusFilter;
-                                            });
-                                            const totalSites = allSiteReviewData.length;
-                                            const completedCount = allSiteReviewData.filter(s => ['wfp_confirmed','completed','verified'].includes(s.status)).length;
-                                            const advancedCount = allSiteReviewData.filter(s => s.advanceId !== null).length;
-                                            const totalAdvPaid = allSiteReviewData.reduce((s, e) => s + e.advancePaid, 0);
-                                            const totalNet = allSiteReviewData.reduce((s, e) => s + e.netToPay, 0);
-                                            const cur = allSiteReviewData[0]?.currency || 'SDG';
-                                            const statusCls: Record<string, string> = {
-                                              wfp_confirmed: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
-                                              completed: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-                                              verified: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
-                                              submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-                                              dispatched: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
-                                              not_covered: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-                                            };
-                                            return (
-                                              <div className="space-y-2">
-                                                {/* KPI bar */}
-                                                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                                                  {[
-                                                    { label: 'Total Sites', val: totalSites, cls: 'bg-muted/50' },
-                                                    { label: 'Completed / Confirmed', val: completedCount, cls: 'bg-green-50 dark:bg-green-950/30' },
-                                                    { label: 'With Advance', val: advancedCount, cls: 'bg-amber-50 dark:bg-amber-950/30' },
-                                                    { label: 'Total Advance Paid', val: `${totalAdvPaid.toLocaleString()} ${cur}`, cls: 'bg-blue-50 dark:bg-blue-950/30' },
-                                                  ].map(k => (
-                                                    <div key={k.label} className={`rounded-lg px-3 py-2 text-center ${k.cls}`}>
-                                                      <div className="text-xs text-muted-foreground">{k.label}</div>
-                                                      <div className="font-bold text-sm">{k.val}</div>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                                {totalNet > 0 && (
-                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 flex items-center gap-2">
-                                                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">Estimated Net to Pay (Gross − Advances):</span>
-                                                    <span className="font-bold text-green-800 dark:text-green-200">{totalNet.toLocaleString()} {cur}</span>
-                                                  </div>
-                                                )}
-                                                {/* Table */}
-                                                <div className="rounded-lg border overflow-hidden">
-                                                  <div className="overflow-x-auto max-h-72">
-                                                    <table className="w-full text-xs">
-                                                      <thead className="sticky top-0 z-10">
-                                                        <tr className="bg-muted/80 border-b">
-                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[130px]">Site</th>
-                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[100px]">Enumerator</th>
-                                                          <th className="px-3 py-1.5 text-center font-semibold">Status</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold">Enum. Fee</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold">Transport</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold">Gross</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-amber-700">Adv. Paid</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Net to Pay</th>
-                                                        </tr>
-                                                      </thead>
-                                                      <tbody>
-                                                        {filtered.length === 0 ? (
-                                                          <tr><td colSpan={8} className="text-center py-4 text-muted-foreground">No sites match the current filter</td></tr>
-                                                        ) : filtered.map(s => (
-                                                          <tr key={s.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                            <td className="px-3 py-2">
-                                                              <div className="font-medium truncate max-w-[150px]" title={s.siteName}>{s.siteName}</div>
-                                                              <div className="text-[10px] text-muted-foreground">{s.siteCode} · {s.state}</div>
-                                                            </td>
-                                                            <td className="px-3 py-2 text-muted-foreground truncate max-w-[110px]">{s.enumeratorName}</td>
-                                                            <td className="px-3 py-2 text-center">
-                                                              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusCls[s.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
-                                                                {s.status.replace(/_/g, ' ')}
-                                                              </span>
-                                                            </td>
-                                                            <td className="px-3 py-2 text-right font-mono">{s.enumeratorFee > 0 ? s.enumeratorFee.toLocaleString() : '—'}</td>
-                                                            <td className="px-3 py-2 text-right font-mono">{s.transportFee > 0 ? s.transportFee.toLocaleString() : '—'}</td>
-                                                            <td className="px-3 py-2 text-right font-mono font-semibold">{s.totalFee > 0 ? s.totalFee.toLocaleString() : '—'}</td>
-                                                            <td className="px-3 py-2 text-right font-mono text-amber-700">{s.advancePaid > 0 ? `−${s.advancePaid.toLocaleString()}` : '—'}</td>
-                                                            <td className={`px-3 py-2 text-right font-mono font-bold ${s.netToPay > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                                              {s.netToPay > 0 ? s.netToPay.toLocaleString() : s.totalFee > 0 ? '0 (settled)' : '—'}
-                                                            </td>
-                                                          </tr>
-                                                        ))}
-                                                      </tbody>
-                                                      <tfoot>
-                                                        <tr className="bg-muted/30 font-semibold border-t">
-                                                          <td className="px-3 py-1.5" colSpan={3}>Total ({filtered.length} shown)</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.enumeratorFee, 0).toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.transportFee, 0).toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono">{filtered.reduce((s, e) => s + e.totalFee, 0).toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono text-amber-700">−{filtered.reduce((s, e) => s + e.advancePaid, 0).toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{filtered.reduce((s, e) => s + e.netToPay, 0).toLocaleString()}</td>
-                                                        </tr>
-                                                      </tfoot>
-                                                    </table>
-                                                  </div>
-                                                </div>
-                                                {filtered.length < allSiteReviewData.length && (
-                                                  <p className="text-xs text-muted-foreground text-center">Showing {filtered.length} of {allSiteReviewData.length} sites — adjust filters to see more</p>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-                                      )}
-
-                                      {/* ── Exchange Rate & Fee Lock (Step 6) ── */}
-                                      {step.id === 'exchange_rate' && !step.blocked && (
-                                        <div className="mt-3 space-y-3">
-
-                                          {/* Locked banner */}
-                                          {feesLockedAt && (
-                                            <div className="flex items-start gap-2.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 px-3 py-2.5">
-                                              <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                                              <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-semibold text-green-800 dark:text-green-200">
-                                                  Fees locked at 1 USD = {feesLockedRate?.toLocaleString()} SDG
-                                                </p>
-                                                <p className="text-[10px] text-green-700 dark:text-green-400 mt-0.5">
-                                                  Applied {new Date(feesLockedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                  {walletUpdateResults && (
-                                                    <span className="ml-2">· Wallet: {walletUpdateResults.success} updated{walletUpdateResults.failed > 0 ? `, ${walletUpdateResults.failed} skipped` : ''}</span>
-                                                  )}
-                                                </p>
-                                                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
-                                                  ⚠ Re-applying the rate below will overwrite all site fees again.
-                                                </p>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Rate input */}
-                                          <div className="rounded-lg border bg-muted/20 p-3 space-y-2.5">
-                                            <p className="text-xs font-semibold text-foreground">Set Exchange Rate</p>
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                              <span className="text-xs text-muted-foreground shrink-0">1 USD =</span>
-                                              <input
-                                                type="number"
-                                                min="1"
-                                                step="0.01"
-                                                placeholder="e.g. 580"
-                                                value={exchangeRateInput}
-                                                onChange={e => setExchangeRateInput(e.target.value)}
-                                                className="w-36 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                                                data-testid="input-exchange-rate"
-                                              />
-                                              <span className="text-xs text-muted-foreground shrink-0">SDG</span>
-                                              {parseFloat(exchangeRateInput) > 0 && (
-                                                <span className="text-xs text-green-700 dark:text-green-400 font-medium">
-                                                  ✓ Preview updates below
-                                                </span>
-                                              )}
-                                            </div>
-                                            <label className="flex items-center gap-2 cursor-pointer w-fit" data-testid="label-update-wallets">
-                                              <input
-                                                type="checkbox"
-                                                checked={updateWallets}
-                                                onChange={e => setUpdateWallets(e.target.checked)}
-                                                className="rounded border-input"
-                                                data-testid="checkbox-update-wallets"
-                                              />
-                                              <span className="text-xs text-muted-foreground">Also update enumerator wallet balances</span>
-                                            </label>
-                                          </div>
-
-                                          {/* Live preview table */}
-                                          {(() => {
-                                            const rate = parseFloat(exchangeRateInput) || 0;
-                                            const eligibleStatuses = ['dispatched', 'assigned', 'submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
-                                            const previewRows = allSiteReviewData.filter(s => eligibleStatuses.includes(s.status));
-                                            if (previewRows.length === 0) return (
-                                              <p className="text-xs text-muted-foreground text-center py-3">
-                                                No dispatched or completed sites found. Sites will appear here once enumerators are assigned and dispatched.
-                                              </p>
-                                            );
-                                            // Re-lock guard: if already locked, reverse old rate to get USD base
-                                            const prevRate = feesLockedRate;
-                                            const toUSD = (v: number) => prevRate ? v / prevRate : v;
-                                            const totalBaseEnum = previewRows.reduce((s, e) => s + toUSD(e.enumeratorFee), 0);
-                                            const totalBaseTrans = previewRows.reduce((s, e) => s + toUSD(e.transportFee), 0);
-                                            const totalBaseAll = totalBaseEnum + totalBaseTrans;
-                                            const totalSDGEnum = rate > 0 ? Math.round(totalBaseEnum * rate) : 0;
-                                            const totalSDGTrans = rate > 0 ? Math.round(totalBaseTrans * rate) : 0;
-                                            const totalSDGAll = totalSDGEnum + totalSDGTrans;
-                                            return (
-                                              <div className="space-y-2">
-                                                {/* Summary KPIs */}
-                                                {rate > 0 && (
-                                                  <div className="grid grid-cols-3 gap-1.5">
-                                                    <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
-                                                      <div className="text-[10px] text-muted-foreground">Total Base (USD){feesLockedAt ? ' ←derived' : ''}</div>
-                                                      <div className="font-bold text-sm font-mono">${totalBaseAll.toLocaleString()}</div>
-                                                    </div>
-                                                    <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-center">
-                                                      <div className="text-[10px] text-blue-700 dark:text-blue-300">Rate Applied</div>
-                                                      <div className="font-bold text-sm">× {parseFloat(exchangeRateInput).toLocaleString()}</div>
-                                                    </div>
-                                                    <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
-                                                      <div className="text-[10px] text-green-700 dark:text-green-300 font-semibold">Total SDG to Pay</div>
-                                                      <div className="font-bold text-base text-green-800 dark:text-green-200 font-mono">{totalSDGAll.toLocaleString()}</div>
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                                {/* Per-site preview table */}
-                                                <div className="rounded-lg border overflow-hidden">
-                                                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold flex items-center gap-2">
-                                                    <span>💱 Fee Conversion Preview ({previewRows.length} eligible sites)</span>
-                                                    {rate <= 0 && <span className="text-muted-foreground font-normal ml-auto">Enter a rate to see SDG amounts</span>}
-                                                  </div>
-                                                  <div className="overflow-x-auto max-h-60">
-                                                    <table className="w-full text-xs">
-                                                      <thead className="sticky top-0">
-                                                        <tr className="bg-muted/60 border-b">
-                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[110px]">Enumerator / Site</th>
-                                                          <th className="px-3 py-1.5 text-center font-semibold">Status</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-blue-700">Enum ({feesLockedAt ? 'SDG→' : 'USD'})</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-indigo-700">Transport ({feesLockedAt ? 'SDG→' : 'USD'})</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Enum (new SDG)</th>
-                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Transport (new SDG)</th>
-                                                          <th className="px-3 py-1.5 text-right font-bold text-green-700">Total SDG</th>
-                                                        </tr>
-                                                      </thead>
-                                                      <tbody>
-                                                        {previewRows.map(s => {
-                                                          const baseEnum = toUSD(s.enumeratorFee);
-                                                          const baseTrans = toUSD(s.transportFee);
-                                                          const sdgEnum = rate > 0 ? Math.round(baseEnum * rate) : 0;
-                                                          const sdgTrans = rate > 0 ? Math.round(baseTrans * rate) : 0;
-                                                          const sdgTotal = sdgEnum + sdgTrans;
-                                                          return (
-                                                            <tr key={s.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                              <td className="px-3 py-2">
-                                                                <div className="font-medium truncate max-w-[130px]" title={s.enumeratorName}>{s.enumeratorName}</div>
-                                                                <div className="text-[10px] text-muted-foreground truncate max-w-[130px]" title={s.siteName}>{s.siteName}</div>
-                                                              </td>
-                                                              <td className="px-3 py-2 text-center">
-                                                                <span className="text-[10px] text-muted-foreground">{s.status.replace(/_/g, ' ')}</span>
-                                                              </td>
-                                                              <td className="px-3 py-2 text-right font-mono text-blue-700">{s.enumeratorFee > 0 ? s.enumeratorFee.toLocaleString() : '—'}</td>
-                                                              <td className="px-3 py-2 text-right font-mono text-indigo-700">{s.transportFee > 0 ? s.transportFee.toLocaleString() : '—'}</td>
-                                                              <td className={`px-3 py-2 text-right font-mono ${rate > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                                                {rate > 0 && sdgEnum > 0 ? sdgEnum.toLocaleString() : '—'}
-                                                              </td>
-                                                              <td className={`px-3 py-2 text-right font-mono ${rate > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                                                {rate > 0 && sdgTrans > 0 ? sdgTrans.toLocaleString() : '—'}
-                                                              </td>
-                                                              <td className={`px-3 py-2 text-right font-mono font-bold ${rate > 0 && sdgTotal > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                                                {rate > 0 && sdgTotal > 0 ? sdgTotal.toLocaleString() : '—'}
-                                                              </td>
-                                                            </tr>
-                                                          );
-                                                        })}
-                                                      </tbody>
-                                                      <tfoot>
-                                                        <tr className="bg-muted/30 font-semibold border-t">
-                                                          <td className="px-3 py-1.5" colSpan={2}>TOTAL ({previewRows.length} sites)</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono text-blue-700">{totalBaseEnum.toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{totalBaseTrans.toLocaleString()}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono text-green-700">{rate > 0 ? totalSDGEnum.toLocaleString() : '—'}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono text-green-700">{rate > 0 ? totalSDGTrans.toLocaleString() : '—'}</td>
-                                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{rate > 0 ? totalSDGAll.toLocaleString() : '—'} SDG</td>
-                                                        </tr>
-                                                      </tfoot>
-                                                    </table>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            );
-                                          })()}
-
-                                          {/* Zero-fee warning */}
-                                          {(() => {
-                                            const eligibleStatuses = ['dispatched', 'assigned', 'submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
-                                            const zeroFeeSites = allSiteReviewData.filter(s =>
-                                              eligibleStatuses.includes(s.status) && s.enumeratorFee === 0 && s.transportFee === 0
-                                            );
-                                            if (zeroFeeSites.length === 0) return null;
-                                            return (
-                                              <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 space-y-1.5">
-                                                <div className="flex items-center gap-1.5">
-                                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                                                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
-                                                    {zeroFeeSites.length} site{zeroFeeSites.length !== 1 ? 's' : ''} with 0 fees — applying the rate will keep them at 0 SDG
-                                                  </p>
-                                                </div>
-                                                <div className="max-h-24 overflow-y-auto space-y-0.5">
-                                                  {zeroFeeSites.map(s => (
-                                                    <div key={s.id} className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-400">
-                                                      <span className="font-medium truncate max-w-[140px]">{s.siteName}</span>
-                                                      <span className="text-amber-500">·</span>
-                                                      <span className="truncate">{s.enumeratorName}</span>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                                <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                                                  Set fees for these sites in the Payment Sheet tab before locking, or lock now and update them manually afterward.
-                                                </p>
-                                              </div>
-                                            );
-                                          })()}
-
-                                          {/* Lock button */}
-                                          <Button
-                                            size="sm"
-                                            className={`w-full gap-1.5 ${feesLockedAt ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'} text-white`}
-                                            onClick={() => handleLockFees(checklistMmpId!)}
-                                            disabled={lockingFees || !parseFloat(exchangeRateInput)}
-                                            data-testid="button-lock-fees"
-                                          >
-                                            {lockingFees
-                                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating {allSiteReviewData.filter(s => ['dispatched','assigned','submitted','wfp_confirmed','completed','verified','approved'].includes(s.status)).length} sites…</>
-                                              : feesLockedAt
-                                                ? <><RefreshCw className="h-3.5 w-3.5" /> Re-apply Rate & Overwrite Fees</>
-                                                : <><CheckCircle2 className="h-3.5 w-3.5" /> Lock Fees & Apply Rate ({parseFloat(exchangeRateInput) > 0 ? `1 USD = ${parseFloat(exchangeRateInput).toLocaleString()} SDG` : 'enter rate above'})</>
-                                            }
-                                          </Button>
-                                          <p className="text-[10px] text-muted-foreground">This permanently updates <strong>enumerator_fee</strong> and <strong>transport_fee</strong> on all eligible site entries to SDG values. Wallet entries use <code>upsert</code> on the site entry ID. Re-locking derives the original USD base from the previous rate to avoid double-conversion.</p>
-                                        </div>
-                                      )}
-
-                                      {/* ── Payment Sheet & Request (Step 7) ── */}
-                                      {step.id === 'payment_request' && !step.blocked && (
-                                        <div className="mt-3 space-y-3">
-                                          {/* Payment status banner */}
-                                          {paymentsConfirmedAt ? (
-                                            <div className="flex items-center gap-2 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 px-3 py-2.5">
-                                              <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                                              <div className="text-xs">
-                                                <span className="font-semibold text-green-800 dark:text-green-200">Payments confirmed</span>
-                                                <span className="text-green-700 dark:text-green-300"> · {new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                              </div>
-                                            </div>
-                                          ) : paymentRequestedAt ? (
-                                            <div className="flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5">
-                                              <Loader2 className="h-4 w-4 text-amber-600 shrink-0 animate-spin" />
-                                              <div className="text-xs">
-                                                <span className="font-semibold text-amber-800 dark:text-amber-200">Payment request sent</span>
-                                                <span className="text-amber-700 dark:text-amber-300"> · {new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                                <span className="block text-amber-600 dark:text-amber-400 mt-0.5">Return here to confirm once finance processes all payments.</span>
-                                              </div>
-                                            </div>
-                                          ) : null}
-
-                                          {/* Per-site payment sheet */}
-                                          {cycleSummaryData && (() => {
-                                            const advMap: Record<string, AdvanceDetail> = {};
-                                            cycleSummaryData.advanceDetails.forEach(a => { if (a.siteEntryId) advMap[a.siteEntryId] = a; });
-                                            const totalGross = cycleSummaryData.enumeratorCosts.reduce((s, e) => s + e.totalCost, 0);
-                                            const totalAdvPaid = Object.values(advMap).reduce((s, a) => s + a.paidAmount, 0);
-                                            const totalNet = Math.max(0, totalGross - totalAdvPaid);
-                                            const cur = cycleSummaryData.currency;
-                                            return (
-                                              <div className="space-y-2">
-                                                {/* Summary KPIs */}
-                                                <div className="grid grid-cols-3 gap-1.5">
-                                                  <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
-                                                    <div className="text-xs text-muted-foreground">Gross Fees</div>
-                                                    <div className="font-bold text-sm">{totalGross.toLocaleString()} {cur}</div>
-                                                  </div>
-                                                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-center">
-                                                    <div className="text-xs text-amber-700 dark:text-amber-300">Advances Paid</div>
-                                                    <div className="font-bold text-sm text-amber-800 dark:text-amber-200">−{totalAdvPaid.toLocaleString()} {cur}</div>
-                                                  </div>
-                                                  <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
-                                                    <div className="text-xs text-green-700 dark:text-green-300 font-semibold">NET TO PAY</div>
-                                                    <div className="font-bold text-base text-green-800 dark:text-green-200">{totalNet.toLocaleString()} {cur}</div>
-                                                  </div>
-                                                </div>
-
-                                                {/* Per-site payment table */}
-                                                {cycleSummaryData.enumeratorCosts.length > 0 ? (
-                                                  <div className="rounded-lg border overflow-hidden">
-                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold flex items-center gap-2">
-                                                      <span>💳 Payment Breakdown — Per Site</span>
-                                                      <Badge variant="secondary" className="text-[10px]">{cycleSummaryData.enumeratorCosts.length} sites</Badge>
-                                                    </div>
-                                                    <div className="overflow-x-auto max-h-64">
-                                                      <table className="w-full text-xs">
-                                                        <thead className="sticky top-0">
-                                                          <tr className="bg-muted/60 border-b">
-                                                            <th className="px-3 py-1.5 text-left font-semibold min-w-[110px]">Enumerator / Site</th>
-                                                            <th className="px-3 py-1.5 text-right font-semibold">Enum. Fee</th>
-                                                            <th className="px-3 py-1.5 text-right font-semibold">Transport</th>
-                                                            <th className="px-3 py-1.5 text-right font-semibold">Gross</th>
-                                                            <th className="px-3 py-1.5 text-right font-semibold text-amber-700">Adv. Paid</th>
-                                                            <th className="px-3 py-1.5 text-right font-semibold text-green-700">NET TO PAY</th>
-                                                            <th className="px-3 py-1.5 text-center font-semibold">Status</th>
-                                                          </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                          {cycleSummaryData.enumeratorCosts.map(e => {
-                                                            const adv = advMap[e.id];
-                                                            const advPaid = adv?.paidAmount ?? 0;
-                                                            const net = Math.max(0, e.totalCost - advPaid);
-                                                            return (
-                                                              <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                                <td className="px-3 py-2">
-                                                                  <div className="font-medium truncate max-w-[140px]" title={e.enumeratorName}>{e.enumeratorName}</div>
-                                                                  <div className="text-[10px] text-muted-foreground truncate max-w-[140px]" title={e.siteName}>{e.siteName}</div>
-                                                                </td>
-                                                                <td className="px-3 py-2 text-right font-mono">{e.enumeratorFee > 0 ? e.enumeratorFee.toLocaleString() : '—'}</td>
-                                                                <td className="px-3 py-2 text-right font-mono">{e.transportFee > 0 ? e.transportFee.toLocaleString() : '—'}</td>
-                                                                <td className="px-3 py-2 text-right font-mono font-semibold">{e.totalCost.toLocaleString()}</td>
-                                                                <td className="px-3 py-2 text-right font-mono text-amber-700">{advPaid > 0 ? `−${advPaid.toLocaleString()}` : '—'}</td>
-                                                                <td className={`px-3 py-2 text-right font-mono font-bold ${net > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                                                  {net > 0 ? net.toLocaleString() : '0 (settled)'}
-                                                                </td>
-                                                                <td className="px-3 py-2 text-center">
-                                                                  <span className="text-[10px] text-muted-foreground">{e.status.replace(/_/g, ' ')}</span>
-                                                                </td>
-                                                              </tr>
-                                                            );
-                                                          })}
-                                                        </tbody>
-                                                        <tfoot>
-                                                          <tr className="bg-muted/30 font-semibold border-t">
-                                                            <td className="px-3 py-1.5">TOTAL</td>
-                                                            <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalEnumeratorFee.toLocaleString()}</td>
-                                                            <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalTransportFee.toLocaleString()}</td>
-                                                            <td className="px-3 py-1.5 text-right font-mono">{totalGross.toLocaleString()}</td>
-                                                            <td className="px-3 py-1.5 text-right font-mono text-amber-700">{totalAdvPaid > 0 ? `−${totalAdvPaid.toLocaleString()}` : '—'}</td>
-                                                            <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{totalNet.toLocaleString()} {cur}</td>
-                                                            <td />
-                                                          </tr>
-                                                        </tfoot>
-                                                      </table>
-                                                    </div>
-                                                  </div>
-                                                ) : (
-                                                  <p className="text-xs text-muted-foreground text-center py-3">No dispatched sites with fees set — the payment sheet will populate once sites are dispatched and fees entered.</p>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-
-                                          {/* Export buttons */}
-                                          <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs" onClick={exportPaymentSheetExcel} disabled={!cycleSummaryData} data-testid="button-export-payment-sheet-excel">
-                                              <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
-                                            </Button>
-                                            <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30" onClick={exportPaymentSheetPDF} disabled={!cycleSummaryData} data-testid="button-export-payment-sheet-pdf">
-                                              <FileText className="h-3.5 w-3.5" /> Export PDF
-                                            </Button>
-                                          </div>
-
-                                          {/* Payment note */}
-                                          {!paymentsConfirmedAt && (
-                                            <textarea
-                                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                                              rows={2}
-                                              placeholder="Optional: add a note for finance (e.g. priority sites, special instructions)…"
-                                              value={paymentRequestNote}
-                                              onChange={e => setPaymentRequestNote(e.target.value)}
-                                              data-testid="textarea-payment-request-note"
-                                            />
-                                          )}
-
-                                          {/* Action buttons */}
-                                          {!paymentsConfirmedAt && (
-                                            <div className="flex gap-2">
-                                              {!paymentRequestedAt ? (
-                                                <Button
-                                                  size="sm"
-                                                  className="flex-1 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                                                  onClick={() => handleRequestPayments(checklistMmpId!)}
-                                                  disabled={requestingPayment}
-                                                  data-testid="button-request-payments"
-                                                >
-                                                  {requestingPayment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
-                                                  Send Payment Request to Finance
-                                                </Button>
-                                              ) : (
-                                                <Button
-                                                  size="sm"
-                                                  className="flex-1 gap-1.5 bg-green-600 hover:bg-green-700 text-white"
-                                                  onClick={() => handleConfirmPaymentsDone(checklistMmpId!)}
-                                                  disabled={confirmingPayments}
-                                                  data-testid="button-confirm-payments-done"
-                                                >
-                                                  {confirmingPayments ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                                                  Confirm All Payments Done ✓
-                                                </Button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* Step 7: Blockers panel — shown when not yet eligible to submit */}
-                                      {step.id === 'submit' && !submitEligibility.ok && !cycleReadiness.loading && (
-                                        <div className="mt-3 space-y-3">
-                                          <div className="rounded-xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
-                                            <div className="flex items-center gap-2">
-                                              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                                              <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Not ready to submit yet — resolve these first:</p>
-                                            </div>
-                                            <ul className="space-y-1.5">
-                                              {submitEligibility.blockers.map((b, i) => (
-                                                <li key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-                                                  <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
-                                                  <span>{b}</span>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                          {/* Full readiness checklist — shows exactly which gate is failing */}
-                                          <div className="rounded-lg border bg-card p-3 space-y-2">
-                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Readiness Gate Status</p>
-                                            {cycleReadiness.items.map(item => (
-                                              <div key={item.id} className="flex items-start gap-2">
-                                                {item.passed
-                                                  ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-                                                  : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
-                                                }
-                                                <div className="flex-1 min-w-0">
-                                                  <p className={`text-xs font-medium ${item.passed ? 'text-green-700 dark:text-green-400' : 'text-foreground'}`}>{item.label}</p>
-                                                  {!item.passed && <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{item.description}</p>}
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="w-full gap-1.5"
-                                            onClick={() => cycleReadiness.refresh()}
-                                            data-testid="button-refresh-readiness-step7"
-                                          >
-                                            <RefreshCw className="h-3.5 w-3.5" /> Refresh Readiness Check
-                                          </Button>
-                                        </div>
-                                      )}
-
-                                      {/* Submit button for step 7 */}
-                                      {step.id === 'submit' && submitEligibility.ok && !cycleReadiness.loading && (
-                                        <div className="mt-3 space-y-3">
-                                          {/* Pre-submit payment summary */}
-                                          {cycleSummaryData && (() => {
-                                            const cur = cycleSummaryData.currency;
-                                            const PAYABLE = ['wfp_confirmed','verified','completed','approved'];
-                                            const payableEntries = cycleSummaryData.enumeratorCosts.filter(e => PAYABLE.includes(e.status));
-                                            const dispatchedTotal = cycleSummaryData.enumeratorCosts.length;
-                                            const enumFee = payableEntries.reduce((s, e) => s + (e.enumeratorFee ?? 0), 0);
-                                            const transport = payableEntries.reduce((s, e) => s + (e.transportFee ?? 0), 0);
-                                            const opCosts = cycleSummaryData.totalApprovedCents / 100;
-                                            const totalPay = enumFee + transport + opCosts;
-                                            const totalRecover = cycleSummaryData.advanceDetails.reduce((s, a) => s + Math.max(0, a.remainingAmount ?? 0), 0);
-                                            const net = totalPay - totalRecover;
-                                            const { totalSites = 0, completedSites = 0, uncoveredSites = 0 } =
-                                              siteVisitCounts[checklistMmpId!]
-                                                ? (() => {
-                                                    const c = siteVisitCounts[checklistMmpId!];
-                                                    const wfpC = c.statusCounts?.['wfp_confirmed'] ?? 0;
-                                                    return {
-                                                      totalSites: c.total,
-                                                      completedSites: (c.statusCounts?.['completed'] ?? 0) + wfpC,
-                                                      uncoveredSites: c.statusCounts?.['not_covered'] ?? 0,
-                                                    };
-                                                  })()
-                                                : {};
-                                            const feeGap = completedSites > 0 && payableEntries.length < completedSites;
-                                            const usdRate = liveExchangeRate;
-                                            const usdLine = (sdg: number) => usdRate && sdg > 0
-                                              ? <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium ml-1">≈ USD {(sdg / usdRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                              : null;
-                                            return (
-                                              <div className="rounded-xl border-2 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 p-3 space-y-2">
-                                                <p className="text-xs font-bold text-indigo-900 dark:text-indigo-100">📋 Closing Summary — Review Before Submitting</p>
-                                                {usdRate && (
-                                                  <p className="text-[10px] text-blue-600 dark:text-blue-400">Rate: 1 USD = {usdRate.toLocaleString()} SDG</p>
-                                                )}
-                                                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
-                                                    <div className="text-sm font-bold text-green-700 dark:text-green-300">{completedSites}</div>
-                                                    <div className="text-muted-foreground">Sites Covered</div>
-                                                  </div>
-                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
-                                                    <div className="text-sm font-bold text-orange-600 dark:text-orange-400">{uncoveredSites}</div>
-                                                    <div className="text-muted-foreground">Not Covered</div>
-                                                  </div>
-                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
-                                                    <div className="text-sm font-bold">{totalSites}</div>
-                                                    <div className="text-muted-foreground">Total Sites</div>
-                                                  </div>
-                                                </div>
-
-                                                {/* Dispatch / fee gap warning */}
-                                                {feeGap && (
-                                                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-2.5 py-2 text-[11px]">
-                                                    <span className="text-amber-600 mt-0.5 shrink-0">⚠️</span>
-                                                    <span className="text-amber-800 dark:text-amber-200">
-                                                      <strong>{completedSites} sites were visited</strong> but only <strong>{payableEntries.length} of {dispatchedTotal} dispatched site{dispatchedTotal !== 1 ? 's' : ''}</strong> have a payable status with fee records. {payableEntries.length === 0 ? 'No fees will be paid out.' : 'Only the dispatched sites are included in the payment total below.'}
-                                                    </span>
-                                                  </div>
-                                                )}
-
-                                                {/* Inline fee editor — always visible when there are payable sites */}
-                                                {payableEntries.length > 0 && (() => {
-                                                  const allFeesZero = payableEntries.every(e => (e.enumeratorFee ?? 0) === 0 && (e.transportFee ?? 0) === 0);
-                                                  const editEntries = Object.keys(feeEdits).length > 0
-                                                    ? feeEdits
-                                                    : Object.fromEntries(payableEntries.map(e => [e.id, { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }]));
-                                                  if (Object.keys(feeEdits).length === 0 && payableEntries.length > 0) {
-                                                    // Initialise feeEdits on first render without triggering re-render loop
-                                                    setTimeout(() => {
-                                                      setFeeEdits(Object.fromEntries(payableEntries.map(e => [e.id, { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }])));
-                                                    }, 0);
-                                                  }
-                                                  const liveEnumTotal = Object.values(editEntries).reduce((s, v) => s + (v.enum || 0), 0);
-                                                  const liveTransTotal = Object.values(editEntries).reduce((s, v) => s + (v.transport || 0), 0);
-                                                  const liveNet = liveEnumTotal + liveTransTotal + opCosts - totalRecover;
-                                                  return (
-                                                    <div className={`rounded-lg border-2 overflow-hidden ${allFeesZero ? 'border-red-300 dark:border-red-700' : 'border-green-300 dark:border-green-700'}`}>
-                                                      <div className={`px-3 py-2 flex items-center justify-between ${allFeesZero ? 'bg-red-50 dark:bg-red-950/30' : 'bg-green-50 dark:bg-green-950/30'}`}>
-                                                        <span className={`text-[11px] font-bold ${allFeesZero ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
-                                                          {allFeesZero ? '⚠️ Fees not set — enter amounts below before submitting' : '✅ Site Fees'}
-                                                        </span>
-                                                        <button
-                                                          type="button"
-                                                          className="text-[10px] text-muted-foreground underline"
-                                                          onClick={() => setFeeEditOpen(v => !v)}
-                                                        >
-                                                          {feeEditOpen ? 'Collapse' : 'Expand to edit'}
-                                                        </button>
-                                                      </div>
-                                                      <div className="p-2 space-y-2 bg-white/90 dark:bg-black/20">
-                                                        {payableEntries.map(e => (
-                                                          <div key={e.id} className="rounded border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
-                                                            <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                                              {e.siteName} <span className="font-normal text-muted-foreground">— {e.enumeratorName}</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                              <div>
-                                                                <label className="text-[10px] text-muted-foreground block mb-0.5">Enumerator Fee (SDG)</label>
-                                                                <input
-                                                                  type="number"
-                                                                  min={0}
-                                                                  className="w-full text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 px-2 py-1 font-mono focus:ring-2 focus:ring-indigo-400 outline-none"
-                                                                  value={feeEdits[e.id]?.enum ?? e.enumeratorFee ?? 0}
-                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...(prev[e.id] ?? { enum: 0, transport: 0 }), enum: Number(ev.target.value) } }))}
-                                                                />
-                                                              </div>
-                                                              <div>
-                                                                <label className="text-[10px] text-muted-foreground block mb-0.5">Transport Fee (SDG)</label>
-                                                                <input
-                                                                  type="number"
-                                                                  min={0}
-                                                                  className="w-full text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 px-2 py-1 font-mono focus:ring-2 focus:ring-indigo-400 outline-none"
-                                                                  value={feeEdits[e.id]?.transport ?? e.transportFee ?? 0}
-                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...(prev[e.id] ?? { enum: 0, transport: 0 }), transport: Number(ev.target.value) } }))}
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                          </div>
-                                                        ))}
-                                                        {/* Live preview */}
-                                                        <div className="rounded bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1.5 text-[11px] space-y-0.5">
-                                                          <div className="flex justify-between text-muted-foreground">
-                                                            <span>Enumerator total</span><span className="font-mono font-semibold">{liveEnumTotal.toLocaleString()} {cur}</span>
-                                                          </div>
-                                                          <div className="flex justify-between text-muted-foreground">
-                                                            <span>Transport total</span><span className="font-mono font-semibold">{liveTransTotal.toLocaleString()} {cur}</span>
-                                                          </div>
-                                                          <div className={`flex justify-between font-bold border-t border-indigo-200 dark:border-indigo-700 pt-1 mt-0.5 ${liveNet >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                                                            <span>Net to Pay</span><span className="font-mono">{Math.abs(liveNet).toLocaleString()} {cur}</span>
-                                                          </div>
-                                                        </div>
-                                                        <button
-                                                          type="button"
-                                                          disabled={savingFees}
-                                                          className="w-full rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold py-2 flex items-center justify-center gap-1.5"
-                                                          onClick={async () => {
-                                                            setSavingFees(true);
-                                                            try {
-                                                              await Promise.all(
-                                                                Object.entries(feeEdits).map(([id, v]) =>
-                                                                  supabase.from('mmp_site_entries').update({
-                                                                    enumerator_fee: v.enum,
-                                                                    transport_fee: v.transport,
-                                                                    cost: v.enum + v.transport,
-                                                                  }).eq('id', id)
-                                                                )
-                                                              );
-                                                              if (checklistMmpId) fetchCycleSummary(checklistMmpId);
-                                                            } finally {
-                                                              setSavingFees(false);
-                                                            }
-                                                          }}
-                                                        >
-                                                          {savingFees ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</> : '💾 Save Fees & Refresh Summary'}
-                                                        </button>
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                })()}
-
-                                                <div className="space-y-1.5 text-xs border-t border-indigo-200 dark:border-indigo-800 pt-2">
-                                                  <div className="flex justify-between items-baseline">
-                                                    <span className="text-muted-foreground">
-                                                      Enumerator fees
-                                                      <span className="ml-1 text-[10px] text-indigo-600 dark:text-indigo-400">({payableEntries.length} dispatched site{payableEntries.length !== 1 ? 's' : ''} with payable status)</span>
-                                                    </span>
-                                                    <span className="font-mono font-semibold shrink-0 ml-2">
-                                                      {enumFee.toLocaleString()} {cur}{usdLine(enumFee)}
-                                                    </span>
-                                                  </div>
-                                                  <div className="flex justify-between items-baseline">
-                                                    <span className="text-muted-foreground flex items-center gap-1">
-                                                      Transport fees
-                                                      {transport === 0 && dispatchedTotal > 0 && (
-                                                        <span className="text-[10px] text-amber-600 dark:text-amber-400">(not set in dispatch)</span>
-                                                      )}
-                                                    </span>
-                                                    <span className="font-mono font-semibold shrink-0 ml-2">
-                                                      {transport.toLocaleString()} {cur}{usdLine(transport)}
-                                                    </span>
-                                                  </div>
-                                                  {opCosts > 0 && (
-                                                    <div className="flex justify-between items-baseline">
-                                                      <span className="text-muted-foreground">Approved op. costs</span>
-                                                      <span className="font-mono font-semibold shrink-0 ml-2">{opCosts.toLocaleString()} {cur}{usdLine(opCosts)}</span>
-                                                    </div>
-                                                  )}
-                                                  {totalRecover > 0 && (
-                                                    <div className="flex justify-between items-baseline text-orange-700 dark:text-orange-400">
-                                                      <span>Less: outstanding advances to recover</span>
-                                                      <span className="font-mono font-semibold shrink-0 ml-2">−{totalRecover.toLocaleString()} {cur}{usdLine(totalRecover)}</span>
-                                                    </div>
-                                                  )}
-                                                  <div className={`flex justify-between items-baseline border-t pt-1.5 mt-1 font-bold ${net >= 0 ? 'text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
-                                                    <span>{net >= 0 ? 'Net to Pay Field Staff' : 'Net to Recover from Field'}</span>
-                                                    <span className="font-mono shrink-0 ml-2">
-                                                      {Math.abs(net).toLocaleString()} {cur}{usdLine(Math.abs(net))}
-                                                    </span>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            );
-                                          })()}
-                                          <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack-guide">
-                                            <input
-                                              type="checkbox"
-                                              checked={reconciliationAcknowledged}
-                                              onChange={e => setReconciliationAcknowledged(e.target.checked)}
-                                              className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
-                                              data-testid="checkbox-reconciliation-ack-guide"
-                                            />
-                                            <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
-                                              I confirm all financial obligations for this cycle are accounted for.
-                                            </span>
-                                          </label>
-                                          <Button
-                                            size="sm"
-                                            className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                                            onClick={() => handleFinalizeCycleClose(checklistMmpId!)}
-                                            disabled={finalizingCycle || !reconciliationAcknowledged || !submitEligibility.ok}
-                                            title={!submitEligibility.ok ? submitEligibility.blockers.join('; ') : undefined}
-                                            data-testid="button-proceed-close-cycle-guide"
-                                          >
-                                            {finalizingCycle
-                                              ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
-                                              : (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_approval_note
-                                                ? <><RefreshCw className="h-4 w-4" /> Re-submit for Approval</>
-                                                : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
-                                            }
-                                          </Button>
-                                          {!submitEligibility.ok && submitEligibility.blockers.length > 0 && (
-                                            <p className="text-xs text-destructive">{submitEligibility.blockers.join(' · ')}</p>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-
-                            {/* ── Cycle Financial Summary (collapsible) ── */}
-                            <Collapsible defaultOpen={true}>
-                              <CollapsibleTrigger className="flex items-center gap-2 text-xs font-semibold text-foreground w-full px-3 py-2 border rounded-lg bg-muted/30 hover:bg-muted/50" data-testid="button-toggle-cycle-summary">
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                                <span>📊 Cycle Financial Summary &amp; Export</span>
-                                {cycleSummaryData && (
-                                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                                    {(cycleSummaryData.totalApprovedCents / 100).toLocaleString()} {cycleSummaryData.currency} approved
-                                  </Badge>
-                                )}
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mt-3 space-y-3">
-                                {loadingCycleSummary ? (
-                                  <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground text-xs">
-                                    <Loader2 className="h-4 w-4 animate-spin" /> Loading financial data…
-                                  </div>
-                                ) : !cycleSummaryData ? (
-                                  <p className="text-xs text-muted-foreground text-center py-2">No financial data found for this cycle.</p>
-                                ) : (
-                                  <>
-                                    {/* ── Settlement Card — accounting obligations at a glance ── */}
-                                    {(() => {
-                                      const cur = cycleSummaryData.currency;
-                                      // ALL payable statuses — fees are owed once a visit is done,
-                                      // regardless of whether WFP confirmation has been applied yet
-                                      const PAYABLE = ['wfp_confirmed','verified','completed','approved'];
-                                      const payableEntries  = cycleSummaryData.enumeratorCosts.filter(e => PAYABLE.includes(e.status));
-                                      const payableEnumFee  = payableEntries.reduce((s, e) => s + (e.enumeratorFee  ?? 0), 0);
-                                      const payableTransport= payableEntries.reduce((s, e) => s + (e.transportFee   ?? 0), 0);
-                                      // WFP-confirmed subset — for the impact line only
-                                      const wfpEntries   = cycleSummaryData.enumeratorCosts.filter(e => e.status === 'wfp_confirmed');
-                                      const wfpEnumFee   = wfpEntries.reduce((s, e) => s + (e.enumeratorFee  ?? 0), 0);
-                                      const wfpTransport = wfpEntries.reduce((s, e) => s + (e.transportFee   ?? 0), 0);
-                                      const wfpSiteCount = wfpEntries.length;
-                                      // How many payable sites are still awaiting WFP confirmation
-                                      const awaitingWfpFees = payableEntries
-                                        .filter(e => ['completed','approved'].includes(e.status))
-                                        .reduce((s, e) => s + (e.totalCost ?? 0), 0);
-                                      // Approved operational costs
-                                      const approvedOp = cycleSummaryData.totalApprovedCents / 100;
-                                      // Total to pay out = all payable site fees + approved op costs
-                                      const totalPayOut = payableEnumFee + payableTransport + approvedOp;
-                                      // Outstanding advances to recover
-                                      const totalRecover = cycleSummaryData.advanceDetails.reduce((s, a) => s + Math.max(0, a.remainingAmount ?? 0), 0);
-                                      // Net
-                                      const net = totalPayOut - totalRecover;
-                                      const isNetPositive = net >= 0;
-                                      return (
-                                        <div className="rounded-xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3">
-                                          <p className="text-xs font-bold text-blue-900 dark:text-blue-100">💰 Cycle Financial Settlement</p>
-
-                                          {/* WFP confirmation impact line */}
-                                          {wfpSiteCount > 0 && (
-                                            <div className="flex items-center gap-2 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
-                                              <span className="text-sm">🛡️</span>
-                                              <div className="text-xs text-blue-800 dark:text-blue-200">
-                                                <span className="font-semibold">WFP confirmed {wfpSiteCount} site{wfpSiteCount !== 1 ? 's' : ''}</span>
-                                                {' — '}{(wfpEnumFee + wfpTransport).toLocaleString()} {cur} payable to enumerators
-                                                <span className="text-muted-foreground ml-1">({wfpEnumFee.toLocaleString()} fees + {wfpTransport.toLocaleString()} transport)</span>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            {/* Pay Out column */}
-                                            <div className="rounded-lg border border-green-300 dark:border-green-700 bg-white/60 dark:bg-black/20 p-3 space-y-1.5">
-                                              <p className="text-[11px] font-bold text-green-800 dark:text-green-300 uppercase tracking-wide">➕ Pay to Field Staff</p>
-                                              <div className="space-y-1 text-xs">
-                                                <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Enumerator fees (visited sites)</span>
-                                                  <span className="font-mono font-semibold">{payableEnumFee.toLocaleString()} {cur}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Transport (visited sites)</span>
-                                                  <span className="font-mono font-semibold">{payableTransport.toLocaleString()} {cur}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Approved op. costs</span>
-                                                  <span className="font-mono font-semibold">{approvedOp.toLocaleString()} {cur}</span>
-                                                </div>
-                                                {awaitingWfpFees > 0 && (
-                                                  <div className="flex justify-between text-amber-700 dark:text-amber-400">
-                                                    <span className="italic">↳ incl. awaiting WFP confirm</span>
-                                                    <span className="font-mono">{awaitingWfpFees.toLocaleString()} {cur}</span>
-                                                  </div>
-                                                )}
-                                                <div className="flex justify-between border-t border-green-200 dark:border-green-800 pt-1 mt-1 font-semibold text-green-800 dark:text-green-300">
-                                                  <span>Subtotal to Pay</span>
-                                                  <span className="font-mono">{totalPayOut.toLocaleString()} {cur}</span>
-                                                </div>
-                                              </div>
-                                            </div>
-
-                                            {/* Recover column */}
-                                            <div className={`rounded-lg border p-3 space-y-1.5 ${totalRecover > 0 ? 'border-orange-300 dark:border-orange-700 bg-white/60 dark:bg-black/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'}`}>
-                                              <p className={`text-[11px] font-bold uppercase tracking-wide ${totalRecover > 0 ? 'text-orange-800 dark:text-orange-300' : 'text-green-700 dark:text-green-400'}`}>➖ Recover from Field</p>
-                                              <div className="space-y-1 text-xs">
-                                                <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Outstanding advances</span>
-                                                  <span className={`font-mono font-semibold ${totalRecover > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-green-700'}`}>
-                                                    {totalRecover > 0 ? `${totalRecover.toLocaleString()} ${cur}` : '✓ None'}
-                                                  </span>
-                                                </div>
-                                                <div className={`flex justify-between border-t pt-1 mt-1 font-semibold ${totalRecover > 0 ? 'border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-300' : 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'}`}>
-                                                  <span>Subtotal to Recover</span>
-                                                  <span className="font-mono">{totalRecover.toLocaleString()} {cur}</span>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          {/* Net line */}
-                                          <div className={`flex items-center justify-between rounded-lg px-4 py-3 border-2 ${isNetPositive ? 'border-green-400 dark:border-green-600 bg-green-100 dark:bg-green-950/50' : 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30'}`}>
-                                            <div>
-                                              <p className="text-xs font-bold text-foreground">
-                                                {isNetPositive ? '✅ Net Payable to Field Staff' : '🔴 Net Recovery from Field Staff'}
-                                              </p>
-                                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                                {isNetPositive
-                                                  ? 'Organisation owes this amount to field staff after all deductions'
-                                                  : 'Field staff owe this amount back to the organisation'}
-                                              </p>
-                                            </div>
-                                            <span className={`font-mono text-lg font-bold ${isNetPositive ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                                              {Math.abs(net).toLocaleString()} {cur}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* Coverage snapshot */}
-                                    {siteVisitCounts[checklistMmpId!] && (() => {
-                                      const c = siteVisitCounts[checklistMmpId!];
-                                      const wfpConfirmedCount = c.statusCounts?.['wfp_confirmed'] ?? 0;
-                                      const completed = (c.statusCounts?.['completed'] ?? 0) + wfpConfirmedCount;
-                                      const notCovered = c.statusCounts?.['not_covered'] ?? 0;
-                                      return (
-                                        <div className="rounded-lg border bg-muted/30 p-3">
-                                          <p className="text-xs font-semibold mb-2">Site Coverage Snapshot</p>
-                                          <div className="grid grid-cols-4 gap-2 text-center">
-                                            <div><div className="text-lg font-bold text-green-600">{completed}</div><div className="text-[10px] text-muted-foreground">Completed</div></div>
-                                            <div><div className="text-lg font-bold text-blue-600">{wfpConfirmedCount}</div><div className="text-[10px] text-muted-foreground">WFP Confirmed</div></div>
-                                            <div><div className="text-lg font-bold text-red-500">{notCovered}</div><div className="text-[10px] text-muted-foreground">Not Covered</div></div>
-                                            <div><div className="text-lg font-bold">{c.total}</div><div className="text-[10px] text-muted-foreground">Total Sites</div></div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* Cost Submissions */}
-                                    {cycleSummaryData.costSubs.length > 0 && (
-                                      <div className="rounded-lg border overflow-hidden">
-                                        <div className="px-3 py-2 bg-muted/40 text-xs font-semibold">Operational Cost Submissions</div>
-                                        <table className="w-full text-xs">
-                                          <thead>
-                                            <tr className="border-b bg-muted/20">
-                                              <th className="px-3 py-1.5 text-left font-medium">Category</th>
-                                              <th className="px-3 py-1.5 text-right font-medium">Count</th>
-                                              <th className="px-3 py-1.5 text-right font-medium text-green-700">Approved</th>
-                                              <th className="px-3 py-1.5 text-right font-medium text-orange-600">Pending</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {cycleSummaryData.costSubs.map(r => (
-                                              <tr key={r.category} className="border-b last:border-0 hover:bg-muted/10">
-                                                <td className="px-3 py-1.5 font-medium">{r.category}</td>
-                                                <td className="px-3 py-1.5 text-right text-muted-foreground">{r.count}</td>
-                                                <td className="px-3 py-1.5 text-right text-green-700 font-mono">{r.approvedCents > 0 ? `${(r.approvedCents / 100).toLocaleString()} ${r.currency}` : '—'}</td>
-                                                <td className="px-3 py-1.5 text-right text-orange-600 font-mono">{r.pendingCents > 0 ? `${(r.pendingCents / 100).toLocaleString()} ${r.currency}` : '—'}</td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                          <tfoot>
-                                            <tr className="bg-muted/30 font-semibold">
-                                              <td className="px-3 py-1.5">Total</td>
-                                              <td className="px-3 py-1.5 text-right">{cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0)}</td>
-                                              <td className="px-3 py-1.5 text-right text-green-700 font-mono">{(cycleSummaryData.totalApprovedCents / 100).toLocaleString()} {cycleSummaryData.currency}</td>
-                                              <td className="px-3 py-1.5 text-right text-orange-600 font-mono">{(cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100).toLocaleString()} {cycleSummaryData.currency}</td>
-                                            </tr>
-                                          </tfoot>
-                                        </table>
-                                      </div>
-                                    )}
-
-                                    {/* Transport Advances — per person */}
-                                    {cycleSummaryData.advanceDetails.length > 0 && (() => {
-                                      const totalAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0);
-                                      const totalPaid = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0);
-                                      const totalRem = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
-                                      const fullyPaidCount = cycleSummaryData.advanceDetails.filter(a => a.remainingAmount <= 0).length;
-                                      const unpaidCount = cycleSummaryData.advanceDetails.length - fullyPaidCount;
-                                      const allSettled = totalRem <= 0;
-                                      return (
-                                        <>
-                                          {/* Advance Payment Status Summary Card */}
-                                          <div className={`rounded-lg border-2 p-3 ${allSettled ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/30' : 'border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-sm font-bold">{allSettled ? '✅' : '⚠️'} Transport Advance Payment Status</span>
-                                              <Badge className={`ml-auto text-xs ${allSettled ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200'}`}>
-                                                {allSettled ? 'All Settled' : `${unpaidCount} Outstanding`}
-                                              </Badge>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                              <div className="rounded bg-white/60 dark:bg-black/20 p-2">
-                                                <div className="text-base font-bold text-blue-700 dark:text-blue-300">{totalAdv.toLocaleString()}</div>
-                                                <div className="text-muted-foreground mt-0.5">Total Issued ({cycleSummaryData.currency})</div>
-                                              </div>
-                                              <div className="rounded bg-white/60 dark:bg-black/20 p-2">
-                                                <div className="text-base font-bold text-green-700 dark:text-green-300">{totalPaid.toLocaleString()}</div>
-                                                <div className="text-muted-foreground mt-0.5">Paid Back ({cycleSummaryData.currency})</div>
-                                              </div>
-                                              <div className={`rounded p-2 ${totalRem > 0 ? 'bg-orange-100/80 dark:bg-orange-900/30' : 'bg-green-100/80 dark:bg-green-900/30'}`}>
-                                                <div className={`text-base font-bold ${totalRem > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-green-700 dark:text-green-300'}`}>{totalRem > 0 ? totalRem.toLocaleString() : '✓ 0'}</div>
-                                                <div className="text-muted-foreground mt-0.5">Remaining ({cycleSummaryData.currency})</div>
-                                              </div>
-                                            </div>
-                                            <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
-                                              <span className="text-green-700 dark:text-green-400 font-medium">✓ {fullyPaidCount} fully paid</span>
-                                              {unpaidCount > 0 && <span className="text-orange-700 dark:text-orange-400 font-medium">⚠ {unpaidCount} still outstanding — must settle before cycle closes</span>}
-                                            </div>
-                                          </div>
-
-                                          {/* Advance detail table */}
-                                          <div className="rounded-lg border overflow-hidden">
-                                            <div className="px-3 py-2 bg-blue-50 dark:bg-blue-950/40 text-xs font-semibold flex items-center gap-2">
-                                              <span>🚗 Transport Advances — Per Person Breakdown</span>
-                                              <Badge variant="secondary" className="ml-auto text-[10px]">
-                                                {cycleSummaryData.advanceDetails.length} advance{cycleSummaryData.advanceDetails.length !== 1 ? 's' : ''}
-                                              </Badge>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                          <table className="w-full text-xs">
-                                            <thead>
-                                              <tr className="border-b bg-muted/20">
-                                                <th className="px-3 py-1.5 text-left font-medium">Recipient</th>
-                                                <th className="px-3 py-1.5 text-left font-medium">Site</th>
-                                                <th className="px-3 py-1.5 text-left font-medium">Type</th>
-                                                <th className="px-3 py-1.5 text-right font-medium">Total Advanced</th>
-                                                <th className="px-3 py-1.5 text-right font-medium text-green-700">Paid</th>
-                                                <th className="px-3 py-1.5 text-right font-medium text-orange-600">Remaining</th>
-                                                <th className="px-3 py-1.5 text-center font-medium">Status</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {cycleSummaryData.advanceDetails.map(a => {
-                                                const isFullyPaid = a.remainingAmount <= 0;
-                                                const isPartial = a.paidAmount > 0 && !isFullyPaid;
-                                                return (
-                                                  <tr key={a.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                    <td className="px-3 py-1.5 font-medium">{a.requesterName}</td>
-                                                    <td className="px-3 py-1.5 text-muted-foreground max-w-[120px] truncate">{a.siteName}</td>
-                                                    <td className="px-3 py-1.5">
-                                                      <Badge variant="outline" className="text-[10px]">
-                                                        {a.paymentType === 'full_advance' ? 'Full' : 'Installments'}
-                                                      </Badge>
-                                                    </td>
-                                                    <td className="px-3 py-1.5 text-right font-mono">{a.requestedAmount.toLocaleString()} {a.currency}</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono text-green-700">{a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—'}</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono text-orange-600">{a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : <span className="text-green-600">✓ Settled</span>}</td>
-                                                    <td className="px-3 py-1.5 text-center">
-                                                      <Badge className={`text-[10px] ${isFullyPaid ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : isPartial ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'}`}>
-                                                        {isFullyPaid ? 'Fully Paid' : isPartial ? 'Partial' : a.status}
-                                                      </Badge>
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                            <tfoot>
-                                              <tr className="bg-muted/30 font-semibold">
-                                                <td className="px-3 py-1.5" colSpan={3}>Total</td>
-                                                <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-green-700">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-orange-600">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td />
-                                              </tr>
-                                            </tfoot>
-                                          </table>
-                                        </div>
-                                      </div>
-                                    </>
-                                  );
-                                })()}
-
-                                    {/* Withdrawal Requests */}
-                                    {cycleSummaryData.withdrawals.length > 0 && (
-                                      <div className="rounded-lg border overflow-hidden">
-                                        <div className="px-3 py-2 bg-purple-50 dark:bg-purple-950/40 text-xs font-semibold flex items-center gap-2">
-                                          <span>💸 Cash Withdrawal Requests</span>
-                                          <Badge variant="secondary" className="ml-auto text-[10px]">
-                                            {cycleSummaryData.withdrawals.filter(w => !['rejected','cancelled'].includes(w.status)).length} active
-                                          </Badge>
-                                        </div>
-                                        <table className="w-full text-xs">
-                                          <thead>
-                                            <tr className="border-b bg-muted/20">
-                                              <th className="px-3 py-1.5 text-left font-medium">Requested By</th>
-                                              <th className="px-3 py-1.5 text-left font-medium">Reason</th>
-                                              <th className="px-3 py-1.5 text-right font-medium">Amount</th>
-                                              <th className="px-3 py-1.5 text-center font-medium">Status</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {cycleSummaryData.withdrawals.map(w => (
-                                              <tr key={w.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                <td className="px-3 py-1.5 font-medium">{w.userName}</td>
-                                                <td className="px-3 py-1.5 text-muted-foreground max-w-[160px] truncate">{w.reason}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono">{w.amount.toLocaleString()} {w.currency}</td>
-                                                <td className="px-3 py-1.5 text-center">
-                                                  <Badge className={`text-[10px] ${w.status === 'paid' || w.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : w.status === 'rejected' || w.status === 'cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'}`}>
-                                                    {w.status}
-                                                  </Badge>
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                          <tfoot>
-                                            <tr className="bg-muted/30 font-semibold">
-                                              <td className="px-3 py-1.5" colSpan={2}>Total (active)</td>
-                                              <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalWithdrawalAmount.toLocaleString()} {cycleSummaryData.currency}</td>
-                                              <td />
-                                            </tr>
-                                          </tfoot>
-                                        </table>
-                                      </div>
-                                    )}
-
-                                    {/* Outstanding Obligations Summary */}
-                                    {(cycleSummaryData.advanceDetails.length > 0 || cycleSummaryData.withdrawals.length > 0) && (() => {
-                                      const totalRemaining = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
-                                      const totalPending = cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100;
-                                      const totalOutstanding = totalRemaining + totalPending + cycleSummaryData.totalWithdrawalAmount;
-                                      return (
-                                        <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 p-3">
-                                          <p className="text-xs font-semibold text-orange-800 dark:text-orange-300 mb-2">📋 Financial Obligations After WFP Confirmation</p>
-                                          <div className="space-y-1.5 text-xs">
-                                            {totalRemaining > 0 && (
-                                              <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Advance balances still to settle</span>
-                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{totalRemaining.toLocaleString()} {cycleSummaryData.currency}</span>
-                                              </div>
-                                            )}
-                                            {totalPending > 0 && (
-                                              <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Pending cost submissions (fees)</span>
-                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{totalPending.toLocaleString()} {cycleSummaryData.currency}</span>
-                                              </div>
-                                            )}
-                                            {cycleSummaryData.totalWithdrawalAmount > 0 && (
-                                              <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Cash withdrawal requests</span>
-                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{cycleSummaryData.totalWithdrawalAmount.toLocaleString()} {cycleSummaryData.currency}</span>
-                                              </div>
-                                            )}
-                                            <div className="flex justify-between border-t border-orange-200 dark:border-orange-700 pt-1.5 mt-1">
-                                              <span className="font-semibold">Total Outstanding</span>
-                                              <span className="font-mono font-bold text-orange-800 dark:text-orange-200">{totalOutstanding.toLocaleString()} {cycleSummaryData.currency}</span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* Enumerator Costs */}
-                                    {cycleSummaryData.enumeratorCosts.length > 0 && (() => {
-                                      type StatusEntry = { label: string; cls: string; isTerminal: boolean; actionFn: (ack: boolean) => string };
-                                      const SM: Record<string, StatusEntry> = {
-                                        // Terminal / done
-                                        wfp_confirmed:           { label: 'WFP Confirmed',    cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',      isTerminal: true,  actionFn: (ack) => ack ? '✓ Ready — no action needed' : 'Ask enumerator to acknowledge cost in the app' },
-                                        cancelled:               { label: 'Cancelled',        cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',              isTerminal: true,  actionFn: () => 'Visit cancelled — no further action' },
-                                        verified:                { label: 'Verified',         cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',      isTerminal: true,  actionFn: (ack) => ack ? '✓ Ready — no action needed' : 'Ask enumerator to acknowledge cost in the app' },
-                                        not_covered:             { label: 'Not Covered',      cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',  isTerminal: true,  actionFn: () => 'Flagged as not covered — reason required if not provided' },
-                                        // Near-done — needs one more step
-                                        completed:               { label: 'Completed',        cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',          isTerminal: false, actionFn: (ack) => ack ? 'Cost acknowledged — supervisor/FOM must submit WFP confirmation' : 'Supervisor/FOM must submit WFP confirmation, enumerator must acknowledge cost' },
-                                        approved:                { label: 'Approved',         cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',          isTerminal: false, actionFn: (ack) => ack ? 'Approved — supervisor/FOM must submit WFP confirmation' : 'Supervisor/FOM must submit WFP confirmation' },
-                                        // Mid-flow — active
-                                        accepted:                { label: 'Accepted',         cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Enumerator accepted — wait for field visit to be completed' },
-                                        in_progress:             { label: 'In Progress',      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Visit in progress — wait for enumerator to mark complete' },
-                                        inprogress:              { label: 'In Progress',      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Visit in progress — wait for enumerator to mark complete' },
-                                        dispatched:              { label: 'Dispatched',       cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for enumerator to accept in the mobile app' },
-                                        forwarded:               { label: 'Forwarded',        cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Forwarded to coordinator — awaiting acceptance' },
-                                        forwarded_to_fom:        { label: 'With FOM',         cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for FOM to review and dispatch' },
-                                        forwarded_to_coordinator:{ label: 'With Coordinator', cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for coordinator to dispatch to enumerator' },
-                                        permits_attached:        { label: 'Permits Attached', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Permits ready — coordinator must dispatch enumerator' },
-                                        assigned:                { label: 'Assigned',         cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Assigned to enumerator — coordinator must dispatch' },
-                                        submitted:               { label: 'Submitted',        cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Submitted — awaiting supervisor review' },
-                                        // Not started
-                                        pending:                 { label: 'Pending',          cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',          isTerminal: false, actionFn: () => 'Not yet assigned — assign an enumerator to proceed' },
-                                      };
-                                      const getStatusEntry = (status: string) => SM[status] || SM[status?.toLowerCase()] || null;
-                                      const getAction = (e: EnumeratorCostDetail): { text: string; isBlocking: boolean } => {
-                                        const entry = getStatusEntry(e.status);
-                                        if (entry) return { text: entry.actionFn(e.costAcknowledged), isBlocking: !entry.isTerminal };
-                                        // Null/unknown status — use cost_acknowledged as signal
-                                        if (e.costAcknowledged) return { text: '✓ Cost acknowledged — verify visit status in MMP', isBlocking: false };
-                                        return { text: 'Open the MMP and check this site entry\'s status', isBlocking: true };
-                                      };
-                                      const ackCount  = cycleSummaryData.enumeratorCosts.filter(e => e.costAcknowledged).length;
-                                      const doneCount = cycleSummaryData.enumeratorCosts.filter(e => getStatusEntry(e.status)?.isTerminal).length;
-                                      const blockCount = cycleSummaryData.enumeratorCosts.filter(e => getAction(e).isBlocking).length;
-                                      return (
-                                        <div className="rounded-lg border overflow-hidden">
-                                          <div className="px-3 py-2 bg-green-50 dark:bg-green-950/40 text-xs font-semibold flex items-center gap-2 flex-wrap">
-                                            <span>👤 Enumerator & Transport Costs (Site Visits)</span>
-                                            <Badge variant="secondary" className="text-[10px]">{cycleSummaryData.enumeratorCosts.length} sites</Badge>
-                                            <span className="ml-auto flex gap-1.5 flex-wrap">
-                                              <span className="rounded-full px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] font-medium">{doneCount} Complete</span>
-                                              <span className="rounded-full px-2 py-0.5 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-medium">{ackCount} Cost Ack.</span>
-                                              {blockCount > 0 && <span className="rounded-full px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-[10px] font-medium">{blockCount} Need Action</span>}
-                                            </span>
-                                          </div>
-                                          <div className="overflow-x-auto">
-                                            <table className="w-full text-xs">
-                                              <thead>
-                                                <tr className="border-b bg-muted/20">
-                                                  <th className="px-3 py-1.5 text-left font-medium min-w-[120px]">Enumerator / Site</th>
-                                                  <th className="px-3 py-1.5 text-right font-medium text-blue-700">Enum. Fee</th>
-                                                  <th className="px-3 py-1.5 text-right font-medium text-indigo-700">Transport</th>
-                                                  <th className="px-3 py-1.5 text-right font-semibold">Total</th>
-                                                  <th className="px-3 py-1.5 text-center font-medium min-w-[100px]">Status</th>
-                                                  <th className="px-3 py-1.5 text-left font-medium min-w-[200px]">What to do next</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {cycleSummaryData.enumeratorCosts.map(e => {
-                                                  const entry = getStatusEntry(e.status);
-                                                  const { text: actionText, isBlocking } = getAction(e);
-                                                  const isDone = entry?.isTerminal && e.costAcknowledged;
-                                                  const rawStatus = e.status && e.status !== 'unknown' ? e.status : null;
-                                                  return (
-                                                    <tr key={e.id} className={`border-b last:border-0 ${isBlocking ? 'bg-amber-50/40 dark:bg-amber-950/15' : 'hover:bg-muted/10'}`}>
-                                                      <td className="px-3 py-2">
-                                                        <div className="font-medium text-foreground">
-                                                          {e.enumeratorName === 'Unassigned'
-                                                            ? <span className="text-muted-foreground italic">Unassigned</span>
-                                                            : e.enumeratorName}
-                                                        </div>
-                                                        <div className="text-[11px] text-muted-foreground truncate max-w-[160px]" title={e.siteName}>{e.siteName}</div>
-                                                        <div className="text-[10px] text-muted-foreground/70">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</div>
-                                                      </td>
-                                                      <td className="px-3 py-2 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                      <td className="px-3 py-2 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                      <td className="px-3 py-2 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
-                                                      <td className="px-3 py-2 text-center">
-                                                        {entry ? (
-                                                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${entry.cls}`}>{entry.label}</span>
-                                                        ) : (
-                                                          <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                                                            {rawStatus ? rawStatus.replace(/_/g, ' ') : 'Not set'}
-                                                          </span>
-                                                        )}
-                                                        {e.costAcknowledged && (
-                                                          <div className="text-[10px] text-green-600 mt-0.5">Cost ✓</div>
-                                                        )}
-                                                      </td>
-                                                      <td className="px-3 py-2 text-[11px]">
-                                                        {isDone
-                                                          ? <span className="text-green-600 font-medium">✓ Ready — no action needed</span>
-                                                          : <span className={isBlocking ? 'text-amber-700 dark:text-amber-400 font-medium' : 'text-muted-foreground'}>{actionText}</span>
-                                                        }
-                                                      </td>
-                                                    </tr>
-                                                  );
-                                                })}
-                                              </tbody>
-                                              <tfoot>
-                                                <tr className="bg-muted/30 font-semibold">
-                                                  <td className="px-3 py-1.5">Total</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono text-blue-700">{cycleSummaryData.totalEnumeratorFee.toLocaleString()} {cycleSummaryData.currency}</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{cycleSummaryData.totalTransportFee.toLocaleString()} {cycleSummaryData.currency}</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString()} {cycleSummaryData.currency}</td>
-                                                  <td colSpan={2} />
-                                                </tr>
-                                              </tfoot>
-                                            </table>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && cycleSummaryData.withdrawals.length === 0 && cycleSummaryData.enumeratorCosts.length === 0 && (
-                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions, advances, withdrawal requests, or enumerator costs found for this cycle.</p>
-                                    )}
-
-                                    {/* Export buttons */}
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 gap-1.5"
-                                        onClick={exportCycleSummaryExcel}
-                                        data-testid="button-export-cycle-summary-excel"
-                                      >
-                                        <FileSpreadsheet className="h-4 w-4" />
-                                        Export to Excel
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 gap-1.5 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
-                                        onClick={exportCycleSummaryPDF}
-                                        data-testid="button-export-cycle-summary-pdf"
-                                      >
-                                        <FileText className="h-4 w-4" />
-                                        Export Full PDF Report
-                                      </Button>
-                                    </div>
-                                  </>
-                                )}
-                              </CollapsibleContent>
-                            </Collapsible>
-
-                            {/* ── Step 9: Final Approval ── */}
-                            {activeStepId === 'approval' && (() => {
-                              const approvalIdx = guideSteps.findIndex(s => s.id === 'approval');
-                              const step = guideSteps[approvalIdx];
-                              if (!step) return null;
-                              const isCurrentStep = !step.passed && !step.blocked;
-                              const isDone = step.passed;
-                              return (
-                                <div
-                                  ref={isCurrentStep ? (el) => {
-                                    if (el && guideScrolledStepRef.current !== 'approval') {
-                                      guideScrolledStepRef.current = 'approval';
-                                      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
-                                    }
-                                  } : undefined}
-                                  className={`rounded-xl border transition-all ${
-                                    isDone
-                                      ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
-                                      : isCurrentStep
-                                        ? 'border-purple-400 bg-purple-50/60 dark:border-purple-600 dark:bg-purple-950/30 shadow-md p-4'
-                                        : 'border-muted bg-card p-4'
-                                  }`}
-                                  data-testid={`guide-step-${step.id}`}
-                                >
-                                  <div className="flex items-start gap-3">
-                                    <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                      isDone ? 'bg-green-500 text-white'
-                                        : isCurrentStep ? 'bg-purple-600 text-white animate-pulse'
-                                        : 'bg-muted text-muted-foreground'
-                                    }`}>
-                                      {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.number}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-semibold text-sm ${isDone ? 'text-green-700 dark:text-green-300' : isCurrentStep ? 'text-purple-800 dark:text-purple-200' : 'text-foreground'}`}>
-                                          {step.title}
-                                        </span>
-                                        <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>
-                                        {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
-                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-purple-600 text-white border-purple-600 animate-pulse">⏳ Awaiting approval</Badge>}
-                                      </div>
-                                      <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
-                                      {isCurrentStep && step.howTo.length > 0 && (
-                                        <div className={`mt-3 rounded-lg border px-3 py-2.5 ${
-                                          step.id === 'approval'
-                                            ? 'bg-white dark:bg-purple-950/40 border-purple-300/70 dark:border-purple-700/60'
-                                            : 'bg-white dark:bg-amber-950/40 border-amber-300/60'
-                                        }`}>
-                                          <p className={`text-xs font-semibold mb-1.5 ${step.id === 'approval' ? 'text-purple-900 dark:text-purple-100' : 'text-amber-900 dark:text-amber-100'}`}>What to do:</p>
-                                          <ol className="space-y-1">
-                                            {step.howTo.map((instruction, i) => (
-                                              <li key={i} className={`flex items-start gap-2 text-xs ${step.id === 'approval' ? 'text-purple-800 dark:text-purple-200' : 'text-amber-800 dark:text-amber-200'}`}>
-                                                <span className={`shrink-0 font-bold ${step.id === 'approval' ? 'text-purple-600' : 'text-amber-600'}`}>{i + 1}.</span>
-                                                <span>{instruction}</span>
-                                              </li>
-                                            ))}
-                                          </ol>
-                                        </div>
-                                      )}
-                                      {/* ── Cycle Close Gate Timeline (Step 9 — always visible when in approval step) ── */}
-                                      {(() => {
-                                        const mmpSnap = mmpFiles?.find(m => m.id === checklistMmpId) as any;
-                                        const fmt = (ts: string | null | undefined) =>
-                                          ts ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
-                                        const closedAt = mmpSnap?.cycle_closed_at;
-                                        const timeline: { label: string; labelAr: string; ts: string | null; icon: string }[] = [
-                                          { label: 'Fees Locked', labelAr: 'تثبيت الأتعاب', ts: fmt(feesLockedAt), icon: '🔒' },
-                                          { label: 'Payment Requested', labelAr: 'طلب الدفع', ts: fmt(paymentRequestedAt), icon: '📤' },
-                                          { label: 'Payments Confirmed', labelAr: 'تأكيد المدفوعات', ts: fmt(paymentsConfirmedAt), icon: '✅' },
-                                          { label: 'Submitted for Approval', labelAr: 'تقديم للموافقة', ts: fmt(cycleSubmittedAt), icon: '📋' },
-                                          ...(closedAt ? [{ label: 'Approved & Archived', labelAr: 'موافقة وأرشفة', ts: fmt(closedAt), icon: '🏛️' }] : []),
-                                        ];
-                                        const anyTs = timeline.some(t => t.ts);
-                                        if (!anyTs) return null;
-                                        return (
-                                          <div className="mt-3 rounded-lg border bg-muted/20 overflow-hidden">
-                                            <div className="px-3 py-2 bg-muted/40 text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                              <Clock className="h-3.5 w-3.5" /> Cycle Close Timeline
-                                            </div>
-                                            <div className="divide-y">
-                                              {timeline.filter(t => t.ts).map((t, i) => (
-                                                <div key={i} className="flex items-center gap-3 px-3 py-2">
-                                                  <span className="text-sm shrink-0">{t.icon}</span>
-                                                  <div className="flex-1 min-w-0">
-                                                    <span className="text-xs font-medium text-foreground">{t.label}</span>
-                                                    <span className="text-[10px] text-muted-foreground/70 ml-1.5" dir="rtl">{t.labelAr}</span>
-                                                  </div>
-                                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">{t.ts}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      })()}
-
-                                      {/* Approve / Reject panel for step 9 — shown for FOM, Admin, Super Admin */}
-                                      {checklistMmpStatus === 'pending_approval' && (isFOM || isAdmin || isSuperAdmin) && (
-                                        <div className="mt-4 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/40 p-4 space-y-3">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-lg">👉</span>
-                                            <div>
-                                              <p className="text-sm font-bold text-green-900 dark:text-green-100">Your action is required</p>
-                                              <p className="text-xs text-green-700 dark:text-green-300">You have approval authority for this cycle. Choose one action below.</p>
-                                            </div>
-                                          </div>
-                                          {pendingViaReportCount > 0 && (
-                                            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2">
-                                              <span className="text-amber-600 text-sm mt-0.5">⚠️</span>
-                                              <div className="text-xs text-amber-800 dark:text-amber-200">
-                                                <span className="font-semibold">{pendingViaReportCount} advance(s) pending payment via report.</span>{' '}
-                                                These zero-disbursement approved advances are <span className="font-semibold">non-blocking</span> — you can close now. They must be settled in the next payment report after close.
-                                              </div>
-                                            </div>
-                                          )}
-                                          <ol className="space-y-1 pl-1">
-                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
-                                              <span className="font-bold shrink-0">1.</span>
-                                              Review the <span className="font-semibold">Cycle Financial Summary</span> above — check enumerator costs, advances, and any outstanding items.
-                                            </li>
-                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
-                                              <span className="font-bold shrink-0">2.</span>
-                                              Click <span className="font-semibold text-green-700 dark:text-green-300">"Approve &amp; Close Cycle"</span> to permanently archive this cycle, or <span className="font-semibold text-red-700 dark:text-red-400">"Reject &amp; Send Back"</span> to return it for corrections.
-                                            </li>
-                                          </ol>
-                                          <Button
-                                            className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-11 text-sm font-semibold shadow-md"
-                                            onClick={() => handleApproveCycle(checklistMmpId!)}
-                                            disabled={closingCycle}
-                                            data-testid="button-approve-cycle-wizard"
-                                          >
-                                            {closingCycle
-                                              ? <><Loader2 className="h-5 w-5 animate-spin" /> Approving &amp; Closing…</>
-                                              : <><CheckCircle2 className="h-5 w-5" /> Approve &amp; Close Cycle</>
-                                            }
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 gap-2 h-9 text-xs"
-                                            onClick={() => setBannerRejectMmpId(checklistMmpId!)}
-                                            data-testid="button-reject-cycle-wizard"
-                                          >
-                                            <XCircle className="h-4 w-4" />
-                                            Reject &amp; Send Back (requires a reason)
-                                          </Button>
-                                        </div>
-                                      )}
-                                      {/* Waiting state — for non-approvers when pending_approval */}
-                                      {checklistMmpStatus === 'pending_approval' && !(isFOM || isAdmin || isSuperAdmin) && (
-                                        <div className="mt-3 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/30 px-3 py-2.5 space-y-1">
-                                          <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">⏳ Waiting for FOM / Admin approval</p>
-                                          <p className="text-xs text-purple-700 dark:text-purple-300">You will be notified once the cycle is approved or sent back for corrections.</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {/* Collapsible technical checklist */}
-                            <Collapsible>
-                              <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full pt-2" data-testid="button-toggle-technical-checklist">
-                                <ChevronDown className="h-3.5 w-3.5" />
-                                Technical Checklist Details
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mt-2 space-y-3">
-                                <CloseReadinessChecklist
-                                  title="Cycle Close Readiness"
-                                  items={cycleReadiness.items}
-                                  score={cycleReadiness.score}
-                                  allPassed={cycleReadiness.allPassed}
-                                  loading={cycleReadiness.loading}
-                                  isSuperAdmin={isSuperAdmin}
-                                  onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
-                                  onResolveItem={handleChecklistResolveItem}
-                                  overrideLabel="Override & Force Close"
-                                />
-                                <ReconciliationSummary
-                                  mmpId={checklistMmpId ?? undefined}
-                                  mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
-                                />
-                              </CollapsibleContent>
-                            </Collapsible>
-                            </>
-                          )}
-                        </div>
-                        {/* ── Wizard navigation footer ── */}
-                        <div className="border-t px-6 py-3 flex items-center justify-between shrink-0 bg-muted/10">
-                          <div className="flex items-center gap-2">
-                            {prevStepObj ? (
-                              <Button variant="outline" size="sm" onClick={() => setWizardStep(prevStepObj.id)} className="gap-1.5 text-xs h-8" data-testid="button-wizard-prev">
-                                <ChevronLeft className="h-3.5 w-3.5" /> Back
-                              </Button>
-                            ) : <div />}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" variant="ghost" className="gap-1 text-xs text-muted-foreground h-8" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh-footer">
-                              <RefreshCw className="h-3 w-3" /> Check progress
-                            </Button>
-                            <span className="text-[10px] text-muted-foreground hidden sm:block">
-                              Step {guideSteps.find(s => s.id === activeStepId)?.number ?? '?'} of {actionable.length}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {nextStepObj ? (
-                              <Button size="sm" onClick={() => setWizardStep(nextStepObj.id)} className={`gap-1.5 text-xs h-8 ${nextStepObj.blocked ? 'opacity-50' : ''}`} disabled={nextStepObj.blocked} data-testid="button-wizard-next">
-                                Next <ChevronRight className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : <div />}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })() : (
-                  /* ── PRE-CLOSE CHECKLIST (cycle still active, user about to start) ── */
-                  <div className="flex-1 overflow-y-auto px-6 py-5">
-                  <div className="max-w-2xl mx-auto space-y-3">
-                    {/* Next-step guide card */}
-                    {!cycleReadiness.loading && nextBlocker && (
-                      <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3" data-testid="banner-next-step">
-                        <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Next step to unblock</p>
-                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{nextBlocker.label}</p>
-                        </div>
-                        {nextBlocker.link && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="shrink-0 text-xs border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950"
-                            onClick={() => {
-                              setChecklistMmpId(null);
-                              setPendingScopedClose(null);
-                              setReconciliationAcknowledged(false);
-                              if (nextBlocker.link!.startsWith('/mmp/cycle-close')) {
-                                const url = new URL(nextBlocker.link!, window.location.origin);
-                                const tab = url.searchParams.get('tab');
-                                if (tab) setActiveTab(tab);
-                              } else {
-                                const activeMmpName = checklistMmpId ? (mmpFiles?.find(m => m.id === checklistMmpId)?.name || '') : '';
-                                let dest = nextBlocker.link!;
-                                if (dest === '/finance' && checklistMmpId) {
-                                  dest = `/finance?mmpId=${checklistMmpId}&mmpName=${encodeURIComponent(activeMmpName)}`;
-                                }
-                                navigate(dest);
-                              }
-                            }}
-                            data-testid="button-next-step-resolve"
-                          >
-                            Resolve <ArrowRight className="h-3 w-3 ml-1" />
-                          </Button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── Guided step-by-step close wizard ── */}
-                    <CycleCloseGuide
-                      mmpId={checklistMmpId}
-                      checklistItems={cycleReadiness.items}
-                      loading={cycleReadiness.loading}
-                      onTabChange={(tab) => {
-                        setActiveTab(tab);
-                        if (tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
-                      }}
-                    />
-
-                    {!cycleReadiness.loading && cycleReadiness.allPassed && (
-                      <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                        All requirements met — you can proceed to close this cycle.
-                      </div>
-                    )}
-
-                    <CloseReadinessChecklist
-                      title="Cycle Close Readiness"
-                      items={cycleReadiness.items}
-                      score={cycleReadiness.score}
-                      allPassed={cycleReadiness.allPassed}
-                      loading={cycleReadiness.loading}
-                      isSuperAdmin={isSuperAdmin}
-                      onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
-                      onResolveItem={handleChecklistResolveItem}
-                      overrideLabel="Override & Start Closing"
-                    />
-                    <ReconciliationSummary
-                      mmpId={checklistMmpId ?? undefined}
-                      mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
-                    />
-                    {cycleReadiness.allPassed && !cycleReadiness.loading && (
-                      <div className="space-y-3 pt-1">
-                        <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack">
-                          <input
-                            type="checkbox"
-                            checked={reconciliationAcknowledged}
-                            onChange={e => setReconciliationAcknowledged(e.target.checked)}
-                            className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
-                            data-testid="checkbox-reconciliation-ack"
-                          />
-                          <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
-                            I have reviewed the reconciliation summary above and confirm that all financial obligations for this cycle are accounted for.
-                          </span>
-                        </label>
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }}
-                            data-testid="button-cancel-close-gate"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                            onClick={() => {
-                              const mmpId = checklistMmpId!;
-                              const pending = pendingScopedClose;
-                              setPendingScopedClose(null);
-                              setReconciliationAcknowledged(false);
-                              if (pending) {
-                                executeScopedClose(mmpId, pending.scope, pending.scopeValue);
-                              } else {
-                                handleStartClosingCycle(mmpId);
-                              }
-                            }}
-                            disabled={closingCycle || !reconciliationAcknowledged}
-                            data-testid="button-proceed-close-cycle"
-                          >
-                            {pendingScopedClose ? `Proceed to Close (${pendingScopedClose.scope})` : 'Proceed to Close Cycle'}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  </div>
-                  )}
-                </div>
-      , document.body) : (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 mb-4" data-testid="wizard-prompt">
-          <div className="px-4 py-3 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
-            <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-semibold text-blue-800 dark:text-blue-200">How to close a cycle — start here</span>
-            <span dir="rtl" className="text-xs text-blue-500 mr-1">كيف تغلق الدورة</span>
-          </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Step A */}
-            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
-              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">1</span>
-              <div>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Click the Active Cycles tab below</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">Find the MMP whose monitoring month has ended. Its row shows live coverage counts.</p>
-              </div>
-            </div>
-            {/* Step B */}
-            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
-              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">2</span>
-              <div>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Click <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px]">Close Full MMP</span> on that row</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">The system flags all unvisited sites automatically and opens the step-by-step wizard.</p>
-              </div>
-            </div>
-            {/* Step C */}
-            <div className="flex gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-3">
-              <span className="flex-none inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">3</span>
-              <div>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Follow the wizard steps until ✓ Submit</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">Assign reasons → pass readiness checklist → submit for FOM approval → done.</p>
-              </div>
-            </div>
-          </div>
-          <div className="px-4 pb-3 flex items-center gap-2">
-            <ArrowRight className="h-3.5 w-3.5 text-blue-500 animate-bounce" style={{ animationDirection: 'alternate' }} />
-            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Scroll down to the Active Cycles tab and find your MMP ↓</span>
-          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-blue-600 hover:text-blue-800 dark:text-blue-400" onClick={() => { setChecklistMmpId(null); setReconciliationAcknowledged(false); }} title="Deselect MMP" data-testid="button-deselect-mmp">
+            <X className="h-3.5 w-3.5" />
+          </Button>
         </div>
       )}
-      {(!checklistMmpId || checklistMmpStatus === 'active') && (
+
       <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); }} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="h-auto flex flex-nowrap gap-1 p-1.5 overflow-x-auto w-full justify-start bg-muted/60 rounded-xl border border-border/60">
           <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm gap-1.5 shrink-0 flex-col items-start py-2">
@@ -7090,6 +4766,102 @@ const MMPCycleClose = () => {
           )}
 
           <CycleCoveragePredictor activeMmps={activeMmps} siteVisitCounts={siteVisitCounts} />
+          {/* ── Close Readiness Panel — visible in-page when an MMP is selected ── */}
+          {checklistMmpId && (
+            <div className="space-y-4 pt-2 border-t border-border/40 mt-2" data-testid="section-close-readiness">
+              <h3 className="text-sm font-semibold text-foreground mt-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Close Readiness: {mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+              </h3>
+
+              {checklistMmpStatus === 'closed' && (
+                <div className="flex items-center gap-3 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-2">
+                  <div className="shrink-0 w-9 h-9 rounded-full bg-green-500 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-green-800 dark:text-green-200">Cycle Closed &amp; Archived</p>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                      All steps are complete. This cycle is permanently archived.
+                      {(() => {
+                        const closedAt = mmpFiles?.find(m => m.id === checklistMmpId)?.cycle_closed_at;
+                        return closedAt ? ` Closed on ${new Date(closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}.` : '';
+                      })()} 
+                    </p>
+                  </div>
+                  {isSuperAdmin && (
+                    <Button size="sm" variant="outline" className="ml-auto shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 gap-1.5 text-xs" onClick={() => { setChecklistMmpId(null); setReopenConfirmId(checklistMmpId!); setReopenReason(''); }} data-testid="button-reopen-from-guide">
+                      <RefreshCw className="h-3 w-3" /> Re-open
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {checklistMmpStatus === 'closing' && (() => {
+                const rejNote = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_approval_note;
+                if (!rejNote) return null;
+                return (
+                  <div className="flex items-start gap-3 rounded-xl border-2 border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-3 mb-2" data-testid="banner-cycle-rejected">
+                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-red-800 dark:text-red-200">Cycle Returned for Corrections</p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mt-1"><span className="font-semibold">Reason:</span> {rejNote}</p>
+                      <p className="text-[11px] text-red-500 dark:text-red-400 mt-1.5">Address the issues above, then re-submit for approval.</p>
+                    </div>
+                  </div>
+                );
+              })()} 
+
+              <CycleCloseGuide
+                mmpId={checklistMmpId}
+                checklistItems={cycleReadiness.items}
+                loading={cycleReadiness.loading}
+                onTabChange={(tab) => {
+                  setActiveTab(tab);
+                  if (tab === 'finance' && checklistMmpId) setSelectedMmpId(checklistMmpId);
+                }}
+              />
+
+              {!cycleReadiness.loading && cycleReadiness.allPassed && (
+                <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                  All requirements met — you can proceed to close this cycle.
+                </div>
+              )}
+
+              <CloseReadinessChecklist
+                title="Cycle Close Readiness"
+                items={cycleReadiness.items}
+                score={cycleReadiness.score}
+                allPassed={cycleReadiness.allPassed}
+                loading={cycleReadiness.loading}
+                isSuperAdmin={isSuperAdmin}
+                onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
+                onResolveItem={handleChecklistResolveItem}
+                overrideLabel="Override &amp; Start Closing"
+              />
+              <ReconciliationSummary
+                mmpId={checklistMmpId ?? undefined}
+                mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+              />
+              {cycleReadiness.allPassed && !cycleReadiness.loading && (
+                <div className="space-y-3 pt-1">
+                  <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack">
+                    <input type="checkbox" checked={reconciliationAcknowledged} onChange={e => setReconciliationAcknowledged(e.target.checked)} className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0" data-testid="checkbox-reconciliation-ack" />
+                    <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
+                      I have reviewed the reconciliation summary above and confirm that all financial obligations for this cycle are accounted for.
+                    </span>
+                  </label>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-cancel-close-gate">Cancel</Button>
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { const mmpId = checklistMmpId!; const pending = pendingScopedClose; setPendingScopedClose(null); setReconciliationAcknowledged(false); if (pending) { executeScopedClose(mmpId, pending.scope, pending.scopeValue); } else { handleStartClosingCycle(mmpId); } }} disabled={closingCycle || !reconciliationAcknowledged} data-testid="button-proceed-close-cycle">
+                      {pendingScopedClose ? `Proceed to Close (${pendingScopedClose.scope})` : 'Proceed to Close Cycle'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="uncovered" className="space-y-4">
@@ -7294,7 +5066,7 @@ const MMPCycleClose = () => {
                 Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — reviewing cost-recovery exceptions for this cycle.
               </span>
               <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-exceptions">
-                ← Back to wizard
+                ← Back to Active Cycles
               </Button>
             </div>
           )}
@@ -7521,7 +5293,7 @@ const MMPCycleClose = () => {
                 Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — reviewing pending finance for this cycle.
               </span>
               <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-finance">
-                ← Back to wizard
+                ← Back to Active Cycles
               </Button>
             </div>
           )}
@@ -7845,7 +5617,7 @@ const MMPCycleClose = () => {
                 Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — upload WFP file for this cycle.
               </span>
               <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist-wfp">
-                ← Back to wizard
+                ← Back to Active Cycles
               </Button>
             </div>
           )}
@@ -8442,7 +6214,6 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
-      )}
       </div>
 
       {/* Re-open Cycle Confirmation Dialog — Super Admin only */}
