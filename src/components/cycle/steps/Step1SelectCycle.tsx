@@ -32,7 +32,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
     setLoading(true);
     const { data, error } = await supabase
       .from('mmp_files')
-      .select('id, name, status, hub_office, created_at, month, year')
+      .select('id, name, status, hub, created_at, month, year')
       .in('status', ['Pending', 'pending', 'In Progress', 'in_progress', 'Verified', 'verified', 'Active', 'active', 'open'])
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
@@ -125,7 +125,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                   <SelectItem key={mmp.id} value={mmp.id}>
                     {mmp.name}
                     {mmp.month && mmp.year && ` — ${mmp.month}/${mmp.year}`}
-                    {mmp.hub_office && ` (${mmp.hub_office})`}
+                    {mmp.hub && ` (${mmp.hub})`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -172,7 +172,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                   <MapPin className="h-4 w-4 text-orange-500" />
                   <div>
                     <p className="text-xs text-muted-foreground">Hub</p>
-                    <p className="font-semibold text-xs">{selectedMmp.hub_office ?? 'All'}</p>
+                    <p className="font-semibold text-xs">{selectedMmp.hub ?? 'All'}</p>
                   </div>
                 </div>
               </div>
