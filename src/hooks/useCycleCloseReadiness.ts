@@ -319,11 +319,13 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'enumerator_reconciliation',
           label: 'Enumerator payments reconciled',
-          description: !wfpApplied
-            ? 'Apply the WFP confirmation file first — enumerator reconciliation is unlocked after site coverage is confirmed.'
-            : 'Settle each enumerator\'s advance vs. confirmed-site earnings before closing: generate balance payments, schedule recoveries, or mark as balanced.',
-          passed: wfpApplied,   // soft check — full enforcement is in Finance tab
-          count: wfpApplied ? 1 : 0,
+          description: wfpApplied
+            ? 'Settle each enumerator\'s advance vs. confirmed-site earnings before closing: generate balance payments, schedule recoveries, or mark as balanced.'
+            : submittedCount === 0
+              ? 'No submitted sites require WFP confirmation — proceed to the Finance tab to settle enumerator advances if any are outstanding.'
+              : 'Apply the WFP confirmation file first — enumerator reconciliation is unlocked after site coverage is confirmed.',
+          passed: wfpApplied || submittedCount === 0,
+          count: (wfpApplied || submittedCount === 0) ? 1 : 0,
           total: 1,
           link: '/mmp/cycle-close?tab=finance',
           notConfigured: false,

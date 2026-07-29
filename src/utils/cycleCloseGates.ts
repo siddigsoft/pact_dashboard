@@ -166,10 +166,10 @@ export function canSubmitForApproval(state: SubmitApprovalState): { ok: boolean;
     blockers.push('Complete all readiness checklist gates (sites, finance, WFP, cost recovery)');
   }
   if (!state.feesLockedAt) {
-    blockers.push('Lock exchange rate and fees (Step 6)');
+    blockers.push('Lock exchange rate and fees (Step 5)');
   }
   if (!state.paymentsConfirmedAt) {
-    blockers.push('Confirm all payments done (Step 7)');
+    blockers.push('Confirm all payments done (Step 6)');
   }
   if (state.unreasonedSiteCount > 0) {
     blockers.push(
