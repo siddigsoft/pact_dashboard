@@ -17,7 +17,7 @@ import {
   Banknote, RefreshCw, Users, Search, Plus, Pencil, Trash2,
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
   TrendingDown, Info, Paperclip, ExternalLink, Upload, Receipt,
-  FileImage, FileText,
+  FileImage, FileText, CheckCircle2, ArrowLeft, ShieldCheck,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -92,6 +92,7 @@ export default function PreFundingDistribute() {
   const [topUpAmt, setTopUpAmt]           = useState('');
   const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
   const [topUpSaving, setTopUpSaving]     = useState(false);
+  const [topUpConfirmStep, setTopUpConfirmStep] = useState(false);
 
   // Receipt viewer popup
   const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
@@ -204,9 +205,9 @@ export default function PreFundingDistribute() {
   const uploadReceipt = async (file: File, fundId: string, userId: string): Promise<string | null> => {
     const ext  = file.name.split('.').pop() ?? 'bin';
     const path = `pre-fund-alloc-receipts/${fundId}/${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true });
+    const { error } = await supabase.storage.from('mmp-files').upload(path, file, { upsert: true });
     if (error) { toast({ title: 'Receipt upload failed', description: error.message, variant: 'destructive' }); return null; }
-    return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl;
+    return supabase.storage.from('mmp-files').getPublicUrl(path).data.publicUrl;
   };
 
   /** Upload multiple receipt files; returns JSON array string if >1, or plain URL if 1. */
@@ -418,53 +419,60 @@ export default function PreFundingDistribute() {
   };
 
   const openTopUp = (alloc: Allocation, fundId: string) => {
-    setTopUpAmt(String(alloc.allocated_amount));
+    setTopUpAmt('');
     setTopUpReceiptFiles([]);
+    setTopUpConfirmStep(false);
     setTopUpDialog({ open: true, alloc, fundId });
+  };
+
+  const handleTopUpReview = () => {
+    const { alloc } = topUpDialog;
+    if (!alloc) return;
+    const increment = parseFloat(topUpAmt);
+    if (isNaN(increment) || increment <= 0) {
+      toast({ title: 'Enter a valid top-up amount', description: 'Amount must be greater than zero.', variant: 'destructive' });
+      return;
+    }
+    if (!topUpReceiptFiles.length) {
+      toast({ title: 'Receipt required', description: 'Please attach at least one receipt before continuing.', variant: 'destructive' });
+      return;
+    }
+    setTopUpConfirmStep(true);
   };
 
   const saveTopUp = async () => {
     const { alloc, fundId } = topUpDialog;
     if (!alloc) return;
-    const newAmt = parseFloat(topUpAmt);
-    if (isNaN(newAmt) || newAmt < 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
-    if (!topUpReceiptFiles.length && !alloc.receipt_url) {
+    const increment = parseFloat(topUpAmt);
+    if (isNaN(increment) || increment <= 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
+    if (!topUpReceiptFiles.length) {
       toast({ title: 'Receipt required', description: 'Please attach a receipt or supporting document before saving.', variant: 'destructive' });
       return;
     }
     setTopUpSaving(true);
     try {
-      let receiptUrl: string | null = alloc.receipt_url ?? null;
-      if (topUpReceiptFiles.length) {
-        const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
-        if (!uploaded) { setTopUpSaving(false); return; }
-        receiptUrl = uploaded;
-      }
+      const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
+      if (!uploaded) { setTopUpSaving(false); return; }
+      const newTotal = alloc.allocated_amount + increment;
       const fund = funds.find(f => f.id === fundId);
       const { error } = await (supabase as any)
         .from('pre_fund_allocations')
-        .update({ allocated_amount: newAmt, receipt_url: receiptUrl })
+        .update({ allocated_amount: newTotal, receipt_url: uploaded })
         .eq('id', alloc.id);
       if (error) throw error;
-      // Notify the allocated staff member that their allocation has been updated
-      const diff = newAmt - alloc.allocated_amount;
-      const changeDesc = diff > 0
-        ? `increased by ${formatNumber(diff, 0)} ${alloc.currency} (new total: ${formatNumber(newAmt, 0)})`
-        : diff < 0
-          ? `reduced by ${formatNumber(Math.abs(diff), 0)} ${alloc.currency} (new total: ${formatNumber(newAmt, 0)})`
-          : `updated to ${formatNumber(newAmt, 0)} ${alloc.currency}`;
       dispatchNotification({
         event: 'pre_fund_allocation_updated', recipientIds: [alloc.user_id],
-        titleEn: 'Fund Allocation Updated', titleAr: 'تم تحديث تخصيص الصندوق',
-        messageEn: `Your allocation from fund "${fund?.name ?? fundId}" has been ${changeDesc}.`,
-        messageAr: `تم تحديث تخصيصك من صندوق "${fund?.name ?? fundId}" إلى ${formatNumber(newAmt, 0)} ${alloc.currency}.`,
+        titleEn: 'Fund Allocation Topped Up', titleAr: 'تم تعبئة تخصيص الصندوق',
+        messageEn: `Your allocation from fund "${fund?.name ?? fundId}" has been topped up by ${formatNumber(increment, 0)} ${alloc.currency}. New total: ${formatNumber(newTotal, 0)} ${alloc.currency}.`,
+        messageAr: `تمت تعبئة تخصيصك من صندوق "${fund?.name ?? fundId}" بمقدار ${formatNumber(increment, 0)} ${alloc.currency}. المجموع الجديد: ${formatNumber(newTotal, 0)}.`,
         entityType: 'pre_fund_request', entityId: fundId,
         triggeredBy: currentUser?.id, priority: 'normal',
-        metadata: { fund_id: fundId, fund_name: fund?.name, old_amount: alloc.allocated_amount, new_amount: newAmt, currency: alloc.currency },
+        metadata: { fund_id: fundId, fund_name: fund?.name, top_up_amount: increment, new_total: newTotal, currency: alloc.currency },
       }).catch(() => null);
-      toast({ title: 'Allocation updated', description: `Amount set to ${formatNumber(newAmt, 0)} ${alloc.currency}.` });
+      toast({ title: 'Funds added', description: `${formatNumber(increment, 0)} ${alloc.currency} added. New total: ${formatNumber(newTotal, 0)}.` });
       setTopUpDialog({ open: false, alloc: null, fundId: '' });
       setTopUpReceiptFiles([]);
+      setTopUpConfirmStep(false);
       await loadAllocations(fundId);
     } catch (e: any) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
@@ -1070,84 +1078,160 @@ export default function PreFundingDistribute() {
         </DialogContent>
       </Dialog>
 
-      {/* Top-Up / Edit Allocation Dialog */}
-      <Dialog open={topUpDialog.open} onOpenChange={o => !o && setTopUpDialog({ open: false, alloc: null, fundId: '' })}>
+      {/* Top-Up / Add Funds Dialog */}
+      <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '' }); setTopUpConfirmStep(false); } }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Banknote className="h-4 w-4 text-sky-600" />
-              Add Funds — {topUpDialog.alloc?.user_name}
-            </DialogTitle>
-          </DialogHeader>
-          {topUpDialog.alloc && (
-            <div className="space-y-4 py-1">
-              <div>
-                <Label className="text-xs mb-1 block">New Amount ({topUpDialog.alloc.currency})</Label>
-                <Input
-                  type="number"
-                  value={topUpAmt}
-                  onChange={e => setTopUpAmt(e.target.value)}
-                  className="h-8 text-sm"
-                  autoFocus
-                  data-testid="input-topup-amount"
-                />
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Currently allocated: {formatNumber(topUpDialog.alloc.allocated_amount, 0)} · Spent: {formatNumber(topUpDialog.alloc.spent_amount, 0)}
-                </p>
-              </div>
-              <div>
-                <Label className="text-xs mb-2 block flex items-center gap-1">
-                  <Paperclip className="h-3 w-3" />Receipts / Supporting Documents <span className="text-destructive">*</span>
-                </Label>
-                {/* Existing receipts (click to view in popup) */}
-                {topUpDialog.alloc.receipt_url && topUpReceiptFiles.length === 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {parseReceiptUrls(topUpDialog.alloc.receipt_url).map((url, i, arr) => (
-                      <button
-                        key={i}
-                        onClick={() => setViewReceiptUrl(url)}
-                        className="flex items-center gap-1 text-[11px] text-sky-600 hover:text-sky-700 border border-sky-200 rounded px-2 py-0.5"
-                      >
-                        <Receipt className="h-3 w-3" />
-                        {arr.length > 1 ? `Receipt ${i + 1}` : 'View current receipt'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* Staged new files */}
-                {topUpReceiptFiles.length > 0 && (
-                  <div className="space-y-1 mb-2">
-                    {topUpReceiptFiles.map((f, i) => (
-                      <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
-                        {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
-                        <span className="truncate flex-1 text-[12px]">{f.name}</span>
-                        <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+          {topUpDialog.alloc && (() => {
+            const alloc = topUpDialog.alloc;
+            const balance = alloc.allocated_amount - alloc.spent_amount;
+            const increment = parseFloat(topUpAmt) || 0;
+            const newTotal = alloc.allocated_amount + increment;
+
+            if (topUpConfirmStep) {
+              /* ── Confirmation step ── */
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      Confirm Fund Transfer
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 py-1">
+                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                      <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-sm">
+                        {alloc.user_name}
                       </div>
-                    ))}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                        <span className="text-muted-foreground">Current balance</span>
+                        <span className="font-mono font-medium text-right">{alloc.currency} {formatNumber(balance, 0)}</span>
+                        <span className="text-muted-foreground">Top-up amount</span>
+                        <span className="font-mono font-semibold text-sky-700 dark:text-sky-400 text-right">+ {alloc.currency} {formatNumber(increment, 0)}</span>
+                        <span className="text-muted-foreground border-t pt-1">New total allocated</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 border-t pt-1 text-right">{alloc.currency} {formatNumber(newTotal, 0)}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {topUpReceiptFiles.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1 text-[11px] border rounded px-2 py-0.5 bg-muted/40">
+                          {f.type.startsWith('image/') ? <FileImage className="h-3 w-3 text-sky-600" /> : <FileText className="h-3 w-3 text-rose-500" />}
+                          <span className="truncate max-w-[140px]">{f.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                      This action will transfer funds to {alloc.user_name} and upload the receipt. It cannot be undone automatically.
+                    </p>
                   </div>
-                )}
-                <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-[12px] text-muted-foreground">
-                    {topUpDialog.alloc.receipt_url || topUpReceiptFiles.length > 0 ? 'Add / replace receipts…' : 'Attach receipt(s) — images or PDFs'}
-                  </span>
-                  <input
-                    type="file" accept="image/*,.pdf" multiple className="hidden"
-                    onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
-                    data-testid="input-topup-receipt-file"
-                  />
-                </label>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '' })}>Cancel</Button>
-            <Button onClick={saveTopUp} disabled={topUpSaving} data-testid="button-confirm-topup">
-              {topUpSaving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </DialogFooter>
+                  <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => setTopUpConfirmStep(false)} className="gap-1" data-testid="button-topup-back">
+                      <ArrowLeft className="h-3.5 w-3.5" />Back
+                    </Button>
+                    <Button
+                      onClick={saveTopUp}
+                      disabled={topUpSaving}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                      data-testid="button-confirm-topup"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {topUpSaving ? 'Sending…' : 'Confirm & Add Funds'}
+                    </Button>
+                  </DialogFooter>
+                </>
+              );
+            }
+
+            /* ── Entry step ── */
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Banknote className="h-4 w-4 text-sky-600" />
+                    Add Funds — {alloc.user_name}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-1">
+                  {/* Current balance summary */}
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Allocated</p>
+                      <p className="font-mono font-semibold text-[13px] mt-0.5">{formatNumber(alloc.allocated_amount, 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Spent</p>
+                      <p className="font-mono font-semibold text-[13px] mt-0.5 text-rose-600">{formatNumber(alloc.spent_amount, 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Balance</p>
+                      <p className={cn('font-mono font-bold text-[13px] mt-0.5', balance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                        {formatNumber(balance, 0)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Top-up amount */}
+                  <div>
+                    <Label className="text-xs mb-1 block">Top-Up Amount ({alloc.currency}) <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={topUpAmt}
+                      onChange={e => setTopUpAmt(e.target.value)}
+                      className="h-9 text-sm font-mono"
+                      autoFocus
+                      data-testid="input-topup-amount"
+                    />
+                    {increment > 0 && (
+                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                        New total: {alloc.currency} {formatNumber(alloc.allocated_amount, 0)} + {formatNumber(increment, 0)} = <span className="font-semibold text-emerald-600">{formatNumber(newTotal, 0)}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Receipt upload — required for each top-up */}
+                  <div>
+                    <Label className="text-xs mb-2 flex items-center gap-1">
+                      <Paperclip className="h-3 w-3" />Receipt of Fund Sent <span className="text-destructive">*</span>
+                    </Label>
+                    {topUpReceiptFiles.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {topUpReceiptFiles.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
+                            {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
+                            <span className="truncate flex-1 text-[12px]">{f.name}</span>
+                            <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
+                      <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[12px] text-muted-foreground">
+                        {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt — image or PDF'}
+                      </span>
+                      <input
+                        type="file" accept="image/*,.pdf" multiple className="hidden"
+                        onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+                        data-testid="input-topup-receipt-file"
+                      />
+                    </label>
+                    <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                      <Info className="h-3 w-3" />A receipt is required for every top-up transaction.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '' })}>Cancel</Button>
+                  <Button onClick={handleTopUpReview} className="gap-1" data-testid="button-review-topup">
+                    Review & Confirm →
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1233,12 +1317,52 @@ export default function PreFundingDistribute() {
             {viewReceiptUrl && (() => {
               const lower = viewReceiptUrl.toLowerCase().split('?')[0];
               const isImage = ['.png','.jpg','.jpeg','.gif','.webp','.bmp'].some(e => lower.endsWith(e));
-              return isImage ? (
-                <div className="flex items-center justify-center h-full bg-muted/30 p-4">
-                  <img src={viewReceiptUrl} alt="Receipt" className="max-h-full max-w-full object-contain rounded shadow-md" />
+              if (isImage) {
+                return (
+                  <div className="flex items-center justify-center h-full bg-muted/30 p-4">
+                    <img
+                      src={viewReceiptUrl}
+                      alt="Receipt"
+                      className="max-h-full max-w-full object-contain rounded shadow-md"
+                      onError={e => {
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.receipt-error')) {
+                          const err = document.createElement('div');
+                          err.className = 'receipt-error flex flex-col items-center gap-2 text-muted-foreground text-sm';
+                          err.innerHTML = '<span class="text-3xl">🖼️</span><p>Image could not be loaded.</p><p class="text-xs">The file may have been stored in an older location. Please re-upload the receipt.</p>';
+                          parent.appendChild(err);
+                        }
+                      }}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div className="relative w-full h-full">
+                  <iframe
+                    src={viewReceiptUrl}
+                    className="w-full h-full border-0"
+                    title="Receipt"
+                    onLoad={e => {
+                      try {
+                        const doc = (e.currentTarget as HTMLIFrameElement).contentDocument;
+                        const text = doc?.body?.innerText ?? '';
+                        if (text.includes('Bucket not found') || text.includes('"error"')) {
+                          const body = doc?.body;
+                          if (body) {
+                            body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:#64748b;font-family:sans-serif;padding:24px;text-align:center">
+                              <div style="font-size:2.5rem">📄</div>
+                              <p style="font-weight:600;font-size:14px">Receipt not available</p>
+                              <p style="font-size:12px;max-width:280px">This receipt was stored in an older location. Please re-upload it using the Add Funds button.</p>
+                            </div>`;
+                          }
+                        }
+                      } catch {/* cross-origin — ignore */}
+                    }}
+                  />
                 </div>
-              ) : (
-                <iframe src={viewReceiptUrl} className="w-full h-full border-0" title="Receipt" />
               );
             })()}
           </div>
