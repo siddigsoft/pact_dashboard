@@ -33,11 +33,26 @@ export interface CycleCloseReadiness {
 
 async function fetchAllSiteEntries(mmpId: string) {
   const PAGE = 1000;
+  // Probe for not_covered_flag + not_covered_reason columns.
+  // If missing (migration not applied yet) fall back to id+status only.
+  // This prevents the readiness check from silently returning [] (= all
+  // gates appear "passed") when those columns don't exist in Supabase yet.
+  const FULL_COLS = 'id, status, not_covered_flag, not_covered_reason';
+  const BASE_COLS = 'id, status';
+  const { error: probeErr } = await supabase
+    .from('mmp_site_entries')
+    .select(FULL_COLS)
+    .eq('mmp_file_id', mmpId)
+    .limit(1);
+  const cols = (probeErr && (probeErr.message?.includes('column') || (probeErr as any).code === '42703'))
+    ? BASE_COLS
+    : FULL_COLS;
+
   let all: Array<{ id: string; status: string; not_covered_flag: boolean | null; not_covered_reason: string | null }> = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, status, not_covered_flag, not_covered_reason')
+      .select(cols)
       .eq('mmp_file_id', mmpId)
       .range(from, from + PAGE - 1);
     if (error || !data) break;

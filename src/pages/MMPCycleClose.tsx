@@ -1231,12 +1231,25 @@ const MMPCycleClose = () => {
     fetchFinance();
   }, [activeTab, selectedMmpId]);
 
-  // Scroll wizard into view whenever it opens (checklistMmpId transitions null → value)
+  // Scroll wizard into view whenever it opens (checklistMmpId transitions null → value).
+  // Uses window.scrollTo with a calculated offset rather than scrollIntoView so it
+  // works correctly in layouts where the scroll container is not the root element.
+  // behavior: 'instant' ensures the jump is visible immediately (smooth scrolls can
+  // be imperceptibly slow on long pages and mislead the user into thinking nothing happened).
   useEffect(() => {
     if (checklistMmpId) {
-      setTimeout(() => {
-        wizardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
+      const doScroll = () => {
+        if (wizardRef.current) {
+          const rect = wizardRef.current.getBoundingClientRect();
+          // Subtract 72px so the wizard clears a typical sticky header
+          const targetY = window.scrollY + rect.top - 72;
+          window.scrollTo({ top: Math.max(0, targetY), behavior: 'instant' as ScrollBehavior });
+        }
+      };
+      // Two attempts: 100ms (after first render) and 350ms (after data loads)
+      const t1 = setTimeout(doScroll, 100);
+      const t2 = setTimeout(doScroll, 350);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [checklistMmpId]);
 
