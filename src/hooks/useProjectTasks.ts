@@ -73,35 +73,91 @@ export interface MyFieldTask {
 
 // ── Notification helpers ────────────────────────────────────────────────────
 
+/** Everyone who should hear about activity on a field task (minus the actor). */
+function stakeholderIds(
+  task: { createdBy?: string | null; assignedTo?: string | null; coAssigneeIds?: string[] },
+  actorId?: string | null,
+): string[] {
+  return Array.from(
+    new Set(
+      [task.createdBy, task.assignedTo, ...(task.coAssigneeIds ?? [])].filter(
+        (id): id is string => !!id && id !== actorId,
+      ),
+    ),
+  );
+}
+
+async function notifyFieldTaskActivity(opts: {
+  event: string;
+  recipientIds: string[];
+  titleEn: string;
+  titleAr: string;
+  messageEn: string;
+  messageAr: string;
+  projectId: string;
+  projectName: string;
+  taskTitle: string;
+  actorName: string;
+  actorId?: string | null;
+  priority?: 'urgent' | 'high' | 'normal';
+  metadata?: Record<string, string | number | boolean | null | undefined>;
+}) {
+  const recipients = Array.from(new Set(opts.recipientIds.filter(id => id && id !== opts.actorId)));
+  if (recipients.length === 0) return;
+
+  await dispatchNotification({
+    event: opts.event,
+    recipientIds: recipients,
+    titleEn: opts.titleEn,
+    titleAr: opts.titleAr,
+    messageEn: opts.messageEn,
+    messageAr: opts.messageAr,
+    priority: opts.priority ?? 'normal',
+    entityType: 'project',
+    entityId: opts.projectId,
+    actionUrl: `/projects/${opts.projectId}?tab=field_tasks`,
+    sendEmail: true,
+    triggeredBy: opts.actorId ?? undefined,
+    triggeredByName: opts.actorName,
+    metadata: {
+      task_name: opts.taskTitle,
+      project_name: opts.projectName,
+      actor: opts.actorName,
+      ...(opts.metadata ?? {}),
+    },
+  });
+}
+
 async function notifyAssignee(
   assigneeId: string,
   taskTitle: string,
   projectName: string,
   projectId: string,
   assignedByName: string,
+  actorId?: string | null,
+  creatorId?: string | null,
 ) {
-  await dispatchNotification({
+  // Assignee + creator (if different from actor / assignee)
+  const recipients = stakeholderIds(
+    { createdBy: creatorId, assignedTo: assigneeId, coAssigneeIds: [] },
+    actorId,
+  );
+  await notifyFieldTaskActivity({
     event: 'project_task_assigned',
-    recipientIds: [assigneeId],
-    titleEn: 'Field task assigned to you',
-    titleAr: 'تم تعيين مهمة ميدانية لك',
-    messageEn: `${assignedByName} assigned you to field task "${taskTitle}" in "${projectName}"`,
-    messageAr: `قام ${assignedByName} بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
-    priority: 'normal',
-    entityType: 'project',
-    entityId: projectId,
-    actionUrl: `/projects/${projectId}?tab=field_tasks`,
-    sendEmail: true,
-    triggeredByName: assignedByName,
-    metadata: {
-      task_name: taskTitle,
-      project_name: projectName,
-      actor: assignedByName,
-    },
+    recipientIds: recipients.length ? recipients : [assigneeId],
+    titleEn: 'Field task assigned',
+    titleAr: 'تم تعيين مهمة ميدانية',
+    messageEn: `${assignedByName} assigned field task "${taskTitle}" in "${projectName}"`,
+    messageAr: `قام ${assignedByName} بتعيين المهمة الميدانية "${taskTitle}" في "${projectName}"`,
+    projectId,
+    projectName,
+    taskTitle,
+    actorName: assignedByName,
+    actorId,
   });
 }
 
-// Notify all co-assignees that were newly added
+// Notify all co-assignees that were newly added (+ creator)
 async function notifyCoAssignees(
   newIds: string[],
   prevIds: string[],
@@ -110,27 +166,28 @@ async function notifyCoAssignees(
   projectName: string,
   projectId: string,
   assignedByName: string,
+  creatorId?: string | null,
 ) {
   const added = newIds.filter(id => !prevIds.includes(id) && id !== currentUserId);
-  if (added.length === 0) return;
-  await dispatchNotification({
+  const recipients = Array.from(
+    new Set([
+      ...added,
+      ...(creatorId && creatorId !== currentUserId ? [creatorId] : []),
+    ]),
+  );
+  if (recipients.length === 0) return;
+  await notifyFieldTaskActivity({
     event: 'project_task_assigned',
-    recipientIds: added,
-    titleEn: 'Field task assigned to you',
-    titleAr: 'تم تعيين مهمة ميدانية لك',
-    messageEn: `${assignedByName} also assigned you to field task "${taskTitle}" in "${projectName}"`,
-    messageAr: `قام ${assignedByName} أيضاً بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
-    priority: 'normal',
-    entityType: 'project',
-    entityId: projectId,
-    actionUrl: `/projects/${projectId}?tab=field_tasks`,
-    sendEmail: true,
-    triggeredByName: assignedByName,
-    metadata: {
-      task_name: taskTitle,
-      project_name: projectName,
-      actor: assignedByName,
-    },
+    recipientIds: recipients,
+    titleEn: 'Field task assigned',
+    titleAr: 'تم تعيين مهمة ميدانية',
+    messageEn: `${assignedByName} updated assignees on field task "${taskTitle}" in "${projectName}"`,
+    messageAr: `قام ${assignedByName} بتحديث المعينين في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
+    projectId,
+    projectName,
+    taskTitle,
+    actorName: assignedByName,
+    actorId: currentUserId,
   });
 }
 
@@ -229,10 +286,18 @@ export function useProjectTasks(projectId: string) {
       if (error) throw error;
 
       if (task.assignedTo && task.assignedTo !== currentUserId) {
-        notifyAssignee(task.assignedTo, task.title, projectName, projectId, currentUserName).catch(() => {});
+        notifyAssignee(
+          task.assignedTo,
+          task.title,
+          projectName,
+          projectId,
+          currentUserName,
+          currentUserId,
+          currentUserId, // creator is the person creating
+        ).catch(() => {});
       }
       if (coIds.length > 0) {
-        notifyCoAssignees(coIds, [], currentUserId, task.title, projectName, projectId, currentUserName).catch(() => {});
+        notifyCoAssignees(coIds, [], currentUserId, task.title, projectName, projectId, currentUserName, currentUserId).catch(() => {});
       }
       return data;
     },
@@ -285,13 +350,21 @@ export function useProjectTasks(projectId: string) {
       const cached = qc.getQueryData<FieldTask[]>(key);
       const task = cached?.find(t => t.id === id);
 
-      // Notify new primary assignee when reassigned
+      // Notify new primary assignee when reassigned (+ creator)
       const newAssignee = patch.assignedTo;
       if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName && task) {
-        notifyAssignee(newAssignee, task.title, projectName, projectId, currentUserName).catch(() => {});
+        notifyAssignee(
+          newAssignee,
+          task.title,
+          projectName,
+          projectId,
+          currentUserName,
+          currentUserId,
+          task.createdBy,
+        ).catch(() => {});
       }
 
-      // Notify newly added co-assignees
+      // Notify newly added co-assignees (+ creator)
       if (patch.coAssigneeIds !== undefined && currentUserId && currentUserName && projectName && task) {
         notifyCoAssignees(
           patch.coAssigneeIds,
@@ -301,27 +374,83 @@ export function useProjectTasks(projectId: string) {
           projectName,
           projectId,
           currentUserName,
+          task.createdBy,
         ).catch(() => {});
       }
 
-      // Notify assignee when task is marked done
-      if (patch.status === 'done' && task?.assignedTo && projectName && currentUserName) {
-        const assigneeId = task.assignedTo;
-        dispatchNotification({
-          event: 'project_task_completed',
-          recipientIds: [assigneeId, ...task.coAssigneeIds].filter(id => id !== currentUserId),
-          titleEn: 'Your field task was marked done',
-          titleAr: 'تم تحديد مهمتك الميدانية كمنجزة',
-          messageEn: `Field task "${task.title}" in "${projectName}" has been marked as completed.`,
-          messageAr: `تم تحديد المهمة الميدانية "${task.title}" في "${projectName}" كمنجزة.`,
-          priority: 'normal',
-          entityType: 'project',
-          entityId: projectId,
-          actionUrl: `/projects/${projectId}?tab=field_tasks`,
-          sendEmail: true,
-          triggeredByName: currentUserName,
-          metadata: { task_name: task.title, project_name: projectName, actor: currentUserName },
-        }).catch(() => {});
+      // Status change → creator + assignees (email)
+      if (patch.status !== undefined && task && currentUserName && projectName) {
+        const recipients = stakeholderIds(task, currentUserId);
+        if (patch.status === 'done') {
+          notifyFieldTaskActivity({
+            event: 'project_task_completed',
+            recipientIds: recipients,
+            titleEn: 'Field task completed',
+            titleAr: 'اكتملت مهمة ميدانية',
+            messageEn: `${currentUserName} marked field task "${task.title}" in "${projectName}" as completed.`,
+            messageAr: `قام ${currentUserName} بتحديد المهمة الميدانية "${task.title}" في "${projectName}" كمنجزة.`,
+            projectId,
+            projectName,
+            taskTitle: task.title,
+            actorName: currentUserName,
+            actorId: currentUserId,
+          }).catch(() => {});
+        } else if (patch.status === 'cancelled') {
+          notifyFieldTaskActivity({
+            event: 'project_task_status_changed',
+            recipientIds: recipients,
+            titleEn: 'Field task cancelled',
+            titleAr: 'تم إلغاء مهمة ميدانية',
+            messageEn: `${currentUserName} cancelled field task "${task.title}" in "${projectName}".`,
+            messageAr: `قام ${currentUserName} بإلغاء المهمة الميدانية "${task.title}" في "${projectName}".`,
+            projectId,
+            projectName,
+            taskTitle: task.title,
+            actorName: currentUserName,
+            actorId: currentUserId,
+            metadata: { status: patch.status },
+          }).catch(() => {});
+        } else {
+          notifyFieldTaskActivity({
+            event: 'project_task_status_changed',
+            recipientIds: recipients,
+            titleEn: 'Field task status updated',
+            titleAr: 'تم تحديث حالة مهمة ميدانية',
+            messageEn: `${currentUserName} changed "${task.title}" in "${projectName}" to ${patch.status}.`,
+            messageAr: `غيّر ${currentUserName} حالة "${task.title}" في "${projectName}" إلى ${patch.status}.`,
+            projectId,
+            projectName,
+            taskTitle: task.title,
+            actorName: currentUserName,
+            actorId: currentUserId,
+            metadata: { status: patch.status },
+          }).catch(() => {});
+        }
+      } else if (
+        // Non-status edits (notes, dates, costs, etc.) still email the creator + team
+        task &&
+        currentUserName &&
+        projectName &&
+        patch.status === undefined &&
+        patch.assignedTo === undefined &&
+        patch.coAssigneeIds === undefined
+      ) {
+        const recipients = stakeholderIds(task, currentUserId);
+        if (recipients.length > 0) {
+          notifyFieldTaskActivity({
+            event: 'project_task_updated',
+            recipientIds: recipients,
+            titleEn: 'Field task updated',
+            titleAr: 'تم تحديث مهمة ميدانية',
+            messageEn: `${currentUserName} updated field task "${task.title}" in "${projectName}".`,
+            messageAr: `حدّث ${currentUserName} المهمة الميدانية "${task.title}" في "${projectName}".`,
+            projectId,
+            projectName,
+            taskTitle: task.title,
+            actorName: currentUserName,
+            actorId: currentUserId,
+          }).catch(() => {});
+        }
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { dispatchNotification } from '@/lib/notify';
 
 export interface FieldTaskComment {
   id: string;
@@ -11,7 +12,20 @@ export interface FieldTaskComment {
   created_at: string;
 }
 
-export function useFieldTaskComments(taskId: string | null) {
+export interface FieldTaskCommentNotifyContext {
+  projectId: string;
+  projectName: string;
+  taskTitle: string;
+  /** Task creator — always emailed on new comments (unless they are the author). */
+  createdBy?: string | null;
+  assignedTo?: string | null;
+  coAssigneeIds?: string[];
+}
+
+export function useFieldTaskComments(
+  taskId: string | null,
+  notifyCtx?: FieldTaskCommentNotifyContext | null,
+) {
   const { toast } = useToast();
   const [comments, setComments] = useState<FieldTaskComment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -63,9 +77,47 @@ export function useFieldTaskComments(taskId: string | null) {
       toast({ title: 'Failed to post comment', description: error.message, variant: 'destructive' });
       return false;
     }
+
+    // Email creator + assignees (exclude the comment author)
+    if (notifyCtx?.projectId) {
+      const recipients = Array.from(
+        new Set(
+          [
+            notifyCtx.createdBy,
+            notifyCtx.assignedTo,
+            ...(notifyCtx.coAssigneeIds ?? []),
+          ].filter((id): id is string => !!id && id !== authorId),
+        ),
+      );
+      if (recipients.length > 0) {
+        const snippet = body.trim().length > 120 ? `${body.trim().slice(0, 117)}…` : body.trim();
+        dispatchNotification({
+          event: 'project_task_commented',
+          recipientIds: recipients,
+          titleEn: 'New comment on field task',
+          titleAr: 'تعليق جديد على مهمة ميدانية',
+          messageEn: `${authorName} commented on "${notifyCtx.taskTitle}" in "${notifyCtx.projectName}": ${snippet}`,
+          messageAr: `علّق ${authorName} على "${notifyCtx.taskTitle}" في "${notifyCtx.projectName}": ${snippet}`,
+          priority: 'normal',
+          entityType: 'project',
+          entityId: notifyCtx.projectId,
+          actionUrl: `/projects/${notifyCtx.projectId}?tab=field_tasks`,
+          sendEmail: true,
+          triggeredBy: authorId,
+          triggeredByName: authorName,
+          metadata: {
+            task_name: notifyCtx.taskTitle,
+            project_name: notifyCtx.projectName,
+            actor: authorName,
+            comment: snippet,
+          },
+        }).catch(() => {});
+      }
+    }
+
     await fetchComments();
     return true;
-  }, [taskId, toast, fetchComments]);
+  }, [taskId, toast, fetchComments, notifyCtx]);
 
   const deleteComment = useCallback(async (commentId: string): Promise<boolean> => {
     const { error } = await supabase

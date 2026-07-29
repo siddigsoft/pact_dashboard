@@ -113,6 +113,10 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'project_task_assigned':      { title_en: 'Project Task Assigned',                title_ar: 'تم تعيين مهمة مشروع',                        category: 'assignments',  priority: 'normal' },
   'project_task_completed':     { title_en: 'Project Task Completed',               title_ar: 'اكتملت مهمة المشروع',                        category: 'system',       priority: 'normal' },
   'project_task_overdue':       { title_en: 'Project Task Overdue',                 title_ar: 'مهمة المشروع متأخرة',                        category: 'assignments',  priority: 'high'   },
+  'project_task_status_changed':{ title_en: 'Project Task Status Updated',          title_ar: 'تم تحديث حالة مهمة المشروع',                  category: 'system',       priority: 'normal' },
+  'project_task_updated':       { title_en: 'Project Task Updated',                 title_ar: 'تم تحديث مهمة المشروع',                      category: 'system',       priority: 'normal' },
+  'project_task_commented':     { title_en: 'New Comment on Project Task',          title_ar: 'تعليق جديد على مهمة المشروع',                 category: 'system',       priority: 'normal' },
+  'project_task_file_uploaded': { title_en: 'File Uploaded to Project Task',        title_ar: 'تم رفع ملف إلى مهمة المشروع',                 category: 'system',       priority: 'normal' },
   'project_health_changed':     { title_en: 'Project Health Status Changed',        title_ar: 'تغيرت حالة صحة المشروع',                     category: 'system',       priority: 'normal' },
   'project_budget_exceeded':    { title_en: 'Project Budget Exceeded',              title_ar: 'تجاوزت ميزانية المشروع',                     category: 'financial',    priority: 'urgent' },
   'project_stage_completed':    { title_en: 'Stage Completed',                      title_ar: 'اكتملت مرحلة المشروع',                       category: 'system',       priority: 'normal' },
@@ -228,6 +232,10 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'project_task_assigned':       'email_notify_task_assigned',
   'project_task_completed':      'email_notify_project_milestones',
   'project_task_overdue':        'email_notify_task_assigned',
+  'project_task_status_changed': 'email_notify_task_assigned',
+  'project_task_updated':        'email_notify_task_assigned',
+  'project_task_commented':      'email_notify_task_assigned',
+  'project_task_file_uploaded':  'email_notify_task_assigned',
   'project_health_changed':      'email_notify_project_milestones',
   'project_budget_exceeded':     'email_notify_payroll',
   'project_stage_completed':     'email_notify_project_milestones',
@@ -378,6 +386,7 @@ function getEventIconSvg(eventType: string): string {
     'task_reminder_1day': '⏰', 'task_reminder_3day': '🔔', 'task_comment_added': '💬',
     'project_created': '🚀', 'project_completed': '🏁', 'project_archived': '📦',
     'project_member_added': '👤', 'project_member_removed': '🚪', 'project_task_assigned': '📋', 'project_task_completed': '✅',
+    'project_task_status_changed': '🔄', 'project_task_updated': '✏️', 'project_task_commented': '💬', 'project_task_file_uploaded': '📎',
     'project_stage_assigned': '📌', 'project_stage_deadline_reminder': '⏰',
     'project_task_overdue': '🔴', 'project_health_changed': '📊', 'project_budget_exceeded': '🚨',
     'crm_partner_created': '🤝', 'crm_engagement_created': '📞', 'crm_contact_added': '👥',
@@ -444,6 +453,8 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     'task_started', 'task_acknowledged', 'task_delayed', 'task_rejected', 'task_cancelled',
     'task_reminder_1day', 'task_reminder_3day', 'task_status_changed', 'task_comment_added',
     'project_task_assigned', 'project_task_completed', 'project_task_overdue',
+    'project_task_status_changed', 'project_task_updated', 'project_task_commented',
+    'project_task_file_uploaded',
   ].includes(eventType)) {
     if (metadata.task_name)    items.push({ label_en: 'Task',            label_ar: 'المهمة',          value: metadata.task_name })
     if (metadata.project_name) items.push({ label_en: 'Project',         label_ar: 'المشروع',         value: metadata.project_name })
@@ -451,6 +462,8 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.priority)     items.push({ label_en: 'Priority',        label_ar: 'الأولوية',        value: metadata.priority })
     if (metadata.assigned_to)  items.push({ label_en: 'Assigned To',     label_ar: 'المعيّن لـ',      value: metadata.assigned_to })
     if (metadata.status)       items.push({ label_en: 'Status',          label_ar: 'الحالة',          value: metadata.status })
+    if (metadata.file_name)    items.push({ label_en: 'File',            label_ar: 'الملف',           value: metadata.file_name })
+    if (metadata.comment)      items.push({ label_en: 'Comment',         label_ar: 'التعليق',         value: metadata.comment })
   }
   if ([
     'project_stage_advanced', 'project_stage_completed', 'project_milestone_reached',

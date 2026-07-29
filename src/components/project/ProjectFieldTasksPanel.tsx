@@ -6,11 +6,12 @@ import {
   LayoutList, Columns, CalendarDays, BarChart2, ArrowRight,
   TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
-  Square, Users,
+  Square, Users, Paperclip, Upload, Download, FileText, Image, FileSpreadsheet,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useFieldTaskComments } from '@/hooks/useFieldTaskComments';
+import { useFieldTaskAttachments } from '@/hooks/useFieldTaskAttachments';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -425,7 +426,7 @@ function DepSearchInput({ otherTasks, deps, toggleDep }: DepSearchInputProps) {
                         {t.status === 'done' ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                         ) : overdueTask ? (
-                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" title="Overdue" />
+                          <span title="Overdue" className="flex-shrink-0"><AlertTriangle className="h-3.5 w-3.5 text-red-500" /></span>
                         ) : t.status === 'inprogress' ? (
                           <Clock className="h-3.5 w-3.5 text-[#1D3461] flex-shrink-0" />
                         ) : (
@@ -1103,8 +1104,9 @@ interface TaskDetailProps {
   typedDeps?: TaskDependency[];
 }
 
-function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, typedDeps = [] }: TaskDetailProps & { currentUserId?: string; currentUserName?: string }) {
+function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [] }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
   if (!task) return null;
+  const { toast } = useToast();
   const overdue = isOverdue(task.dueDate, task.status);
   const sCfg = STATUS_CFG[task.status];
   const pCfg = PRIORITY_CFG[task.priority];
@@ -1121,14 +1123,61 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
   const costUsedPct = task.estimatedCost && task.actualCost
     ? Math.min(100, (task.actualCost / task.estimatedCost) * 100) : null;
 
+  const notifyCtx = {
+    projectId,
+    projectName,
+    taskTitle: task.title,
+    createdBy: task.createdBy,
+    assignedTo: task.assignedTo,
+    coAssigneeIds: task.coAssigneeIds,
+  };
   const { comments, loading: commentsLoading, submitting: commentSubmitting, addComment, deleteComment } =
-    useFieldTaskComments(task.id);
+    useFieldTaskComments(task.id, notifyCtx);
+  const {
+    attachments,
+    loading: attachmentsLoading,
+    uploading: attachmentUploading,
+    deletingId: attachmentDeletingId,
+    uploadFile,
+    deleteAttachment,
+  } = useFieldTaskAttachments(task.id, projectId, notifyCtx);
   const [commentText, setCommentText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCommentSubmit = async () => {
     if (!commentText.trim() || !currentUserId) return;
     const ok = await addComment(commentText, currentUserId, currentUserName ?? 'Unknown');
     if (ok) setCommentText('');
+  };
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    let okCount = 0;
+    for (const file of files) {
+      const ok = await uploadFile(file, currentUserId, currentUserName);
+      if (ok) okCount++;
+    }
+    if (okCount > 0) {
+      toast({ title: okCount === 1 ? 'File uploaded' : `${okCount} files uploaded` });
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const formatBytes = (bytes: number | null) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const AttachmentIcon = ({ type }: { type: string | null }) => {
+    if (!type) return <FileText className="h-4 w-4 text-slate-400" />;
+    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />;
+    if (type.includes('sheet') || type.includes('excel') || type.includes('csv'))
+      return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+    if (type.includes('pdf')) return <FileText className="h-4 w-4 text-red-500" />;
+    return <FileText className="h-4 w-4 text-slate-400" />;
   };
 
   return (
@@ -1156,7 +1205,7 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden mt-2">
-          <TabsList className="grid grid-cols-5 w-full flex-shrink-0">
+          <TabsList className="grid grid-cols-6 w-full flex-shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="timesheet">
               Timesheet
@@ -1169,6 +1218,10 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
             <TabsTrigger value="dependencies">
               Deps
               {(depTasks.length > 0 || blockingTasks.length > 0) && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500" />}
+            </TabsTrigger>
+            <TabsTrigger value="files">
+              <Paperclip className="h-3 w-3 mr-1" />
+              {attachments.length > 0 ? <span className="text-[10px]">{attachments.length}</span> : 'Files'}
             </TabsTrigger>
             <TabsTrigger value="comments">
               <MessageCircle className="h-3 w-3 mr-1" />
@@ -1351,6 +1404,96 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                 <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
                   No cost data. Edit the task to add budget or actual spend.
                 </p>
+              )}
+            </TabsContent>
+
+            {/* ── FILES ── */}
+            <TabsContent value="files" className="space-y-3 mt-0">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Attachments
+                  {attachments.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">{attachments.length}</Badge>
+                  )}
+                </p>
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept="*/*"
+                    onChange={handleAttachmentUpload}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    disabled={attachmentUploading || !currentUserId}
+                    onClick={() => fileInputRef.current?.click()}
+                    data-testid="btn-upload-field-task-file"
+                  >
+                    {attachmentUploading ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Upload className="h-3 w-3 mr-1" />
+                    )}
+                    {attachmentUploading ? 'Uploading…' : 'Upload'}
+                  </Button>
+                </>
+              </div>
+
+              {attachmentsLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : attachments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2 border-2 border-dashed rounded-lg">
+                  <Paperclip className="h-7 w-7 opacity-30" />
+                  <p className="text-sm">No files yet. Upload documents, photos, or reports.</p>
+                  <p className="text-[10px]">Max 20 MB per file</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {attachments.map(att => (
+                    <div
+                      key={att.id}
+                      className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 group"
+                    >
+                      <AttachmentIcon type={att.fileType} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{att.fileName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatBytes(att.fileSize)}
+                          {att.uploadedByName && ` · ${att.uploadedByName}`}
+                          {` · ${format(new Date(att.createdAt), 'dd MMM yyyy')}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Download className="h-3 w-3" />
+                          </Button>
+                        </a>
+                        {(canEdit || att.uploadedBy === currentUserId) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                            disabled={attachmentDeletingId === att.id}
+                            onClick={() => deleteAttachment(att.id)}
+                            data-testid={`btn-delete-field-task-file-${att.id}`}
+                          >
+                            {attachmentDeletingId === att.id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <Trash2 className="h-3 w-3" />}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </TabsContent>
 
@@ -2635,7 +2778,7 @@ export function ProjectFieldTasksPanel({
 
   const handleStatusChange = async (task: FieldTask, status: FieldTaskStatus) => {
     try {
-      await updateTask(task.id, { status }, { currentUserId });
+      await updateTask(task.id, { status }, { currentUserId, projectName, currentUserName, prevAssignee: task.assignedTo });
       setDetailTask(prev => prev?.id === task.id ? { ...prev, status } : prev);
     } catch {
       toast({ title: 'Failed to update status', variant: 'destructive' });
@@ -3032,6 +3175,8 @@ export function ProjectFieldTasksPanel({
         canEdit={canEdit}
         currentUserId={currentUserId}
         currentUserName={currentUserName}
+        projectId={projectId}
+        projectName={projectName}
         typedDeps={typedDepsAll}
         onClose={() => setDetailTask(null)}
         onEdit={() => { setEditTask(detailTask); setDetailTask(null); }}
