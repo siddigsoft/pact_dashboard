@@ -1068,7 +1068,7 @@ const MMPCycleClose = () => {
       setPaymentRequestNote('');
       setFeesLockedAt(tracking.exchange_rate_applied_at || null);
       setFeesLockedRate(tracking.exchange_rate_applied ?? null);
-      if (tracking.exchange_rate_applied) setExchangeRateInput(String(tracking.exchange_rate_applied));
+      setExchangeRateInput(tracking.exchange_rate_applied ? String(tracking.exchange_rate_applied) : '');
       setWalletUpdateResults(null);
       setCycleSubmittedAt(tracking.submitted_at || null);
       fetchCycleSummary(checklistMmpId);
@@ -1078,6 +1078,10 @@ const MMPCycleClose = () => {
       setAllSiteReviewData([]);
       setPaymentRequestedAt(null);
       setPaymentsConfirmedAt(null);
+      setFeesLockedAt(null);
+      setFeesLockedRate(null);
+      setExchangeRateInput('');
+      setCycleSubmittedAt(null);
     }
   }, [checklistMmpId, mmpFiles, fetchCycleSummary, fetchAllSiteDetails]);
 
