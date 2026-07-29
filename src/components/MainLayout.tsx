@@ -91,7 +91,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
         <SidebarProvider>
           <div className="min-h-screen max-h-screen flex w-full bg-[#f3f5f8] dark:bg-gray-950">
             <AppSidebar />
-            <SidebarInset className="relative z-0 flex flex-col min-w-0 h-screen max-h-screen bg-transparent">
+            <SidebarInset className="relative flex flex-col min-w-0 h-screen max-h-screen bg-transparent">
               <ViewAsBanner />
               <RealtimeBanner
                 onRefresh={handleGlobalRefresh}
@@ -99,7 +99,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
                 showOnlyWhenDisconnected={true}
               />
               <Navbar />
-              <div className="global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 bg-transparent px-2 py-2 sm:px-3 sm:py-3 lg:px-5 lg:py-4">
+              <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-2 py-2 sm:px-3 sm:py-3 lg:px-5 lg:py-4">
                 <div className="w-full rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
                   {showAccessSpinner ? (
                     <div className="flex items-center justify-center min-h-[60vh]">

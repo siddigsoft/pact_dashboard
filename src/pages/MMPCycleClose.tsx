@@ -4672,7 +4672,7 @@ const MMPCycleClose = () => {
 
       {/* ── Full Guided Wizard — fixed full-screen overlay ─────────────── */}
       {checklistMmpId ? (
-      <div ref={wizardRef} className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
+      <div ref={wizardRef} className="fixed inset-0 z-[200] bg-background flex flex-col overflow-hidden" data-testid="section-cycle-close-checklist">
         {/* Wizard header */}
         <div className="px-6 pt-4 pb-4 border-b bg-background shrink-0 shadow-sm">
           <div className="flex items-start justify-between gap-4">
