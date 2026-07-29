@@ -1532,17 +1532,21 @@ const MMPCycleClose = () => {
   activeMmpsRef.current = activeMmps;
   closingMmpsRef.current = closingMmps;
 
-  const fetchUncoveredSites = useCallback(async () => {
+  // includeActive=true fetches entries for ALL active MMPs (expensive — only
+  // call this lazily when the Uncovered Sites tab is open). The default
+  // (false) fetches only closing MMP data so the wizard opens quickly.
+  const fetchUncoveredSites = useCallback(async (includeActive = false) => {
     setLoading(true);
     try {
       // Read from refs so this callback never needs mmpFiles/activeMmps/closingMmps
       // in its dependency array (they are new references every render while TanStack
       // Query is loading, which was causing an infinite re-render loop).
       const closingIds = closingMmpsRef.current.map(m => m.id);
-      // Active MMPs that are NOT already counted in the closing set
-      const activeOnlyIds = activeMmpsRef.current
-        .map(m => m.id)
-        .filter(id => !closingIds.includes(id));
+      // Active MMPs that are NOT already counted in the closing set.
+      // Only included when the caller explicitly opts in (lazy tab load).
+      const activeOnlyIds = includeActive
+        ? activeMmpsRef.current.map(m => m.id).filter(id => !closingIds.includes(id))
+        : [];
 
       const allRelevantIds = [...closingIds, ...activeOnlyIds];
       if (allRelevantIds.length === 0) {
@@ -1595,9 +1599,9 @@ const MMPCycleClose = () => {
         return all;
       };
 
-      // Race the combined fetch against a 20-second timeout so loading always
+      // Race the combined fetch against a 60-second timeout so loading always
       // clears even if Supabase stalls (fetch() has no built-in timeout).
-      const FETCH_TIMEOUT_MS = 20_000;
+      const FETCH_TIMEOUT_MS = 60_000;
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Site data load timed out — try refreshing')), FETCH_TIMEOUT_MS)
       );
@@ -1671,13 +1675,25 @@ const MMPCycleClose = () => {
   const loadExceptionsData = useCallback(async (mmpId: string) => {
     setLoadingExceptions(true);
     try {
-      // 1. Get all not-covered entries for this MMP
-      const { data: notCoveredEntries, error: ncErr } = await supabase
+      // 1. Get all not-covered entries for this MMP.
+      // Try with not_covered_flag filter first; if the column is missing
+      // (migration not yet applied) fall back to status-only filter.
+      let { data: notCoveredEntries, error: ncErr } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, mmp_file_id, accepted_by, not_covered_reason')
         .eq('mmp_file_id', mmpId)
         .or('not_covered_flag.eq.true,status.eq.not_covered')
         .limit(10000);
+
+      if (ncErr && (ncErr.message?.includes('column') || (ncErr as any).code === '42703')) {
+        // Column missing — fall back to status-only
+        ({ data: notCoveredEntries, error: ncErr } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, state, mmp_file_id, accepted_by')
+          .eq('mmp_file_id', mmpId)
+          .eq('status', 'not_covered')
+          .limit(10000));
+      }
 
       if (ncErr) throw ncErr;
       if (!notCoveredEntries || notCoveredEntries.length === 0) {
@@ -2321,16 +2337,25 @@ const MMPCycleClose = () => {
     }
   };
 
-  // Primary loading effect — only fetchUncoveredSites here so it can acquire
-  // HTTP connections immediately without competing with fetchClosedCycles.
-  // fetchClosedCycles fires N×4 parallel Supabase requests for closed cycles;
-  // keeping them in the same effect starves uncovered-site requests in Chrome's
-  // 6-connection-per-host pool and can leave loading=true indefinitely.
-  const activeMmpsLength = activeMmps.length;
+  // Primary loading effect — fetch only closing MMP data eagerly so the
+  // wizard can open quickly. Active MMP uncovered data is loaded lazily
+  // when the user opens the Uncovered Sites tab (see effect below).
+  // Previously this depended on activeMmpsLength, which caused repeated
+  // heavy fetches (9 active MMPs × 3000 entries) every time TanStack Query
+  // updated, making the page hang for up to 20 seconds on load.
   useEffect(() => {
-    fetchUncoveredSites();
+    fetchUncoveredSites(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUncoveredSites, activeMmpsLength]);
+  }, [fetchUncoveredSites]);
+
+  // Lazy — load active MMP uncovered sites only when that tab is open.
+  // This avoids fetching thousands of rows on every page load.
+  useEffect(() => {
+    if (activeTab === 'uncovered') {
+      fetchUncoveredSites(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Lazy — closed cycle history is only needed on the "archive" tab.
   // Loading it at startup fired N×4 parallel Supabase requests (3 count queries
@@ -2370,11 +2395,23 @@ const MMPCycleClose = () => {
         // a status stored as e.g. 'Submitted' (capital S) or ' pending ' (with
         // spaces) would be missed by SQL filters but correctly handled here.
         const PAGE = 1000;
+        // Probe for not_covered_flag column; fall back to status-only if missing.
+        let useFlag = true;
+        {
+          const { error: flagProbe } = await supabase
+            .from('mmp_site_entries')
+            .select('mmp_file_id, status, not_covered_flag')
+            .in('mmp_file_id', mmpIds.slice(0, 1))
+            .limit(1);
+          if (flagProbe && (flagProbe.message?.includes('column') || (flagProbe as any).code === '42703')) {
+            useFlag = false;
+          }
+        }
         let allSites: Array<{ mmp_file_id: string; status: string | null; not_covered_flag: boolean | null }> = [];
         for (let from = 0; ; from += PAGE) {
           const { data, error } = await supabase
             .from('mmp_site_entries')
-            .select('mmp_file_id, status, not_covered_flag')
+            .select(useFlag ? 'mmp_file_id, status, not_covered_flag' : 'mmp_file_id, status')
             .in('mmp_file_id', mmpIds)
             .range(from, from + PAGE - 1);
           if (error) throw error;
@@ -3983,7 +4020,7 @@ const MMPCycleClose = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg" onClick={() => { fetchUncoveredSites(activeTab === 'uncovered'); fetchClosedCycles(); }} data-testid="button-refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" className="h-9 rounded-lg hidden sm:flex" onClick={() => exportCoverageReport()} data-testid="button-export">
