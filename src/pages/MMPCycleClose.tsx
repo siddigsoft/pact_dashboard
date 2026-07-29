@@ -1071,6 +1071,7 @@ const MMPCycleClose = () => {
       setExchangeRateInput(tracking.exchange_rate_applied ? String(tracking.exchange_rate_applied) : '');
       setWalletUpdateResults(null);
       setCycleSubmittedAt(tracking.submitted_at || null);
+      setWizardStep('');
       fetchCycleSummary(checklistMmpId);
       fetchAllSiteDetails(checklistMmpId);
     } else {
@@ -1082,6 +1083,7 @@ const MMPCycleClose = () => {
       setFeesLockedRate(null);
       setExchangeRateInput('');
       setCycleSubmittedAt(null);
+      setWizardStep('');
     }
   }, [checklistMmpId, mmpFiles, fetchCycleSummary, fetchAllSiteDetails]);
 
@@ -5009,9 +5011,18 @@ const MMPCycleClose = () => {
                                       {step.id === 'finance' && (
                                         <div className="mt-3 space-y-3">
                                           {step.remaining > 0 ? (
-                                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4">
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2">
                                               <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">⚠ {step.remaining} item{step.remaining > 1 ? 's' : ''} need resolution</p>
                                               <p className="text-xs text-amber-700 dark:text-amber-300">Approve or reject pending cost submissions and settle open advances in the Finance module, then return here.</p>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-1.5 border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-950/50"
+                                                onClick={() => { setChecklistMmpId(null); setActiveTab('finance'); }}
+                                                data-testid="button-go-to-finance-tab"
+                                              >
+                                                <ArrowRight className="h-3.5 w-3.5" /> Open Finance Tab
+                                              </Button>
                                             </div>
                                           ) : (
                                             <div className="flex items-center gap-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30 px-4 py-3">
@@ -5065,13 +5076,21 @@ const MMPCycleClose = () => {
                                                 </div>
                                               )}
                                               <p className="text-xs text-muted-foreground">Use the <strong>WFP Confirmation</strong> tab to upload and review the WFP file.</p>
+                                              <Button
+                                                size="sm"
+                                                className="gap-1.5 mt-1"
+                                                onClick={() => { setChecklistMmpId(null); setActiveTab('wfp'); }}
+                                                data-testid="button-go-to-wfp-tab"
+                                              >
+                                                <ArrowRight className="h-3.5 w-3.5" /> Open WFP Confirmation Tab
+                                              </Button>
                                             </div>
                                           )}
                                         </div>
                                       )}
 
-                                      {/* ── Site & Advance Review (Step 2) ── */}
-                                      {step.id === 'site_review' && (
+                                      {/* ── Site & Advance Review (shown in payment_request step) ── */}
+                                      {step.id === 'payment_request' && !step.blocked && (
                                         <div className="mt-3 space-y-2">
                                           {/* Search + filter bar */}
                                           <div className="flex gap-2 flex-wrap">
