@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -100,6 +100,19 @@ export default function PreFundingDistribute() {
   const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
   const [receiptFetchLoading, setReceiptFetchLoading] = useState(false);
   const [receiptFetchError, setReceiptFetchError] = useState<string | null>(null);
+  // Context for the row currently shown in the viewer (enables Replace from error state)
+  const [viewReceiptMeta, setViewReceiptMeta] = useState<{
+    alloc: Allocation;
+    rowType: 'initial' | number;
+  } | null>(null);
+
+  // Replace-receipt feature
+  const replaceFileRef = useRef<HTMLInputElement>(null);
+  const [replaceTarget, setReplaceTarget] = useState<{
+    alloc: Allocation;
+    rowType: 'initial' | number;
+  } | null>(null);
+  const [replaceSaving, setReplaceSaving] = useState(false);
 
   useEffect(() => {
     if (!viewReceiptUrl) {
@@ -362,6 +375,60 @@ export default function PreFundingDistribute() {
     }
     if (urls.length === 0) return null;
     return urls.length === 1 ? urls[0] : JSON.stringify(urls);
+  };
+
+  /** Open the OS file picker and set the target row for receipt replacement. */
+  const triggerReplaceReceipt = (alloc: Allocation, rowType: 'initial' | number) => {
+    setReplaceTarget({ alloc, rowType });
+    if (replaceFileRef.current) {
+      replaceFileRef.current.value = '';
+      replaceFileRef.current.click();
+    }
+  };
+
+  /** Handle the file selected from the hidden input and save it back to the allocation. */
+  const handleReplaceReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !replaceTarget) return;
+    const { alloc, rowType } = replaceTarget;
+    setReplaceTarget(null);
+    setReplaceSaving(true);
+    try {
+      const newUrl = await uploadReceipt(file, alloc.pre_fund_request_id, alloc.user_id);
+      if (!newUrl) return;
+      const meta = parseAllocMeta(alloc.notes);
+      if (rowType === 'initial') {
+        let updateData: Record<string, any> = {};
+        if (meta.top_up_count === 0) {
+          // No top-ups: receipt_url IS the initial receipt
+          updateData.receipt_url = newUrl;
+        } else {
+          // Has top-ups: initial is stored in notes.initial_receipt_url
+          const parsed = JSON.parse(alloc.notes ?? '{}');
+          updateData.notes = JSON.stringify({ ...parsed, initial_receipt_url: newUrl });
+        }
+        const { error } = await (supabase as any).from('pre_fund_allocations').update(updateData).eq('id', alloc.id);
+        if (error) throw error;
+      } else {
+        const idx = rowType as number;
+        const parsed = JSON.parse(alloc.notes ?? '{}');
+        const updatedLog = [...meta.top_up_log];
+        updatedLog[idx] = { ...updatedLog[idx], receipt_url: newUrl };
+        const updatedNotes = JSON.stringify({ ...parsed, top_up_log: updatedLog });
+        const isLatest = idx === meta.top_up_log.length - 1;
+        const updateData: Record<string, any> = { notes: updatedNotes };
+        if (isLatest) updateData.receipt_url = newUrl;
+        const { error } = await (supabase as any).from('pre_fund_allocations').update(updateData).eq('id', alloc.id);
+        if (error) throw error;
+      }
+      toast({ title: '✅ Receipt uploaded', description: `${file.name} saved successfully.` });
+      await loadAllocations(alloc.pre_fund_request_id);
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setReplaceSaving(false);
+    }
   };
 
   const load = useCallback(async () => {
@@ -1196,17 +1263,42 @@ export default function PreFundingDistribute() {
                                               </td>
                                               <td className="py-2 px-2.5 text-center">
                                                 {row.receipt_url ? (
-                                                  <button
-                                                    onClick={() => setViewReceiptUrl(parseReceiptUrls(row.receipt_url!)[0] ?? null)}
-                                                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 hover:underline"
-                                                    data-testid={`link-dist-receipt-${a.id}-${row.seq}`}
-                                                  >
-                                                    <Receipt className="h-3 w-3" />View
-                                                  </button>
+                                                  <div className="flex items-center justify-center gap-1.5">
+                                                    <button
+                                                      onClick={() => {
+                                                        const rowType = row.is_initial ? 'initial' : (row.seq - 2) as number;
+                                                        setViewReceiptMeta({ alloc: a, rowType });
+                                                        setViewReceiptUrl(parseReceiptUrls(row.receipt_url!)[0] ?? null);
+                                                      }}
+                                                      className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 hover:underline"
+                                                      data-testid={`link-dist-receipt-${a.id}-${row.seq}`}
+                                                    >
+                                                      <Receipt className="h-3 w-3" />View
+                                                    </button>
+                                                    {isFinanceAdmin && (
+                                                      <button
+                                                        onClick={() => triggerReplaceReceipt(a, row.is_initial ? 'initial' : (row.seq - 2) as number)}
+                                                        className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-sky-600 border border-border/60 rounded px-1 py-0.5"
+                                                        title="Replace this receipt"
+                                                      >
+                                                        <Upload className="h-2.5 w-2.5" />
+                                                      </button>
+                                                    )}
+                                                  </div>
                                                 ) : (
-                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                                                    <AlertCircle className="h-3 w-3" />No Receipt
-                                                  </span>
+                                                  <div className="flex flex-col items-center gap-1">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                                      <AlertCircle className="h-3 w-3" />No Receipt
+                                                    </span>
+                                                    <button
+                                                      onClick={() => triggerReplaceReceipt(a, row.is_initial ? 'initial' : (row.seq - 2) as number)}
+                                                      disabled={replaceSaving}
+                                                      className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 underline"
+                                                      data-testid={`button-upload-receipt-${a.id}-${row.seq}`}
+                                                    >
+                                                      <Upload className="h-2.5 w-2.5" />Upload
+                                                    </button>
+                                                  </div>
                                                 )}
                                               </td>
                                             </tr>
@@ -1825,20 +1917,41 @@ export default function PreFundingDistribute() {
 
             {/* Error state */}
             {!receiptFetchLoading && receiptFetchError && (
-              <div className="flex flex-col items-center gap-3 text-center px-6 text-muted-foreground">
-                <div className="text-4xl">📄</div>
+              <div className="flex flex-col items-center gap-3 text-center px-8 text-muted-foreground">
+                <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-4">
+                  <AlertCircle className="h-8 w-8 text-amber-500" />
+                </div>
                 <p className="font-semibold text-sm text-foreground">
-                  {receiptFetchError === 'bucket' ? 'Storage bucket not found' : 'Receipt unavailable'}
+                  {receiptFetchError === 'bucket' ? 'Receipt file not accessible' : 'Receipt unavailable'}
                 </p>
-                <p className="text-xs max-w-xs">
+                <p className="text-xs max-w-xs leading-relaxed">
                   {receiptFetchError === 'bucket'
-                    ? 'This receipt was uploaded to a storage bucket that no longer exists. Please re-upload the receipt using the Add Funds button.'
-                    : 'The receipt file could not be loaded. It may have been deleted or the link has expired.'}
+                    ? 'This receipt was stored in a bucket that no longer exists or is inaccessible. You can upload a replacement receipt directly below.'
+                    : 'The receipt file could not be loaded. It may have been deleted or the link has expired. Upload a replacement below.'}
                 </p>
+                {/* Accepted file types */}
+                <p className="text-[10px] text-muted-foreground/70 bg-muted/60 rounded px-3 py-1.5">
+                  Accepted: <strong>JPG, PNG, WEBP, GIF, PDF</strong> (max 10 MB)
+                </p>
+                {/* Primary action: upload replacement */}
+                {viewReceiptMeta && (
+                  <button
+                    onClick={() => {
+                      setViewReceiptUrl(null);
+                      triggerReplaceReceipt(viewReceiptMeta.alloc, viewReceiptMeta.rowType);
+                    }}
+                    disabled={replaceSaving}
+                    className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-lg px-5 py-2 shadow-sm transition-colors"
+                    data-testid="button-replace-receipt-from-viewer"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Replacement Receipt
+                  </button>
+                )}
                 {viewReceiptUrl && (
                   <a
                     href={viewReceiptUrl} target="_blank" rel="noopener noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-sky-600 hover:underline border border-sky-200 rounded px-3 py-1.5"
+                    className="inline-flex items-center gap-1 text-xs text-sky-600 hover:underline"
                   >
                     <ExternalLink className="h-3 w-3" />Try opening directly
                   </a>
@@ -1872,6 +1985,16 @@ export default function PreFundingDistribute() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Hidden file input for Replace Receipt feature */}
+      <input
+        ref={replaceFileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf"
+        className="hidden"
+        onChange={handleReplaceReceiptFile}
+        data-testid="input-replace-receipt-file"
+      />
 
       {/* Remove Confirmation Dialog */}
       <Dialog open={!!removeId} onOpenChange={o => !o && setRemoveId(null)}>
