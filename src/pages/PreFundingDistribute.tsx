@@ -1755,15 +1755,21 @@ export default function PreFundingDistribute() {
                   {/* Receipt upload — only when not locked */}
                   {!holderLocked && (
                     <div>
-                      <Label className="text-xs mb-2 flex items-center gap-1">
-                        <Paperclip className="h-3 w-3" />Receipt of Fund Sent <span className="text-destructive">*</span>
+                      <Label className="text-xs mb-2 flex items-center gap-1.5">
+                        <Paperclip className="h-3 w-3" />
+                        Receipt of Fund Sent
+                        <span className="text-destructive font-bold">*</span>
+                        <span className="ml-auto text-[9px] font-normal text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5">
+                          JPG · PNG · WEBP · GIF · PDF · max 10 MB
+                        </span>
                       </Label>
                       {topUpReceiptFiles.length > 0 && (
                         <div className="space-y-1 mb-2">
                           {topUpReceiptFiles.map((f, i) => (
-                            <div key={i} className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-muted/30">
+                            <div key={i} className="flex items-center gap-2 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-1.5 bg-emerald-50/40 dark:bg-emerald-950/20">
                               {f.type.startsWith('image/') ? <FileImage className="h-3.5 w-3.5 text-sky-600 shrink-0" /> : <FileText className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
                               <span className="truncate flex-1 text-[12px]">{f.name}</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
                               <button onClick={() => setTopUpReceiptFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive shrink-0">
                                 <X className="h-3.5 w-3.5" />
                               </button>
@@ -1771,20 +1777,40 @@ export default function PreFundingDistribute() {
                           ))}
                         </div>
                       )}
-                      <label className="flex items-center gap-2 border border-dashed rounded-md px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors" data-testid="label-topup-receipt-upload">
-                        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-[12px] text-muted-foreground">
-                          {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt — image or PDF'}
-                        </span>
+                      <label
+                        className={cn(
+                          'flex items-center gap-2 border-2 border-dashed rounded-md px-3 py-3 cursor-pointer transition-colors',
+                          topUpReceiptFiles.length === 0
+                            ? 'border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                            : 'border-border hover:bg-muted/30'
+                        )}
+                        data-testid="label-topup-receipt-upload"
+                      >
+                        <Upload className={cn('h-4 w-4 shrink-0', topUpReceiptFiles.length === 0 ? 'text-amber-500' : 'text-muted-foreground')} />
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-[12px] font-medium', topUpReceiptFiles.length === 0 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>
+                            {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Click to attach receipt'}
+                          </p>
+                          {topUpReceiptFiles.length === 0 && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Image or PDF — required before submitting</p>
+                          )}
+                        </div>
                         <input
-                          type="file" accept="image/*,.pdf" multiple className="hidden"
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf"
+                          multiple
+                          className="hidden"
                           onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
                           data-testid="input-topup-receipt-file"
                         />
                       </label>
-                      <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                        <Info className="h-3 w-3" />A receipt is required for every top-up transaction.
-                      </p>
+                      {/* Prominent requirement warning */}
+                      <div className="mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="h-3 w-3 shrink-0 text-amber-600" />
+                        <p className="text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                          A receipt is required for every top-up. Submissions without a receipt will be rejected.
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -1792,24 +1818,80 @@ export default function PreFundingDistribute() {
                   {(isFinanceAdmin || allocMeta.top_up_log.length > 0) && allocMeta.top_up_log.length > 0 && (
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-1.5">
-                        <History className="h-3 w-3" />Top-Up Audit Log
+                        <History className="h-3 w-3" />Top-Up History
+                        <span className="ml-auto text-[9px] font-normal">
+                          {allocMeta.top_up_log.filter(e => !e.receipt_url).length > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                              <AlertCircle className="h-2.5 w-2.5" />
+                              {allocMeta.top_up_log.filter(e => !e.receipt_url).length} missing receipt
+                            </span>
+                          )}
+                        </span>
                       </p>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                        {allocMeta.top_up_log.map((entry, i) => (
-                          <div key={i} className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 px-2.5 py-1.5 text-[11px]">
-                            <Clock className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-1 flex-wrap">
-                                <span className="font-medium text-sky-700 dark:text-sky-300">+{alloc.currency} {formatNumber(entry.amount, 0)}</span>
-                                <span className="text-muted-foreground">{format(new Date(entry.date), 'dd MMM yyyy HH:mm')}</span>
-                              </div>
-                              <div className="text-muted-foreground truncate">by {entry.by_name}</div>
-                              <div className="text-[10px] text-muted-foreground">
-                                {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {alloc.currency}
+                      <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                        {allocMeta.top_up_log.map((entry, i) => {
+                          const hasReceipt = !!entry.receipt_url;
+                          return (
+                            <div
+                              key={i}
+                              className={cn(
+                                'rounded-md border px-2.5 py-1.5 text-[11px]',
+                                hasReceipt
+                                  ? 'border-border/40 bg-muted/20'
+                                  : 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+                              )}
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-sky-500 text-white text-[9px] font-bold shrink-0 mt-0.5">
+                                  {i + 2}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                                    <span className="font-semibold text-sky-700 dark:text-sky-300">
+                                      +{alloc.currency} {formatNumber(entry.amount, 0)}
+                                    </span>
+                                    <span className="text-muted-foreground text-[10px]">
+                                      {format(new Date(entry.date), 'dd MMM yyyy HH:mm')}
+                                    </span>
+                                  </div>
+                                  <div className="text-muted-foreground truncate">by {entry.by_name}</div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {alloc.currency}
+                                  </div>
+                                  {/* Receipt status */}
+                                  <div className="mt-1">
+                                    {hasReceipt ? (
+                                      <button
+                                        onClick={() => {
+                                          setViewReceiptMeta({ alloc, rowType: i });
+                                          setViewReceiptUrl(parseReceiptUrls(entry.receipt_url!)[0] ?? null);
+                                        }}
+                                        className="inline-flex items-center gap-0.5 text-[10px] text-sky-600 hover:text-sky-800 hover:underline"
+                                      >
+                                        <Receipt className="h-3 w-3" />View Receipt
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full text-[9px] font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                          <AlertCircle className="h-2.5 w-2.5" />No Receipt
+                                        </span>
+                                        <button
+                                          onClick={() => {
+                                            setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null });
+                                            triggerReplaceReceipt(alloc, i);
+                                          }}
+                                          className="inline-flex items-center gap-0.5 text-[10px] text-amber-700 dark:text-amber-300 hover:underline"
+                                        >
+                                          <Upload className="h-2.5 w-2.5" />Upload
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
