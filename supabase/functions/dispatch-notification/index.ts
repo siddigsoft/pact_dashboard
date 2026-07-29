@@ -414,28 +414,59 @@ function getEventIconSvg(eventType: string): string {
 function getEventContextBlock(eventType: string, metadata: Record<string, any>, accentColor: string): string {
   const items: { label_en: string; label_ar: string; value: string }[] = []
 
-  if (['cost_submitted', 'cost_approved', 'cost_rejected'].includes(eventType)) {
-    if (metadata.ref_number)   items.push({ label_en: 'Request ID',    label_ar: 'رقم الطلب',        value: metadata.ref_number })
-    if (metadata.amount)       items.push({ label_en: 'Amount',        label_ar: 'المبلغ',            value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
-    if (metadata.category)     items.push({ label_en: 'Category',      label_ar: 'الفئة',             value: metadata.category })
-    if (metadata.submitted_by) items.push({ label_en: 'Submitted By',  label_ar: 'قُدِّم بواسطة',    value: metadata.submitted_by })
-    if (metadata.approver_name) items.push({ label_en: 'Reviewed By',  label_ar: 'راجعه',             value: metadata.approver_name })
-    if (metadata.period)       items.push({ label_en: 'Period',        label_ar: 'الفترة',            value: metadata.period })
+  if (['cost_submitted', 'cost_approved', 'cost_rejected', 'cost_action_required', 'cost_reminder'].includes(eventType) || eventType.startsWith('cost_')) {
+    if (metadata.submission_type) items.push({ label_en: 'Request Type',    label_ar: 'نوع الطلب',         value: metadata.submission_type })
+    if (metadata.ref_number)      items.push({ label_en: 'Reference No.',   label_ar: 'الرقم المرجعي',     value: metadata.ref_number })
+    if (metadata.submission_title) items.push({ label_en: 'Title',          label_ar: 'العنوان',            value: metadata.submission_title })
+    if (metadata.amount)          items.push({ label_en: 'Amount',          label_ar: 'المبلغ',             value: typeof metadata.amount === 'number' ? `${Number(metadata.amount).toLocaleString('en-US')} ${metadata.currency || 'SDG'}` : String(metadata.amount) })
+    if (metadata.category)        items.push({ label_en: 'Category',        label_ar: 'الفئة',              value: metadata.category })
+    if (metadata.expense_date)    items.push({ label_en: 'Expense Date',    label_ar: 'تاريخ المصروف',     value: metadata.expense_date })
+    if (metadata.vendor)          items.push({ label_en: 'Vendor / Payee',  label_ar: 'المورد / المستفيد',  value: metadata.vendor })
+    if (metadata.submitted_by)    items.push({ label_en: 'Submitted By',    label_ar: 'قُدِّم بواسطة',     value: metadata.submitted_by })
+    if (metadata.disbursed_by)    items.push({ label_en: 'Disbursed By',    label_ar: 'صُرف بواسطة',       value: metadata.disbursed_by })
+    if (metadata.payment_date)    items.push({ label_en: 'Payment Date',    label_ar: 'تاريخ الصرف',       value: metadata.payment_date })
+    if (metadata.approver_name)   items.push({ label_en: 'Reviewed By',     label_ar: 'راجعه',              value: metadata.approver_name })
+    if (metadata.rejection_reason) items.push({ label_en: 'Reason',         label_ar: 'السبب',              value: metadata.rejection_reason })
+    if (metadata.hub)             items.push({ label_en: 'Hub / Office',    label_ar: 'المكتب / المحطة',    value: metadata.hub })
+    if (metadata.period)          items.push({ label_en: 'Period',          label_ar: 'الفترة',             value: metadata.period })
+    if (metadata.notes)           items.push({ label_en: 'Notes',           label_ar: 'ملاحظات',            value: metadata.notes })
   }
 
+  // cost_action_required: extra fields not covered by the main cost block above
   if (eventType === 'cost_action_required') {
-    if (metadata.ref_number)        items.push({ label_en: 'Request ID',      label_ar: 'رقم الطلب',          value: metadata.ref_number })
-    if (metadata.submission_title)  items.push({ label_en: 'Title',           label_ar: 'العنوان',             value: metadata.submission_title })
-    if (metadata.amount)            items.push({ label_en: 'Amount',          label_ar: 'المبلغ',              value: metadata.amount })
     if (metadata.submitter_name)    items.push({ label_en: 'Submitted By',    label_ar: 'قُدِّم بواسطة',      value: metadata.submitter_name })
     if (metadata.approval_flow)     items.push({ label_en: 'Approval Flow',   label_ar: 'مسار الموافقة',       value: metadata.approval_flow })
     if (metadata.current_step)      items.push({ label_en: 'Your Action',     label_ar: 'إجراؤك المطلوب',      value: metadata.current_step })
     if (metadata.next_step)         items.push({ label_en: 'Next Step',       label_ar: 'الخطوة التالية',       value: metadata.next_step })
   }
-  if (['withdrawal_approved', 'withdrawal_rejected', 'wallet_updated', 'payment_processed'].includes(eventType)) {
+  if (['withdrawal_approved', 'withdrawal_rejected', 'wallet_updated'].includes(eventType)) {
     if (metadata.amount)     items.push({ label_en: 'Amount',          label_ar: 'المبلغ',          value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
     if (metadata.account)    items.push({ label_en: 'Account',         label_ar: 'الحساب',          value: metadata.account })
     if (metadata.balance)    items.push({ label_en: 'New Balance',      label_ar: 'الرصيد الجديد',   value: `${metadata.balance} ${metadata.currency || 'SDG'}` })
+  }
+  // payment_processed: covers both cost-submission payments and wallet payments
+  if (eventType === 'payment_processed') {
+    if (metadata.submission_type) {
+      // Cost submission / Down-payment payment — show full details
+      if (metadata.ref_number)       items.push({ label_en: 'Reference No.',   label_ar: 'الرقم المرجعي',    value: metadata.ref_number })
+      if (metadata.submission_title) items.push({ label_en: 'Title',           label_ar: 'العنوان',           value: metadata.submission_title })
+      if (metadata.amount)           items.push({ label_en: 'Amount',          label_ar: 'المبلغ',            value: String(metadata.amount) })
+      if (metadata.category)         items.push({ label_en: 'Category',        label_ar: 'الفئة',             value: metadata.category })
+      if (metadata.expense_date)     items.push({ label_en: 'Expense Date',    label_ar: 'تاريخ المصروف',    value: metadata.expense_date })
+      if (metadata.vendor)           items.push({ label_en: 'Vendor / Payee',  label_ar: 'المورد / المستفيد', value: metadata.vendor })
+      if (metadata.submitted_by)     items.push({ label_en: 'Submitted By',    label_ar: 'قُدِّم بواسطة',    value: metadata.submitted_by })
+      if (metadata.disbursed_by)     items.push({ label_en: 'Disbursed By',    label_ar: 'صُرف بواسطة',      value: metadata.disbursed_by })
+      if (metadata.payment_date)     items.push({ label_en: 'Payment Date',    label_ar: 'تاريخ الصرف',      value: metadata.payment_date })
+    } else {
+      // Wallet payment — show wallet fields
+      if (metadata.amount)   items.push({ label_en: 'Amount',          label_ar: 'المبلغ',          value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
+      if (metadata.account)  items.push({ label_en: 'Account',         label_ar: 'الحساب',          value: metadata.account })
+      if (metadata.balance)  items.push({ label_en: 'New Balance',     label_ar: 'الرصيد الجديد',   value: `${metadata.balance} ${metadata.currency || 'SDG'}` })
+    }
+    if (metadata.item_count && metadata.item_count > 1) {
+      items.push({ label_en: 'Submissions Count', label_ar: 'عدد المطالبات', value: String(metadata.item_count) })
+    }
+    if (metadata.notes) items.push({ label_en: 'Notes', label_ar: 'ملاحظات', value: metadata.notes })
   }
   if (['leave_request_submitted', 'leave_request_approved', 'leave_request_rejected'].includes(eventType)) {
     if (metadata.leave_type) items.push({ label_en: 'Leave Type',      label_ar: 'نوع الإجازة',     value: metadata.leave_type })

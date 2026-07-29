@@ -84,20 +84,40 @@ export function useDownPayment() {
 /** Fire-and-forget: send in-app + email to every FOM / Country Director / SuperAdmin */
 async function notifyManagementOfDownPayment(
   event: 'dp_submitted' | 'dp_sup_approved' | 'dp_sup_rejected' | 'dp_admin_approved' | 'dp_admin_rejected' | 'dp_paid',
-  detail: { requesterName: string; siteName: string; amount: number; currency: string; reason?: string },
+  detail: {
+    requesterName: string; siteName: string; amount: number; currency: string;
+    reason?: string; refNumber?: string; disbursedBy?: string; hubName?: string;
+    requestDate?: string; purposeOfVisit?: string;
+  },
   excludeUserId?: string
 ): Promise<void> {
   type Msg = { title: string; titleAr: string; message: string; type: 'info' | 'success' | 'warning' | 'error'; priority: 'normal' | 'high' };
+  const amountStr = `${detail.amount.toLocaleString()} ${detail.currency}`;
   const msgMap: Record<string, Msg> = {
-    dp_submitted:      { title: `New Advance Request — ${detail.siteName}`, titleAr: `طلب سلفة جديد — ${detail.siteName}`, message: `${detail.requesterName} submitted an advance request for "${detail.siteName}" (${detail.amount.toLocaleString()} ${detail.currency}) — awaiting supervisor approval.`, type: 'info', priority: 'normal' },
-    dp_sup_approved:   { title: `Advance Approved by Supervisor — ${detail.siteName}`, titleAr: `وافق المشرف على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was approved by supervisor and is now awaiting admin approval.`, type: 'info', priority: 'high' },
-    dp_sup_rejected:   { title: `Advance Rejected by Supervisor — ${detail.siteName}`, titleAr: `رفض المشرف طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was rejected by supervisor${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
-    dp_admin_approved: { title: `Advance Fully Approved — ${detail.siteName}`, titleAr: `تمت الموافقة النهائية على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} has been fully approved and is ready for payment.`, type: 'success', priority: 'normal' },
-    dp_admin_rejected: { title: `Advance Rejected by Admin — ${detail.siteName}`, titleAr: `رفضت الإدارة طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${detail.amount.toLocaleString()} ${detail.currency}) by ${detail.requesterName} was rejected by admin${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
-    dp_paid:           { title: `Advance Disbursed — ${detail.siteName}`, titleAr: `تم صرف السلفة — ${detail.siteName}`, message: `Transport advance of ${detail.amount.toLocaleString()} ${detail.currency} for "${detail.siteName}" by ${detail.requesterName} has been disbursed.`, type: 'success', priority: 'normal' },
+    dp_submitted:      { title: `New Advance Request — ${detail.siteName}`, titleAr: `طلب سلفة جديد — ${detail.siteName}`, message: `${detail.requesterName} submitted an advance request for "${detail.siteName}" (${amountStr}) — awaiting supervisor approval.`, type: 'info', priority: 'normal' },
+    dp_sup_approved:   { title: `Advance Approved by Supervisor — ${detail.siteName}`, titleAr: `وافق المشرف على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${amountStr}) by ${detail.requesterName} was approved by supervisor and is now awaiting admin approval.`, type: 'info', priority: 'high' },
+    dp_sup_rejected:   { title: `Advance Rejected by Supervisor — ${detail.siteName}`, titleAr: `رفض المشرف طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${amountStr}) by ${detail.requesterName} was rejected by supervisor${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
+    dp_admin_approved: { title: `Advance Fully Approved — ${detail.siteName}`, titleAr: `تمت الموافقة النهائية على السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${amountStr}) by ${detail.requesterName} has been fully approved and is ready for payment.`, type: 'success', priority: 'normal' },
+    dp_admin_rejected: { title: `Advance Rejected by Admin — ${detail.siteName}`, titleAr: `رفضت الإدارة طلب السلفة — ${detail.siteName}`, message: `"${detail.siteName}" advance (${amountStr}) by ${detail.requesterName} was rejected by admin${detail.reason ? '. Reason: ' + detail.reason : ''}.`, type: 'warning', priority: 'normal' },
+    dp_paid:           { title: `Advance Disbursed ✅ — ${detail.siteName}`, titleAr: `تم صرف السلفة ✅ — ${detail.siteName}`, message: `Transport advance of ${amountStr} for "${detail.siteName}" by ${detail.requesterName} has been disbursed${detail.disbursedBy ? ' by ' + detail.disbursedBy : ''}.`, type: 'success', priority: 'high' },
   };
   const msg = msgMap[event];
   if (!msg) return;
+
+  const emailDetails: Array<{ label: string; value: string }> = [
+    { label: 'Request Type',    value: 'Transport Advance (Down Payment)' },
+    ...(detail.refNumber  ? [{ label: 'Reference No.',   value: detail.refNumber }]    : []),
+    { label: 'Site / Location', value: detail.siteName },
+    { label: 'Amount',          value: amountStr },
+    ...(detail.purposeOfVisit ? [{ label: 'Purpose of Visit', value: detail.purposeOfVisit }] : []),
+    ...(detail.hubName    ? [{ label: 'Hub / Office',    value: detail.hubName }]       : []),
+    { label: 'Requested By',    value: detail.requesterName },
+    ...(detail.disbursedBy ? [{ label: 'Disbursed By',   value: detail.disbursedBy }]  : []),
+    ...(event === 'dp_paid' ? [{ label: 'Payment Date',  value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
+    ...(detail.requestDate ? [{ label: 'Request Date',   value: detail.requestDate }]  : []),
+    ...(detail.reason     ? [{ label: event.includes('rejected') ? 'Rejection Reason' : 'Notes', value: detail.reason }] : []),
+  ];
+
   try {
     const { data: mgmt } = await supabase.from('profiles').select('id')
       .in('role', ['fom', 'field_operation_manager', 'countryDirector', 'country_director', 'superAdmin', 'super_admin'])
@@ -108,8 +128,10 @@ async function notifyManagementOfDownPayment(
       userId: uid, title: msg.title, titleAr: msg.titleAr, message: msg.message,
       type: msg.type, category: 'financial', priority: msg.priority,
       link: '/down-payment-approval', relatedEntityType: 'downPayment',
-      sendEmail: true, emailActionUrl: '/down-payment-approval', emailActionLabel: 'View Approvals',
-    })));
+      sendEmail: true, emailActionUrl: '/down-payment-approval',
+      emailActionLabel: event === 'dp_paid' ? 'View Advance | عرض السلفة' : 'Review Advance | مراجعة السلفة',
+      emailDetails,
+    } as any)));
   } catch (e) { console.warn('[DownPayment] Management notification failed (non-fatal):', e); }
 }
 
@@ -1139,13 +1161,25 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
 
       // In-app notification to requester (FCM push already handled above)
+      const dpDisbursedByName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
+      const dpEmailDetails: Array<{ label: string; value: string }> = [
+        { label: 'Request Type',    value: 'Transport Advance (Down Payment)' },
+        { label: 'Site / Location', value: request.siteName || 'Unknown Site' },
+        { label: newStatus === 'fully_paid' ? 'Amount Disbursed' : 'Partial Amount Paid', value: `${data.amount.toLocaleString()} SDG` },
+        ...(newStatus !== 'fully_paid' ? [
+          { label: 'Remaining Balance', value: `${newRemainingAmount.toLocaleString()} SDG` },
+        ] : []),
+        { label: 'Disbursed By',    value: dpDisbursedByName },
+        { label: 'Payment Date',    value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+        ...(data.notes?.trim() ? [{ label: 'Notes', value: data.notes.trim() }] : []),
+      ];
       NotificationTriggerService.send({
         userId: request.requestedBy,
         title: newStatus === 'fully_paid'
-          ? 'Advance Fully Disbursed / تم صرف السلفة بالكامل'
-          : 'Advance Partially Disbursed / تم صرف جزء من السلفة',
+          ? 'Advance Fully Disbursed ✅ / تم صرف السلفة بالكامل'
+          : 'Advance Partially Disbursed 💰 / تم صرف جزء من السلفة',
         message: newStatus === 'fully_paid'
-          ? `Your full transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid.`
+          ? `Your full transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Please confirm receipt.`
           : `A partial transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Remaining: ${newRemainingAmount.toLocaleString()} SDG.`,
         type: 'success',
         category: 'financial',
@@ -1155,8 +1189,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         relatedEntityType: 'downPayment',
         sendEmail: true,
         emailActionUrl: '/wallet',
-        emailActionLabel: 'View Wallet',
-      }).catch(console.error);
+        emailActionLabel: 'Confirm Receipt | تأكيد الاستلام',
+        emailDetails: dpEmailDetails,
+      } as any).catch(console.error);
 
       // Notify management (FOM / Country Director / SuperAdmin) that payment was disbursed
       notifyManagementOfDownPayment(
@@ -1166,6 +1201,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           siteName: request.siteName || 'Unknown Site',
           amount: data.amount,
           currency: 'SDG',
+          disbursedBy: dpDisbursedByName,
+          requestDate: request.createdAt ? new Date(request.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined,
         }
       ).catch(console.warn);
 
