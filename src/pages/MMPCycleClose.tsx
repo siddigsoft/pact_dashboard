@@ -2114,17 +2114,29 @@ const MMPCycleClose = () => {
       });
 
       if (records.length > 0) {
+        // Probe once for not_covered_flag column; fall back to status-only if missing.
+        const { error: flagProbeErr } = await supabase
+          .from('mmp_site_entries')
+          .select('not_covered_flag')
+          .limit(1);
+        const hasNotCoveredFlag = !flagProbeErr ||
+          !(flagProbeErr.message?.includes('column') || (flagProbeErr as any).code === '42703');
+
         const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
         await Promise.all(records.map(async (r) => {
+          const uncoveredQuery = hasNotCoveredFlag
+            ? supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).eq('not_covered_flag', true)
+            : supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).eq('status', 'not_covered');
           const [totalRes, completedRes, uncoveredRes] = await Promise.all([
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).in('status', coveredStatuses),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).eq('not_covered_flag', true),
+            uncoveredQuery,
           ]);
           r.totalSites = totalRes.count ?? 0;
           r.completedSites = completedRes.count ?? 0;
           r.uncoveredSites = uncoveredRes.count ?? 0;
           r.reasonBreakdown = {};
+          if (!hasNotCoveredFlag) return; // reason breakdown requires the not_covered_reason column too
           // paginate reason breakdown for not-covered sites
           const PAGE = 1000;
           for (let from = 0; ; from += PAGE) {
@@ -2277,7 +2289,14 @@ const MMPCycleClose = () => {
           .from('mmp_site_entries')
           .update({ not_covered_flag: true } as any)
           .in('id', visitIds);
-        if (svError) throw svError;
+        if (svError) {
+          const isMissingCol = svError.message?.includes('column') || (svError as any).code === '42703';
+          if (isMissingCol) {
+            console.warn('[executeScopedClose] not_covered_flag column missing — apply migration 20260727c. Skipping flag step.');
+          } else {
+            throw svError;
+          }
+        }
       }
 
       const newRecord: CycleCloseRecord = {
@@ -3352,7 +3371,8 @@ const MMPCycleClose = () => {
       // Clear not_covered_flag that was set on pending/active sites during
       // handleStartClosingCycle. Without this, aborted sites remain permanently
       // flagged as uncovered even though the cycle is back to active.
-      await supabase
+      // Guard against 42703 (column missing) — cycle_status is already fixed above.
+      const { error: flagResetErr } = await supabase
         .from('mmp_site_entries')
         .update({
           not_covered_flag: false,
@@ -3363,6 +3383,14 @@ const MMPCycleClose = () => {
         } as any)
         .eq('mmp_file_id', mmpId)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+      if (flagResetErr) {
+        const isMissingCol = flagResetErr.message?.includes('column') || (flagResetErr as any).code === '42703';
+        if (!isMissingCol) throw flagResetErr;
+        console.warn('[handleAbortClose] not_covered_flag column missing — apply migration 20260727c. Flag reset skipped.');
+      }
+      // Close the guided wizard for this MMP so the user isn't left staring
+      // at a stale "Pre-Close Checklist" view now that status is back to active.
+      if (checklistMmpId === mmpId) setChecklistMmpId(null);
 
       await logMMPAudit({
         mmpId,
