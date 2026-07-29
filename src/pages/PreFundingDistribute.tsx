@@ -1588,7 +1588,7 @@ export default function PreFundingDistribute() {
 
       {/* Top-Up / Add Funds Dialog */}
       <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-lg w-full">
           {topUpDialog.alloc && (() => {
             const alloc = topUpDialog.alloc;
             const balance = alloc.allocated_amount - alloc.spent_amount;
@@ -1675,18 +1675,18 @@ export default function PreFundingDistribute() {
                       <p className="font-semibold text-sky-700 dark:text-sky-300 mb-1.5 flex items-center gap-1">
                         <Wallet className="h-3 w-3" />Fund Pool — {fundDialogData.name}
                       </p>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="min-w-0">
                           <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Total</p>
-                          <p className="font-mono font-bold text-sky-700 dark:text-sky-300 mt-0.5">{formatNumber(fundDialogData.amount, 0)}</p>
+                          <p className="font-mono font-bold text-sky-700 dark:text-sky-300 mt-0.5 text-[12px] break-all">{formatNumber(fundDialogData.amount, 0)}</p>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Allocated</p>
-                          <p className="font-mono font-semibold text-violet-600 mt-0.5">{formatNumber(totalAllocatedForFund, 0)}</p>
+                          <p className="font-mono font-semibold text-violet-600 mt-0.5 text-[12px] break-all">{formatNumber(totalAllocatedForFund, 0)}</p>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-muted-foreground uppercase tracking-wide text-[9px]">Available</p>
-                          <p className={cn('font-mono font-bold mt-0.5', (fundAvailable ?? 0) <= 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                          <p className={cn('font-mono font-bold mt-0.5 text-[12px] break-all', (fundAvailable ?? 0) <= 0 ? 'text-rose-600' : 'text-emerald-600')}>
                             {formatNumber(fundAvailable ?? 0, 0)}
                           </p>
                         </div>
@@ -1714,18 +1714,18 @@ export default function PreFundingDistribute() {
                   )}
 
                   {/* Current allocation balance summary */}
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5 grid grid-cols-3 gap-2 text-center">
-                    <div>
+                  <div className="rounded-lg border bg-muted/30 px-4 py-3 grid grid-cols-3 gap-4 text-center">
+                    <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Allocated</p>
-                      <p className="font-mono font-semibold text-[13px] mt-0.5">{formatNumber(alloc.allocated_amount, 0)}</p>
+                      <p className="font-mono font-semibold text-[13px] mt-1 break-all">{formatNumber(alloc.allocated_amount, 0)}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0 border-x border-border/40">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Spent</p>
-                      <p className="font-mono font-semibold text-[13px] mt-0.5 text-rose-600">{formatNumber(alloc.spent_amount, 0)}</p>
+                      <p className="font-mono font-semibold text-[13px] mt-1 text-rose-600 break-all">{formatNumber(alloc.spent_amount, 0)}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Balance</p>
-                      <p className={cn('font-mono font-bold text-[13px] mt-0.5', balance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                      <p className={cn('font-mono font-bold text-[13px] mt-1 break-all', balance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                         {formatNumber(balance, 0)}
                       </p>
                     </div>
