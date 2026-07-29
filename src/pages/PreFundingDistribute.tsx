@@ -1111,6 +1111,7 @@ export default function PreFundingDistribute() {
                                 });
 
                                 const totalDisbursed = rows.reduce((s, r) => s + r.amount, 0);
+                                const missingReceiptCount = rows.filter(r => !r.receipt_url).length;
 
                                 return (
                                   <div>
@@ -1120,7 +1121,25 @@ export default function PreFundingDistribute() {
                                       <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold border border-emerald-200 dark:border-emerald-700">
                                         {rows.length} disbursement{rows.length > 1 ? 's' : ''}
                                       </span>
+                                      {missingReceiptCount > 0 && (
+                                        <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-[9px] font-bold border border-amber-300 dark:border-amber-700">
+                                          <AlertCircle className="h-2.5 w-2.5" />
+                                          {missingReceiptCount} receipt{missingReceiptCount > 1 ? 's' : ''} missing
+                                        </span>
+                                      )}
                                     </p>
+
+                                    {/* Missing-receipt warning banner */}
+                                    {missingReceiptCount > 0 && (
+                                      <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+                                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+                                        <span>
+                                          <strong>{missingReceiptCount} disbursement{missingReceiptCount > 1 ? 's are' : ' is'} missing a receipt.</strong>
+                                          {' '}Receipts are required for financial accountability. Please re-upload via <em>Add Funds</em>.
+                                        </span>
+                                      </div>
+                                    )}
+
                                     <div className="overflow-x-auto rounded-lg border border-emerald-200/60 dark:border-emerald-800/40">
                                       <table className="w-full text-xs">
                                         <thead className="bg-emerald-50/80 dark:bg-emerald-950/40">
@@ -1134,10 +1153,29 @@ export default function PreFundingDistribute() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {rows.map((row) => (
-                                            <tr key={row.seq} className={cn('border-t border-border/30', row.is_initial ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : 'hover:bg-muted/30')}>
+                                          {rows.map((row) => {
+                                            const missingReceipt = !row.receipt_url;
+                                            return (
+                                            <tr
+                                              key={row.seq}
+                                              className={cn(
+                                                'border-t',
+                                                missingReceipt
+                                                  ? 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30'
+                                                  : row.is_initial
+                                                    ? 'border-border/30 bg-emerald-50/40 dark:bg-emerald-950/20'
+                                                    : 'border-border/30 hover:bg-muted/30'
+                                              )}
+                                            >
                                               <td className="py-2 px-2.5">
-                                                <span className={cn('inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold', row.is_initial ? 'bg-emerald-500 text-white' : 'bg-sky-500 text-white')}>
+                                                <span className={cn(
+                                                  'inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold',
+                                                  missingReceipt
+                                                    ? 'bg-amber-500 text-white'
+                                                    : row.is_initial
+                                                      ? 'bg-emerald-500 text-white'
+                                                      : 'bg-sky-500 text-white'
+                                                )}>
                                                   {row.seq}
                                                 </span>
                                               </td>
@@ -1166,13 +1204,14 @@ export default function PreFundingDistribute() {
                                                     <Receipt className="h-3 w-3" />View
                                                   </button>
                                                 ) : (
-                                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
-                                                    <AlertCircle className="h-3 w-3" />Missing
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                                    <AlertCircle className="h-3 w-3" />No Receipt
                                                   </span>
                                                 )}
                                               </td>
                                             </tr>
-                                          ))}
+                                            );
+                                          })}
                                         </tbody>
                                         <tfoot className="border-t-2 border-emerald-300/60 dark:border-emerald-700/60 bg-emerald-50/60 dark:bg-emerald-950/30">
                                           <tr>
