@@ -4294,6 +4294,9 @@ const MMPCycleClose = () => {
         ]}
       />
 
+      {/* ── 7-Step guide + summary cards: hidden while the guided wizard is open so the
+           wizard appears immediately below the amber banner without any scrolling ── */}
+      {!checklistMmpId && (<>
       {/* ── Prominent 7-Step Workflow Strip ── always visible, no collapsible ── */}
       <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden" data-testid="cycle-close-steps-strip">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
@@ -4639,6 +4642,7 @@ const MMPCycleClose = () => {
           </Card>
         </div>
       )}
+      </>)} {/* end !checklistMmpId */}
 
 
       {/* ── Full Guided Wizard (inline) ─────────────────────────────────── */}
