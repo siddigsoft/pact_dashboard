@@ -249,13 +249,15 @@ const MMPCycleClose = () => {
     if (mmpIdParam) {
       setSelectedMmpId(mmpIdParam);
     }
-    // When arriving from the "Go to Cycle Close" banner in MMP Management,
-    // ?wizardFor=X auto-opens the guided wizard for that specific MMP.
+    // When arriving from the "View Closing Guide" button (MMP page) or MMP Management
+    // banner, ?wizardFor=X auto-opens the guided wizard for that specific MMP.
+    // Do NOT guard on mmpFiles — set immediately so the wizard opens on first render;
+    // the wizard itself handles the loading state while data arrives.
     const wizardForParam = searchParams.get('wizardFor');
-    if (wizardForParam && mmpFiles && mmpFiles.length > 0) {
+    if (wizardForParam) {
       setChecklistMmpId(wizardForParam);
     }
-  }, [searchParams, mmpFiles]);
+  }, [searchParams]);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
   const [reopenConfirmId, setReopenConfirmId] = useState<string | null>(null);
@@ -1237,24 +1239,19 @@ const MMPCycleClose = () => {
     fetchFinance();
   }, [activeTab, selectedMmpId]);
 
-  // Scroll wizard into view whenever it opens (checklistMmpId transitions null → value).
-  // Uses window.scrollTo with a calculated offset rather than scrollIntoView so it
-  // works correctly in layouts where the scroll container is not the root element.
-  // behavior: 'instant' ensures the jump is visible immediately (smooth scrolls can
-  // be imperceptibly slow on long pages and mislead the user into thinking nothing happened).
+  // Scroll the wizard into view whenever it opens.
+  // scrollIntoView() traverses the ancestor scroll chain automatically, so it works
+  // correctly inside the SidebarInset overflow-y-auto container (window.scrollTo does not).
   useEffect(() => {
     if (checklistMmpId) {
       const doScroll = () => {
         if (wizardRef.current) {
-          const rect = wizardRef.current.getBoundingClientRect();
-          // Subtract 72px so the wizard clears a typical sticky header
-          const targetY = window.scrollY + rect.top - 72;
-          window.scrollTo({ top: Math.max(0, targetY), behavior: 'instant' as ScrollBehavior });
+          wizardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       };
-      // Two attempts: 100ms (after first render) and 350ms (after data loads)
+      // Two attempts: 100ms (after first render) and 400ms (after data loads / DOM settles)
       const t1 = setTimeout(doScroll, 100);
-      const t2 = setTimeout(doScroll, 350);
+      const t2 = setTimeout(doScroll, 400);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [checklistMmpId]);
