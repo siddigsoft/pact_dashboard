@@ -124,64 +124,115 @@ export default function PreFundingDistribute() {
     if (allocPayments.has(allocId)) return; // already loaded
     setAllocPaymentsLoading(prev => { const s = new Set(prev); s.add(allocId); return s; });
     try {
-      // Fetch all payment transactions for this fund
+      // Fetch ALL payment transactions for this fund (not filtered by user — full fund history)
       const { data: txnData } = await (supabase as any)
         .from('pre_fund_transactions')
-        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id')
+        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id,created_by')
         .eq('pre_fund_request_id', fundId)
-        .eq('transaction_type', 'payment')
+        .in('transaction_type', ['payment', 'disbursement'])
         .order('transaction_date', { ascending: false });
 
+      const allTxns: any[] = txnData ?? [];
+
       // Partition by source type
-      const ocsTxns    = (txnData ?? []).filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
-      const dpTxns     = (txnData ?? []).filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
-      const otherTxns  = (txnData ?? []).filter((t: any) =>
+      const ocsTxns   = allTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
+      const dpTxns    = allTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
+      const otherTxns = allTxns.filter((t: any) =>
         t.source_table !== 'operational_cost_submissions' &&
         t.source_table !== 'down_payment_requests'
       );
-      const ocsIds  = ocsTxns.map((t: any) => t.source_id as string);
-      const dpIds   = dpTxns.map((t: any) => t.source_id as string);
+
+      const ocsIds = [...new Set(ocsTxns.map((t: any) => t.source_id as string))];
+      const dpIds  = [...new Set(dpTxns.map((t: any)  => t.source_id as string))];
 
       let payments: any[] = [];
 
-      // Enrich OCS-linked transactions
+      // Enrich OCS-linked transactions. Track which source_ids were matched so
+      // unresolved ones are added as fallback manual entries (not silently dropped).
+      const matchedOcsIds = new Set<string>();
       if (ocsIds.length > 0) {
         const { data: ocsData } = await (supabase as any)
           .from('operational_cost_submissions')
           .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
           .in('id', ocsIds);
-        payments = [...payments, ...(ocsData ?? []).map((o: any) => {
+        (ocsData ?? []).forEach((o: any) => {
+          matchedOcsIds.add(o.id);
           const txn = ocsTxns.find((t: any) => t.source_id === o.id);
-          return { ...o, _type: 'ocs', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
-        })];
+          // Use the transaction amount as the authoritative amount (it is recorded in
+          // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
+          // the transaction row itself has no amount.
+          const txnAmt = Number(txn?.amount ?? 0);
+          payments.push({
+            ...o,
+            _type: 'ocs',
+            _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
+            _txn_date: txn?.transaction_date,
+          });
+        });
+        // Unresolved OCS transactions → fallback manual entries so they aren't dropped
+        ocsTxns
+          .filter((t: any) => !matchedOcsIds.has(t.source_id))
+          .forEach((t: any) => {
+            payments.push({
+              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+              description: t.description || 'Cost submission (details unavailable)',
+              status: 'paid',
+            });
+          });
       }
 
-      // Enrich DP-linked transactions
+      // Enrich DP-linked transactions with same fallback pattern
+      const matchedDpIds = new Set<string>();
       if (dpIds.length > 0) {
         const { data: dpData } = await (supabase as any)
           .from('down_payment_requests')
           .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
           .in('id', dpIds);
-        payments = [...payments, ...(dpData ?? []).map((dp: any) => {
+        (dpData ?? []).forEach((dp: any) => {
+          matchedDpIds.add(dp.id);
           const txn = dpTxns.find((t: any) => t.source_id === dp.id);
-          return { ...dp, _type: 'dp', _txn_amount: txn?.amount, _txn_date: txn?.transaction_date };
-        })];
+          // Prefer the recorded transaction amount over the DP requested amount
+          const txnAmt = Number(txn?.amount ?? 0);
+          payments.push({
+            ...dp,
+            _type: 'dp',
+            _txn_amount: txnAmt || Number(dp.amount) || 0,
+            _txn_date: txn?.transaction_date,
+            amount: txnAmt || Number(dp.amount) || 0,
+          });
+        });
+        // Unresolved DP transactions → fallback manual entries
+        dpTxns
+          .filter((t: any) => !matchedDpIds.has(t.source_id))
+          .forEach((t: any) => {
+            payments.push({
+              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+              description: t.description || 'Down payment (details unavailable)',
+              status: 'paid',
+            });
+          });
       }
 
-      // Add manual / other transactions directly from pre_fund_transactions
-      payments = [...payments, ...otherTxns.map((t: any) => ({
-        ...t,
-        _type: 'manual',
-        _txn_amount: t.amount,
-        _txn_date: t.transaction_date,
-        amount: t.amount,
-        description: t.description,
-        status: 'paid',
-      }))];
+      // Manual / other transactions — always included
+      otherTxns.forEach((t: any) => {
+        payments.push({
+          ...t,
+          _type: 'manual',
+          _txn_amount: Number(t.amount) || 0,
+          _txn_date: t.transaction_date,
+          amount: Number(t.amount) || 0,
+          description: t.description || '—',
+          status: 'paid',
+        });
+      });
 
       // Sort by transaction date desc
-      payments.sort((a, b) => new Date(b._txn_date || b.paid_at || b.submitted_at || 0).getTime()
-        - new Date(a._txn_date || a.paid_at || a.submitted_at || 0).getTime());
+      payments.sort((a, b) =>
+        new Date(b._txn_date || b.paid_at || b.submitted_at || 0).getTime() -
+        new Date(a._txn_date || a.paid_at || a.submitted_at || 0).getTime()
+      );
 
       setAllocPayments(prev => { const m = new Map(prev); m.set(allocId, payments); return m; });
     } catch (e: any) {
@@ -281,14 +332,46 @@ export default function PreFundingDistribute() {
   const loadAllocations = useCallback(async (fundId: string) => {
     setAllocLoading(prev => new Set(prev).add(fundId));
     try {
-      const { data: allocs, error } = await (supabase as any)
-        .from('pre_fund_allocations')
-        .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes,receipt_url,created_at')
-        .eq('pre_fund_request_id', fundId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const [allocRes, txnRes] = await Promise.all([
+        (supabase as any)
+          .from('pre_fund_allocations')
+          .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes,receipt_url,created_at')
+          .eq('pre_fund_request_id', fundId)
+          .order('created_at', { ascending: false }),
+        // Fetch payment transactions to compute live spent amounts per user
+        (supabase as any)
+          .from('pre_fund_transactions')
+          .select('id,user_id,created_by,source_table,source_id,amount,transaction_type')
+          .eq('pre_fund_request_id', fundId),
+      ]);
+      if (allocRes.error) throw allocRes.error;
 
-      const profileIds: string[] = [...new Set((allocs ?? []).map((a: any) => a.user_id).filter(Boolean))];
+      const allocs: any[] = allocRes.data ?? [];
+      const txns:   any[] = txnRes.data   ?? [];
+
+      // Build the set of allocated user IDs so we can fall back to created_by
+      // when user_id on the transaction is an unallocated recipient
+      const allocatedUserIds = new Set(allocs.map((a: any) => a.user_id).filter(Boolean));
+
+      // Compute per-user spend from transactions (mirrors PreFundingAllocations logic)
+      const spendMap = new Map<string, number>();
+      for (const t of txns) {
+        const amt   = Number(t.amount) || 0;
+        const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
+        if (!['payment', 'disbursement'].includes(t.transaction_type) && delta >= 0) continue;
+
+        // Prefer allocated user_id; fall back to created_by if user_id isn't allocated
+        let owner: string | null = null;
+        if (t.user_id && allocatedUserIds.has(t.user_id)) owner = t.user_id;
+        else if (t.created_by && allocatedUserIds.has(t.created_by)) owner = t.created_by;
+        else owner = t.user_id ?? t.created_by ?? null;
+        if (!owner) continue;
+
+        spendMap.set(owner, Math.max(0, (spendMap.get(owner) ?? 0) + delta));
+      }
+
+      // Enrich profiles
+      const profileIds: string[] = [...new Set(allocs.map((a: any) => a.user_id).filter(Boolean))];
       let profileMap: Record<string, StaffProfile> = {};
       if (profileIds.length > 0) {
         const { data: profs } = await supabase
@@ -298,12 +381,18 @@ export default function PreFundingDistribute() {
         (profs ?? []).forEach((p: any) => { profileMap[p.id] = p; });
       }
 
-      const enriched: Allocation[] = (allocs ?? []).map((a: any) => ({
-        ...a,
-        user_name:  profileMap[a.user_id]?.full_name ?? 'Unknown',
-        user_email: profileMap[a.user_id]?.email ?? '',
-        user_role:  profileMap[a.user_id]?.role ?? '',
-      }));
+      const enriched: Allocation[] = allocs.map((a: any) => {
+        const txnSpent    = spendMap.get(a.user_id) ?? 0;
+        const storedSpent = Number(a.spent_amount ?? 0);
+        return {
+          ...a,
+          // Use whichever is higher — txn-computed or stored column
+          spent_amount: Math.max(txnSpent, storedSpent),
+          user_name:  profileMap[a.user_id]?.full_name ?? 'Unknown',
+          user_email: profileMap[a.user_id]?.email ?? '',
+          user_role:  profileMap[a.user_id]?.role ?? '',
+        };
+      });
 
       setFundAllocs(prev => new Map(prev).set(fundId, enriched));
     } catch (e: any) {
@@ -856,11 +945,12 @@ export default function PreFundingDistribute() {
                                     <tbody>
                                       {payments.map((p, i) => {
                                         const date = p._txn_date || p.paid_at || p.submitted_at || p.approved_at || p.created_at;
-                                        const amt = p._type === 'ocs'
-                                          ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
-                                          : p._type === 'manual'
-                                            ? (p._txn_amount ?? p.amount ?? 0)
-                                            : (p.amount ?? p._txn_amount ?? 0);
+                                        // _txn_amount is the canonical transaction amount (set for all types).
+                                        // For OCS, fall back to amount_paid_cents/amount_cents when _txn_amount is 0.
+                                        const amt = Number(p._txn_amount) ||
+                                          (p._type === 'ocs'
+                                            ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
+                                            : Number(p.amount) || 0);
                                         const category = p._type === 'ocs'
                                           ? (catLabel[p.expense_category] ?? p.expense_category ?? '—')
                                           : p._type === 'manual'
@@ -898,10 +988,11 @@ export default function PreFundingDistribute() {
                                       <tr className="border-t font-semibold">
                                         <td colSpan={3} className="py-1.5 text-muted-foreground text-xs">Total Payments</td>
                                         <td className="py-1.5 text-right font-mono text-xs">
-                                          {fund.currency} {formatNumber(payments.reduce((s,p) => {
-                                            const amt = p._type === 'ocs'
-                                              ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
-                                              : (p.amount ?? p._txn_amount ?? 0);
+                                          {fund.currency} {formatNumber(payments.reduce((s, p) => {
+                                            const amt = Number(p._txn_amount) ||
+                                              (p._type === 'ocs'
+                                                ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
+                                                : Number(p.amount) || 0);
                                             return s + amt;
                                           }, 0), 0)}
                                         </td>
