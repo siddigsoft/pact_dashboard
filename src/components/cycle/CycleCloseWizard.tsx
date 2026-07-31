@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, CheckCircle2, Circle, AlertCircle, Clock, ChevronRight, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Step1SelectCycle from './steps/Step1SelectCycle';
