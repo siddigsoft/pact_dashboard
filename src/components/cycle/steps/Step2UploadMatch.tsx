@@ -113,7 +113,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const wb = XLSX.read(data, { type: 'binary' });
+        // readAsArrayBuffer is more reliable than the deprecated readAsBinaryString
+        const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
         if (!json.length) { setFileError('The file appears to be empty. Check the file and try again.'); return; }
@@ -137,7 +138,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         setFileError('Could not read this file. Make sure it is a valid Excel or CSV file.');
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -257,20 +258,30 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
       {/* 2a — Upload Zone */}
       <div className="space-y-3">
         <h3 className="font-medium text-sm">2a — Upload WFP Clean Data File</h3>
-        <div
+        {/* Input is OUTSIDE the label so its click never re-triggers the label */}
+        <input
+          ref={fileInputRef}
+          id="wfp-file-upload"
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={handleFileInput}
+          data-testid="input-wfp-file"
+        />
+        {/* label+htmlFor opens the dialog natively — no programmatic .click() needed */}
+        <label
+          htmlFor="wfp-file-upload"
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+          className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
             ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/30'}`}
           data-testid="upload-dropzone"
         >
           <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
           <p className="font-medium text-sm">{wizardState.uploadedFileName ?? 'Drag & drop or click to upload'}</p>
           <p className="text-xs text-muted-foreground mt-1">Accepted: .xlsx, .xls, .csv — Max size: 10 MB</p>
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} data-testid="input-wfp-file" />
-        </div>
+        </label>
         {fileError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
