@@ -32,8 +32,9 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
     setLoading(true);
     const { data, error } = await supabase
       .from('mmp_files')
-      .select('id, name, status, hub, created_at, month')
-      .in('status', ['Pending', 'pending', 'In Progress', 'in_progress', 'Verified', 'verified', 'Active', 'active', 'open'])
+      .select('id, name, status, hub, created_at, month, cycle_status')
+      .not('status', 'eq', 'rejected')
+      .or('cycle_status.is.null,cycle_status.neq.closed')
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
     else setOpenCycles(data ?? []);

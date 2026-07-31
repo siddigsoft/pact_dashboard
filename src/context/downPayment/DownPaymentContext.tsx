@@ -88,6 +88,8 @@ async function notifyManagementOfDownPayment(
     requesterName: string; siteName: string; amount: number; currency: string;
     reason?: string; refNumber?: string; disbursedBy?: string; hubName?: string;
     requestDate?: string; purposeOfVisit?: string;
+    approvedBy?: string; approverRole?: string; nextTier?: string;
+    rejectedBy?: string; rejectorRole?: string;
   },
   excludeUserId?: string
 ): Promise<void> {
@@ -112,6 +114,9 @@ async function notifyManagementOfDownPayment(
     ...(detail.purposeOfVisit ? [{ label: 'Purpose of Visit', value: detail.purposeOfVisit }] : []),
     ...(detail.hubName    ? [{ label: 'Hub / Office',    value: detail.hubName }]       : []),
     { label: 'Requested By',    value: detail.requesterName },
+    ...(detail.approvedBy ? [{ label: 'Approved By',    value: detail.approvedBy + (detail.approverRole ? ` — ${detail.approverRole}` : '') }] : []),
+    ...(detail.rejectedBy ? [{ label: 'Rejected By',    value: detail.rejectedBy + (detail.rejectorRole ? ` — ${detail.rejectorRole}` : '') }] : []),
+    ...(detail.nextTier   ? [{ label: 'Awaiting',       value: detail.nextTier }]       : []),
     ...(detail.disbursedBy ? [{ label: 'Disbursed By',   value: detail.disbursedBy }]  : []),
     ...(event === 'dp_paid' ? [{ label: 'Payment Date',  value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
     ...(detail.requestDate ? [{ label: 'Request Date',   value: detail.requestDate }]  : []),
@@ -640,6 +645,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             siteName: request.siteName || 'Unknown Site',
             amount: approvedAmount,
             currency: 'SDG',
+            approvedBy: data.approvedByName || undefined,
+            approverRole: bypassFired ? 'Admin' : 'Supervisor',
+            nextTier: bypassFired ? undefined : 'Admin Approval (Tier 2)',
           },
           data.approvedBy
         ).catch(console.warn);
@@ -722,6 +730,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           amount: request?.requestedAmount || 0,
           currency: 'SDG',
           reason: data.rejectionReason,
+          rejectedBy: data.rejectedByName || undefined,
+          rejectorRole: 'Supervisor',
         },
         data.rejectedBy
       ).catch(console.warn);
@@ -894,6 +904,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             siteName: request.siteName || 'Unknown Site',
             amount: approvedAmount,
             currency: 'SDG',
+            approvedBy: data.approvedByName || undefined,
+            approverRole: 'Admin',
+            nextTier: 'Payment Processing',
           },
           data.approvedBy
         ).catch(console.warn);
@@ -974,6 +987,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           amount: request?.requestedAmount || 0,
           currency: 'SDG',
           reason: data.rejectionReason,
+          rejectedBy: data.rejectedByName || undefined,
+          rejectorRole: 'Admin',
         },
         data.rejectedBy
       ).catch(console.warn);
