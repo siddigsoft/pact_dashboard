@@ -488,14 +488,14 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
               <div key={field.key} className="flex items-center gap-2">
                 <span className="text-xs font-medium w-32 flex-shrink-0">{field.label}</span>
                 <Select
-                  value={localMapping[field.key] ?? ''}
-                  onValueChange={v => setLocalMapping(prev => ({ ...prev, [field.key]: v }))}
+                  value={localMapping[field.key] || '__none__'}
+                  onValueChange={v => setLocalMapping(prev => ({ ...prev, [field.key]: v === '__none__' ? '' : v }))}
                 >
                   <SelectTrigger className="flex-1 h-8 text-xs" data-testid={`select-mapping-${field.key}`}>
                     <SelectValue placeholder="Not mapped" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Not mapped —</SelectItem>
+                    <SelectItem value="__none__">— Not mapped —</SelectItem>
                     {(wizardState.fileColumns ?? []).map(c => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
