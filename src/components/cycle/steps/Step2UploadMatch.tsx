@@ -471,8 +471,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         );
       })()}
 
-      {/* 2b — Column Mapping */}
-      {previewConfirmed && (
+      {/* 2b — Column Mapping — shown whenever file data exists in wizardState (persists across re-renders) */}
+      {wizardState.fileColumns.length > 0 && (
         <div className="space-y-3 border rounded-lg p-4">
           <div className="flex items-center justify-between">
             <h3 className="font-medium text-sm">2b — Column Mapping</h3>
