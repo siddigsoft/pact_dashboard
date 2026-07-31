@@ -54,9 +54,16 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
   const buildReconciliation = async () => {
     setLoading(true);
 
+    // Fetch entries with per-site fee columns and all enumerator-linkage columns.
+    // transport_fee / enumerator_fee live on each entry row, not on mmp_files.
+    // Enumerator linkage may be accepted_by, claimed_by, or visit_started_by (UUID)
+    // with display names falling back to additional_data text fields.
     const { data: entries } = await supabase
       .from('mmp_site_entries')
-      .select('id, accepted_by, status, profiles!accepted_by(full_name)')
+      .select(
+        'id, accepted_by, claimed_by, visit_started_by, status, transport_fee, enumerator_fee, additional_data, ' +
+        'profiles!accepted_by(full_name)'
+      )
       .eq('mmp_file_id', wizardState.selectedMmpId!);
 
     const { data: advances } = await supabase
@@ -64,15 +71,6 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
       .select('user_id, amount, status')
       .eq('mmp_file_id', wizardState.selectedMmpId!)
       .in('status', ['approved', 'paid', 'partially_paid']);
-
-    const { data: feeConfig } = await supabase
-      .from('mmp_files')
-      .select('transport_fee, enumerator_fee')
-      .eq('id', wizardState.selectedMmpId!)
-      .single();
-
-    const transportRate = feeConfig?.transport_fee ?? 0;
-    const feeRate = feeConfig?.enumerator_fee ?? 0;
 
     const notCoveredIds = new Set(Object.keys(wizardState.uncoveredReasons));
     const confirmedMatchIds = new Set(
@@ -82,32 +80,66 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
         .filter(Boolean) as string[]
     );
 
+    // Pick the best available enumerator UUID per entry
+    const resolveEnumId = (e: any): string | null =>
+      e.accepted_by || e.claimed_by || e.visit_started_by || null;
+
+    // Pick the best available display name per entry
+    const resolveEnumName = (e: any): string => {
+      const profileName = (e as any).profiles?.full_name;
+      if (profileName) return profileName;
+      const ad = e.additional_data ?? {};
+      return (
+        ad.collector_name      ||
+        ad.accepted_by_name    ||
+        ad.enumerator_name     ||
+        ad.data_collector_name ||
+        ad.collectorName       ||
+        'Unknown'
+      );
+    };
+
     // Group by enumerator
     const byEnum: Record<string, { name: string; entries: any[] }> = {};
     for (const e of (entries ?? [])) {
-      const id = e.accepted_by;
+      const id = resolveEnumId(e);
       if (!id) continue;
-      if (!byEnum[id]) byEnum[id] = { name: (e as any).profiles?.full_name ?? 'Unknown', entries: [] };
+      if (!byEnum[id]) byEnum[id] = { name: resolveEnumName(e), entries: [] };
       byEnum[id].entries.push(e);
     }
 
     const advanceByEnum: Record<string, number> = {};
     for (const a of (advances ?? [])) {
+      if (!a.user_id) continue;
       advanceByEnum[a.user_id] = (advanceByEnum[a.user_id] ?? 0) + (a.amount ?? 0);
     }
 
     const tableRows: EnumRow[] = Object.entries(byEnum).map(([enumId, data]) => {
       const sitesAssigned = data.entries.length;
-      const wfpConfirmed = data.entries.filter(e => confirmedMatchIds.has(e.id)).length;
+
+      // Earnings are computed from per-site fees of WFP-confirmed sites only
+      const confirmedEntries = data.entries.filter(e => confirmedMatchIds.has(e.id));
+      const wfpConfirmed = confirmedEntries.length;
       const wfpRejected = data.entries.filter(e =>
         wizardState.matchResults.some(r => r.matchedSiteId === e.id && r.action === 'reject')
       ).length;
       const notCoveredCount = data.entries.filter(e => notCoveredIds.has(e.id)).length;
+
       const advancePaid = advanceByEnum[enumId] ?? 0;
-      const transportEarned = transportRate * wfpConfirmed;
-      const feesEarned = feeRate * wfpConfirmed;
-      const totalEarned = transportEarned + feesEarned;
-      const netToPay = totalEarned - advancePaid;
+
+      // Sum per-site transport and enumerator fees for confirmed sites
+      const transportEarned = confirmedEntries.reduce((s, e) => s + (Number(e.transport_fee) || 0), 0);
+      const feesEarned      = confirmedEntries.reduce((s, e) => s + (Number(e.enumerator_fee) || 0), 0);
+      const totalEarned     = transportEarned + feesEarned;
+      const netToPay        = totalEarned - advancePaid;
+
+      // Representative rates (shown in UI for reference; may vary per site)
+      const transportRate = confirmedEntries.length > 0
+        ? Math.round(transportEarned / confirmedEntries.length)
+        : 0;
+      const feeRate = confirmedEntries.length > 0
+        ? Math.round(feesEarned / confirmedEntries.length)
+        : 0;
 
       let rowType: EnumRow['rowType'] = 'amber';
       if (advancePaid === 0) rowType = 'blue';
