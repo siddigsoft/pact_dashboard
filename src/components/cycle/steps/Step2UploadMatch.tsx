@@ -112,9 +112,9 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = e.target?.result;
-        // readAsArrayBuffer is more reliable than the deprecated readAsBinaryString
-        const wb = XLSX.read(data, { type: 'array' });
+        const raw = e.target?.result;
+        // readAsArrayBuffer gives an ArrayBuffer; XLSX.read type:'array' needs a Uint8Array
+        const wb = XLSX.read(new Uint8Array(raw as ArrayBuffer), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
         if (!json.length) { setFileError('The file appears to be empty. Check the file and try again.'); return; }
