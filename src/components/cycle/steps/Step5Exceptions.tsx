@@ -145,8 +145,8 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
           <p className="text-sm text-green-800 font-medium">No exceptions — no not-covered sites had advance payments. Ready to continue.</p>
         </div>
         <div className="flex items-center justify-between pt-4 border-t">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack}>← Back</Button>}
-          <Button onClick={onNext} data-testid="button-next-step5-empty">Next: Financial Reconciliation →</Button>
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack}>← Back</Button>}
+          <Button type="button" onClick={onNext} data-testid="button-next-step5-empty">Next: Financial Reconciliation →</Button>
         </div>
       </div>
     );
@@ -272,13 +272,13 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step5">← Back</Button>}
-          <Button variant="outline" size="sm" onClick={exportExceptions} data-testid="button-export-exceptions">
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step5">← Back</Button>}
+          <Button type="button" variant="outline" size="sm" onClick={exportExceptions} data-testid="button-export-exceptions">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export Exceptions Report
           </Button>
         </div>
-        <Button onClick={onNext} disabled={!allDecided} data-testid="button-next-step5">
+        <Button type="button" onClick={onNext} disabled={!allDecided} data-testid="button-next-step5">
           Next: Financial Reconciliation →
         </Button>
       </div>

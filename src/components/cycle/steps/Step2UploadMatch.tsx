@@ -54,6 +54,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ columns: string[]; rows: Record<string, string>[] } | null>(null);
+  const [previewRowCount, setPreviewRowCount] = useState(5);
+  const [selectedPreviewCols, setSelectedPreviewCols] = useState<string[]>([]);
   const [previewConfirmed, setPreviewConfirmed] = useState(false);
   const [rememberMapping, setRememberMapping] = useState(false);
   const [running, setRunning] = useState(false);
@@ -106,7 +108,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
         if (!json.length) { setFileError('The file appears to be empty. Check the file and try again.'); return; }
         const columns = Object.keys(json[0]);
-        const rows = json.slice(0, 5).map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)])));
+        const rows = json.slice(0, 50).map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)])));
         const allRows = json.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)])));
         const detected = autoDetect(columns);
         const missing = SYSTEM_FIELDS.filter(f => !detected[f.key]).map(f => f.label);
@@ -114,6 +116,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
           setFileError(`These required columns were not found: ${missing.join(', ')}. Check the column names or use the mapping panel below.`);
         }
         setPreview({ columns, rows });
+        setSelectedPreviewCols(columns);
+        setPreviewRowCount(5);
         setLocalMapping(detected);
         updateWizardState({ uploadedFileName: file.name, fileRows: allRows, fileColumns: columns, columnMapping: detected });
       } catch {
@@ -260,21 +264,100 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
 
       {/* Preview */}
       {preview && !previewConfirmed && (
-        <div className="space-y-3 border rounded-lg p-4">
-          <p className="text-sm font-medium">Preview (first 5 rows) — confirm this is the correct file:</p>
-          <div className="overflow-x-auto">
-            <table className="text-xs w-full border-collapse">
-              <thead>
-                <tr>{preview.columns.slice(0, 8).map(c => <th key={c} className="border px-2 py-1 bg-muted text-left font-medium">{c}</th>)}</tr>
-              </thead>
-              <tbody>
-                {preview.rows.map((row, i) => (
-                  <tr key={i}>{preview.columns.slice(0, 8).map(c => <td key={c} className="border px-2 py-1">{row[c]}</td>)}</tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-4 border rounded-lg p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm font-medium">
+              Preview — {preview.columns.length} columns detected
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Rows:</span>
+              <Select value={String(previewRowCount)} onValueChange={v => setPreviewRowCount(Number(v))}>
+                <SelectTrigger className="h-7 w-20 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[5, 10, 20, 50].map(n => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Button size="sm" onClick={() => setPreviewConfirmed(true)} data-testid="button-apply-file">Apply File</Button>
+
+          {/* Column selector */}
+          <div className="border rounded-md p-3 bg-muted/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Select columns to show in preview</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="text-xs text-primary underline"
+                  onClick={() => setSelectedPreviewCols(preview.columns)}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => setSelectedPreviewCols([])}
+                >
+                  None
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 max-h-40 overflow-y-auto">
+              {preview.columns.map(col => (
+                <label key={col} className="flex items-center gap-1.5 cursor-pointer min-w-0">
+                  <Checkbox
+                    checked={selectedPreviewCols.includes(col)}
+                    onCheckedChange={checked => {
+                      setSelectedPreviewCols(prev =>
+                        checked ? [...prev, col] : prev.filter(c => c !== col)
+                      );
+                    }}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="text-xs truncate max-w-[160px]" title={col}>{col}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{selectedPreviewCols.length} of {preview.columns.length} columns selected</p>
+          </div>
+
+          {/* Preview table */}
+          {selectedPreviewCols.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="text-xs w-full border-collapse">
+                <thead>
+                  <tr>
+                    {selectedPreviewCols.map(c => (
+                      <th key={c} className="border px-2 py-1 bg-muted text-left font-medium whitespace-nowrap">{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.rows.slice(0, previewRowCount).map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                      {selectedPreviewCols.map(c => (
+                        <td key={c} className="border px-2 py-1 whitespace-nowrap max-w-[200px] truncate" title={String(row[c] ?? '')}>
+                          {row[c] ?? ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Select at least one column to see the preview.</p>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-muted-foreground">
+              Showing {Math.min(previewRowCount, preview.rows.length)} of {preview.rows.length >= 50 ? '50+ (showing first 50)' : `${preview.rows.length}`} rows
+            </p>
+            <Button type="button" size="sm" onClick={() => setPreviewConfirmed(true)} data-testid="button-apply-file">Apply File</Button>
+          </div>
         </div>
       )}
 
@@ -366,10 +449,10 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
               <div className="flex items-center justify-between bg-muted/50 px-4 py-2">
                 <span className="text-sm font-medium">Rows Needing Action ({needsReview.length + unmatchedRows.length})</span>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={markAllUnmatched} className="text-xs h-7" data-testid="button-mark-all-unmatched">
+                  <Button type="button" variant="outline" size="sm" onClick={markAllUnmatched} className="text-xs h-7" data-testid="button-mark-all-unmatched">
                     Mark All as Unmatched
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setShowReviewTable(p => !p)} className="h-7">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowReviewTable(p => !p)} className="h-7">
                     {showReviewTable ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
                 </div>
@@ -412,9 +495,9 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
                             ) : (
                               <div className="space-y-1.5">
                                 <div className="flex gap-1">
-                                  <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'confirm')} data-testid={`button-confirm-${r.rowIndex}`}>Confirm</Button>
-                                  <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'extra')} data-testid={`button-extra-${r.rowIndex}`}>Extra</Button>
-                                  <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200" onClick={() => handleAction(r.rowIndex, 'reject')} data-testid={`button-reject-${r.rowIndex}`}>Reject</Button>
+                                  <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'confirm')} data-testid={`button-confirm-${r.rowIndex}`}>Confirm</Button>
+                                  <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'extra')} data-testid={`button-extra-${r.rowIndex}`}>Extra</Button>
+                                  <Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200" onClick={() => handleAction(r.rowIndex, 'reject')} data-testid={`button-reject-${r.rowIndex}`}>Reject</Button>
                                 </div>
                                 <div className="relative">
                                   <Search className="absolute left-1.5 top-1 h-3 w-3 text-muted-foreground" />
@@ -461,15 +544,15 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step2">← Back</Button>}
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step2">← Back</Button>}
           {matchResults.length > 0 && (
-            <Button variant="outline" size="sm" onClick={exportMatchingReport} data-testid="button-export-matching">
+            <Button type="button" variant="outline" size="sm" onClick={exportMatchingReport} data-testid="button-export-matching">
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Export Matching Report
             </Button>
           )}
         </div>
-        <Button onClick={onNext} disabled={!canAdvance} data-testid="button-next-step2">
+        <Button type="button" onClick={onNext} disabled={!canAdvance} data-testid="button-next-step2">
           Next: Resolve Unmatched →
         </Button>
       </div>

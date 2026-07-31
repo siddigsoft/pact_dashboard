@@ -237,7 +237,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOverrideDialog(null)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setOverrideDialog(null)}>Cancel</Button>
             <Button
               onClick={handleOverrideConfirm}
               disabled={overrideJustification.length < 10 || saving}
@@ -253,13 +253,13 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step3">← Back</Button>}
-          <Button variant="outline" size="sm" onClick={exportRejectedReport} data-testid="button-export-rejected">
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step3">← Back</Button>}
+          <Button type="button" variant="outline" size="sm" onClick={exportRejectedReport} data-testid="button-export-rejected">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export Rejected Sites Report
           </Button>
         </div>
-        <Button onClick={onNext} data-testid="button-next-step3">
+        <Button type="button" onClick={onNext} data-testid="button-next-step3">
           Next: Mark Uncovered →
         </Button>
       </div>

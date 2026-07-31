@@ -325,22 +325,22 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
             ) : (
               <div className="flex flex-wrap gap-2">
                 {(row.rowType === 'green') && (
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'balance')} disabled={saving} data-testid={`button-generate-payment-${row.enumeratorId}`}>
+                  <Button type="button" size="sm" className="bg-green-600 hover:bg-green-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'balance')} disabled={saving} data-testid={`button-generate-payment-${row.enumeratorId}`}>
                     Generate Payment (SDG {row.netToPay.toLocaleString()})
                   </Button>
                 )}
                 {row.rowType === 'blue' && (
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'full')} disabled={saving} data-testid={`button-generate-full-payment-${row.enumeratorId}`}>
+                  <Button type="button" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'full')} disabled={saving} data-testid={`button-generate-full-payment-${row.enumeratorId}`}>
                     Generate Full Payment — Transport SDG {row.transportEarned.toLocaleString()} + Fees SDG {row.feesEarned.toLocaleString()}
                   </Button>
                 )}
                 {row.rowType === 'red' && (
                   <>
-                    <Button size="sm" variant="outline" className="text-xs border-red-300 text-red-700 hover:bg-red-50" onClick={() => handleScheduleRecovery(row)} disabled={saving} data-testid={`button-schedule-recovery-${row.enumeratorId}`}>
+                    <Button type="button" size="sm" variant="outline" className="text-xs border-red-300 text-red-700 hover:bg-red-50" onClick={() => handleScheduleRecovery(row)} disabled={saving} data-testid={`button-schedule-recovery-${row.enumeratorId}`}>
                       Schedule Recovery (SDG {Math.abs(row.netToPay).toLocaleString()})
                     </Button>
                     {canOverride && (
-                      <Button size="sm" variant="outline" className="text-xs border-slate-300" onClick={() => setWriteoffDialog({ open: true, enumId: row.enumeratorId, name: row.enumeratorName })} data-testid={`button-writeoff-${row.enumeratorId}`}>
+                      <Button type="button" size="sm" variant="outline" className="text-xs border-slate-300" onClick={() => setWriteoffDialog({ open: true, enumId: row.enumeratorId, name: row.enumeratorName })} data-testid={`button-writeoff-${row.enumeratorId}`}>
                         Write-Off
                       </Button>
                     )}
@@ -387,8 +387,8 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setWriteoffDialog(null)}>Cancel</Button>
-            <Button onClick={handleWriteoff} disabled={writeoffJustification.length < 10 || saving} className="bg-red-600 hover:bg-red-700 text-white" data-testid="button-confirm-writeoff-step6">
+            <Button type="button" variant="outline" onClick={() => setWriteoffDialog(null)}>Cancel</Button>
+            <Button type="button" onClick={handleWriteoff} disabled={writeoffJustification.length < 10 || saving} className="bg-red-600 hover:bg-red-700 text-white" data-testid="button-confirm-writeoff-step6">
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Confirm Write-Off
             </Button>
@@ -398,12 +398,12 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex flex-wrap items-center gap-2">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step6">← Back</Button>}
-          <Button variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation"><Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)</Button>
-          <Button variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run"><Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet</Button>
-          <Button variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf"><Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)</Button>
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step6">← Back</Button>}
+          <Button type="button" variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation"><Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)</Button>
+          <Button type="button" variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run"><Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet</Button>
+          <Button type="button" variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf"><Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)</Button>
         </div>
-        <Button onClick={onNext} data-testid="button-next-step6">Next: Final Review & Close →</Button>
+        <Button type="button" onClick={onNext} data-testid="button-next-step6">Next: Final Review & Close →</Button>
       </div>
     </div>
   );

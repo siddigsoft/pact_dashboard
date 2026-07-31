@@ -221,7 +221,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                   className="h-8 min-h-[2rem] text-sm resize-none"
                   rows={1}
                 />
-                <Button size="sm" onClick={applyBulk} disabled={!bulkReason} data-testid="button-apply-bulk">
+                <Button type="button" size="sm" onClick={applyBulk} disabled={!bulkReason} data-testid="button-apply-bulk">
                   Apply to {selected.size} sites
                 </Button>
               </div>
@@ -294,13 +294,13 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
-          {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step4">← Back</Button>}
-          <Button variant="outline" size="sm" onClick={exportNotCoveredReport} disabled={sites.length === 0} data-testid="button-export-not-covered">
+          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step4">← Back</Button>}
+          <Button type="button" variant="outline" size="sm" onClick={exportNotCoveredReport} disabled={sites.length === 0} data-testid="button-export-not-covered">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export Not-Covered Report
           </Button>
         </div>
-        <Button onClick={saveAndNext} disabled={!allAssigned || saving} data-testid="button-next-step4">
+        <Button type="button" onClick={saveAndNext} disabled={!allAssigned || saving} data-testid="button-next-step4">
           {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Next: Resolve Exceptions →
         </Button>

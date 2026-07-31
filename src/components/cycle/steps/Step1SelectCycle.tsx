@@ -112,7 +112,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
-          <Button variant="outline" size="sm" onClick={() => { setError(null); loadCycles(); }}>
+          <Button type="button" variant="outline" size="sm" onClick={() => { setError(null); loadCycles(); }}>
             Retry
           </Button>
         </div>
