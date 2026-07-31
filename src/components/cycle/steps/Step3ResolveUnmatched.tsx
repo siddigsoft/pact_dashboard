@@ -177,6 +177,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
 
               <div className="flex flex-wrap gap-2">
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => handleAction(site.id, 'not_covered')}
@@ -187,6 +188,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
                 </Button>
                 {canOverride && (
                   <Button
+                    type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => setOverrideDialog({ open: true, siteId: site.id, siteName: site.site_name })}
@@ -197,6 +199,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
                   </Button>
                 )}
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => handleAction(site.id, 'resubmit')}
@@ -259,7 +262,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
             Export Rejected Sites Report
           </Button>
         </div>
-        <Button type="button" onClick={onNext} data-testid="button-next-step3">
+        <Button type="button" onClick={onNext} disabled={!canAdvance} data-testid="button-next-step3">
           Next: Mark Uncovered →
         </Button>
       </div>

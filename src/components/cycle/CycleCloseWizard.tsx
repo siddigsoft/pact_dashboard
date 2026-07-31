@@ -110,7 +110,11 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       const hasUnactioned = wizardState.matchResults.some(r => r.status === 'review');
       return wizardState.matchResults.length > 0 && !hasUnactioned;
     }
-    if (currentStep === 3) return true;
+    if (currentStep === 3) {
+      // Resubmit-flagged sites mean the cycle cannot close — they must be cleared first
+      const hasResubmit = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
+      return !hasResubmit;
+    }
     if (currentStep === 4) {
       const notCoveredIds = [
         ...wizardState.matchResults.filter(r => r.action === 'reject' || r.status === 'unmatched').map(r => r.matchedSiteId),

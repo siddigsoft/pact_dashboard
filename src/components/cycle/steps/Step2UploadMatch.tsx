@@ -233,7 +233,9 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const actionedCount = matchResults.filter(r => r.status === 'actioned').length;
   const needsReview = matchResults.filter(r => r.status === 'review');
   const unmatchedRows = matchResults.filter(r => r.status === 'unmatched');
-  const allMapped = SYSTEM_FIELDS.every(f => localMapping[f.key]);
+  // Only the 5 fields actually used by runMatching are required — submissionId and visitStatus are optional
+  const REQUIRED_MATCH_KEYS = ['siteName', 'state', 'locality', 'activity', 'enumeratorName'];
+  const allMapped = REQUIRED_MATCH_KEYS.every(f => localMapping[f]);
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -502,8 +504,10 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg p-3 text-center">
               <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto mb-1" />
-              <p className="text-xl font-bold text-green-700">{autoCount + actionedCount}</p>
-              <p className="text-xs text-green-600">Auto-confirmed</p>
+              <p className="text-xl font-bold text-green-700">
+                {autoCount + matchResults.filter(r => r.status === 'actioned' && (r.action === 'confirm' || r.action === 'extra')).length}
+              </p>
+              <p className="text-xs text-green-600">Confirmed / Extra</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-lg p-3 text-center">
               <AlertTriangle className="h-5 w-5 text-amber-600 mx-auto mb-1" />
