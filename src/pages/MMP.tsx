@@ -2189,6 +2189,17 @@ const MMP = () => {
   // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
   const canClaimSites = !isAdmin && !isICT && !isFOM && (isDataCollector || isCoordinator);
   const [showCycleWizard, setShowCycleWizard] = useState(false);
+
+  // Auto-open the Close Cycle wizard when navigated to via ?action=close-cycle
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'close-cycle' && (isFOM || isAdmin || isSuperAdmin)) {
+      setShowCycleWizard(true);
+      // Clean the URL so a refresh doesn't re-open it
+      navigate('/mmp', { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
   
   // Hub-based access control for supervisors
   // Supervisors should only see operations within their assigned hub

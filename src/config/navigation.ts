@@ -3,7 +3,7 @@ import {
   DollarSign, Wallet, BarChart3, Calendar, Settings,
   CheckCircle, Banknote, Bell, Compass, FolderKanban,
   Database, CheckSquare, Inbox, LayoutDashboard,
-  BookOpen, Briefcase, ShieldCheck
+  BookOpen, Briefcase, ShieldCheck, Archive
 } from 'lucide-react';
 import { AppRole } from '@/types';
 
@@ -142,6 +142,16 @@ export const navigationConfig: NavigationGroup[] = [
     id: 'cycle-management',
     label: 'Cycle Management',
     items: [
+      {
+        id: 'cycle-close-wizard',
+        icon: Archive,
+        label: 'Close Cycle',
+        path: '/mmp?action=close-cycle',
+        category: 'primary',
+        priority: 45,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
+        description: 'Run the guided cycle close wizard'
+      },
       {
         id: 'data-export-center',
         icon: BarChart3,
