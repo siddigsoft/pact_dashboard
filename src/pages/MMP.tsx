@@ -7688,12 +7688,12 @@ const MMP = () => {
           shows an inline recovery UI instead of propagating to the root
           ErrorBoundary (which would trigger a full page reload). */}
       {showCycleWizard && (
-        <ErrorBoundary fallback={
+        <ErrorBoundary fallback={(err: Error) => (
           <div className="fixed inset-0 z-[100] bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
             <p className="text-lg font-semibold text-destructive">Something went wrong inside the wizard.</p>
-            <p className="text-sm text-muted-foreground max-w-md">
-              An unexpected error occurred. Your MMP data is safe — close the wizard and try again.
-            </p>
+            <div className="max-w-xl w-full bg-muted rounded p-3 text-left text-xs font-mono text-destructive break-all overflow-auto max-h-40">
+              {err.message || 'Unknown error'}
+            </div>
             <button
               type="button"
               onClick={() => setShowCycleWizard(false)}
@@ -7702,7 +7702,7 @@ const MMP = () => {
               Close Wizard
             </button>
           </div>
-        }>
+        )}>
           <CycleCloseWizard
             onClose={() => setShowCycleWizard(false)}
             isFOM={isFOM}

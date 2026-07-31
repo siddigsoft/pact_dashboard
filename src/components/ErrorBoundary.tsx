@@ -6,7 +6,8 @@ const PAGE_LOAD_TIME = Date.now();
 
 interface ErrorBoundaryProps {
   children: ReactNode;
-  fallback?: ReactNode;
+  /** Static fallback node, or a render-prop that receives the caught error. */
+  fallback?: ReactNode | ((error: Error, errorInfo: ErrorInfo) => ReactNode);
 }
 
 interface ErrorBoundaryState {
@@ -104,7 +105,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        const f = this.props.fallback;
+        return typeof f === 'function'
+          ? f(this.state.error ?? new Error('Unknown error'), this.state.errorInfo ?? { componentStack: '' })
+          : f;
       }
 
       const msg = this.state.error?.message ?? '';
