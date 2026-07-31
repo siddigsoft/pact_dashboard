@@ -56,7 +56,7 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
 
     const { data: entries } = await supabase
       .from('mmp_site_entries')
-      .select('id, data_collector_id, status, profiles(full_name)')
+      .select('id, accepted_by, status, profiles!accepted_by(full_name)')
       .eq('mmp_file_id', wizardState.selectedMmpId!);
 
     const { data: advances } = await supabase
@@ -85,7 +85,7 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     // Group by enumerator
     const byEnum: Record<string, { name: string; entries: any[] }> = {};
     for (const e of (entries ?? [])) {
-      const id = e.data_collector_id;
+      const id = e.accepted_by;
       if (!id) continue;
       if (!byEnum[id]) byEnum[id] = { name: (e as any).profiles?.full_name ?? 'Unknown', entries: [] };
       byEnum[id].entries.push(e);

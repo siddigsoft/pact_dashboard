@@ -75,7 +75,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const loadCandidates = async () => {
     const { data } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, activity, data_collector_id, profiles(full_name)')
+      .select('id, site_name, state, locality, activity, accepted_by, profiles!accepted_by(full_name)')
       .eq('mmp_file_id', wizardState.selectedMmpId!);
     const cands: MatchCandidate[] = (data ?? []).map((e: any) => ({
       siteId: e.id,

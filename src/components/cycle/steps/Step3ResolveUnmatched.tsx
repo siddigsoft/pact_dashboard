@@ -46,7 +46,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
     setLoading(true);
     const { data } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, status, data_collector_id, profiles(full_name)')
+      .select('id, site_name, state, locality, status, accepted_by, profiles!accepted_by(full_name)')
       .eq('mmp_file_id', wizardState.selectedMmpId!)
       .in('status', ['submitted', 'wfp_rejected', 'completed']);
 

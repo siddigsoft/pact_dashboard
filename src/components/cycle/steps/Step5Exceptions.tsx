@@ -56,12 +56,12 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
     // Get enumerator IDs for not-covered sites
     const { data: siteData } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, data_collector_id, profiles(full_name)')
+      .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name)')
       .in('id', notCoveredIds);
 
     if (!siteData?.length) { setLoading(false); return; }
 
-    const enumIds = [...new Set(siteData.map((s: any) => s.data_collector_id).filter(Boolean))];
+    const enumIds = [...new Set(siteData.map((s: any) => s.accepted_by).filter(Boolean))];
 
     // Check for advances paid (down_payments table)
     const { data: advances } = await supabase
@@ -77,15 +77,15 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
     });
 
     const exceptionSites: ExceptionSite[] = siteData
-      .filter((s: any) => advanceByEnum[s.data_collector_id] > 0)
+      .filter((s: any) => advanceByEnum[s.accepted_by] > 0)
       .map((s: any) => ({
         siteId: s.id,
         siteName: s.site_name,
         state: s.state,
         locality: s.locality,
-        enumeratorId: s.data_collector_id,
+        enumeratorId: s.accepted_by,
         enumeratorName: s.profiles?.full_name ?? 'Unknown',
-        advancePaid: advanceByEnum[s.data_collector_id] ?? 0,
+        advancePaid: advanceByEnum[s.accepted_by] ?? 0,
       }));
 
     setExceptions(exceptionSites);

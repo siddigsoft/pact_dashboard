@@ -75,7 +75,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       // Check for sites with not_covered status in DB
       const { data } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, data_collector_id, profiles(full_name), status')
+        .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name), status')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('status', 'not_covered');
       setSites((data ?? []).map((s: any) => ({
@@ -92,7 +92,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     const { data } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, data_collector_id, profiles(full_name)')
+      .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name)')
       .in('id', allIds);
 
     setSites((data ?? []).map((s: any) => ({
