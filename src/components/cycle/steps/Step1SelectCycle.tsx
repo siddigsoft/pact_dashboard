@@ -149,7 +149,19 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm">{selectedMmp.name}</h3>
                 <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
-                  {selectedMmp.status ?? 'Open'}
+                  {(() => {
+                    const s = (selectedMmp.status ?? '').toLowerCase().replace(/_/g, ' ');
+                    const labels: Record<string, string> = {
+                      'pending': 'Pending',
+                      'approved': 'Approved',
+                      'verified': 'Verified',
+                      'forwarded to coordinator': 'Forwarded to Coordinator',
+                      'forwarded to fom': 'Forwarded to FOM',
+                      'in progress': 'In Progress',
+                      'completed': 'Completed',
+                    };
+                    return labels[s] ?? (s ? s.replace(/\b\w/g, c => c.toUpperCase()) : 'Open');
+                  })()}
                 </Badge>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -164,7 +176,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                   <Users className="h-4 w-4 text-purple-500" />
                   <div>
                     <p className="text-xs text-muted-foreground">Enumerators</p>
-                    <p className="font-semibold">{enumeratorCount}</p>
+                    <p className="font-semibold">{enumeratorCount === 0 ? <span className="text-muted-foreground text-xs font-normal">None assigned yet</span> : enumeratorCount}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm">
