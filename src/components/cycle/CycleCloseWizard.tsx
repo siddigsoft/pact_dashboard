@@ -1,5 +1,5 @@
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { X, CheckCircle2, Circle, AlertCircle, Clock, ChevronRight, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Step1SelectCycle from './steps/Step1SelectCycle';
@@ -12,6 +12,17 @@ import Step7FinalClose from './steps/Step7FinalClose';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
+
+// ─── Session persistence ────────────────────────────────────────────────────
+const STORAGE_VERSION = 'v1';
+const getKey = (mmpId: string) => `pact_ccw_${STORAGE_VERSION}_${mmpId}`;
+
+export interface SavedSession {
+  savedAt: string;          // ISO timestamp
+  currentStep: number;
+  stepStatuses: StepStatus[];
+  wizardState: Omit<WizardState, 'mmpRawRows'>; // mmpRawRows re-fetched from DB
+}
 
 export interface ExceptionDecision {
   decision: 'roll' | 'return' | 'writeoff' | 'redirect';
@@ -108,9 +119,71 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
   ]);
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
+  const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const updateWizardState = (patch: Partial<WizardState>) => {
     setWizardState(prev => ({ ...prev, ...patch }));
+  };
+
+  // ── Auto-save to localStorage whenever step ≥ 2 state changes ─────────────
+  useEffect(() => {
+    if (!wizardState.selectedMmpId || currentStep < 2) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { mmpRawRows, ...stateToSave } = wizardState;
+        const session: SavedSession = {
+          savedAt: new Date().toISOString(),
+          currentStep,
+          stepStatuses,
+          wizardState: stateToSave,
+        };
+        localStorage.setItem(getKey(wizardState.selectedMmpId!), JSON.stringify(session));
+      } catch {
+        // localStorage full or unavailable — silently skip
+      }
+    }, 800);
+    return () => clearTimeout(saveTimer.current);
+  }, [wizardState, currentStep, stepStatuses]);
+
+  // ── Clear saved session automatically when Final Close completes ───────────
+  useEffect(() => {
+    if (wizardState.cycleClosedAt && wizardState.selectedMmpId) {
+      try { localStorage.removeItem(getKey(wizardState.selectedMmpId)); } catch {}
+    }
+  }, [wizardState.cycleClosedAt]);
+
+  // ── Detect saved session when the selected MMP changes ────────────────────
+  useEffect(() => {
+    const id = wizardState.selectedMmpId;
+    if (!id) { setSavedSession(null); return; }
+    try {
+      const raw = localStorage.getItem(getKey(id));
+      setSavedSession(raw ? JSON.parse(raw) : null);
+    } catch {
+      setSavedSession(null);
+    }
+  }, [wizardState.selectedMmpId]);
+
+  const handleResume = () => {
+    if (!savedSession) return;
+    setWizardState(prev => ({
+      ...prev,
+      ...savedSession.wizardState,
+      mmpRawRows: [], // re-fetched by Step2's loadCandidates
+    }));
+    setCurrentStep(savedSession.currentStep);
+    setStepStatuses(savedSession.stepStatuses);
+    setSavedSession(null);
+  };
+
+  const handleStartFresh = () => {
+    if (wizardState.selectedMmpId) {
+      try { localStorage.removeItem(getKey(wizardState.selectedMmpId)); } catch {}
+    }
+    setSavedSession(null);
   };
 
   const markStepDone = (step: number) => {
@@ -247,7 +320,14 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
           <Step7FinalClose {...stepProps} />
         ) : (
           <>
-            {currentStep === 1 && <Step1SelectCycle {...stepProps} />}
+            {currentStep === 1 && (
+              <Step1SelectCycle
+                {...stepProps}
+                savedSession={savedSession}
+                onResume={handleResume}
+                onStartFresh={handleStartFresh}
+              />
+            )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
             {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
             {currentStep === 4 && <Step4MarkUncovered {...stepProps} />}

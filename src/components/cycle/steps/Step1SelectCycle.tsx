@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, MapPin, Users, Calendar, Info, Download } from 'lucide-react';
-import type { WizardState } from '../CycleCloseWizard';
+import { Loader2, AlertCircle, MapPin, Users, Calendar, Info, Download, Clock, RotateCcw } from 'lucide-react';
+import type { WizardState, SavedSession } from '../CycleCloseWizard';
 import * as XLSX from 'xlsx';
 
 interface Props {
@@ -15,18 +15,51 @@ interface Props {
   onNext: () => void;
   canAdvance: boolean;
   canGoBack: boolean;
+  /** Populated when localStorage has a saved session for the currently-selected cycle. */
+  savedSession?: SavedSession | null;
+  onResume?: () => void;
+  onStartFresh?: () => void;
 }
 
-export default function Step1SelectCycle({ wizardState, updateWizardState, onNext, canAdvance }: Props) {
+function formatSavedAt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    return d.toLocaleDateString();
+  } catch {
+    return '—';
+  }
+}
+
+const STEP_LABELS: Record<number, string> = {
+  1: 'Select Cycle',
+  2: 'Upload & Match',
+  3: 'Resolve Unmatched',
+  4: 'Mark Uncovered',
+  5: 'Exceptions',
+  6: 'Reconciliation',
+  7: 'Final Close',
+};
+
+export default function Step1SelectCycle({
+  wizardState, updateWizardState, onNext, canAdvance,
+  savedSession, onResume, onStartFresh,
+}: Props) {
   const [openCycles, setOpenCycles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [siteCount, setSiteCount] = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [siteCount, setSiteCount]   = useState(0);
   const [enumeratorCount, setEnumeratorCount] = useState(0);
 
-  useEffect(() => {
-    loadCycles();
-  }, []);
+  useEffect(() => { loadCycles(); }, []);
 
   const loadCycles = async () => {
     setLoading(true);
@@ -42,8 +75,8 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
 
   const handleSelect = async (mmpId: string) => {
     const mmp = openCycles.find(m => m.id === mmpId);
-    // Reset all upload & matching state so stale results from a previous
-    // session don't leave the Step 2 "Next" button erroneously enabled.
+    // Reset all state so stale data from a different cycle never bleeds through.
+    // (If there is a saved session for this cycle, the Resume banner handles restoration.)
     updateWizardState({
       selectedMmpId: mmpId,
       selectedMmp: mmp,
@@ -52,8 +85,16 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
       fileRows: [],
       columnMapping: {},
       fileConfirmed: false,
+      mmpColumns: [],
+      mmpRawRows: [],
+      matchingPairs: [],
       matchResults: [],
       resolvedSites: {},
+      uncoveredReasons: {},
+      exceptionDecisions: {},
+      paymentActions: {},
+      overrides: {},
+      cycleClosedAt: null,
     });
 
     const { count: sc } = await supabase
@@ -86,15 +127,38 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
       Status: r.status,
       'Enumerator ID': r.data_collector_id ?? '',
     }));
-
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Cycle Summary');
     XLSX.writeFile(wb, `cycle-summary-${wizardState.selectedMmp?.name ?? 'cycle'}.xlsx`);
   };
 
-  const selectedMmp = wizardState.selectedMmp;
+  const selectedMmp    = wizardState.selectedMmp;
   const isAlreadyClosed = selectedMmp?.status === 'closed';
+  const showResumeBanner =
+    !!savedSession &&
+    !!wizardState.selectedMmpId &&
+    savedSession.wizardState.selectedMmpId === wizardState.selectedMmpId;
+
+  // Summary of what was saved — shown in the resume banner
+  const resumeSummary = (() => {
+    if (!savedSession) return null;
+    const parts: string[] = [];
+    if (savedSession.wizardState.uploadedFileName) {
+      parts.push(`File: ${savedSession.wizardState.uploadedFileName}`);
+    }
+    const validPairs = (savedSession.wizardState.matchingPairs ?? []).filter(
+      p => p.mmpColumn && p.wfpColumn
+    );
+    if (validPairs.length > 0) {
+      parts.push(`${validPairs.length} matching pair${validPairs.length !== 1 ? 's' : ''} defined`);
+    }
+    const matched = (savedSession.wizardState.matchResults ?? []).filter(
+      r => r.status === 'auto' || (r.status === 'actioned' && (r.action === 'confirm' || r.action === 'extra'))
+    ).length;
+    if (matched > 0) parts.push(`${matched} rows confirmed`);
+    return parts.join(' · ');
+  })();
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
@@ -103,7 +167,6 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
         <p className="text-muted-foreground text-sm">Choose which MMP cycle you are closing. Only open or in-progress cycles are shown.</p>
       </div>
 
-      {/* Help panel */}
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
@@ -156,6 +219,58 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
             )}
           </div>
 
+          {/* ── Resume banner ─────────────────────────────────────────────── */}
+          {showResumeBanner && (
+            <div className="border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <p className="font-semibold text-sm text-amber-800 dark:text-amber-200">
+                      Unsaved session found — resume where you left off?
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 space-y-0.5">
+                      <span className="font-medium">
+                        Saved {formatSavedAt(savedSession!.savedAt)}
+                      </span>
+                      {' · '}
+                      <span>
+                        Was on <strong>Step {savedSession!.currentStep} — {STEP_LABELS[savedSession!.currentStep] ?? ''}</strong>
+                      </span>
+                    </p>
+                    {resumeSummary && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{resumeSummary}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white h-8"
+                      onClick={onResume}
+                      data-testid="button-resume-session"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                      Resume from Step {savedSession!.currentStep}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 border-amber-300 text-amber-700 hover:bg-amber-100"
+                      onClick={onStartFresh}
+                      data-testid="button-start-fresh"
+                    >
+                      Start Fresh
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Cycle summary card ────────────────────────────────────────── */}
           {selectedMmp && !isAlreadyClosed && (
             <div className="bg-muted/50 border rounded-lg p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -188,14 +303,20 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                   <Users className="h-4 w-4 text-purple-500" />
                   <div>
                     <p className="text-xs text-muted-foreground">Enumerators</p>
-                    <p className="font-semibold">{enumeratorCount === 0 ? <span className="text-muted-foreground text-xs font-normal">None assigned yet</span> : enumeratorCount}</p>
+                    <p className="font-semibold">
+                      {enumeratorCount === 0
+                        ? <span className="text-muted-foreground text-xs font-normal">None assigned yet</span>
+                        : enumeratorCount}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm">
                   <Calendar className="h-4 w-4 text-green-500" />
                   <div>
                     <p className="text-xs text-muted-foreground">Cycle Month</p>
-                    <p className="font-semibold">{selectedMmp.month ?? '—'}/{selectedMmp.created_at ? new Date(selectedMmp.created_at).getFullYear() : '—'}</p>
+                    <p className="font-semibold">
+                      {selectedMmp.month ?? '—'}/{selectedMmp.created_at ? new Date(selectedMmp.created_at).getFullYear() : '—'}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm">
