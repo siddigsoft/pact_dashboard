@@ -216,11 +216,19 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       return !hasResubmit;
     }
     if (currentStep === 4) {
-      const notCoveredIds = [
-        ...wizardState.matchResults.filter(r => r.action === 'reject' || r.status === 'unmatched').map(r => r.matchedSiteId),
-        ...Object.keys(wizardState.resolvedSites).filter(k => wizardState.resolvedSites[k] === 'not_covered'),
-      ].filter(Boolean) as string[];
-      return notCoveredIds.every(id => !!wizardState.uncoveredReasons[id]?.reason);
+      // All three sources of uncovered sites must have a reason before advancing:
+      // (1) WFP-rejected / unmatched rows from Step 2
+      // (2) Sites resolved as not_covered in Step 3
+      // (3) MMP sites that had no WFP file row at all ("Not in clean data")
+      const notCoveredIds = new Set<string>([
+        ...wizardState.matchResults
+          .filter(r => r.action === 'reject' || r.status === 'unmatched')
+          .map(r => r.matchedSiteId).filter(Boolean) as string[],
+        ...Object.keys(wizardState.resolvedSites)
+          .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
+        ...(wizardState.unmatchedMmpSiteIds ?? []),
+      ]);
+      return [...notCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
     }
     if (currentStep === 5) {
       const exceptions = Object.keys(wizardState.exceptionDecisions);
