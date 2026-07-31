@@ -166,6 +166,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
             )}
           </div>
           <Button
+            type="button"
             variant="ghost"
             size="icon"
             className="text-slate-300 hover:text-white hover:bg-white/10"

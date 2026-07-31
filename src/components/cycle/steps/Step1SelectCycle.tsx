@@ -211,6 +211,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
 
       <div className="flex items-center justify-between pt-4 border-t">
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={exportCycleSummary}
@@ -221,6 +222,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
           Export Cycle Summary (Excel)
         </Button>
         <Button
+          type="button"
           onClick={onNext}
           disabled={!canAdvance || isAlreadyClosed}
           data-testid="button-start-guided-close"

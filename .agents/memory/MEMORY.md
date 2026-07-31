@@ -1,3 +1,4 @@
+- [wizard-button-type-fix](wizard-button-type-fix.md) — sed 's/<Button /<Button type="button" /g' misses multiline <Button\n tags; always grep for them after running sed.
 - [profile-role-vs-user-roles-perm-gap](profile-role-vs-user-roles-perm-gap.md) — hasPermission & Permission Tester miss profiles.role; fixed via profileRolesCache in refreshUserPermissions + step 5 in hasPermission.
 - [tier4-default-pending-bug](tier4-default-pending-bug.md) — 20260607 migration set tier4_status DEFAULT 'pending' on ALL rows; hasFourTiers() must use submitter_role only.
 - [cost-submission-supervisor-filter](cost-submission-supervisor-filter.md) — Supervisor visibility filter and canTier1Approve must both be hub-scoped for Coordinator submissions.

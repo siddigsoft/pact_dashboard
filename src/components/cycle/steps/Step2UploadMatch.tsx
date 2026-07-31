@@ -516,6 +516,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
             </p>
           )}
           <Button
+            type="button"
             size="sm"
             onClick={runMatch}
             disabled={!allMapped || running}
