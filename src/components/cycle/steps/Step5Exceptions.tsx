@@ -138,6 +138,7 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
       <div className="max-w-3xl mx-auto p-6 space-y-6">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
+          <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
         </div>
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
           <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -155,9 +156,11 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
+        <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
         <p className="text-muted-foreground text-sm">
           These not-covered sites had advance payments already paid to their enumerators. Each one needs a decision before the cycle can close.
         </p>
+        <p className="text-sm text-muted-foreground" dir="rtl">المواقع غير المغطاة التي صُرفت مدفوعاتها مسبقاً للمعددين — يجب اتخاذ قرار بشأن كل منها قبل إغلاق الدورة.</p>
       </div>
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">

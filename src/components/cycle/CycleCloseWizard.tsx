@@ -52,6 +52,8 @@ export interface WizardState {
   /** User-defined column pairs: one MMP DB column ↔ one WFP file column. */
   matchingPairs: MatchPair[];
   matchResults: MatchResult[];
+  /** MMP site IDs that were in the DB but had NO WFP file row matching them ("Not in clean data"). */
+  unmatchedMmpSiteIds: string[];
   resolvedSites: Record<string, 'not_covered' | 'override_confirmed' | 'resubmit'>;
   uncoveredReasons: Record<string, UncoveredReason>;
   exceptionDecisions: Record<string, ExceptionDecision>;
@@ -61,13 +63,13 @@ export interface WizardState {
 }
 
 const STEPS = [
-  { label: 'Select Cycle', shortLabel: '1' },
-  { label: 'Upload & Match', shortLabel: '2' },
-  { label: 'Resolve Unmatched', shortLabel: '3' },
-  { label: 'Mark Uncovered', shortLabel: '4' },
-  { label: 'Exceptions', shortLabel: '5' },
-  { label: 'Reconciliation', shortLabel: '6' },
-  { label: 'Final Close', shortLabel: '7' },
+  { label: 'Select Cycle',      arLabel: 'اختيار الدورة',           shortLabel: '1' },
+  { label: 'Upload & Match',    arLabel: 'رفع الملف والمطابقة',      shortLabel: '2' },
+  { label: 'Resolve Unmatched', arLabel: 'حل غير المتطابقة',         shortLabel: '3' },
+  { label: 'Mark Uncovered',    arLabel: 'المواقع غير المغطاة',       shortLabel: '4' },
+  { label: 'Exceptions',        arLabel: 'الاستثناءات',               shortLabel: '5' },
+  { label: 'Reconciliation',    arLabel: 'المراجعة',                  shortLabel: '6' },
+  { label: 'Final Close',       arLabel: 'الإغلاق النهائي',           shortLabel: '7' },
 ];
 
 const initialState: WizardState = {
@@ -82,6 +84,7 @@ const initialState: WizardState = {
   mmpRawRows: [],
   matchingPairs: [],
   matchResults: [],
+  unmatchedMmpSiteIds: [],
   resolvedSites: {},
   uncoveredReasons: {},
   exceptionDecisions: {},
@@ -302,7 +305,10 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
                    status === 'blocked' ? <AlertCircle className="h-3 w-3" /> :
                    status === 'in_progress' ? <Clock className="h-3 w-3" /> :
                    <Circle className="h-3 w-3" />}
-                  <span className="hidden sm:inline">{step.label}</span>
+                  <span className="hidden sm:flex sm:flex-col sm:items-start sm:leading-tight">
+                    <span>{step.label}</span>
+                    <span className="text-[9px] opacity-70 font-normal" dir="rtl">{step.arLabel}</span>
+                  </span>
                   <span className="sm:hidden">{step.shortLabel}</span>
                 </button>
                 {idx < STEPS.length - 1 && (

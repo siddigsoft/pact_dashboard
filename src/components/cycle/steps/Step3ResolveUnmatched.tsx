@@ -130,7 +130,9 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 3 — Resolve Unmatched Sites</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٣ — حل المواقع غير المتطابقة</p>
         <p className="text-muted-foreground text-sm">Sites that are WFP-rejected or still submitted after matching need a resolution before closing.</p>
+        <p className="text-sm text-muted-foreground" dir="rtl">المواقع المرفوضة من برنامج الغذاء أو التي لم تُطابَق يجب حلها قبل إغلاق الدورة.</p>
       </div>
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">

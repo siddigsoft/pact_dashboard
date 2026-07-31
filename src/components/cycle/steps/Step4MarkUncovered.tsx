@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react';
+import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import * as XLSX from 'xlsx';
 
@@ -30,8 +30,16 @@ interface UncoveredSite {
   site_name: string;
   state: string;
   locality: string;
+  hub_office: string;
   enumerator_name: string;
-  source: 'not_covered' | 'rejected_match' | 'manual';
+  source: 'not_covered' | 'rejected_match' | 'manual' | 'not_in_wfp';
+}
+
+interface CoverageRow {
+  label: string;         // state or hub name
+  total: number;
+  confirmed: number;
+  notCovered: number;
 }
 
 interface Props {
@@ -50,10 +58,16 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [bulkReason, setBulkReason] = useState('');
   const [bulkNote, setBulkNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [coverageRows, setCoverageRows] = useState<CoverageRow[]>([]);
+  const [coverageExpanded, setCoverageExpanded] = useState(false);
+  const [stateFilter, setStateFilter] = useState<string>('');
 
   useEffect(() => {
-    if (wizardState.selectedMmpId) loadUncoveredSites();
-  }, [wizardState.selectedMmpId, wizardState.resolvedSites]);
+    if (wizardState.selectedMmpId) {
+      loadUncoveredSites();
+      loadCoverageBreakdown();
+    }
+  }, [wizardState.selectedMmpId, wizardState.resolvedSites, wizardState.unmatchedMmpSiteIds]);
 
   const loadUncoveredSites = async () => {
     setLoading(true);
@@ -69,22 +83,26 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       .map(r => r.matchedSiteId)
       .filter(Boolean) as string[];
 
-    const allIds = [...new Set([...step3NotCovered, ...rejectedMatchIds])];
+    // MMP sites that had NO corresponding WFP row at all ("Not in clean data")
+    const notInWfpIds = wizardState.unmatchedMmpSiteIds ?? [];
+
+    const allIds = [...new Set([...step3NotCovered, ...rejectedMatchIds, ...notInWfpIds])];
 
     if (allIds.length === 0) {
-      // Check for sites with not_covered status in DB
+      // Fall back: check DB for any already-marked not_covered sites
       const { data } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name), status')
+        .select('id, site_name, state, locality, hub_office, accepted_by, profiles!accepted_by(full_name), status')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('status', 'not_covered');
       setSites((data ?? []).map((s: any) => ({
         id: s.id,
         site_name: s.site_name,
-        state: s.state,
-        locality: s.locality,
-        enumerator_name: s.profiles?.full_name ?? 'Unknown',
-        source: 'manual',
+        state: s.state ?? '',
+        locality: s.locality ?? '',
+        hub_office: s.hub_office ?? '',
+        enumerator_name: s.profiles?.full_name ?? '—',
+        source: 'manual' as const,
       })));
       setLoading(false);
       return;
@@ -92,18 +110,63 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     const { data } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name)')
+      .select('id, site_name, state, locality, hub_office, accepted_by, profiles!accepted_by(full_name)')
       .in('id', allIds);
+
+    const notInWfpSet = new Set(notInWfpIds);
+    const step3Set    = new Set(step3NotCovered);
 
     setSites((data ?? []).map((s: any) => ({
       id: s.id,
       site_name: s.site_name,
-      state: s.state,
-      locality: s.locality,
-      enumerator_name: s.profiles?.full_name ?? 'Unknown',
-      source: step3NotCovered.includes(s.id) ? 'not_covered' : 'rejected_match',
+      state: s.state ?? '',
+      locality: s.locality ?? '',
+      hub_office: s.hub_office ?? '',
+      enumerator_name: s.profiles?.full_name ?? '—',
+      source: step3Set.has(s.id) ? 'not_covered'
+            : notInWfpSet.has(s.id) ? 'not_in_wfp'
+            : 'rejected_match',
     })));
     setLoading(false);
+  };
+
+  // ── Coverage breakdown by state ───────────────────────────────────────────
+  const loadCoverageBreakdown = async () => {
+    const { data: allSites } = await supabase
+      .from('mmp_site_entries')
+      .select('id, state')
+      .eq('mmp_file_id', wizardState.selectedMmpId!);
+
+    if (!allSites?.length) return;
+
+    // IDs confirmed in Step 2 matching
+    const confirmedIds = new Set(
+      wizardState.matchResults
+        .filter(r => r.action === 'confirm' || r.action === 'extra' || r.status === 'auto')
+        .map(r => r.matchedSiteId)
+        .filter(Boolean) as string[]
+    );
+    const notCoveredIds = new Set([
+      ...(wizardState.unmatchedMmpSiteIds ?? []),
+      ...Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k),
+      ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
+    ]);
+
+    // Group by state
+    const byState: Record<string, { total: number; confirmed: number; notCovered: number }> = {};
+    for (const s of allSites) {
+      const st = s.state ?? 'Unknown';
+      if (!byState[st]) byState[st] = { total: 0, confirmed: 0, notCovered: 0 };
+      byState[st].total++;
+      if (confirmedIds.has(s.id)) byState[st].confirmed++;
+      if (notCoveredIds.has(s.id)) byState[st].notCovered++;
+    }
+
+    setCoverageRows(
+      Object.entries(byState)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([label, v]) => ({ label, ...v }))
+    );
   };
 
   const setReason = (siteId: string, patch: Partial<UncoveredReason>) => {
@@ -174,6 +237,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 4 — Mark Uncovered Sites</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٤ — تحديد المواقع غير المغطاة وأسباب عدم تغطيتها</p>
         <p className="text-muted-foreground text-sm">Assign a reason for every site that was not visited or not confirmed. All sites must have a reason before closing.</p>
       </div>
 
@@ -184,6 +248,96 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           <p>Sites with Security Concerns or Access Denied are automatically flagged with a red badge and generate a follow-up action item for the next cycle. You can select multiple sites and assign the same reason in bulk.</p>
         </div>
       </div>
+
+      {/* ── Coverage breakdown by state ── */}
+      {coverageRows.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setCoverageExpanded(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900 text-sm font-medium hover:bg-slate-100 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              📊 Coverage Breakdown by State
+              <span className="text-xs font-normal text-muted-foreground" dir="rtl">نسبة التغطية حسب الولاية</span>
+            </span>
+            {coverageExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+          {coverageExpanded && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-100 dark:bg-slate-800 text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="px-4 py-2 text-left">State / الولاية</th>
+                    <th className="px-4 py-2 text-right">Total</th>
+                    <th className="px-4 py-2 text-right">✓ Confirmed</th>
+                    <th className="px-4 py-2 text-right">✗ Not Covered</th>
+                    <th className="px-4 py-2 text-right">Coverage %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverageRows.map((row, i) => {
+                    const pct = row.total ? Math.round((row.confirmed / row.total) * 100) : 0;
+                    return (
+                      <tr key={row.label} className={`border-t ${i % 2 === 0 ? '' : 'bg-slate-50 dark:bg-slate-900/40'}`}>
+                        <td className="px-4 py-2 font-medium">
+                          <button
+                            type="button"
+                            className="text-blue-600 hover:underline"
+                            onClick={() => setStateFilter(stateFilter === row.label ? '' : row.label)}
+                          >
+                            {row.label}
+                          </button>
+                        </td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">{row.total}</td>
+                        <td className="px-4 py-2 text-right text-green-700 font-medium">{row.confirmed}</td>
+                        <td className="px-4 py-2 text-right text-red-600 font-medium">{row.notCovered}</td>
+                        <td className="px-4 py-2 text-right">
+                          <span className={`font-semibold ${pct >= 90 ? 'text-green-700' : pct >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {pct}%
+                          </span>
+                          <div className="w-20 h-1.5 bg-slate-200 rounded-full mt-1 ml-auto">
+                            <div
+                              className={`h-1.5 rounded-full ${pct >= 90 ? 'bg-green-500' : pct >= 70 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Totals row */}
+                  <tr className="border-t-2 border-slate-300 bg-slate-100 dark:bg-slate-800 font-semibold">
+                    <td className="px-4 py-2">Total</td>
+                    <td className="px-4 py-2 text-right">{coverageRows.reduce((s, r) => s + r.total, 0)}</td>
+                    <td className="px-4 py-2 text-right text-green-700">{coverageRows.reduce((s, r) => s + r.confirmed, 0)}</td>
+                    <td className="px-4 py-2 text-right text-red-600">{coverageRows.reduce((s, r) => s + r.notCovered, 0)}</td>
+                    <td className="px-4 py-2 text-right">
+                      {(() => {
+                        const total = coverageRows.reduce((s, r) => s + r.total, 0);
+                        const conf  = coverageRows.reduce((s, r) => s + r.confirmed, 0);
+                        const pct   = total ? Math.round((conf / total) * 100) : 0;
+                        return <span className={pct >= 90 ? 'text-green-700' : pct >= 70 ? 'text-amber-600' : 'text-red-600'}>{pct}%</span>;
+                      })()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* State filter chip */}
+      {stateFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Filtered by state:</span>
+          <Badge className="bg-blue-100 text-blue-700 border-blue-300">
+            {stateFilter}
+            <button type="button" className="ml-1.5 hover:text-blue-900" onClick={() => setStateFilter('')}>×</button>
+          </Badge>
+        </div>
+      )}
 
       {sites.length === 0 ? (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
@@ -229,10 +383,19 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           )}
 
           <div className="space-y-3">
-            {sites.map(site => {
+            {sites.filter(s => !stateFilter || s.state === stateFilter).map(site => {
               const assigned = wizardState.uncoveredReasons[site.id];
               const isSelected = selected.has(site.id);
               const isFlagged = assigned?.flagged;
+              const sourceLabel =
+                site.source === 'rejected_match' ? 'WFP Rejected'
+                : site.source === 'not_in_wfp'   ? 'Not in WFP File'
+                : site.source === 'not_covered'   ? 'Unresolved (Step 3)'
+                : 'DB: Not Covered';
+              const sourceBadgeClass =
+                site.source === 'rejected_match' ? 'border-orange-300 text-orange-700'
+                : site.source === 'not_in_wfp'   ? 'border-slate-400 text-slate-600'
+                : 'border-purple-300 text-purple-700';
               return (
                 <div key={site.id} className={`border rounded-lg p-4 space-y-3 ${isFlagged ? 'border-red-300 bg-red-50/30' : ''}`}>
                   <div className="flex items-start gap-3">
@@ -249,7 +412,8 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm">{site.site_name}</p>
                         {isFlagged && <Badge className="bg-red-100 text-red-700 border-red-300 text-xs">⚠️ Follow-up Required</Badge>}
-                        <Badge variant="outline" className="text-xs">{site.source === 'rejected_match' ? 'WFP Rejected' : 'Not Covered'}</Badge>
+                        <Badge variant="outline" className={`text-xs ${sourceBadgeClass}`}>{sourceLabel}</Badge>
+                        {site.hub_office && <span className="text-xs text-muted-foreground">{site.hub_office}</span>}
                       </div>
                       <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumerator_name}</p>
                     </div>

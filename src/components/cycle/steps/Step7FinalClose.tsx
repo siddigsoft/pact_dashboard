@@ -185,6 +185,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         <div className="flex flex-col items-center gap-4 py-8">
           <CheckCircle2 className="h-16 w-16 text-green-600" />
           <h2 className="text-2xl font-bold text-green-700">Cycle Closed Successfully</h2>
+          <p className="text-sm text-green-600 mt-0.5" dir="rtl">تم إغلاق الدورة بنجاح</p>
           <p className="text-muted-foreground">
             {wizardState.selectedMmp?.name} was closed on {new Date(wizardState.cycleClosedAt!).toLocaleString()}.
           </p>
@@ -203,7 +204,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Step 7 — Final Review & Close</h2>
+        <h2 className="text-xl font-semibold">Step 7 — Final Review &amp; Close</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٧ — المراجعة النهائية وإغلاق الدورة</p>
         <p className="text-muted-foreground text-sm">All 7 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
       </div>
 

@@ -19,21 +19,23 @@ import { runMatching, type MatchCandidate, type MatchPair } from '@/utils/fuzzyM
 // ─── MMP columns to fetch from the database ────────────────────────────────
 const MMP_MATCH_COLS =
   'id, site_code, site_name, state, locality, hub_office, cp_name, ' +
-  'activity_at_site, main_activity, monitoring_by, visit_type, visit_date';
+  'activity_at_site, main_activity, monitoring_by, visit_type, visit_date, ' +
+  'accepted_by, enumerator:profiles!accepted_by(full_name)';
 
 // Human-readable labels for MMP DB columns shown in the UI
 const MMP_COL_LABELS: Record<string, string> = {
-  site_code: 'Site Code',
-  site_name: 'Site Name',
-  state: 'State',
-  locality: 'Locality',
-  hub_office: 'Hub / Office',
-  cp_name: 'CP Name',
-  activity_at_site: 'Activity at Site',
-  main_activity: 'Main Activity',
-  monitoring_by: 'Monitoring By',
-  visit_type: 'Visit Type',
-  visit_date: 'Visit Date',
+  site_code:       'Site Code',
+  site_name:       'Site Name',
+  state:           'State',
+  locality:        'Locality',
+  hub_office:      'Hub / Office',
+  cp_name:         'CP Name',
+  activity_at_site:'Activity at Site',
+  main_activity:   'Main Activity',
+  monitoring_by:   'Monitoring By',
+  visit_type:      'Visit Type',
+  visit_date:      'Visit Date',
+  enumerator_name: 'Enumerator (Claimed By)',
 };
 
 // ─── Auto-detect pairs: map MMP column → likely WFP file column ────────────
@@ -42,7 +44,8 @@ const MMP_MATCH_ALIASES: Array<{ mmpCol: string; keywords: string[] }> = [
   { mmpCol: 'state',           keywords: ['state of the site', 'state', 'governorate', 'ولاية'] },
   { mmpCol: 'locality',        keywords: ['locality of the site', 'locality', 'district', 'محلية'] },
   { mmpCol: 'activity_at_site',keywords: ['confirm the activity', 'activity of the site', 'activity', 'programme', 'النشاط'] },
-  { mmpCol: 'monitoring_by',   keywords: ['name of interviewer', 'enumerator name', 'enumerator', 'data collector', 'interviewer', 'المعدد'] },
+  { mmpCol: 'enumerator_name', keywords: ['name of interviewer', 'enumerator name', 'enumerator', 'data collector', 'interviewer', 'المعدد', 'اسم المعدد'] },
+  { mmpCol: 'monitoring_by',   keywords: ['monitoring by', 'monitored by', 'رقابة', 'مراقب'] },
   { mmpCol: 'site_code',       keywords: ['deviceid', 'device id', '_uuid', 'uuid', 'submission_id'] },
   { mmpCol: 'hub_office',      keywords: ['hub', 'office'] },
   { mmpCol: 'cp_name',         keywords: ['cp name', 'cooperating partner', 'community point'] },
@@ -145,16 +148,27 @@ export default function Step2UploadMatch({
       .eq('mmp_file_id', wizardState.selectedMmpId!);
 
     const rows = data ?? [];
-    const mmpCols = rows.length > 0
-      ? Object.keys(rows[0]).filter(k => k !== 'id')
-      : Object.keys(MMP_COL_LABELS);
 
-    const cands: MatchCandidate[] = rows.map((e: any) => ({
-      siteId: String(e.id),
-      data: Object.fromEntries(
-        Object.entries(e).map(([k, v]) => [k, v == null ? '' : String(v)])
-      ),
-    }));
+    // Build candidates, extracting the joined profile name as a virtual column
+    const cands: MatchCandidate[] = rows.map((e: any) => {
+      const { id, accepted_by, enumerator, ...rest } = e;
+      return {
+        siteId: String(id),
+        data: {
+          ...Object.fromEntries(
+            Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
+          ),
+          enumerator_name: (enumerator as any)?.full_name ?? '',
+        },
+      };
+    });
+
+    const mmpCols = rows.length > 0
+      ? [
+          ...Object.keys(rows[0]).filter(k => !['id', 'accepted_by', 'enumerator'].includes(k)),
+          'enumerator_name',
+        ]
+      : Object.keys(MMP_COL_LABELS);
 
     setCandidates(cands);
     updateWizardState({
@@ -238,7 +252,17 @@ export default function Step2UploadMatch({
     setRunning(true);
     await new Promise(r => setTimeout(r, 80));
     const results = runMatching(wizardState.fileRows, wizardState.matchingPairs, candidates);
-    updateWizardState({ matchResults: results });
+
+    // Detect MMP sites that were never matched by any WFP row — these are "Not in clean data"
+    // and must flow into Step 4 as uncovered sites needing a reason.
+    const matchedSiteIds = new Set(
+      results.map(r => r.matchedSiteId).filter(Boolean) as string[]
+    );
+    const unmatchedMmpSiteIds = candidates
+      .filter(c => !matchedSiteIds.has(c.siteId))
+      .map(c => c.siteId);
+
+    updateWizardState({ matchResults: results, unmatchedMmpSiteIds });
     setRunning(false);
   };
 
@@ -329,7 +353,8 @@ export default function Step2UploadMatch({
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Step 2 — Upload & Match Clean Data (WFP File)</h2>
+        <h2 className="text-xl font-semibold">Step 2 — Upload &amp; Match Clean Data (WFP File)</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٢ — رفع الملف والمطابقة مع بيانات برنامج الغذاء</p>
         <p className="text-muted-foreground text-sm">
           Upload the WFP-provided clean data file and define which columns to match against the MMP site entries.
         </p>
