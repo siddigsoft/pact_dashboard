@@ -9,7 +9,7 @@ import Step4MarkUncovered from './steps/Step4MarkUncovered';
 import Step5Exceptions from './steps/Step5Exceptions';
 import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
-import type { MatchResult } from '@/utils/fuzzyMatcher';
+import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
@@ -33,7 +33,13 @@ export interface WizardState {
   fileConfirmed: boolean;
   fileRows: Record<string, string>[];
   fileColumns: string[];
-  columnMapping: Record<string, string>;
+  columnMapping: Record<string, string>; // legacy – kept for compat; matching now uses matchingPairs
+  /** All column names loaded from mmp_site_entries for the selected cycle. */
+  mmpColumns: string[];
+  /** Full row data from mmp_site_entries (all loaded columns) used for preview + matching. */
+  mmpRawRows: Record<string, string>[];
+  /** User-defined column pairs: one MMP DB column ↔ one WFP file column. */
+  matchingPairs: MatchPair[];
   matchResults: MatchResult[];
   resolvedSites: Record<string, 'not_covered' | 'override_confirmed' | 'resubmit'>;
   uncoveredReasons: Record<string, UncoveredReason>;
@@ -61,6 +67,9 @@ const initialState: WizardState = {
   fileRows: [],
   fileColumns: [],
   columnMapping: {},
+  mmpColumns: [],
+  mmpRawRows: [],
+  matchingPairs: [],
   matchResults: [],
   resolvedSites: {},
   uncoveredReasons: {},

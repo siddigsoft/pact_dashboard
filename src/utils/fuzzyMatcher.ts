@@ -30,15 +30,18 @@ export function normalize(s: string): string {
     .trim();
 }
 
-export type MatchLevel = 'exact' | 'fuzzy' | 'partial' | 'enumerator' | 'none';
+export type MatchLevel = 'exact' | 'fuzzy' | 'partial' | 'none';
 
+/** A single column-pair used for matching: one column from the MMP DB, one from the WFP upload. */
+export interface MatchPair {
+  mmpColumn: string;
+  wfpColumn: string;
+}
+
+/** One MMP site entry, now carrying all loaded DB columns as a flat map. */
 export interface MatchCandidate {
   siteId: string;
-  siteName: string;
-  state: string;
-  locality: string;
-  activity: string;
-  enumeratorName: string;
+  data: Record<string, string>;
 }
 
 export interface MatchResult {
@@ -55,60 +58,87 @@ export interface MatchResult {
   manualMatchAt?: string;
 }
 
+/**
+ * Match every WFP file row to the best MMP site-entry candidate.
+ *
+ * Scoring:
+ *  - The first pair is the PRIMARY field (weight 2).  All other pairs have weight 1.
+ *  - Per-pair score is levenshtein similarity on normalised values (0–1).
+ *    If either side is blank we treat the pair as neutral (0.5) rather than penalising it.
+ *  - Weighted average determines the match level:
+ *      ≥ 0.92 on ALL pairs → exact  → auto
+ *      weighted avg ≥ 0.78 → fuzzy  → auto
+ *      weighted avg ≥ 0.50 → partial → review
+ *      otherwise           → none   → unmatched
+ */
 export function runMatching(
   fileRows: Record<string, string>[],
-  columnMapping: Record<string, string>,
+  matchingPairs: MatchPair[],
   candidates: MatchCandidate[]
 ): MatchResult[] {
-  const get = (row: Record<string, string>, field: string) =>
-    normalize(row[columnMapping[field]] ?? '');
+  const validPairs = matchingPairs.filter(p => p.mmpColumn && p.wfpColumn);
+
+  if (!validPairs.length || !candidates.length) {
+    return fileRows.map((row, rowIndex) => ({
+      rowIndex, wfpRow: row,
+      matchedSiteId: null, matchedSiteName: null,
+      matchScore: 0, matchLevel: 'none', status: 'unmatched',
+    }));
+  }
+
+  // First pair = primary (weight 2); the rest = weight 1
+  const weights = validPairs.map((_, i) => (i === 0 ? 2 : 1));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
 
   return fileRows.map((row, rowIndex) => {
-    const wfpSite = get(row, 'siteName');
-    const wfpState = get(row, 'state');
-    const wfpLocality = get(row, 'locality');
-    const wfpActivity = get(row, 'activity');
-    const wfpEnum = get(row, 'enumeratorName');
+    const wfpVals = validPairs.map(p => normalize(row[p.wfpColumn] ?? ''));
 
     let best: MatchCandidate | null = null;
     let bestScore = 0;
     let bestLevel: MatchLevel = 'none';
 
     for (const c of candidates) {
-      const cSite = normalize(c.siteName);
-      const cState = normalize(c.state);
-      const cLocality = normalize(c.locality);
-      const cActivity = normalize(c.activity);
+      const mmpVals = validPairs.map(p => normalize(c.data[p.mmpColumn] ?? ''));
 
-      const siteScore = similarity(wfpSite, cSite);
-      const stateExact = wfpState && cState ? wfpState === cState || similarity(wfpState, cState) >= 0.8 : true;
-      const localityExact = wfpLocality && cLocality ? wfpLocality === cLocality || similarity(wfpLocality, cLocality) >= 0.8 : true;
-      const activityExact = wfpActivity && cActivity ? wfpActivity === cActivity || similarity(wfpActivity, cActivity) >= 0.8 : true;
+      const pairScores = validPairs.map((_, i) => {
+        const wv = wfpVals[i], mv = mmpVals[i];
+        if (!wv || !mv) return 0.5;   // unknown → neutral
+        return similarity(wv, mv);
+      });
 
-      if (siteScore === 1 && stateExact && localityExact && activityExact) {
-        best = c; bestScore = 1; bestLevel = 'exact'; break;
+      const weightedScore =
+        pairScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight;
+      const allHigh = pairScores.every(s => s >= 0.92);
+
+      const level: MatchLevel = allHigh ? 'exact'
+        : weightedScore >= 0.78 ? 'fuzzy'
+        : weightedScore >= 0.50 ? 'partial'
+        : 'none';
+
+      if (level === 'exact') {
+        best = c; bestScore = weightedScore; bestLevel = 'exact'; break;
       }
-      if (siteScore >= 0.85 && stateExact && localityExact && activityExact) {
-        if (siteScore > bestScore) { best = c; bestScore = siteScore; bestLevel = 'fuzzy'; }
-      } else if (siteScore >= 0.75) {
-        if (siteScore > bestScore && bestLevel !== 'exact' && bestLevel !== 'fuzzy') {
-          best = c; bestScore = siteScore; bestLevel = 'partial';
-        }
-      } else if (wfpEnum && normalize(c.enumeratorName) === wfpEnum && stateExact) {
-        if (bestLevel === 'none') { best = c; bestScore = 0.5; bestLevel = 'enumerator'; }
+      if (weightedScore > bestScore) {
+        best = c; bestScore = weightedScore; bestLevel = level;
       }
     }
 
     const status: MatchResult['status'] =
       best && (bestLevel === 'exact' || bestLevel === 'fuzzy') ? 'auto'
-      : best ? 'review'
-      : 'unmatched';
+        : best && bestLevel === 'partial' ? 'review'
+          : 'unmatched';
+
+    // Display name: prefer primary MMP column, fall back to site_name
+    const primaryMmpCol = validPairs[0].mmpColumn;
+    const matchedSiteName = best
+      ? (best.data[primaryMmpCol] ?? best.data['site_name'] ?? null)
+      : null;
 
     return {
       rowIndex,
       wfpRow: row,
       matchedSiteId: best?.siteId ?? null,
-      matchedSiteName: best?.siteName ?? null,
+      matchedSiteName,
       matchScore: Math.round(bestScore * 100),
       matchLevel: bestLevel,
       status,
