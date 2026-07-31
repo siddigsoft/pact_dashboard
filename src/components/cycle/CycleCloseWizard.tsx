@@ -79,6 +79,21 @@ interface Props {
 }
 
 export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin, currentUser }: Props) {
+  // Block ALL form submissions on the document for the wizard's lifetime.
+  // Without this, any <form> in the layout (search bars, background dialogs,
+  // portals) can accidentally submit and cause a full page reload when the user
+  // interacts with the upload zone or presses Enter in the file picker.
+  useEffect(() => {
+    const blockSubmit = (e: SubmitEvent) => {
+      // Only block if the submission did NOT originate inside this wizard's own
+      // intentional submit handlers (there are none — all buttons are type="button").
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    document.addEventListener('submit', blockSubmit, true); // capture phase
+    return () => document.removeEventListener('submit', blockSubmit, true);
+  }, []);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
     'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
