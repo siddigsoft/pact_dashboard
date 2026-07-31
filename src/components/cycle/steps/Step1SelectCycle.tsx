@@ -32,7 +32,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
     setLoading(true);
     const { data, error } = await supabase
       .from('mmp_files')
-      .select('id, name, status, hub, created_at, month, year')
+      .select('id, name, status, hub, created_at, month')
       .in('status', ['Pending', 'pending', 'In Progress', 'in_progress', 'Verified', 'verified', 'Active', 'active', 'open'])
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
@@ -129,7 +129,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                 {openCycles.map(mmp => (
                   <SelectItem key={mmp.id} value={mmp.id}>
                     {mmp.name}
-                    {mmp.month && mmp.year && ` — ${mmp.month}/${mmp.year}`}
+                    {mmp.month && ` — ${mmp.month}/${new Date(mmp.created_at).getFullYear()}`}
                     {mmp.hub && ` (${mmp.hub})`}
                   </SelectItem>
                 ))}
@@ -170,7 +170,7 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
                   <Calendar className="h-4 w-4 text-green-500" />
                   <div>
                     <p className="text-xs text-muted-foreground">Cycle Month</p>
-                    <p className="font-semibold">{selectedMmp.month ?? '—'}/{selectedMmp.year ?? '—'}</p>
+                    <p className="font-semibold">{selectedMmp.month ?? '—'}/{selectedMmp.created_at ? new Date(selectedMmp.created_at).getFullYear() : '—'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm">
