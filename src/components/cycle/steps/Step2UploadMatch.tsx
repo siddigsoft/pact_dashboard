@@ -95,7 +95,6 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const parseFile = (file: File) => {
     setFileError(null);
     setPreview(null);
-    updateWizardState({ fileConfirmed: false });
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['xlsx', 'xls', 'csv'].includes(ext ?? '')) {
       setFileError('This file type is not supported. Upload an .xlsx, .xls, or .csv file.');
@@ -117,11 +116,19 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         if (missing.length > 3) {
           setFileError(`These required columns were not found: ${missing.join(', ')}. Check the column names or use the mapping panel below.`);
         }
+        // Batch all updates together in the async callback so no intermediate
+        // parent re-render can reset local state mid-parse.
         setPreview({ columns, rows });
         setSelectedPreviewCols(columns);
         setPreviewRowCount(5);
         setLocalMapping(detected);
-        updateWizardState({ uploadedFileName: file.name, fileRows: allRows, fileColumns: columns, columnMapping: detected });
+        updateWizardState({
+          uploadedFileName: file.name,
+          fileRows: allRows,
+          fileColumns: columns,
+          columnMapping: detected,
+          fileConfirmed: false,   // reset confirmation atomically with new file data
+        });
       } catch {
         setFileError('Could not read this file. Make sure it is a valid Excel or CSV file.');
       }
