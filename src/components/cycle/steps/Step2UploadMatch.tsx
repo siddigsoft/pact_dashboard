@@ -64,6 +64,11 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const [manualCandidates, setManualCandidates] = useState<Record<number, any[]>>({});
   const [showReviewTable, setShowReviewTable] = useState(true);
   const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
+  // Collapse the preview without unmounting it — conditional rendering of the
+  // preview IIFE causes Radix UI to throw "Cannot read properties of null"
+  // during its internal cleanup, which triggers the root ErrorBoundary reload.
+  // Using CSS hidden keeps the DOM subtree alive so Radix never errors.
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Track which set of columns selectedPreviewCols was last initialised for
   const lastColumnsKey = useRef('');
@@ -126,6 +131,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
           setFileError(`These required columns were not found: ${missing.join(', ')}. Check the column names or use the mapping panel below.`);
         }
         setLocalMapping(detected);
+        setPreviewCollapsed(false); // always expand preview for a fresh file
         // Everything goes into wizardState — no local preview state that can be reset
         updateWizardState({
           uploadedFileName: file.name,
@@ -290,8 +296,14 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         )}
       </div>
 
-      {/* Preview — driven entirely from wizardState (never resets on parent re-render) */}
-      {wizardState.fileColumns.length > 0 && !wizardState.fileConfirmed && (() => {
+      {/* Preview — always kept in the React tree once a file is loaded.
+          We hide via CSS `hidden` class (NOT conditional rendering) so that
+          Radix UI portals inside the preview (SelectContent etc.) never unmount
+          abruptly. Abrupt unmounting throws "Cannot read properties of null"
+          inside Radix, which bubbles to the root ErrorBoundary and reloads the
+          whole page. The IIFE always executes; its outermost div carries the
+          `hidden` class when the user clicks "Apply File". */}
+      {wizardState.fileColumns.length > 0 && (() => {
         const cols = wizardState.fileColumns;
         const previewRows = wizardState.fileRows.slice(0, previewRowCount);
         const detectedCols = new Set(Object.values(localMapping).filter(Boolean));
@@ -306,7 +318,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
         const visibleOther = otherColumns.filter(c => !searchLower || c.toLowerCase().includes(searchLower));
 
         return (
-          <div className="border rounded-lg overflow-hidden shadow-sm">
+          <div className={`border rounded-lg overflow-hidden shadow-sm${previewCollapsed ? ' hidden' : ''}`}>
             {/* Panel header */}
             <div className="bg-muted/40 border-b px-4 py-3 flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -443,7 +455,12 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
                     <span className="font-medium">{wizardState.fileRows.length}</span> rows
                     {selectedPreviewCols.length > 0 && <> &nbsp;·&nbsp; <span className="font-medium">{selectedPreviewCols.length}</span> columns</>}
                   </p>
-                  <Button type="button" size="sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); updateWizardState({ fileConfirmed: true }); }} data-testid="button-apply-file">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewCollapsed(true); updateWizardState({ fileConfirmed: true }); }}
+                    data-testid="button-apply-file"
+                  >
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                     Apply File
                   </Button>
