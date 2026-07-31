@@ -105,10 +105,15 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
           <span>Loading cycles…</span>
         </div>
       ) : error ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="space-y-3">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+          <Button variant="outline" size="sm" onClick={() => { setError(null); loadCycles(); }}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="space-y-4">
           <div className="space-y-2">
