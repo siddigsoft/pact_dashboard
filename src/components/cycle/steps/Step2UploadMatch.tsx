@@ -56,6 +56,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const [preview, setPreview] = useState<{ columns: string[]; rows: Record<string, string>[] } | null>(null);
   const [previewRowCount, setPreviewRowCount] = useState(5);
   const [selectedPreviewCols, setSelectedPreviewCols] = useState<string[]>([]);
+  const [colSearch, setColSearch] = useState('');
   const [previewConfirmed, setPreviewConfirmed] = useState(false);
   const [rememberMapping, setRememberMapping] = useState(false);
   const [running, setRunning] = useState(false);
@@ -263,103 +264,211 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
       </div>
 
       {/* Preview */}
-      {preview && !previewConfirmed && (
-        <div className="space-y-4 border rounded-lg p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-sm font-medium">
-              Preview — {preview.columns.length} columns detected
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Rows:</span>
-              <Select value={String(previewRowCount)} onValueChange={v => setPreviewRowCount(Number(v))}>
-                <SelectTrigger className="h-7 w-20 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[5, 10, 20, 50].map(n => (
-                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+      {preview && !previewConfirmed && (() => {
+        const detectedCols = new Set(Object.values(localMapping).filter(Boolean));
+        const mappedColLabels: Record<string, string> = {};
+        for (const f of SYSTEM_FIELDS) {
+          if (localMapping[f.key]) mappedColLabels[localMapping[f.key]] = f.label;
+        }
+        const keyColumns = preview.columns.filter(c => detectedCols.has(c));
+        const otherColumns = preview.columns.filter(c => !detectedCols.has(c));
+        const searchLower = colSearch.toLowerCase();
+        const visibleKey = keyColumns.filter(c => !searchLower || c.toLowerCase().includes(searchLower));
+        const visibleOther = otherColumns.filter(c => !searchLower || c.toLowerCase().includes(searchLower));
 
-          {/* Column selector */}
-          <div className="border rounded-md p-3 bg-muted/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">Select columns to show in preview</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="text-xs text-primary underline"
-                  onClick={() => setSelectedPreviewCols(preview.columns)}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline"
-                  onClick={() => setSelectedPreviewCols([])}
-                >
-                  None
-                </button>
+        return (
+          <div className="border rounded-lg overflow-hidden shadow-sm">
+            {/* Panel header */}
+            <div className="bg-muted/40 border-b px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <p className="text-sm font-semibold">File Preview</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {preview.columns.length} columns detected &nbsp;·&nbsp; {wizardState.uploadedFileName}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Preview rows:</span>
+                <Select value={String(previewRowCount)} onValueChange={v => setPreviewRowCount(Number(v))}>
+                  <SelectTrigger className="h-7 w-20 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[5, 10, 20, 50].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 max-h-40 overflow-y-auto">
-              {preview.columns.map(col => (
-                <label key={col} className="flex items-center gap-1.5 cursor-pointer min-w-0">
-                  <Checkbox
-                    checked={selectedPreviewCols.includes(col)}
-                    onCheckedChange={checked => {
-                      setSelectedPreviewCols(prev =>
-                        checked ? [...prev, col] : prev.filter(c => c !== col)
-                      );
-                    }}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span className="text-xs truncate max-w-[160px]" title={col}>{col}</span>
-                </label>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">{selectedPreviewCols.length} of {preview.columns.length} columns selected</p>
-          </div>
 
-          {/* Preview table */}
-          {selectedPreviewCols.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="text-xs w-full border-collapse">
-                <thead>
-                  <tr>
-                    {selectedPreviewCols.map(c => (
-                      <th key={c} className="border px-2 py-1 bg-muted text-left font-medium whitespace-nowrap">{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.slice(0, previewRowCount).map((row, i) => (
-                    <tr key={i} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
-                      {selectedPreviewCols.map(c => (
-                        <td key={c} className="border px-2 py-1 whitespace-nowrap max-w-[200px] truncate" title={String(row[c] ?? '')}>
-                          {row[c] ?? ''}
-                        </td>
+            <div className="flex divide-x" style={{ minHeight: 280 }}>
+              {/* Left: column selector */}
+              <div className="w-72 flex-shrink-0 flex flex-col bg-muted/10">
+                {/* Search + quick actions */}
+                <div className="px-3 pt-3 pb-2 space-y-2 border-b">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      className="h-8 pl-8 text-xs"
+                      placeholder="Search columns…"
+                      value={colSearch}
+                      onChange={e => setColSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground font-medium">
+                      {selectedPreviewCols.length} / {preview.columns.length} selected
+                    </span>
+                    <div className="flex gap-2">
+                      <button type="button" className="text-primary hover:underline" onClick={() => setSelectedPreviewCols(preview.columns)}>All</button>
+                      <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedPreviewCols(keyColumns)}>Key only</button>
+                      <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedPreviewCols([])}>None</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Column list */}
+                <div className="flex-1 overflow-y-auto py-1">
+                  {/* Auto-detected section */}
+                  {visibleKey.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1.5 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-green-700 dark:text-green-400">
+                          Auto-detected ({visibleKey.length})
+                        </span>
+                      </div>
+                      {visibleKey.map(col => (
+                        <label
+                          key={col}
+                          className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors
+                            ${selectedPreviewCols.includes(col) ? 'bg-green-50 dark:bg-green-950/20' : ''}`}
+                        >
+                          <Checkbox
+                            checked={selectedPreviewCols.includes(col)}
+                            onCheckedChange={checked =>
+                              setSelectedPreviewCols(prev => checked ? [...prev, col] : prev.filter(c => c !== col))
+                            }
+                            className="mt-0.5 h-3.5 w-3.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium leading-tight break-all">{col}</p>
+                            <p className="text-[10px] text-green-600 mt-0.5">→ {mappedColLabels[col]}</p>
+                          </div>
+                        </label>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">Select at least one column to see the preview.</p>
-          )}
+                    </div>
+                  )}
 
-          <div className="flex items-center justify-between pt-1">
-            <p className="text-xs text-muted-foreground">
-              Showing {Math.min(previewRowCount, preview.rows.length)} of {preview.rows.length >= 50 ? '50+ (showing first 50)' : `${preview.rows.length}`} rows
-            </p>
-            <Button type="button" size="sm" onClick={() => setPreviewConfirmed(true)} data-testid="button-apply-file">Apply File</Button>
+                  {/* Other columns section */}
+                  {visibleOther.length > 0 && (
+                    <div className={visibleKey.length > 0 ? 'border-t mt-1 pt-1' : ''}>
+                      {visibleKey.length > 0 && (
+                        <div className="px-3 py-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Other columns ({visibleOther.length})
+                          </span>
+                        </div>
+                      )}
+                      {visibleOther.map(col => (
+                        <label
+                          key={col}
+                          className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors
+                            ${selectedPreviewCols.includes(col) ? 'bg-primary/5' : ''}`}
+                        >
+                          <Checkbox
+                            checked={selectedPreviewCols.includes(col)}
+                            onCheckedChange={checked =>
+                              setSelectedPreviewCols(prev => checked ? [...prev, col] : prev.filter(c => c !== col))
+                            }
+                            className="mt-0.5 h-3.5 w-3.5"
+                          />
+                          <p className="text-xs leading-tight break-all min-w-0">{col}</p>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {visibleKey.length === 0 && visibleOther.length === 0 && (
+                    <p className="px-3 py-4 text-xs text-muted-foreground italic">No columns match "{colSearch}"</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: data table */}
+              <div className="flex-1 min-w-0 flex flex-col">
+                {selectedPreviewCols.length > 0 ? (
+                  <div className="overflow-auto flex-1">
+                    <table className="text-xs w-full border-collapse">
+                      <thead className="sticky top-0 z-10">
+                        <tr>
+                          <th className="border-b border-r px-2 py-1.5 bg-muted text-center text-muted-foreground font-normal w-8">#</th>
+                          {selectedPreviewCols.map(c => (
+                            <th
+                              key={c}
+                              title={c}
+                              className={`border-b border-r px-3 py-1.5 text-left font-semibold whitespace-nowrap
+                                ${detectedCols.has(c)
+                                  ? 'bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300'
+                                  : 'bg-muted text-foreground'}`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span>{c}</span>
+                                {detectedCols.has(c) && (
+                                  <Badge className="text-[9px] px-1 py-0 h-4 bg-green-100 text-green-700 border-green-300 font-normal">
+                                    {mappedColLabels[c]}
+                                  </Badge>
+                                )}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.rows.slice(0, previewRowCount).map((row, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                            <td className="border-b border-r px-2 py-1.5 text-center text-muted-foreground">{i + 1}</td>
+                            {selectedPreviewCols.map(c => (
+                              <td
+                                key={c}
+                                title={String(row[c] ?? '')}
+                                className={`border-b border-r px-3 py-1.5 max-w-[180px] truncate
+                                  ${detectedCols.has(c) ? 'font-medium' : ''}`}
+                              >
+                                {row[c] || <span className="text-muted-foreground/50 italic text-[10px]">—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-center p-8">
+                    <div>
+                      <Info className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">Select columns on the left to preview data</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="border-t px-4 py-2.5 flex items-center justify-between bg-muted/20">
+                  <p className="text-xs text-muted-foreground">
+                    Showing <span className="font-medium">{Math.min(previewRowCount, preview.rows.length)}</span> of{' '}
+                    <span className="font-medium">{preview.rows.length >= 50 ? '50+' : preview.rows.length}</span> rows
+                    {selectedPreviewCols.length > 0 && <> &nbsp;·&nbsp; <span className="font-medium">{selectedPreviewCols.length}</span> columns</>}
+                  </p>
+                  <Button type="button" size="sm" onClick={() => setPreviewConfirmed(true)} data-testid="button-apply-file">
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    Apply File
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2b — Column Mapping */}
       {previewConfirmed && (
