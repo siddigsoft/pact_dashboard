@@ -1,5 +1,9 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 
+// Captured once when the module loads — used to determine whether an error
+// occurred at startup (genuine HMR race) or during normal user interaction.
+const PAGE_LOAD_TIME = Date.now();
+
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
@@ -64,7 +68,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
       const now = Date.now();
-      if (now - last > 4000) {
+      // Only auto-reload within the first 15 seconds of the page load.
+      // Genuine HMR provider-race errors occur at startup (module hot-swap
+      // reorders declarations before providers mount). Errors that surface
+      // during normal user interaction — e.g. mid-session file uploads — are
+      // real application bugs that should show the error UI, not silently
+      // reload the page and discard the user's work.
+      const pageAge = now - PAGE_LOAD_TIME;
+      if (now - last > 4000 && pageAge < 15000) {
         sessionStorage.setItem(key, String(now));
         window.location.reload();
       }

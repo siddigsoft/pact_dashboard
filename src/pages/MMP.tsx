@@ -57,6 +57,7 @@ import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/uti
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
 import CycleCloseWizard from '@/components/cycle/CycleCloseWizard';
+import ErrorBoundary from '@/components/ErrorBoundary';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
   siteRows: SiteVisitRow[]; 
@@ -7682,15 +7683,34 @@ const MMP = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Cycle Close Wizard — full-screen overlay */}
+      {/* Cycle Close Wizard — full-screen overlay.
+          Wrapped in a local ErrorBoundary so any render error inside the wizard
+          shows an inline recovery UI instead of propagating to the root
+          ErrorBoundary (which would trigger a full page reload). */}
       {showCycleWizard && (
-        <CycleCloseWizard
-          onClose={() => setShowCycleWizard(false)}
-          isFOM={isFOM}
-          isAdmin={isAdmin}
-          isSuperAdmin={isSuperAdmin}
-          currentUser={currentUser}
-        />
+        <ErrorBoundary fallback={
+          <div className="fixed inset-0 z-[100] bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
+            <p className="text-lg font-semibold text-destructive">Something went wrong inside the wizard.</p>
+            <p className="text-sm text-muted-foreground max-w-md">
+              An unexpected error occurred. Your MMP data is safe — close the wizard and try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowCycleWizard(false)}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 text-sm"
+            >
+              Close Wizard
+            </button>
+          </div>
+        }>
+          <CycleCloseWizard
+            onClose={() => setShowCycleWizard(false)}
+            isFOM={isFOM}
+            isAdmin={isAdmin}
+            isSuperAdmin={isSuperAdmin}
+            currentUser={currentUser}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
