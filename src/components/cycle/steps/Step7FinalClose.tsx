@@ -46,13 +46,26 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const matchResults = wizardState.matchResults;
   const hasFile = matchResults.length > 0;
   const allMatchesResolved = !matchResults.some(r => r.status === 'review');
-  const notCoveredIds = Object.keys(wizardState.uncoveredReasons);
-  const allSitesResolved = Object.keys(wizardState.resolvedSites).length === 0 ||
-    Object.values(wizardState.resolvedSites).every(v => v !== 'resubmit');
-  const allReasonsAssigned = notCoveredIds.every(id => !!wizardState.uncoveredReasons[id]?.reason);
+
+  // Step 3: no resubmit-pending sites
+  const allSitesResolved = Object.values(wizardState.resolvedSites).every(v => v !== 'resubmit');
+
+  // Step 4: every site from all three uncovered sources must have a reason
+  const allNotCoveredIds = new Set<string>([
+    ...matchResults
+      .filter(r => r.action === 'reject' || r.status === 'unmatched')
+      .map(r => r.matchedSiteId).filter(Boolean) as string[],
+    ...Object.keys(wizardState.resolvedSites)
+      .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
+    ...(wizardState.unmatchedMmpSiteIds ?? []),
+  ]);
+  const allReasonsAssigned = [...allNotCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
+
   const allExceptionsDecided = Object.keys(wizardState.exceptionDecisions).every(k => !!wizardState.exceptionDecisions[k]?.decision);
-  const hasPaymentActions = Object.keys(wizardState.paymentActions).length > 0 ||
-    matchResults.filter(r => r.status === 'auto' || r.action === 'confirm').length === 0;
+
+  // Step 6: no payment action may still be pending (all must be marked done, or no actions started = no advances)
+  const anyPendingPayments = Object.values(wizardState.paymentActions).some(a => !a.done);
+  const hasPaymentActions = !anyPendingPayments;
 
   const checks: CheckItem[] = [
     { id: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
@@ -61,7 +74,9 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 4, passes: allReasonsAssigned },
     { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 5, passes: allExceptionsDecided },
     { id: 6, label: 'All enumerators reconciled', description: 'Every enumerator has a settlement status', jumpStep: 6, passes: hasPaymentActions },
-    { id: 7, label: 'No pending cost submissions', description: 'All operational cost submissions approved or rejected', jumpStep: 1, passes: true },
+    { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
+    // Note: check 7 is not auto-computed (requires a separate DB query the wizard doesn't cache).
+    // FOM must verify manually; the override mechanism exists if it's acceptable to close with pending submissions.
   ];
 
   const allPassed = checks.every(c => c.passes || !!wizardState.overrides[c.id]);
@@ -163,18 +178,33 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const handleCloseCycle = async () => {
     if (!allPassed || !confirmChecked) return;
     setClosing(true);
-    await supabase.from('mmp_files').update({
-      status: 'closed',
-      closed_at: new Date().toISOString(),
-      closed_by: currentUser?.id,
-    }).eq('id', wizardState.selectedMmpId!);
+    try {
+      const closedAt = new Date().toISOString();
+      const { error } = await supabase.from('mmp_files').update({
+        status: 'closed',
+        cycle_status: 'closed',       // canonical column checked by Operations/Monitoring
+        closed_at: closedAt,
+        cycle_closed_at: closedAt,
+        closed_by: currentUser?.id,
+      }).eq('id', wizardState.selectedMmpId!);
 
-    // Generate reports
-    await generateCycleCloseReports();
+      if (error) {
+        console.error('Cycle close DB error:', error);
+        alert(`Failed to close cycle: ${error.message}\n\nThe cycle has NOT been marked closed. Please try again.`);
+        setClosing(false);
+        return;
+      }
 
-    updateWizardState({ cycleClosedAt: new Date().toISOString() });
-    setClosing(false);
-    setClosingDialog(false);
+      // Reports are generated after a confirmed DB write
+      await generateCycleCloseReports();
+      updateWizardState({ cycleClosedAt: closedAt });
+    } catch (err: any) {
+      console.error('Unexpected error closing cycle:', err);
+      alert(`An unexpected error occurred: ${err?.message ?? err}\n\nPlease check the cycle status before retrying.`);
+    } finally {
+      setClosing(false);
+      setClosingDialog(false);
+    }
   };
 
   const isClosed = !!wizardState.cycleClosedAt;

@@ -108,6 +108,21 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
       byEnum[id].entries.push(e);
     }
 
+    // Batch-resolve profile names for any enumerator whose name is still 'Unknown'
+    // (happens when the link column is claimed_by/visit_started_by — profile join only covers accepted_by)
+    const unknownIds = Object.entries(byEnum)
+      .filter(([, d]) => d.name === 'Unknown')
+      .map(([id]) => id);
+    if (unknownIds.length > 0) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', unknownIds);
+      for (const p of (profileRows ?? [])) {
+        if (byEnum[p.id] && p.full_name) byEnum[p.id].name = p.full_name;
+      }
+    }
+
     const advanceByEnum: Record<string, number> = {};
     for (const a of (advances ?? [])) {
       if (!a.user_id) continue;
@@ -394,7 +409,7 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
             { label: 'Total Earned (WFP-confirmed)', value: totalEarned },
             { label: 'Total to Pay Out', value: totalToPay },
             { label: 'Total to Recover', value: totalToRecover },
-            { label: 'Net Cycle Cost', value: totalEarned },
+            { label: 'Net Cycle Cost', value: totalEarned - totalAdvances },
           ].map(item => (
             <div key={item.label} className="space-y-0.5">
               <p className="text-xs text-muted-foreground">{item.label}</p>

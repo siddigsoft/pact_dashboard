@@ -234,7 +234,10 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       const exceptions = Object.keys(wizardState.exceptionDecisions);
       return exceptions.every(k => !!wizardState.exceptionDecisions[k].decision);
     }
-    if (currentStep === 6) return true;
+    if (currentStep === 6) {
+      // No payment action may still be pending before advancing to final close
+      return !Object.values(wizardState.paymentActions).some(a => !a.done);
+    }
     return false;
   }, [currentStep, wizardState]);
 
