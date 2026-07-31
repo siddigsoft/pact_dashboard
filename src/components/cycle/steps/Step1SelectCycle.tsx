@@ -34,7 +34,6 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
       .from('mmp_files')
       .select('id, name, status, hub, created_at, month, cycle_status')
       .not('status', 'eq', 'rejected')
-      .or('cycle_status.is.null,cycle_status.neq.closed')
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
     else setOpenCycles(data ?? []);
