@@ -53,9 +53,10 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
 
     const { data: entries } = await supabase
       .from('mmp_site_entries')
-      .select('data_collector_id')
-      .eq('mmp_file_id', mmpId);
-    const uniqueEnums = new Set((entries ?? []).map((e: any) => e.data_collector_id).filter(Boolean));
+      .select('accepted_by')
+      .eq('mmp_file_id', mmpId)
+      .not('accepted_by', 'is', null);
+    const uniqueEnums = new Set((entries ?? []).map((e: any) => e.accepted_by).filter(Boolean));
     setEnumeratorCount(uniqueEnums.size);
   };
 
