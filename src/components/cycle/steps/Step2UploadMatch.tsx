@@ -57,7 +57,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const [previewRowCount, setPreviewRowCount] = useState(5);
   const [selectedPreviewCols, setSelectedPreviewCols] = useState<string[]>([]);
   const [colSearch, setColSearch] = useState('');
-  const [previewConfirmed, setPreviewConfirmed] = useState(false);
+  // fileConfirmed lives in wizardState so it survives parent re-renders
+  const previewConfirmed = wizardState.fileConfirmed;
   const [rememberMapping, setRememberMapping] = useState(false);
   const [running, setRunning] = useState(false);
   const [localMapping, setLocalMapping] = useState<Record<string, string>>(wizardState.columnMapping);
@@ -94,7 +95,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const parseFile = (file: File) => {
     setFileError(null);
     setPreview(null);
-    setPreviewConfirmed(false);
+    updateWizardState({ fileConfirmed: false });
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['xlsx', 'xls', 'csv'].includes(ext ?? '')) {
       setFileError('This file type is not supported. Upload an .xlsx, .xls, or .csv file.');
@@ -459,7 +460,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
                     <span className="font-medium">{preview.rows.length >= 50 ? '50+' : preview.rows.length}</span> rows
                     {selectedPreviewCols.length > 0 && <> &nbsp;·&nbsp; <span className="font-medium">{selectedPreviewCols.length}</span> columns</>}
                   </p>
-                  <Button type="button" size="sm" onClick={() => setPreviewConfirmed(true)} data-testid="button-apply-file">
+                  <Button type="button" size="sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); updateWizardState({ fileConfirmed: true }); }} data-testid="button-apply-file">
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                     Apply File
                   </Button>

@@ -30,6 +30,7 @@ export interface WizardState {
   selectedMmpId: string | null;
   selectedMmp: any | null;
   uploadedFileName: string | null;
+  fileConfirmed: boolean;
   fileRows: Record<string, string>[];
   fileColumns: string[];
   columnMapping: Record<string, string>;
@@ -56,6 +57,7 @@ const initialState: WizardState = {
   selectedMmpId: null,
   selectedMmp: null,
   uploadedFileName: null,
+  fileConfirmed: false,
   fileRows: [],
   fileColumns: [],
   columnMapping: {},
