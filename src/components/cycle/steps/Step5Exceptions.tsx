@@ -26,7 +26,6 @@ interface Props {
   updateWizardState: (patch: Partial<WizardState>) => void;
   onNext: () => void;
   onBack: () => void;
-  canAdvance: boolean;
   canGoBack: boolean;
   canOverride: boolean;
   currentUser: any;

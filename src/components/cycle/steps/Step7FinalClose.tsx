@@ -32,9 +32,10 @@ interface Props {
   canGoBack: boolean;
   canOverride: boolean;
   currentUser: any;
+  goToStep?: (step: number) => void;
 }
 
-export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, currentUser }: Props) {
+export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, currentUser, goToStep }: Props) {
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [closingDialog, setClosingDialog] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -190,7 +191,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           <p className="text-sm text-muted-foreground">The official Cycle Close PDF and Excel workbook have been downloaded automatically.</p>
         </div>
         <div className="flex flex-col items-center gap-2">
-          <Button onClick={generateCycleCloseReports} variant="outline" data-testid="button-re-download-reports">
+          <Button type="button" onClick={generateCycleCloseReports} variant="outline" data-testid="button-re-download-reports">
             <Download className="h-4 w-4 mr-1.5" />
             Download Reports Again
           </Button>
@@ -244,11 +245,11 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
               </div>
               {status === 'fail' && (
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button size="sm" variant="outline" className="text-xs h-7 flex items-center gap-1" data-testid={`button-fixit-${check.id}`}>
+                  <Button type="button" size="sm" variant="outline" className="text-xs h-7 flex items-center gap-1" onClick={() => goToStep?.(check.jumpStep)} data-testid={`button-fixit-${check.id}`}>
                     Fix it <ArrowRight className="h-3 w-3" />
                   </Button>
                   {canOverride && (
-                    <Button size="sm" variant="outline" className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setOverrideTargetId(check.id)} data-testid={`button-override-check-${check.id}`}>
+                    <Button type="button" size="sm" variant="outline" className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setOverrideTargetId(check.id)} data-testid={`button-override-check-${check.id}`}>
                       Override
                     </Button>
                   )}
@@ -286,6 +287,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             </label>
           </div>
           <Button
+            type="button"
             onClick={() => setClosingDialog(true)}
             disabled={!confirmChecked}
             className="bg-green-600 hover:bg-green-700 text-white"
@@ -320,8 +322,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             <p className="text-xs text-muted-foreground">{overrideJustification.length}/20 minimum characters</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOverrideTargetId(null)}>Cancel</Button>
-            <Button onClick={handleOverride} disabled={overrideJustification.length < 20 || savingOverride} className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-confirm-step7-override">
+            <Button type="button" variant="outline" onClick={() => setOverrideTargetId(null)}>Cancel</Button>
+            <Button type="button" onClick={handleOverride} disabled={overrideJustification.length < 20 || savingOverride} className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-confirm-step7-override">
               {savingOverride && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Apply Override
             </Button>
@@ -349,8 +351,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setClosingDialog(false)}>Cancel</Button>
-            <Button onClick={handleCloseCycle} disabled={closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
+            <Button type="button" variant="outline" onClick={() => setClosingDialog(false)}>Cancel</Button>
+            <Button type="button" onClick={handleCloseCycle} disabled={closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
               {closing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Archive className="h-3.5 w-3.5 mr-1.5" />}
               {closing ? 'Closing…' : 'Close Cycle Now'}
             </Button>
@@ -359,8 +361,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       </Dialog>
 
       <div className="flex items-center justify-between pt-4 border-t">
-        {canGoBack && <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-step7">← Back</Button>}
-        <Button variant="outline" size="sm" onClick={generateCycleCloseReports} data-testid="button-download-reports">
+        {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step7">← Back</Button>}
+        <Button type="button" variant="outline" size="sm" onClick={generateCycleCloseReports} data-testid="button-download-reports">
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Download Draft Reports
         </Button>

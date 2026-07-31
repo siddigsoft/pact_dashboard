@@ -155,6 +155,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     onBack: handleBack,
     canAdvance,
     canGoBack,
+    goToStep,
   };
 
   return (
