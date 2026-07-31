@@ -458,7 +458,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
                   <Button
                     type="button"
                     size="sm"
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewCollapsed(true); updateWizardState({ fileConfirmed: true }); }}
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewCollapsed(true); }}
                     data-testid="button-apply-file"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
