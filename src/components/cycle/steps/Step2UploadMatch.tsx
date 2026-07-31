@@ -149,6 +149,8 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) parseFile(file);
+    // Reset the input so the same file can be re-selected if needed
+    e.target.value = '';
   };
 
   const applyMapping = () => {
@@ -259,7 +261,7 @@ export default function Step2UploadMatch({ wizardState, updateWizardState, onNex
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
             ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/30'}`}
           data-testid="upload-dropzone"

@@ -42,7 +42,19 @@ export default function Step1SelectCycle({ wizardState, updateWizardState, onNex
 
   const handleSelect = async (mmpId: string) => {
     const mmp = openCycles.find(m => m.id === mmpId);
-    updateWizardState({ selectedMmpId: mmpId, selectedMmp: mmp });
+    // Reset all upload & matching state so stale results from a previous
+    // session don't leave the Step 2 "Next" button erroneously enabled.
+    updateWizardState({
+      selectedMmpId: mmpId,
+      selectedMmp: mmp,
+      uploadedFileName: null,
+      fileColumns: [],
+      fileRows: [],
+      columnMapping: {},
+      fileConfirmed: false,
+      matchResults: [],
+      resolvedSites: {},
+    });
 
     const { count: sc } = await supabase
       .from('mmp_site_entries')
