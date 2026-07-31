@@ -31,7 +31,7 @@ interface Props {
   currentUser: any;
 }
 
-export default function Step3ResolveUnmatched({ wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride, currentUser }: Props) {
+export default function Step3ResolveUnmatched({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, canOverride, currentUser }: Props) {
   const [sites, setSites] = useState<UnresolvedSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; siteId: string; siteName: string } | null>(null);
