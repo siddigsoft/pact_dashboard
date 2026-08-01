@@ -595,70 +595,146 @@ export default function Step2UploadMatch({
             Add more pairs for higher accuracy.
           </p>
 
-          {/* MMP data summary */}
-          {candidates.length > 0 && (
-            <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium">MMP Data Loaded</span>
-                  <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
-                    {candidates.length} site entries
-                  </Badge>
+          {/* MMP ↔ WFP column overview */}
+          {candidates.length > 0 && (() => {
+            const usedMmp = new Set(wizardState.matchingPairs.map(p => p.mmpColumn).filter(Boolean));
+            const usedWfp = new Set(wizardState.matchingPairs.map(p => p.wfpColumn).filter(Boolean));
+            return (
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                {/* Header row */}
+                <div className="flex items-center justify-between px-3 py-2 border-b bg-white/60 dark:bg-slate-800/60">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium">Column Overview</span>
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
+                      {candidates.length} MMP entries
+                    </Badge>
+                    <Badge className="bg-purple-100 text-purple-700 border-purple-300 text-xs">
+                      {wizardState.fileColumns.length} WFP cols
+                    </Badge>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setShowMmpPreview(p => !p)}
+                  >
+                    {showMmpPreview ? 'Hide data preview' : 'Show data preview'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="text-xs text-primary hover:underline"
-                  onClick={() => setShowMmpPreview(p => !p)}
-                >
-                  {showMmpPreview ? 'Hide preview' : 'Show preview'}
-                </button>
-              </div>
 
-              {/* MMP column pills */}
-              <div className="flex flex-wrap gap-1.5">
-                {wizardState.mmpColumns.map(col => (
-                  <span key={col} className="inline-flex items-center px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 border text-xs font-mono text-slate-700 dark:text-slate-200">
-                    {col}
-                    {MMP_COL_LABELS[col] && (
-                      <span className="ml-1 text-muted-foreground not-italic normal-case font-sans">
-                        — {MMP_COL_LABELS[col]}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
+                {/* Two-column layout: MMP | WFP */}
+                <div className="grid grid-cols-2 divide-x text-xs">
+                  {/* MMP columns */}
+                  <div className="p-2.5 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-1.5">
+                      MMP System Columns
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {wizardState.mmpColumns.map(col => {
+                        const active = usedMmp.has(col);
+                        return (
+                          <span
+                            key={col}
+                            title={MMP_COL_LABELS[col] ?? col}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono
+                              ${active
+                                ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/50 dark:border-blue-500 dark:text-blue-200'
+                                : 'bg-white border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'
+                              }`}
+                          >
+                            {active && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+                            {col}
+                            {MMP_COL_LABELS[col] && (
+                              <span className="font-sans font-normal opacity-70">({MMP_COL_LABELS[col]})</span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              {/* MMP mini preview table */}
-              {showMmpPreview && candidates.length > 0 && (
-                <div className="overflow-x-auto rounded border mt-1">
-                  <table className="text-xs w-full border-collapse">
-                    <thead>
-                      <tr className="bg-muted">
-                        {wizardState.mmpColumns.map(c => (
-                          <th key={c} className="border-b border-r px-2 py-1.5 text-left font-semibold whitespace-nowrap">{c}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {candidates.slice(0, 5).map((c, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                          {wizardState.mmpColumns.map(col => (
-                            <td key={col} className="border-b border-r px-2 py-1 max-w-[160px] truncate" title={c.data[col]}>
-                              {c.data[col] || <span className="text-muted-foreground/50 italic">—</span>}
-                            </td>
+                  {/* WFP file columns */}
+                  <div className="p-2.5 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 mb-1.5">
+                      WFP File Columns
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {wizardState.fileColumns.map(col => {
+                        const active = usedWfp.has(col);
+                        return (
+                          <span
+                            key={col}
+                            title={col}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono
+                              ${active
+                                ? 'bg-purple-100 border-purple-400 text-purple-800 dark:bg-purple-900/50 dark:border-purple-500 dark:text-purple-200'
+                                : 'bg-white border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'
+                              }`}
+                          >
+                            {active && <span className="h-1.5 w-1.5 rounded-full bg-purple-500 flex-shrink-0" />}
+                            {col}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active pairs summary strip */}
+                {usedMmp.size > 0 && (
+                  <div className="border-t px-3 py-2 bg-green-50/60 dark:bg-green-900/10 flex flex-wrap gap-2 items-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 dark:text-green-400 flex-shrink-0">
+                      Active pairs:
+                    </span>
+                    {wizardState.matchingPairs
+                      .filter(p => p.mmpColumn && p.wfpColumn)
+                      .map((p, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-white dark:bg-slate-700 border border-green-200 dark:border-green-700 rounded px-2 py-0.5">
+                          <span className="text-blue-700 dark:text-blue-300 font-mono">{MMP_COL_LABELS[p.mmpColumn] ?? p.mmpColumn}</span>
+                          <span className="text-muted-foreground">↔</span>
+                          <span className="text-purple-700 dark:text-purple-300 font-mono">{p.wfpColumn}</span>
+                        </span>
+                      ))
+                    }
+                  </div>
+                )}
+
+                {/* MMP data preview table */}
+                {showMmpPreview && candidates.length > 0 && (
+                  <div className="overflow-x-auto border-t">
+                    <table className="text-xs w-full border-collapse">
+                      <thead>
+                        <tr className="bg-muted">
+                          {wizardState.mmpColumns.map(c => (
+                            <th key={c} className={`border-b border-r px-2 py-1.5 text-left font-semibold whitespace-nowrap
+                              ${usedMmp.has(c) ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : ''}`}>
+                              {c}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t bg-muted/20">
-                    Showing first 5 of {candidates.length} entries
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                      </thead>
+                      <tbody>
+                        {candidates.slice(0, 5).map((c, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                            {wizardState.mmpColumns.map(col => (
+                              <td key={col} className={`border-b border-r px-2 py-1 max-w-[160px] truncate
+                                ${usedMmp.has(col) ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}
+                                title={c.data[col]}>
+                                {c.data[col] || <span className="text-muted-foreground/50 italic">—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t bg-muted/20">
+                      Showing first 5 of {candidates.length} MMP entries · highlighted columns are active in matching pairs
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Pair rows */}
           <div className="space-y-2">
