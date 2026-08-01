@@ -96,6 +96,9 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [sortAsc, setSortAsc] = useState(true);
   const [coverageFilter, setCoverageFilter] = useState<'' | 'Covered' | 'Not Covered' | 'Pending'>('');
   const [activityFilter, setActivityFilter] = useState<string>('');
+  const [showUnmatchedWfp, setShowUnmatchedWfp] = useState(false);
+  const [unmatchedWfpSearch, setUnmatchedWfpSearch] = useState('');
+  const [expandedUnmatchedRows, setExpandedUnmatchedRows] = useState<Set<number>>(new Set());
 
   // Refs to prevent re-running loaders when wizard state object references change
   // without the underlying data actually changing.
@@ -532,6 +535,165 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           )}
         </div>
       )}
+
+      {/* ── Unmatched WFP Rows panel ─────────────────────────────────────── */}
+      {(() => {
+        const unmatchedRows = wizardState.matchResults.filter(r => r.status === 'unmatched');
+        if (unmatchedRows.length === 0) return null;
+
+        const primaryPair    = wizardState.matchingPairs[0] ?? null;
+        const secondaryPairs = wizardState.matchingPairs.slice(1);
+        const wfpCols        = wizardState.fileColumns;
+
+        const searchLow = unmatchedWfpSearch.toLowerCase();
+        const visibleRows = unmatchedRows.filter(r => {
+          if (!searchLow) return true;
+          return Object.values(r.wfpRow).some(v => String(v).toLowerCase().includes(searchLow));
+        });
+
+        const exportUnmatched = () => {
+          const rows = unmatchedRows.map((r, i) => {
+            const out: Record<string, string> = { '#': String(i + 1) };
+            wfpCols.forEach(col => { out[col] = r.wfpRow[col] ?? ''; });
+            return out;
+          });
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Unmatched WFP Rows');
+          XLSX.writeFile(wb, 'unmatched-wfp-rows.xlsx');
+        };
+
+        return (
+          <div className="border rounded-lg shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center bg-orange-50 dark:bg-orange-950/20 border-b">
+              <button
+                type="button"
+                onClick={() => setShowUnmatchedWfp(v => !v)}
+                className="flex-1 flex items-center gap-2 flex-wrap px-4 py-3 font-medium hover:bg-orange-100/60 transition-colors text-left"
+              >
+                <span className="text-sm">⚠️ Unmatched WFP Rows</span>
+                <Badge className="bg-orange-100 text-orange-700 border-orange-300 text-xs">{unmatchedRows.length} rows</Badge>
+                <span className="text-xs font-normal text-muted-foreground hidden sm:inline">
+                  WFP file rows that could not be matched to any MMP site
+                </span>
+              </button>
+              <Button type="button" size="sm" variant="outline" className="h-7 text-xs mr-2 border-orange-300 text-orange-700 hover:bg-orange-50" onClick={exportUnmatched}>
+                <Download className="h-3 w-3 mr-1" /> Export
+              </Button>
+              <button
+                type="button"
+                onClick={() => setShowUnmatchedWfp(v => !v)}
+                className="px-3 py-3 text-muted-foreground hover:text-foreground hover:bg-orange-100/60 transition-colors flex-shrink-0"
+              >
+                {showUnmatchedWfp ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {showUnmatchedWfp && (
+              <>
+                {/* Search bar */}
+                <div className="border-b bg-white dark:bg-slate-900 px-4 py-2.5 flex items-center gap-3">
+                  <div className="relative flex-1 max-w-80">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="h-8 pl-8 text-xs"
+                      placeholder="Search any WFP column value…"
+                      value={unmatchedWfpSearch}
+                      onChange={e => setUnmatchedWfpSearch(e.target.value)}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{visibleRows.length} of {unmatchedRows.length} rows</span>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto" style={{ maxHeight: '52vh', overflowY: 'auto' }}>
+                  <table className="w-full text-xs border-collapse">
+                    <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3 py-2.5 w-8 text-center">#</th>
+                        <th className="px-3 py-2.5 text-left font-semibold min-w-[180px]">
+                          {primaryPair ? primaryPair.wfpColumn : 'Primary Value'}
+                        </th>
+                        {secondaryPairs.map(p => (
+                          <th key={p.wfpColumn} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">
+                            {p.wfpColumn}
+                          </th>
+                        ))}
+                        <th className="px-3 py-2.5 text-left font-semibold">All Fields</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleRows.map((r, i) => {
+                        const isExpanded = expandedUnmatchedRows.has(r.rowIndex);
+                        const toggle = () => setExpandedUnmatchedRows(prev => {
+                          const n = new Set(prev);
+                          isExpanded ? n.delete(r.rowIndex) : n.add(r.rowIndex);
+                          return n;
+                        });
+                        const primaryVal = primaryPair ? (r.wfpRow[primaryPair.wfpColumn] ?? '—') : '—';
+
+                        return (
+                          <>
+                            <tr
+                              key={r.rowIndex}
+                              className={`border-t transition-colors hover:bg-orange-50/40 ${i % 2 === 1 ? 'bg-muted/20' : ''}`}
+                            >
+                              <td className="px-3 py-2 text-center text-muted-foreground">{r.rowIndex + 1}</td>
+                              <td className="px-3 py-2 font-medium">{primaryVal}</td>
+                              {secondaryPairs.map(p => (
+                                <td key={p.wfpColumn} className="px-3 py-2 text-muted-foreground max-w-[140px] truncate" title={r.wfpRow[p.wfpColumn] ?? ''}>
+                                  {r.wfpRow[p.wfpColumn] ?? '—'}
+                                </td>
+                              ))}
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={toggle}
+                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                  {isExpanded ? 'Hide' : `${wfpCols.filter(c => r.wfpRow[c] && r.wfpRow[c] !== '').length} fields`}
+                                </button>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr key={`${r.rowIndex}-exp`} className="border-t bg-orange-50/30 dark:bg-orange-950/10">
+                                <td colSpan={3 + secondaryPairs.length} className="px-5 py-3">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1">
+                                    {wfpCols.filter(col => r.wfpRow[col] != null && r.wfpRow[col] !== '').map(col => (
+                                      <div key={col} className="flex gap-1.5 text-[11px] min-w-0">
+                                        <span className="text-muted-foreground font-mono shrink-0 truncate max-w-[110px]" title={col}>{col}:</span>
+                                        <span className="font-medium break-all">{r.wfpRow[col]}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })}
+                      {visibleRows.length === 0 && (
+                        <tr>
+                          <td colSpan={3 + secondaryPairs.length} className="px-4 py-10 text-center text-muted-foreground italic">
+                            No rows match the search
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer note */}
+                <div className="border-t px-4 py-2 bg-orange-50/50 text-[10px] text-orange-800">
+                  These WFP file rows had no MMP site matching them (score below threshold). They are informational only and do not affect site coverage counts.
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Full Site Status Table + Inline Reason Assignment ──────────────── */}
       {(() => {
