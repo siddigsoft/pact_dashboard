@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight, Search, ArrowUpDown } from 'lucide-react';
+import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight, Search, ArrowUpDown, Maximize2, Minimize2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import * as XLSX from 'xlsx';
@@ -51,6 +51,8 @@ interface SiteDetail {
   state: string;
   locality: string;
   hub_office: string;
+  activity_at_site: string | null;
+  main_activity: string | null;
   /** Status stored in mmp_site_entries.status (Dispatched, Accepted, etc.) */
   system_status: string;
   /** Was a WFP row matched (or attempted) against this MMP site? */
@@ -88,17 +90,34 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [siteDetails, setSiteDetails] = useState<SiteDetail[]>([]);
   const [siteDetailsLoading, setSiteDetailsLoading] = useState(false);
   const [showSiteStatus, setShowSiteStatus] = useState(true);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const [siteSearch, setSiteSearch] = useState('');
   const [sortCol, setSortCol] = useState<keyof SiteDetail>('state');
   const [sortAsc, setSortAsc] = useState(true);
   const [coverageFilter, setCoverageFilter] = useState<'' | 'Covered' | 'Not Covered' | 'Pending'>('');
 
+  // Refs to prevent re-running loaders when wizard state object references change
+  // without the underlying data actually changing.
+  const loadedMmpIdRef   = useRef<string | null>(null);
+  const matchResultsRef  = useRef(wizardState.matchResults);
+  const resolvedSitesRef = useRef(wizardState.resolvedSites);
+  const unmatchedRef     = useRef(wizardState.unmatchedMmpSiteIds);
+
   useEffect(() => {
-    if (wizardState.selectedMmpId) {
-      loadUncoveredSites();
-      loadCoverageBreakdown();
-      loadSiteStatusDetails();
-    }
+    if (!wizardState.selectedMmpId) return;
+    const idChanged       = loadedMmpIdRef.current !== wizardState.selectedMmpId;
+    const matchChanged    = matchResultsRef.current !== wizardState.matchResults;
+    const resolvedChanged = resolvedSitesRef.current !== wizardState.resolvedSites;
+    const unmatchedChanged= unmatchedRef.current !== wizardState.unmatchedMmpSiteIds;
+    if (!idChanged && !matchChanged && !resolvedChanged && !unmatchedChanged) return;
+    // Update refs
+    loadedMmpIdRef.current   = wizardState.selectedMmpId;
+    matchResultsRef.current  = wizardState.matchResults;
+    resolvedSitesRef.current = wizardState.resolvedSites;
+    unmatchedRef.current     = wizardState.unmatchedMmpSiteIds;
+    loadUncoveredSites();
+    loadCoverageBreakdown();
+    loadSiteStatusDetails();
   }, [wizardState.selectedMmpId, wizardState.resolvedSites, wizardState.unmatchedMmpSiteIds, wizardState.matchResults]);
 
   const loadUncoveredSites = async () => {
@@ -236,7 +255,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     const { data: allSites } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_code, site_name, state, locality, hub_office, status')
+      .select('id, site_code, site_name, state, locality, hub_office, status, activity_at_site, main_activity')
       .eq('mmp_file_id', wizardState.selectedMmpId);
 
     if (!allSites?.length) { setSiteDetailsLoading(false); return; }
@@ -290,17 +309,19 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         resolvedNotCov.has(s.id);
 
       return {
-        id:              s.id,
-        site_code:       s.site_code ?? '',
-        site_name:       s.site_name ?? '',
-        state:           s.state ?? '',
-        locality:        s.locality ?? '',
-        hub_office:      s.hub_office ?? '',
-        system_status:   s.status ?? '—',
-        wfp_in_file:     !!mr,
-        wfp_row_primary: mr ? (mr.wfpRow[primaryWfpCol] ?? null) : null,
-        match_score:     mr ? mr.matchScore : null,
-        match_level:     mr ? mr.matchLevel : null,
+        id:               s.id,
+        site_code:        s.site_code ?? '',
+        site_name:        s.site_name ?? '',
+        state:            s.state ?? '',
+        locality:         s.locality ?? '',
+        hub_office:       s.hub_office ?? '',
+        activity_at_site: s.activity_at_site ?? null,
+        main_activity:    s.main_activity ?? null,
+        system_status:    s.status ?? '—',
+        wfp_in_file:      !!mr,
+        wfp_row_primary:  mr ? (mr.wfpRow[primaryWfpCol] ?? null) : null,
+        match_score:      mr ? mr.matchScore : null,
+        match_level:      mr ? mr.matchLevel : null,
         matching_status,
         action_taken,
         not_covered_reason: notCovReason?.reason ?? null,
@@ -571,6 +592,8 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
             'Matching Status':    s.matching_status,
             'Action Taken':       s.action_taken ?? '—',
             Coverage:             s.coverage,
+            'Activity at Site':   s.activity_at_site ?? '—',
+            'Main Activity':      s.main_activity ?? '—',
             'Not-Covered Reason': s.not_covered_reason ?? (wizardState.uncoveredReasons[s.id]?.reason ?? '—'),
           }));
           const ws = XLSX.utils.json_to_sheet(rows);
@@ -596,18 +619,21 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         const ncCount   = siteDetails.filter(s => s.coverage === 'Not Covered').length;
         const pendCount = siteDetails.filter(s => s.coverage === 'Pending').length;
 
-        return (
-          <div className="border rounded-lg overflow-hidden shadow-sm">
+        const panelContent = (
+          <div className={`flex flex-col overflow-hidden ${isFullScreen ? 'h-full' : 'border rounded-lg shadow-sm'}`}>
 
             {/* ── Panel header (toggle) ──────────────────────────────── */}
-            <button
-              type="button"
-              onClick={() => setShowSiteStatus(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <span className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center bg-slate-50 dark:bg-slate-900 border-b">
+              <button
+                type="button"
+                onClick={() => setShowSiteStatus(v => !v)}
+                className="flex-1 flex items-center gap-2 flex-wrap px-4 py-3 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+              >
                 <span className="text-sm">🗂 Full Site Status Table</span>
-                <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">{siteDetails.length} sites</Badge>
+                {siteDetailsLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  : <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">{siteDetails.length} sites</Badge>
+                }
                 <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">✓ {covCount}</Badge>
                 <Badge className="bg-red-100 text-red-700 border-red-300 text-xs">✗ {ncCount}</Badge>
                 {pendCount > 0 && <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">⏳ {pendCount}</Badge>}
@@ -616,10 +642,25 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                     {allAssigned ? '✓ All reasons assigned' : `${sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length} reasons pending`}
                   </Badge>
                 )}
-                <span className="text-xs font-normal text-muted-foreground hidden sm:inline">WFP · System · Matching · Reason</span>
-              </span>
-              {showSiteStatus ? <ChevronDown className="h-4 w-4 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 flex-shrink-0" />}
-            </button>
+                <span className="text-xs font-normal text-muted-foreground hidden sm:inline">WFP · System · Activity · Matching · Reason</span>
+              </button>
+              {/* Fullscreen toggle */}
+              <button
+                type="button"
+                title={isFullScreen ? 'Exit full screen' : 'Open full screen'}
+                onClick={e => { e.stopPropagation(); setIsFullScreen(v => !v); setShowSiteStatus(true); }}
+                className="px-3 py-3 text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+              >
+                {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSiteStatus(v => !v)}
+                className="px-3 py-3 text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+              >
+                {showSiteStatus ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            </div>
 
             {showSiteStatus && (
               <>
@@ -771,8 +812,9 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                           <SortTh col="site_name"       label="Site Name"       className="min-w-[140px]" />
                           <SortTh col="state"           label="State" />
                           <SortTh col="locality"        label="Locality" />
-                          <SortTh col="hub_office"      label="Hub / Office" />
-                          <SortTh col="system_status"   label="Sys. Status" />
+                          <SortTh col="hub_office"       label="Hub / Office" />
+                          <SortTh col="activity_at_site" label="Activity"       className="min-w-[120px]" />
+                          <SortTh col="system_status"    label="Sys. Status" />
                           <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">WFP</th>
                           <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">WFP Row (Primary)</th>
                           <SortTh col="match_score"     label="Score" />
@@ -839,6 +881,16 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                               <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{s.state || '—'}</td>
                               <td className="px-3 py-2 max-w-[110px] truncate text-muted-foreground" title={s.locality}>{s.locality || '—'}</td>
                               <td className="px-3 py-2 max-w-[120px] truncate" title={s.hub_office}>{s.hub_office || '—'}</td>
+
+                              {/* Activity */}
+                              <td className="px-3 py-2 max-w-[130px]" title={[s.activity_at_site, s.main_activity].filter(Boolean).join(' · ')}>
+                                {s.activity_at_site
+                                  ? <span className="truncate block text-slate-700 dark:text-slate-300">{s.activity_at_site}</span>
+                                  : <span className="text-muted-foreground/50">—</span>}
+                                {s.main_activity && s.main_activity !== s.activity_at_site && (
+                                  <span className="text-[10px] text-muted-foreground truncate block">{s.main_activity}</span>
+                                )}
+                              </td>
 
                               {/* System status */}
                               <td className="px-3 py-2">
@@ -920,7 +972,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                         })}
                         {filtered.length === 0 && (
                           <tr>
-                            <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground italic">
+                            <td colSpan={13} className="px-4 py-12 text-center text-muted-foreground italic">
                               No sites match the current filter
                             </td>
                           </tr>
@@ -952,6 +1004,22 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
             )}
           </div>
         );
+
+        return isFullScreen ? (
+          <div className="fixed inset-0 z-[200] bg-white dark:bg-slate-950 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-800 text-white text-sm flex-shrink-0">
+              <span className="font-semibold">🗂 Full Site Status Table — {wizardState.selectedMmp?.name ?? 'Cycle'}</span>
+              <button
+                type="button"
+                onClick={() => setIsFullScreen(false)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 transition-colors text-xs"
+              >
+                <X className="h-3.5 w-3.5" /> Exit Full Screen
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden flex flex-col">{panelContent}</div>
+          </div>
+        ) : panelContent;
       })()}
 
       <div className="flex items-center justify-between pt-4 border-t">
