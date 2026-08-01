@@ -17,10 +17,13 @@ import type { WizardState } from '../CycleCloseWizard';
 import { runMatching, type MatchCandidate, type MatchPair } from '@/utils/fuzzyMatcher';
 
 // ─── MMP columns to fetch from the database ────────────────────────────────
+// NOTE: accepted_by is a plain text / uuid column with no FK to profiles,
+// so we must NOT use a join hint here — it causes a 400 and kills the load.
+// Enumerator names are resolved separately after the main fetch.
 const MMP_MATCH_COLS =
   'id, site_code, site_name, state, locality, hub_office, cp_name, ' +
   'activity_at_site, main_activity, monitoring_by, visit_type, visit_date, ' +
-  'accepted_by, enumerator:profiles!accepted_by(full_name)';
+  'accepted_by';
 
 // Human-readable labels for MMP DB columns shown in the UI
 const MMP_COL_LABELS: Record<string, string> = {
@@ -166,25 +169,19 @@ export default function Step2UploadMatch({
 
     const rows = data ?? [];
 
-    // Build candidates, extracting the joined profile name as a virtual column
+    // Build candidates from plain columns (no join — see MMP_MATCH_COLS note)
     const cands: MatchCandidate[] = rows.map((e: any) => {
-      const { id, accepted_by, enumerator, ...rest } = e;
+      const { id, ...rest } = e;
       return {
         siteId: String(id),
-        data: {
-          ...Object.fromEntries(
-            Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
-          ),
-          enumerator_name: (enumerator as any)?.full_name ?? '',
-        },
+        data: Object.fromEntries(
+          Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
+        ),
       };
     });
 
     const mmpCols = rows.length > 0
-      ? [
-          ...Object.keys(rows[0]).filter(k => !['id', 'accepted_by', 'enumerator'].includes(k)),
-          'enumerator_name',
-        ]
+      ? Object.keys(rows[0]).filter(k => k !== 'id')
       : Object.keys(MMP_COL_LABELS);
 
     setCandidates(cands);
@@ -277,15 +274,12 @@ export default function Step2UploadMatch({
         .select(MMP_MATCH_COLS)
         .eq('mmp_file_id', wizardState.selectedMmpId);
       activeCandidates = (data ?? []).map((e: any) => {
-        const { id, accepted_by, enumerator, ...rest } = e;
+        const { id, ...rest } = e;
         return {
           siteId: String(id),
-          data: {
-            ...Object.fromEntries(
-              Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
-            ),
-            enumerator_name: (enumerator as any)?.full_name ?? '',
-          },
+          data: Object.fromEntries(
+            Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
+          ),
         };
       });
       setCandidates(activeCandidates);
