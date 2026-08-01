@@ -90,9 +90,10 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     if (allIds.length === 0) {
       // Fall back: check DB for any already-marked not_covered sites
+      // NOTE: accepted_by has no FK to profiles — do NOT use a join here
       const { data } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, hub_office, accepted_by, profiles!accepted_by(full_name), status')
+        .select('id, site_name, state, locality, hub_office, accepted_by, status')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('status', 'not_covered');
       setSites((data ?? []).map((s: any) => ({
@@ -101,17 +102,25 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         state: s.state ?? '',
         locality: s.locality ?? '',
         hub_office: s.hub_office ?? '',
-        enumerator_name: s.profiles?.full_name ?? '—',
+        enumerator_name: '—',
         source: 'manual' as const,
       })));
       setLoading(false);
       return;
     }
 
-    const { data } = await supabase
+    // NOTE: accepted_by has no FK to profiles — query plain columns only,
+    // then do a separate lookup for any enumerator names we need.
+    const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, hub_office, accepted_by, profiles!accepted_by(full_name)')
+      .select('id, site_name, state, locality, hub_office, accepted_by')
       .in('id', allIds);
+
+    if (error) {
+      console.error('loadUncoveredSites error:', error);
+      setLoading(false);
+      return;
+    }
 
     const notInWfpSet = new Set(notInWfpIds);
     const step3Set    = new Set(step3NotCovered);
@@ -122,7 +131,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       state: s.state ?? '',
       locality: s.locality ?? '',
       hub_office: s.hub_office ?? '',
-      enumerator_name: s.profiles?.full_name ?? '—',
+      enumerator_name: s.accepted_by ?? '—',   // accepted_by is text (name/id)
       source: step3Set.has(s.id) ? 'not_covered'
             : notInWfpSet.has(s.id) ? 'not_in_wfp'
             : 'rejected_match',
@@ -208,21 +217,61 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   };
 
   const exportNotCoveredReport = () => {
-    const rows = sites.map(s => {
+    const sourceLabel = (src: UncoveredSite['source']) =>
+      src === 'not_in_wfp'      ? 'Not in WFP File'
+      : src === 'rejected_match' ? 'WFP Rejected'
+      : src === 'not_covered'    ? 'Unresolved (Step 3)'
+      : 'DB: Not Covered';
+
+    // Sheet 1 — individual uncovered sites
+    const siteRows = sites.map(s => {
       const r = wizardState.uncoveredReasons[s.id];
       return {
-        'Site Name': s.site_name,
-        State: s.state,
-        Locality: s.locality,
-        Enumerator: s.enumerator_name,
-        Reason: r?.reason ?? 'Not assigned',
-        Notes: r?.note ?? '',
+        'Site Name':           s.site_name,
+        State:                 s.state,
+        Locality:              s.locality,
+        'Hub / Office':        s.hub_office,
+        'Enumerator / Accepted By': s.enumerator_name,
+        Source:                sourceLabel(s.source),
+        Reason:                r?.reason ?? 'Not assigned',
+        Notes:                 r?.note ?? '',
         'Flagged for Follow-Up': r?.flagged ? 'Yes' : 'No',
       };
     });
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const wsSites = XLSX.utils.json_to_sheet(siteRows);
+
+    // Sheet 2 — coverage breakdown by state (mirrors the on-screen table)
+    const coverageSummaryRows = [
+      ...coverageRows.map(row => {
+        const pct = row.total ? Math.round((row.confirmed / row.total) * 100) : 0;
+        return {
+          State:         row.label,
+          'Total Sites': row.total,
+          'Confirmed':   row.confirmed,
+          'Not Covered': row.notCovered,
+          'Coverage %':  `${pct}%`,
+        };
+      }),
+      // Totals row
+      (() => {
+        const total = coverageRows.reduce((s, r) => s + r.total, 0);
+        const conf  = coverageRows.reduce((s, r) => s + r.confirmed, 0);
+        const nc    = coverageRows.reduce((s, r) => s + r.notCovered, 0);
+        const pct   = total ? Math.round((conf / total) * 100) : 0;
+        return {
+          State:         'TOTAL',
+          'Total Sites': total,
+          'Confirmed':   conf,
+          'Not Covered': nc,
+          'Coverage %':  `${pct}%`,
+        };
+      })(),
+    ];
+    const wsCoverage = XLSX.utils.json_to_sheet(coverageSummaryRows);
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Not Covered Sites');
+    XLSX.utils.book_append_sheet(wb, wsSites,    'Uncovered Sites');
+    XLSX.utils.book_append_sheet(wb, wsCoverage, 'Coverage by State');
     XLSX.writeFile(wb, 'not-covered-sites-report.xlsx');
   };
 
