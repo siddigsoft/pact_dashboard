@@ -95,6 +95,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [sortCol, setSortCol] = useState<keyof SiteDetail>('state');
   const [sortAsc, setSortAsc] = useState(true);
   const [coverageFilter, setCoverageFilter] = useState<'' | 'Covered' | 'Not Covered' | 'Pending'>('');
+  const [activityFilter, setActivityFilter] = useState<string>('');
 
   // Refs to prevent re-running loaders when wizard state object references change
   // without the underlying data actually changing.
@@ -558,10 +559,14 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         for (const s of sites) siteSourceMap[s.id] = s.source;
 
         const searchLow = siteSearch.toLowerCase();
+        const uniqueStates     = [...new Set(siteDetails.map(s => s.state).filter(Boolean))].sort();
+        const uniqueActivities = [...new Set(siteDetails.map(s => s.activity_at_site).filter(Boolean))].sort() as string[];
+
         const filtered = siteDetails
           .filter(s =>
-            (!stateFilter    || s.state    === stateFilter) &&
-            (!coverageFilter || s.coverage === coverageFilter) &&
+            (!stateFilter    || s.state             === stateFilter) &&
+            (!activityFilter || s.activity_at_site  === activityFilter) &&
+            (!coverageFilter || s.coverage          === coverageFilter) &&
             (!searchLow ||
               s.site_name.toLowerCase().includes(searchLow)  ||
               s.locality.toLowerCase().includes(searchLow)   ||
@@ -682,15 +687,43 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                     </span>
                   </div>
 
-                  {/* Row 2: filter chips + export buttons */}
+                  {/* Row 2: State / Activity dropdowns + coverage chips + export buttons */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* State filter chip */}
-                    {stateFilter ? (
-                      <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs cursor-pointer hover:bg-blue-200" onClick={() => setStateFilter('')}>
-                        📍 {stateFilter} ×
-                      </Badge>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">Click a state in Coverage Breakdown to filter</span>
+                    {/* State dropdown */}
+                    <Select value={stateFilter || '__all__'} onValueChange={v => setStateFilter(v === '__all__' ? '' : v)}>
+                      <SelectTrigger className={`h-7 text-xs w-40 ${stateFilter ? 'border-blue-400 bg-blue-50 text-blue-800' : ''}`}>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All States</SelectItem>
+                        {uniqueStates.map(st => (
+                          <SelectItem key={st} value={st}>{st}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Activity dropdown */}
+                    <Select value={activityFilter || '__all__'} onValueChange={v => setActivityFilter(v === '__all__' ? '' : v)}>
+                      <SelectTrigger className={`h-7 text-xs w-40 ${activityFilter ? 'border-purple-400 bg-purple-50 text-purple-800' : ''}`}>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Activities</SelectItem>
+                        {uniqueActivities.map(act => (
+                          <SelectItem key={act} value={act}>{act}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Clear all filters shortcut */}
+                    {(stateFilter || activityFilter || coverageFilter) && (
+                      <button
+                        type="button"
+                        onClick={() => { setStateFilter(''); setActivityFilter(''); setCoverageFilter(''); }}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-slate-300 text-muted-foreground hover:bg-slate-100 transition-colors"
+                      >
+                        Clear filters ×
+                      </button>
                     )}
 
                     {/* Coverage filter buttons */}
