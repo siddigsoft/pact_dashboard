@@ -102,6 +102,7 @@ export default function Step2UploadMatch({
   const [showReviewTable, setShowReviewTable] = useState(true);
   const [showMmpPreview, setShowMmpPreview] = useState(false);
   const [candidates, setCandidates]     = useState<MatchCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   // Track whether pairs have been auto-initialised for the current MMP + file combo
   const [pairsInitialized, setPairsInitialized] = useState(false);
@@ -113,6 +114,9 @@ export default function Step2UploadMatch({
   useEffect(() => {
     if (wizardState.selectedMmpId) loadCandidates();
   }, [wizardState.selectedMmpId]);
+
+  // ── Guard: warn and abort if Run Matching is attempted with no candidates ──
+  // (candidates is local state and can be empty on resume before DB fetch completes)
 
   // ── Re-initialise preview columns when new file loaded ────────────────────
   useEffect(() => {
@@ -132,20 +136,33 @@ export default function Step2UploadMatch({
       wizardState.mmpColumns.length > 0 &&
       wizardState.fileColumns.length > 0
     ) {
-      const pairs = autoDetectPairs(wizardState.mmpColumns, wizardState.fileColumns);
-      if (pairs.length > 0) {
-        updateWizardState({ matchingPairs: pairs });
-        setPairsInitialized(true);
+      // Only auto-detect when there are no configured pairs yet.
+      // Do NOT overwrite pairs the user already set (e.g. on resume or manual config).
+      if (wizardState.matchingPairs.length === 0) {
+        const pairs = autoDetectPairs(wizardState.mmpColumns, wizardState.fileColumns);
+        if (pairs.length > 0) {
+          updateWizardState({ matchingPairs: pairs });
+        }
+        // Always mark initialized — even if 0 pairs were detected — so the effect
+        // stops re-running and the user can manually configure pairs.
       }
+      setPairsInitialized(true);
     }
   }, [candidates.length, wizardState.mmpColumns.length, wizardState.fileColumns.length, pairsInitialized]);
 
   // ── Fetch all matchable columns from mmp_site_entries ────────────────────
   const loadCandidates = async () => {
-    const { data } = await supabase
+    setCandidatesLoading(true);
+    const { data, error } = await supabase
       .from('mmp_site_entries')
       .select(MMP_MATCH_COLS)
       .eq('mmp_file_id', wizardState.selectedMmpId!);
+
+    if (error) {
+      console.error('loadCandidates error:', error);
+      setCandidatesLoading(false);
+      return;
+    }
 
     const rows = data ?? [];
 
@@ -171,6 +188,7 @@ export default function Step2UploadMatch({
       : Object.keys(MMP_COL_LABELS);
 
     setCandidates(cands);
+    setCandidatesLoading(false);
     updateWizardState({
       mmpColumns: mmpCols,
       mmpRawRows: cands.map(c => c.data),
@@ -249,9 +267,34 @@ export default function Step2UploadMatch({
 
   // ── Run the matching algorithm ────────────────────────────────────────────
   const runMatch = async () => {
+    // candidates is local state — if the component mounted from a resume and
+    // the DB fetch hasn't completed yet, reload before running.
+    let activeCandidates = candidates;
+    if (activeCandidates.length === 0 && wizardState.selectedMmpId) {
+      setCandidatesLoading(true);
+      const { data } = await supabase
+        .from('mmp_site_entries')
+        .select(MMP_MATCH_COLS)
+        .eq('mmp_file_id', wizardState.selectedMmpId);
+      activeCandidates = (data ?? []).map((e: any) => {
+        const { id, accepted_by, enumerator, ...rest } = e;
+        return {
+          siteId: String(id),
+          data: {
+            ...Object.fromEntries(
+              Object.entries(rest).map(([k, v]) => [k, v == null ? '' : String(v)])
+            ),
+            enumerator_name: (enumerator as any)?.full_name ?? '',
+          },
+        };
+      });
+      setCandidates(activeCandidates);
+      setCandidatesLoading(false);
+    }
+
     setRunning(true);
     await new Promise(r => setTimeout(r, 80));
-    const results = runMatching(wizardState.fileRows, wizardState.matchingPairs, candidates);
+    const results = runMatching(wizardState.fileRows, wizardState.matchingPairs, activeCandidates);
 
     // Detect MMP sites that were never matched by any WFP row — these are "Not in clean data"
     // and must flow into Step 4 as uncovered sites needing a reason.
@@ -725,15 +768,27 @@ export default function Step2UploadMatch({
             </label>
           </div>
 
+          {candidatesLoading && (
+            <p className="text-xs text-amber-700 flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading MMP site data… wait before running match
+            </p>
+          )}
+          {!candidatesLoading && candidates.length === 0 && wizardState.selectedMmpId && (
+            <p className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertCircle className="h-3 w-3" />
+              No MMP site entries found for this cycle — check the selected cycle
+            </p>
+          )}
           <Button
             type="button"
             size="sm"
             onClick={runMatch}
-            disabled={!hasValidPairs || running}
+            disabled={!hasValidPairs || running || candidatesLoading}
             data-testid="button-run-match"
           >
-            {running ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-            {running ? 'Running match…' : 'Run Matching'}
+            {(running || candidatesLoading) ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+            {running ? 'Running match…' : candidatesLoading ? 'Loading site data…' : 'Run Matching'}
           </Button>
         </div>
       )}
