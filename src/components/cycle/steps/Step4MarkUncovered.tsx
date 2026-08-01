@@ -156,17 +156,36 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     const notInWfpSet = new Set(notInWfpIds);
     const step3Set    = new Set(step3NotCovered);
 
-    setSites((data ?? []).map((s: any) => ({
-      id: s.id,
-      site_name: s.site_name,
-      state: s.state ?? '',
-      locality: s.locality ?? '',
-      hub_office: s.hub_office ?? '',
-      enumerator_name: s.accepted_by ?? '—',   // accepted_by is text (name/id)
-      source: step3Set.has(s.id) ? 'not_covered'
-            : notInWfpSet.has(s.id) ? 'not_in_wfp'
-            : 'rejected_match',
-    })));
+    // Resolve any UUID-shaped accepted_by values to profile full_names
+    const isUuid = (v: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    const uuids = [...new Set(
+      (data ?? []).map((s: any) => s.accepted_by).filter((v: any) => v && isUuid(String(v)))
+    )];
+    const nameMap: Record<string, string> = {};
+    if (uuids.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', uuids);
+      for (const p of profiles ?? []) if (p.full_name) nameMap[p.id] = p.full_name;
+    }
+
+    setSites((data ?? []).map((s: any) => {
+      const raw = s.accepted_by ?? '';
+      const resolved = raw && isUuid(raw) ? (nameMap[raw] ?? raw) : (raw || '—');
+      return {
+        id: s.id,
+        site_name: s.site_name,
+        state: s.state ?? '',
+        locality: s.locality ?? '',
+        hub_office: s.hub_office ?? '',
+        enumerator_name: resolved,
+        source: step3Set.has(s.id) ? 'not_covered'
+              : notInWfpSet.has(s.id) ? 'not_in_wfp'
+              : 'rejected_match',
+      };
+    }));
     setLoading(false);
   };
 

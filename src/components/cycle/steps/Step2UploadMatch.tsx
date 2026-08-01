@@ -108,6 +108,8 @@ export default function Step2UploadMatch({
   const [expandedReviewRows, setExpandedReviewRows] = useState<Set<number>>(new Set());
   const [candidates, setCandidates]     = useState<MatchCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [profileNameMap, setProfileNameMap] = useState<Record<string, string>>({});
+
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   // Track whether pairs have been auto-initialised for the current MMP + file combo
   const [pairsInitialized, setPairsInitialized] = useState(false);
@@ -187,11 +189,29 @@ export default function Step2UploadMatch({
       : Object.keys(MMP_COL_LABELS);
 
     setCandidates(cands);
-    setCandidatesLoading(false);
     updateWizardState({
       mmpColumns: mmpCols,
       mmpRawRows: cands.map(c => c.data),
     });
+
+    // Resolve UUID-shaped accepted_by values to profile names (secondary lookup —
+    // no FK exists so we can't join directly).
+    const isUuid = (v: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    const uuids = [...new Set(
+      cands.map(c => c.data['accepted_by']).filter(v => v && isUuid(v))
+    )];
+    if (uuids.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', uuids);
+      const map: Record<string, string> = {};
+      for (const p of profiles ?? []) if (p.full_name) map[p.id] = p.full_name;
+      setProfileNameMap(map);
+    }
+
+    setCandidatesLoading(false);
     // Trigger pair auto-detect on next render
     setPairsInitialized(false);
   };
@@ -1125,12 +1145,18 @@ export default function Step2UploadMatch({
                                         <div className="space-y-0.5">
                                           {Object.entries(matchedCandidate.data)
                                             .filter(([, v]) => v !== '')
-                                            .map(([k, v]) => (
-                                              <div key={k} className="flex gap-2 text-[11px]">
-                                                <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-32 truncate" title={k}>{k}:</span>
-                                                <span className="font-medium break-all">{v}</span>
-                                              </div>
-                                            ))}
+                                            .map(([k, v]) => {
+                                              const isUuidVal = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+                                              const display = k === 'accepted_by' && isUuidVal
+                                                ? (profileNameMap[v] ?? v)
+                                                : v;
+                                              return (
+                                                <div key={k} className="flex gap-2 text-[11px]">
+                                                  <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-32 truncate" title={k}>{k}:</span>
+                                                  <span className="font-medium break-all">{display}</span>
+                                                </div>
+                                              );
+                                            })}
                                         </div>
                                       ) : (
                                         <p className="text-xs text-muted-foreground italic">No MMP site was matched for this WFP row</p>
