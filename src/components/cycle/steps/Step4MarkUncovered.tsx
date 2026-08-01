@@ -87,10 +87,11 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [stateFilter, setStateFilter] = useState<string>('');
   const [siteDetails, setSiteDetails] = useState<SiteDetail[]>([]);
   const [siteDetailsLoading, setSiteDetailsLoading] = useState(false);
-  const [showSiteStatus, setShowSiteStatus] = useState(false);
+  const [showSiteStatus, setShowSiteStatus] = useState(true);
   const [siteSearch, setSiteSearch] = useState('');
   const [sortCol, setSortCol] = useState<keyof SiteDetail>('state');
   const [sortAsc, setSortAsc] = useState(true);
+  const [coverageFilter, setCoverageFilter] = useState<'' | 'Covered' | 'Not Covered' | 'Pending'>('');
 
   useEffect(() => {
     if (wizardState.selectedMmpId) {
@@ -510,19 +511,19 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         </div>
       )}
 
-      {/* ── Full Site Status Table ─────────────────────────────────────────── */}
-      {siteDetails.length > 0 && (() => {
+      {/* ── Full Site Status Table + Inline Reason Assignment ──────────────── */}
+      {(() => {
+        // Helpers
         const toggleSort = (col: keyof SiteDetail) => {
           if (sortCol === col) setSortAsc(a => !a);
           else { setSortCol(col); setSortAsc(true); }
         };
-
         const matchingStatusColor = (s: SiteDetail['matching_status']) => {
           if (s === 'Auto-Confirmed' || s === 'Confirmed') return 'bg-green-100 text-green-700 border-green-300';
-          if (s === 'Extra')          return 'bg-teal-100 text-teal-700 border-teal-300';
-          if (s === 'Needs Review')   return 'bg-amber-100 text-amber-700 border-amber-300';
-          if (s === 'Rejected')       return 'bg-red-100 text-red-700 border-red-300';
-          if (s === 'Not in WFP File')return 'bg-slate-100 text-slate-600 border-slate-300';
+          if (s === 'Extra')           return 'bg-teal-100 text-teal-700 border-teal-300';
+          if (s === 'Needs Review')    return 'bg-amber-100 text-amber-700 border-amber-300';
+          if (s === 'Rejected')        return 'bg-red-100 text-red-700 border-red-300';
+          if (s === 'Not in WFP File') return 'bg-slate-100 text-slate-600 border-slate-300';
           return 'bg-orange-100 text-orange-700 border-orange-300';
         };
         const coverageColor = (c: SiteDetail['coverage']) =>
@@ -530,13 +531,19 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           c === 'Not Covered' ? 'bg-red-100 text-red-700 border-red-300'       :
                                 'bg-amber-100 text-amber-700 border-amber-300';
 
+        // Which sites need a reason assigned?
+        const uncoveredSiteIds = new Set(sites.map(s => s.id));
+        const siteSourceMap: Record<string, UncoveredSite['source']> = {};
+        for (const s of sites) siteSourceMap[s.id] = s.source;
+
         const searchLow = siteSearch.toLowerCase();
         const filtered = siteDetails
           .filter(s =>
-            (!stateFilter || s.state === stateFilter) &&
+            (!stateFilter    || s.state    === stateFilter) &&
+            (!coverageFilter || s.coverage === coverageFilter) &&
             (!searchLow ||
-              s.site_name.toLowerCase().includes(searchLow) ||
-              s.locality.toLowerCase().includes(searchLow) ||
+              s.site_name.toLowerCase().includes(searchLow)  ||
+              s.locality.toLowerCase().includes(searchLow)   ||
               s.hub_office.toLowerCase().includes(searchLow) ||
               s.site_code.toLowerCase().includes(searchLow))
           )
@@ -546,22 +553,25 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
             return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
           });
 
+        // How many uncovered in current filter still need a reason
+        const pendingInView = filtered.filter(s => uncoveredSiteIds.has(s.id) && !wizardState.uncoveredReasons[s.id]?.reason).length;
+
         const exportSiteStatus = () => {
           const rows = filtered.map(s => ({
-            'Site Code':        s.site_code,
-            'Site Name':        s.site_name,
-            State:              s.state,
-            Locality:           s.locality,
-            'Hub / Office':     s.hub_office,
-            'System Status':    s.system_status,
-            'In WFP File':      s.wfp_in_file ? 'Yes' : 'No',
-            'WFP Row (Primary)':s.wfp_row_primary ?? '—',
-            'Match Score':      s.match_score != null ? `${s.match_score}%` : '—',
-            'Match Level':      s.match_level ?? '—',
-            'Matching Status':  s.matching_status,
-            'Action Taken':     s.action_taken ?? '—',
-            'Coverage':         s.coverage,
-            'Not-Covered Reason': s.not_covered_reason ?? '—',
+            'Site Code':          s.site_code,
+            'Site Name':          s.site_name,
+            State:                s.state,
+            Locality:             s.locality,
+            'Hub / Office':       s.hub_office,
+            'System Status':      s.system_status,
+            'In WFP File':        s.wfp_in_file ? 'Yes' : 'No',
+            'WFP Row (Primary)':  s.wfp_row_primary ?? '—',
+            'Match Score':        s.match_score != null ? `${s.match_score}%` : '—',
+            'Match Level':        s.match_level ?? '—',
+            'Matching Status':    s.matching_status,
+            'Action Taken':       s.action_taken ?? '—',
+            Coverage:             s.coverage,
+            'Not-Covered Reason': s.not_covered_reason ?? (wizardState.uncoveredReasons[s.id]?.reason ?? '—'),
           }));
           const ws = XLSX.utils.json_to_sheet(rows);
           const wb = XLSX.utils.book_new();
@@ -569,163 +579,374 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           XLSX.writeFile(wb, 'site-status-full.xlsx');
         };
 
-        const SortTh = ({ col, label }: { col: keyof SiteDetail; label: string }) => (
+        const SortTh = ({ col, label, className = '' }: { col: keyof SiteDetail; label: string; className?: string }) => (
           <th
-            className="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 select-none"
+            className={`px-3 py-2.5 text-left font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200 dark:hover:bg-slate-700 ${className}`}
             onClick={() => toggleSort(col)}
           >
             <span className="flex items-center gap-1">
               {label}
-              <ArrowUpDown className={`h-3 w-3 ${sortCol === col ? 'text-primary' : 'text-muted-foreground/40'}`} />
+              <ArrowUpDown className={`h-3 w-3 flex-shrink-0 ${sortCol === col ? 'text-primary' : 'text-muted-foreground/30'}`} />
             </span>
           </th>
         );
 
+        // Count badges for the header
+        const covCount  = siteDetails.filter(s => s.coverage === 'Covered').length;
+        const ncCount   = siteDetails.filter(s => s.coverage === 'Not Covered').length;
+        const pendCount = siteDetails.filter(s => s.coverage === 'Pending').length;
+
         return (
-          <div className="border rounded-lg overflow-hidden">
-            {/* Header */}
+          <div className="border rounded-lg overflow-hidden shadow-sm">
+
+            {/* ── Panel header (toggle) ──────────────────────────────── */}
             <button
               type="button"
               onClick={() => setShowSiteStatus(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900 text-sm font-medium hover:bg-slate-100 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
-              <span className="flex items-center gap-2">
-                🗂 Full Site Status Table
+              <span className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm">🗂 Full Site Status Table</span>
                 <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">{siteDetails.length} sites</Badge>
-                <span className="text-xs font-normal text-muted-foreground">WFP · System · Matching · Action</span>
+                <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">✓ {covCount}</Badge>
+                <Badge className="bg-red-100 text-red-700 border-red-300 text-xs">✗ {ncCount}</Badge>
+                {pendCount > 0 && <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">⏳ {pendCount}</Badge>}
+                {sites.length > 0 && (
+                  <Badge className={`text-xs ${allAssigned ? 'bg-green-100 text-green-700 border-green-300' : 'bg-orange-100 text-orange-700 border-orange-300'}`}>
+                    {allAssigned ? '✓ All reasons assigned' : `${sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length} reasons pending`}
+                  </Badge>
+                )}
+                <span className="text-xs font-normal text-muted-foreground hidden sm:inline">WFP · System · Matching · Reason</span>
               </span>
-              {showSiteStatus ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {showSiteStatus ? <ChevronDown className="h-4 w-4 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 flex-shrink-0" />}
             </button>
 
             {showSiteStatus && (
               <>
-                {/* Toolbar */}
-                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white dark:bg-slate-900 flex-wrap">
-                  <div className="relative flex-1 min-w-48">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      className="h-8 pl-8 text-xs"
-                      placeholder="Search site name, locality, hub, code…"
-                      value={siteSearch}
-                      onChange={e => setSiteSearch(e.target.value)}
-                    />
+                {/* ── Filters toolbar ───────────────────────────────── */}
+                <div className="border-b bg-white dark:bg-slate-900 px-4 py-2.5 space-y-2">
+                  {/* Row 1: search + count */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative flex-1 min-w-48">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        className="h-8 pl-8 text-xs"
+                        placeholder="Search site name, locality, hub, code…"
+                        value={siteSearch}
+                        onChange={e => setSiteSearch(e.target.value)}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">
+                      {filtered.length} of {siteDetails.length} sites
+                    </span>
                   </div>
-                  {stateFilter && (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
-                      {stateFilter}
-                      <button type="button" className="ml-1.5" onClick={() => setStateFilter('')}>×</button>
-                    </Badge>
-                  )}
-                  <span className="text-xs text-muted-foreground">{filtered.length} of {siteDetails.length}</span>
-                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={exportSiteStatus}>
-                    <Download className="h-3 w-3 mr-1.5" /> Export All
-                  </Button>
-                  {(() => {
-                    const notInWfpFiltered = filtered.filter(s => s.matching_status === 'Not in WFP File');
-                    return notInWfpFiltered.length > 0 ? (
-                      <Button
-                        type="button" size="sm" variant="outline"
-                        className="h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
-                        onClick={() => exportNotInWfpReport(
-                          notInWfpFiltered.map(s => ({
-                            site_code:     s.site_code,
-                            site_name:     s.site_name,
-                            state:         s.state,
-                            locality:      s.locality,
-                            hub_office:    s.hub_office,
-                            system_status: s.system_status,
-                          } satisfies NotInWfpSite)),
-                          wizardState.selectedMmp?.name ?? 'Cycle'
-                        )}
+
+                  {/* Row 2: filter chips + export buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* State filter chip */}
+                    {stateFilter ? (
+                      <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs cursor-pointer hover:bg-blue-200" onClick={() => setStateFilter('')}>
+                        📍 {stateFilter} ×
+                      </Badge>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">Click a state in Coverage Breakdown to filter</span>
+                    )}
+
+                    {/* Coverage filter buttons */}
+                    {(['', 'Covered', 'Not Covered', 'Pending'] as const).map(cf => (
+                      <button
+                        key={cf}
+                        type="button"
+                        onClick={() => setCoverageFilter(cf)}
+                        className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                          coverageFilter === cf
+                            ? cf === ''           ? 'bg-slate-700 text-white border-slate-700'
+                            : cf === 'Covered'    ? 'bg-green-600 text-white border-green-600'
+                            : cf === 'Not Covered'? 'bg-red-600 text-white border-red-600'
+                                                  : 'bg-amber-500 text-white border-amber-500'
+                            : 'bg-white text-muted-foreground border-slate-200 hover:bg-slate-50'
+                        }`}
                       >
-                        <Download className="h-3 w-3 mr-1.5" />
-                        Not-in-WFP Report ({notInWfpFiltered.length})
-                      </Button>
-                    ) : null;
-                  })()}
+                        {cf === '' ? 'All' : cf}
+                        {cf === 'Covered'     && ` (${covCount})`}
+                        {cf === 'Not Covered' && ` (${ncCount})`}
+                        {cf === 'Pending'     && ` (${pendCount})`}
+                      </button>
+                    ))}
+
+                    <div className="flex-1" />
+
+                    {/* Export buttons */}
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={exportSiteStatus}>
+                      <Download className="h-3 w-3 mr-1" /> Export All
+                    </Button>
+                    {(() => {
+                      const niw = filtered.filter(s => s.matching_status === 'Not in WFP File');
+                      return niw.length > 0 ? (
+                        <Button
+                          type="button" size="sm" variant="outline"
+                          className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                          onClick={() => exportNotInWfpReport(
+                            niw.map(s => ({
+                              site_code: s.site_code, site_name: s.site_name,
+                              state: s.state, locality: s.locality,
+                              hub_office: s.hub_office, system_status: s.system_status,
+                            } satisfies NotInWfpSite)),
+                            wizardState.selectedMmp?.name ?? 'Cycle'
+                          )}
+                        >
+                          <Download className="h-3 w-3 mr-1" />
+                          Not-in-WFP ({niw.length})
+                        </Button>
+                      ) : null;
+                    })()}
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={exportNotCoveredReport} disabled={sites.length === 0}>
+                      <Download className="h-3 w-3 mr-1" /> Not-Covered Report
+                    </Button>
+                  </div>
                 </div>
 
+                {/* ── Bulk assignment bar (only when rows selected) ──── */}
+                {selected.size > 0 && (
+                  <div className="border-b px-4 py-2.5 bg-blue-50 dark:bg-blue-950/20 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">
+                      {selected.size} site{selected.size > 1 ? 's' : ''} selected — bulk assign:
+                    </span>
+                    <Select value={bulkReason} onValueChange={setBulkReason}>
+                      <SelectTrigger className="h-7 text-xs w-52" data-testid="select-bulk-reason">
+                        <SelectValue placeholder="Select reason…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Textarea
+                      placeholder="Optional note…"
+                      value={bulkNote}
+                      onChange={e => setBulkNote(e.target.value)}
+                      className="h-7 min-h-[1.75rem] text-xs resize-none flex-1 min-w-32"
+                      rows={1}
+                    />
+                    <Button type="button" size="sm" className="h-7 text-xs" onClick={applyBulk} disabled={!bulkReason} data-testid="button-apply-bulk">
+                      Apply to {selected.size}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setSelected(new Set())}>
+                      Clear
+                    </Button>
+                  </div>
+                )}
+
+                {/* ── Flags / alerts ────────────────────────────────── */}
+                {flaggedCount > 0 && (
+                  <div className="border-b px-4 py-2 bg-red-50 flex items-center gap-2 text-xs text-red-800">
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />
+                    {flaggedCount} site{flaggedCount > 1 ? 's' : ''} flagged with Security / Access issues — follow-up actions will be auto-created for the next cycle.
+                  </div>
+                )}
+
+                {/* ── Table ─────────────────────────────────────────── */}
                 {siteDetailsLoading ? (
-                  <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                   </div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+                  <div className="overflow-x-auto" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                     <table className="w-full text-xs border-collapse">
-                      <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10">
+                      <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                         <tr>
-                          <SortTh col="site_name"        label="Site Name" />
-                          <SortTh col="state"            label="State" />
-                          <SortTh col="locality"         label="Locality" />
-                          <SortTh col="hub_office"       label="Hub" />
-                          <SortTh col="system_status"    label="System Status" />
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">In WFP File</th>
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">WFP Row (Primary)</th>
-                          <SortTh col="match_score"      label="Score" />
-                          <SortTh col="matching_status"  label="Matching Status" />
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Action Taken</th>
-                          <SortTh col="coverage"         label="Coverage" />
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">NC Reason</th>
+                          {/* Select-all checkbox */}
+                          <th className="px-3 py-2.5 w-8">
+                            <Checkbox
+                              checked={selected.size > 0 && [...filtered].filter(s => uncoveredSiteIds.has(s.id)).every(s => selected.has(s.id))}
+                              onCheckedChange={v => {
+                                const ids = filtered.filter(s => uncoveredSiteIds.has(s.id)).map(s => s.id);
+                                setSelected(prev => {
+                                  const n = new Set(prev);
+                                  ids.forEach(id => v ? n.add(id) : n.delete(id));
+                                  return n;
+                                });
+                              }}
+                            />
+                          </th>
+                          <SortTh col="site_name"       label="Site Name"       className="min-w-[140px]" />
+                          <SortTh col="state"           label="State" />
+                          <SortTh col="locality"        label="Locality" />
+                          <SortTh col="hub_office"      label="Hub / Office" />
+                          <SortTh col="system_status"   label="Sys. Status" />
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">WFP</th>
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">WFP Row (Primary)</th>
+                          <SortTh col="match_score"     label="Score" />
+                          <SortTh col="matching_status" label="Matching Status"  className="min-w-[130px]" />
+                          <SortTh col="coverage"        label="Coverage" />
+                          <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap min-w-[180px]">
+                            Reason Not Covered
+                            {pendingInView > 0 && (
+                              <span className="ml-1.5 text-[10px] text-orange-600 font-normal">{pendingInView} pending</span>
+                            )}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.map((s, i) => (
-                          <tr key={s.id} className={`border-t ${i % 2 === 0 ? '' : 'bg-muted/20'} hover:bg-primary/5`}>
-                            <td className="px-3 py-1.5 font-medium max-w-[180px] truncate" title={s.site_name}>{s.site_name || '—'}</td>
-                            <td className="px-3 py-1.5 whitespace-nowrap">{s.state || '—'}</td>
-                            <td className="px-3 py-1.5 max-w-[120px] truncate" title={s.locality}>{s.locality || '—'}</td>
-                            <td className="px-3 py-1.5 max-w-[120px] truncate" title={s.hub_office}>{s.hub_office || '—'}</td>
-                            <td className="px-3 py-1.5">
-                              <Badge variant="outline" className="text-[10px] capitalize">{s.system_status}</Badge>
-                            </td>
-                            <td className="px-3 py-1.5 text-center">
-                              {s.wfp_in_file
-                                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mx-auto" />
-                                : <span className="text-muted-foreground">—</span>}
-                            </td>
-                            <td className="px-3 py-1.5 max-w-[140px] truncate text-muted-foreground" title={s.wfp_row_primary ?? ''}>
-                              {s.wfp_row_primary ?? '—'}
-                            </td>
-                            <td className="px-3 py-1.5 text-center">
-                              {s.match_score != null
-                                ? <span className={`font-semibold ${s.match_score >= 80 ? 'text-green-600' : s.match_score >= 55 ? 'text-amber-600' : 'text-red-500'}`}>{s.match_score}%</span>
-                                : <span className="text-muted-foreground">—</span>}
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <Badge variant="outline" className={`text-[10px] ${matchingStatusColor(s.matching_status)}`}>
-                                {s.matching_status}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-1.5">
-                              {s.action_taken
-                                ? <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">{s.action_taken}</Badge>
-                                : <span className="text-muted-foreground">—</span>}
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <Badge variant="outline" className={`text-[10px] ${coverageColor(s.coverage)}`}>
-                                {s.coverage}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-1.5 max-w-[140px] truncate text-muted-foreground" title={s.not_covered_reason ?? ''}>
-                              {s.not_covered_reason ?? '—'}
+                        {filtered.map((s, i) => {
+                          const needsReason  = uncoveredSiteIds.has(s.id);
+                          const assigned     = wizardState.uncoveredReasons[s.id];
+                          const isSelected   = selected.has(s.id);
+                          const isFlagged    = assigned?.flagged;
+                          const source       = siteSourceMap[s.id];
+                          const sourceLabel  = source === 'rejected_match' ? 'WFP Rejected'
+                                             : source === 'not_in_wfp'    ? 'Not in WFP File'
+                                             : source === 'not_covered'   ? 'Unresolved (Step 3)'
+                                             : null;
+                          const reasonLabel  = NOT_COVERED_REASONS.find(r => r.value === assigned?.reason)?.label ?? null;
+
+                          return (
+                            <tr
+                              key={s.id}
+                              className={`border-t transition-colors
+                                ${isFlagged    ? 'bg-red-50/60 dark:bg-red-950/20' :
+                                  isSelected   ? 'bg-blue-50/60 dark:bg-blue-950/20' :
+                                  i % 2 === 1  ? 'bg-muted/20' : ''}
+                                hover:bg-primary/5`}
+                            >
+                              {/* Checkbox — only for uncovered sites */}
+                              <td className="px-3 py-2">
+                                {needsReason ? (
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={v => setSelected(prev => {
+                                      const n = new Set(prev);
+                                      v ? n.add(s.id) : n.delete(s.id);
+                                      return n;
+                                    })}
+                                    data-testid={`checkbox-site-${s.id}`}
+                                  />
+                                ) : <span />}
+                              </td>
+
+                              {/* Site name + source badge */}
+                              <td className="px-3 py-2">
+                                <div className="font-medium leading-tight" title={s.site_name}>{s.site_name || '—'}</div>
+                                {sourceLabel && (
+                                  <span className={`text-[10px] px-1 rounded border leading-tight inline-block mt-0.5
+                                    ${source === 'rejected_match' ? 'border-orange-300 text-orange-700' :
+                                      source === 'not_in_wfp'    ? 'border-slate-400 text-slate-600' :
+                                                                    'border-purple-300 text-purple-700'}`}>
+                                    {sourceLabel}
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{s.state || '—'}</td>
+                              <td className="px-3 py-2 max-w-[110px] truncate text-muted-foreground" title={s.locality}>{s.locality || '—'}</td>
+                              <td className="px-3 py-2 max-w-[120px] truncate" title={s.hub_office}>{s.hub_office || '—'}</td>
+
+                              {/* System status */}
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className="text-[10px] capitalize font-normal">{s.system_status}</Badge>
+                              </td>
+
+                              {/* In WFP file */}
+                              <td className="px-3 py-2 text-center">
+                                {s.wfp_in_file
+                                  ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mx-auto" />
+                                  : <span className="text-muted-foreground/50 text-base leading-none">—</span>}
+                              </td>
+
+                              {/* WFP primary value */}
+                              <td className="px-3 py-2 max-w-[130px] truncate text-muted-foreground" title={s.wfp_row_primary ?? ''}>
+                                {s.wfp_row_primary ?? '—'}
+                              </td>
+
+                              {/* Match score */}
+                              <td className="px-3 py-2 text-center">
+                                {s.match_score != null
+                                  ? <span className={`font-semibold tabular-nums ${s.match_score >= 80 ? 'text-green-600' : s.match_score >= 55 ? 'text-amber-600' : 'text-red-500'}`}>
+                                      {s.match_score}%
+                                    </span>
+                                  : <span className="text-muted-foreground/50">—</span>}
+                              </td>
+
+                              {/* Matching status */}
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className={`text-[10px] ${matchingStatusColor(s.matching_status)}`}>
+                                  {s.matching_status}
+                                </Badge>
+                              </td>
+
+                              {/* Coverage */}
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className={`text-[10px] ${coverageColor(s.coverage)}`}>
+                                  {s.coverage}
+                                </Badge>
+                              </td>
+
+                              {/* Reason — editable dropdown for uncovered sites */}
+                              <td className="px-3 py-1.5">
+                                {needsReason ? (
+                                  <div className="space-y-1">
+                                    {isFlagged && (
+                                      <span className="text-[10px] text-red-600 flex items-center gap-0.5">
+                                        <AlertTriangle className="h-3 w-3" /> Follow-up flagged
+                                      </span>
+                                    )}
+                                    <Select
+                                      value={assigned?.reason ?? ''}
+                                      onValueChange={v => setReason(s.id, { reason: v })}
+                                    >
+                                      <SelectTrigger className={`h-7 text-[11px] w-full ${assigned?.reason ? 'border-green-300 bg-green-50' : 'border-orange-300 bg-orange-50'}`} data-testid={`select-reason-${s.id}`}>
+                                        <SelectValue placeholder="Select reason…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                    {assigned?.reason === 'other' && (
+                                      <Textarea
+                                        placeholder="Specify…"
+                                        value={assigned?.note ?? ''}
+                                        onChange={e => setReason(s.id, { note: e.target.value })}
+                                        className="h-6 min-h-[1.5rem] text-[11px] w-full resize-none"
+                                        rows={1}
+                                        data-testid={`input-reason-note-${s.id}`}
+                                      />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground/50 text-base leading-none">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground italic">
+                              No sites match the current filter
                             </td>
                           </tr>
-                        ))}
-                        {filtered.length === 0 && (
-                          <tr><td colSpan={12} className="px-4 py-8 text-center text-muted-foreground italic">No sites match the current filter</td></tr>
                         )}
                       </tbody>
                     </table>
                   </div>
                 )}
 
-                {/* Legend */}
-                <div className="border-t px-4 py-2.5 bg-muted/20 flex flex-wrap gap-3 text-[10px]">
+                {/* ── Footer: legend + progress ──────────────────────── */}
+                <div className="border-t px-4 py-2.5 bg-muted/20 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px]">
                   <span className="font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
-                  {(['Auto-Confirmed','Confirmed','Extra','Needs Review','Rejected','Not in WFP File'] as SiteDetail['matching_status'][]).map(s => (
-                    <span key={s} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${matchingStatusColor(s)}`}>{s}</span>
+                  {(['Auto-Confirmed','Confirmed','Extra','Needs Review','Rejected','Not in WFP File'] as SiteDetail['matching_status'][]).map(st => (
+                    <span key={st} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border ${matchingStatusColor(st)}`}>{st}</span>
                   ))}
-                  <span className="text-muted-foreground ml-2">Click a state in Coverage Breakdown to filter · Click column header to sort</span>
+                  {sites.length > 0 && !allAssigned && (
+                    <span className="ml-auto text-orange-700 font-medium">
+                      <AlertCircle className="h-3 w-3 inline mr-0.5" />
+                      {sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length} site{sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length !== 1 ? 's' : ''} still need a reason before advancing
+                    </span>
+                  )}
+                  {sites.length === 0 && (
+                    <span className="ml-auto text-green-700 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> No uncovered sites — ready to continue
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -733,141 +954,9 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         );
       })()}
 
-      {/* State filter chip */}
-      {stateFilter && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Filtered by state:</span>
-          <Badge className="bg-blue-100 text-blue-700 border-blue-300">
-            {stateFilter}
-            <button type="button" className="ml-1.5 hover:text-blue-900" onClick={() => setStateFilter('')}>×</button>
-          </Badge>
-        </div>
-      )}
-
-      {sites.length === 0 ? (
-        <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-          <p className="text-sm text-green-800 font-medium">No uncovered sites to assign reasons to. Ready to continue.</p>
-        </div>
-      ) : (
-        <>
-          {flaggedCount > 0 && (
-            <Alert className="bg-red-50 border-red-200">
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">
-                {flaggedCount} site{flaggedCount > 1 ? 's' : ''} flagged with Security/Access issues — follow-up actions will be auto-created for the next cycle.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Bulk assignment */}
-          {selected.size > 0 && (
-            <div className="border border-blue-200 bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 space-y-3">
-              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">{selected.size} site{selected.size > 1 ? 's' : ''} selected — bulk assign reason:</p>
-              <div className="flex gap-2 flex-wrap">
-                <Select value={bulkReason} onValueChange={setBulkReason}>
-                  <SelectTrigger className="w-64 h-8 text-sm" data-testid="select-bulk-reason">
-                    <SelectValue placeholder="Select reason…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Textarea
-                  placeholder="Optional note…"
-                  value={bulkNote}
-                  onChange={e => setBulkNote(e.target.value)}
-                  className="h-8 min-h-[2rem] text-sm resize-none"
-                  rows={1}
-                />
-                <Button type="button" size="sm" onClick={applyBulk} disabled={!bulkReason} data-testid="button-apply-bulk">
-                  Apply to {selected.size} sites
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {sites.filter(s => !stateFilter || s.state === stateFilter).map(site => {
-              const assigned = wizardState.uncoveredReasons[site.id];
-              const isSelected = selected.has(site.id);
-              const isFlagged = assigned?.flagged;
-              const sourceLabel =
-                site.source === 'rejected_match' ? 'WFP Rejected'
-                : site.source === 'not_in_wfp'   ? 'Not in WFP File'
-                : site.source === 'not_covered'   ? 'Unresolved (Step 3)'
-                : 'DB: Not Covered';
-              const sourceBadgeClass =
-                site.source === 'rejected_match' ? 'border-orange-300 text-orange-700'
-                : site.source === 'not_in_wfp'   ? 'border-slate-400 text-slate-600'
-                : 'border-purple-300 text-purple-700';
-              return (
-                <div key={site.id} className={`border rounded-lg p-4 space-y-3 ${isFlagged ? 'border-red-300 bg-red-50/30' : ''}`}>
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={v => setSelected(prev => {
-                        const n = new Set(prev);
-                        v ? n.add(site.id) : n.delete(site.id);
-                        return n;
-                      })}
-                      data-testid={`checkbox-site-${site.id}`}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm">{site.site_name}</p>
-                        {isFlagged && <Badge className="bg-red-100 text-red-700 border-red-300 text-xs">⚠️ Follow-up Required</Badge>}
-                        <Badge variant="outline" className={`text-xs ${sourceBadgeClass}`}>{sourceLabel}</Badge>
-                        {site.hub_office && <span className="text-xs text-muted-foreground">{site.hub_office}</span>}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumerator_name}</p>
-                    </div>
-                    {assigned?.reason && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
-                  </div>
-                  <div className="flex gap-2 pl-8 flex-wrap">
-                    <Select
-                      value={assigned?.reason ?? ''}
-                      onValueChange={v => setReason(site.id, { reason: v })}
-                    >
-                      <SelectTrigger className="w-64 h-8 text-xs" data-testid={`select-reason-${site.id}`}>
-                        <SelectValue placeholder="Select reason…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    {assigned?.reason === 'other' && (
-                      <Textarea
-                        placeholder="Specify reason…"
-                        value={assigned?.note ?? ''}
-                        onChange={e => setReason(site.id, { note: e.target.value })}
-                        className="flex-1 min-h-[2rem] text-xs"
-                        rows={1}
-                        data-testid={`input-reason-note-${site.id}`}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {!allAssigned && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>All uncovered sites must have a reason assigned before advancing to the next step.</AlertDescription>
-            </Alert>
-          )}
-        </>
-      )}
-
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
           {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step4">← Back</Button>}
-          <Button type="button" variant="outline" size="sm" onClick={exportNotCoveredReport} disabled={sites.length === 0} data-testid="button-export-not-covered">
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export Not-Covered Report
-          </Button>
         </div>
         <Button type="button" onClick={saveAndNext} disabled={!allAssigned || saving} data-testid="button-next-step4">
           {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
