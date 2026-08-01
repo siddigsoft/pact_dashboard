@@ -104,6 +104,8 @@ export default function Step2UploadMatch({
   const [manualCandidates, setManualCandidates] = useState<Record<number, MatchCandidate[]>>({});
   const [showReviewTable, setShowReviewTable] = useState(true);
   const [showMmpPreview, setShowMmpPreview] = useState(false);
+  const [showNotInClean, setShowNotInClean] = useState(false);
+  const [expandedReviewRows, setExpandedReviewRows] = useState<Set<number>>(new Set());
   const [candidates, setCandidates]     = useState<MatchCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
@@ -884,12 +886,63 @@ export default function Step2UploadMatch({
               <p className="text-xl font-bold text-red-700">{unmatchedCount}</p>
               <p className="text-xs text-red-600">Unmatched rows</p>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 rounded-lg p-3 text-center">
+            <button
+              type="button"
+              onClick={() => setShowNotInClean(p => !p)}
+              className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 rounded-lg p-3 text-center hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors w-full"
+            >
               <AlertCircle className="h-5 w-5 text-slate-500 mx-auto mb-1" />
-              <p className="text-xl font-bold text-slate-700">{candidates.length - autoCount}</p>
+              <p className="text-xl font-bold text-slate-700">{(wizardState.unmatchedMmpSiteIds ?? []).length}</p>
               <p className="text-xs text-slate-500">Not in clean data</p>
-            </div>
+              <p className="text-[10px] text-primary mt-0.5">{showNotInClean ? 'Hide ▲' : 'Show sites ▼'}</p>
+            </button>
           </div>
+
+          {/* Not-in-clean-data detail panel */}
+          {showNotInClean && (wizardState.unmatchedMmpSiteIds ?? []).length > 0 && (() => {
+            const notInCleanSet = new Set(wizardState.unmatchedMmpSiteIds ?? []);
+            const notInCleanCands = candidates.filter(c => notInCleanSet.has(c.siteId));
+            return (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border-b">
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-slate-500" />
+                    MMP Sites Not in WFP Clean Data ({notInCleanCands.length})
+                  </span>
+                  <span className="text-xs text-muted-foreground">These sites exist in the MMP system but had no matching WFP row — they will flow into Step 4 as uncovered sites</span>
+                </div>
+                <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">#</th>
+                        <th className="px-3 py-2 text-left font-medium">Site Name</th>
+                        <th className="px-3 py-2 text-left font-medium">State</th>
+                        <th className="px-3 py-2 text-left font-medium">Locality</th>
+                        <th className="px-3 py-2 text-left font-medium">Hub / Office</th>
+                        <th className="px-3 py-2 text-left font-medium">Site Code</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {notInCleanCands.map((c, i) => (
+                        <tr key={c.siteId} className={`border-t ${i % 2 === 0 ? '' : 'bg-muted/20'}`}>
+                          <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                          <td className="px-3 py-1.5 font-medium">{c.data.site_name || '—'}</td>
+                          <td className="px-3 py-1.5">{c.data.state || '—'}</td>
+                          <td className="px-3 py-1.5">{c.data.locality || '—'}</td>
+                          <td className="px-3 py-1.5">{c.data.hub_office || '—'}</td>
+                          <td className="px-3 py-1.5 font-mono text-muted-foreground">{c.data.site_code || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="border-t px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">
+                  Showing all {notInCleanCands.length} sites · assign reasons in Step 4
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Review Table */}
           {(needsReview.length > 0 || unmatchedRows.length > 0) && (
@@ -934,90 +987,162 @@ export default function Step2UploadMatch({
                       </tr>
                     </thead>
                     <tbody>
-                      {[...needsReview, ...unmatchedRows].map(r => (
-                        <tr key={r.rowIndex} className="border-t hover:bg-muted/20">
-                          <td className="px-3 py-2">
-                            <div className="font-medium">
-                              {primaryPair ? (r.wfpRow[primaryPair.wfpColumn] ?? '—') : '—'}
-                            </div>
-                            {secondaryPairs.length > 0 && (
-                              <div className="text-muted-foreground text-[11px]">
-                                {secondaryPairs.map(p => r.wfpRow[p.wfpColumn]).filter(Boolean).join(' / ')}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.matchedSiteName
-                              ? <span className="text-blue-600">{r.matchedSiteName}</span>
-                              : <span className="text-muted-foreground italic">No match found</span>}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${r.matchScore >= 78 ? 'text-green-600' : r.matchScore >= 50 ? 'text-amber-600' : 'text-red-500'}`}
-                            >
-                              {r.matchScore}%
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge variant="outline" className="text-xs capitalize">{r.matchLevel}</Badge>
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.status === 'actioned' ? (
-                              <Badge className="bg-green-100 text-green-700 text-xs">{r.action}</Badge>
-                            ) : (
-                              <div className="space-y-1.5">
-                                <div className="flex gap-1">
-                                  <Button
-                                    type="button" size="sm" variant="outline"
-                                    className="h-6 text-xs px-2"
-                                    onClick={() => handleAction(r.rowIndex, 'confirm')}
-                                    data-testid={`button-confirm-${r.rowIndex}`}
-                                  >Confirm</Button>
-                                  <Button
-                                    type="button" size="sm" variant="outline"
-                                    className="h-6 text-xs px-2"
-                                    onClick={() => handleAction(r.rowIndex, 'extra')}
-                                    data-testid={`button-extra-${r.rowIndex}`}
-                                  >Extra</Button>
-                                  <Button
-                                    type="button" size="sm" variant="outline"
-                                    className="h-6 text-xs px-2 text-red-600 border-red-200"
-                                    onClick={() => handleAction(r.rowIndex, 'reject')}
-                                    data-testid={`button-reject-${r.rowIndex}`}
-                                  >Reject</Button>
-                                </div>
-                                <div className="relative">
-                                  <Search className="absolute left-1.5 top-1 h-3 w-3 text-muted-foreground" />
-                                  <Input
-                                    className="h-6 text-xs pl-5"
-                                    placeholder="Link to site…"
-                                    value={manualSearch[r.rowIndex] ?? ''}
-                                    onChange={e => handleManualSearch(r.rowIndex, e.target.value)}
-                                    data-testid={`input-manual-search-${r.rowIndex}`}
-                                  />
-                                  {(manualCandidates[r.rowIndex] ?? []).length > 0 && (
-                                    <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">
-                                      {manualCandidates[r.rowIndex].map(c => (
-                                        <div
-                                          key={c.siteId}
-                                          className="px-2 py-1 hover:bg-muted cursor-pointer text-xs"
-                                          onClick={() => handleManualLink(r.rowIndex, c)}
-                                        >
-                                          <span className="font-medium">{c.data.site_name ?? '—'}</span>
-                                          <span className="text-muted-foreground ml-1">
-                                            {c.data.state}/{c.data.locality}
-                                          </span>
-                                        </div>
-                                      ))}
+                      {[...needsReview, ...unmatchedRows].map(r => {
+                        const isExpanded = expandedReviewRows.has(r.rowIndex);
+                        const toggleExpand = () => setExpandedReviewRows(prev => {
+                          const n = new Set(prev);
+                          isExpanded ? n.delete(r.rowIndex) : n.add(r.rowIndex);
+                          return n;
+                        });
+                        const matchedCandidate = r.matchedSiteId
+                          ? candidates.find(c => c.siteId === r.matchedSiteId)
+                          : null;
+                        const wfpCols = wizardState.fileColumns;
+                        return (
+                          <>
+                            <tr key={r.rowIndex} className="border-t hover:bg-muted/20">
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                                    onClick={toggleExpand}
+                                    title={isExpanded ? 'Collapse details' : 'Expand full details'}
+                                  >
+                                    {isExpanded
+                                      ? <ChevronUp className="h-3.5 w-3.5" />
+                                      : <ChevronDown className="h-3.5 w-3.5" />}
+                                  </button>
+                                  <div>
+                                    <div className="font-medium">
+                                      {primaryPair ? (r.wfpRow[primaryPair.wfpColumn] ?? '—') : '—'}
                                     </div>
-                                  )}
+                                    {secondaryPairs.length > 0 && (
+                                      <div className="text-muted-foreground text-[11px]">
+                                        {secondaryPairs.map(p => r.wfpRow[p.wfpColumn]).filter(Boolean).join(' / ')}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
+                              </td>
+                              <td className="px-3 py-2">
+                                {r.matchedSiteName
+                                  ? <span className="text-blue-600">{r.matchedSiteName}</span>
+                                  : <span className="text-muted-foreground italic">No match found</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${r.matchScore >= 78 ? 'text-green-600' : r.matchScore >= 50 ? 'text-amber-600' : 'text-red-500'}`}
+                                >
+                                  {r.matchScore}%
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className="text-xs capitalize">{r.matchLevel}</Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                {r.status === 'actioned' ? (
+                                  <Badge className="bg-green-100 text-green-700 text-xs">{r.action}</Badge>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    <div className="flex gap-1">
+                                      <Button
+                                        type="button" size="sm" variant="outline"
+                                        className="h-6 text-xs px-2"
+                                        onClick={() => handleAction(r.rowIndex, 'confirm')}
+                                        data-testid={`button-confirm-${r.rowIndex}`}
+                                      >Confirm</Button>
+                                      <Button
+                                        type="button" size="sm" variant="outline"
+                                        className="h-6 text-xs px-2"
+                                        onClick={() => handleAction(r.rowIndex, 'extra')}
+                                        data-testid={`button-extra-${r.rowIndex}`}
+                                      >Extra</Button>
+                                      <Button
+                                        type="button" size="sm" variant="outline"
+                                        className="h-6 text-xs px-2 text-red-600 border-red-200"
+                                        onClick={() => handleAction(r.rowIndex, 'reject')}
+                                        data-testid={`button-reject-${r.rowIndex}`}
+                                      >Reject</Button>
+                                    </div>
+                                    <div className="relative">
+                                      <Search className="absolute left-1.5 top-1 h-3 w-3 text-muted-foreground" />
+                                      <Input
+                                        className="h-6 text-xs pl-5"
+                                        placeholder="Link to site…"
+                                        value={manualSearch[r.rowIndex] ?? ''}
+                                        onChange={e => handleManualSearch(r.rowIndex, e.target.value)}
+                                        data-testid={`input-manual-search-${r.rowIndex}`}
+                                      />
+                                      {(manualCandidates[r.rowIndex] ?? []).length > 0 && (
+                                        <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">
+                                          {manualCandidates[r.rowIndex].map(c => (
+                                            <div
+                                              key={c.siteId}
+                                              className="px-2 py-1 hover:bg-muted cursor-pointer text-xs"
+                                              onClick={() => handleManualLink(r.rowIndex, c)}
+                                            >
+                                              <span className="font-medium">{c.data.site_name ?? '—'}</span>
+                                              <span className="text-muted-foreground ml-1">
+                                                {c.data.state}/{c.data.locality}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                            {/* ── Expanded detail row ── */}
+                            {isExpanded && (
+                              <tr key={`${r.rowIndex}-detail`} className="border-t bg-slate-50 dark:bg-slate-900/40">
+                                <td colSpan={5} className="px-4 py-3">
+                                  <div className="grid grid-cols-2 gap-4">
+                                    {/* WFP file row — all columns */}
+                                    <div>
+                                      <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700 mb-2">WFP File Row (all columns)</p>
+                                      <div className="space-y-0.5">
+                                        {wfpCols.filter(col => r.wfpRow[col] != null && r.wfpRow[col] !== '').map(col => (
+                                          <div key={col} className="flex gap-2 text-[11px]">
+                                            <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-40 truncate" title={col}>{col}:</span>
+                                            <span className="font-medium break-all">{String(r.wfpRow[col])}</span>
+                                          </div>
+                                        ))}
+                                        {wfpCols.filter(col => r.wfpRow[col] != null && r.wfpRow[col] !== '').length === 0 && (
+                                          <p className="text-xs text-muted-foreground italic">No non-empty values</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {/* Matched MMP candidate detail */}
+                                    <div>
+                                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-2">
+                                        Matched MMP Site{matchedCandidate ? '' : ' — None'}
+                                      </p>
+                                      {matchedCandidate ? (
+                                        <div className="space-y-0.5">
+                                          {Object.entries(matchedCandidate.data)
+                                            .filter(([, v]) => v !== '')
+                                            .map(([k, v]) => (
+                                              <div key={k} className="flex gap-2 text-[11px]">
+                                                <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-32 truncate" title={k}>{k}:</span>
+                                                <span className="font-medium break-all">{v}</span>
+                                              </div>
+                                            ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-muted-foreground italic">No MMP site was matched for this WFP row</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
-                          </td>
-                        </tr>
-                      ))}
+                          </>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

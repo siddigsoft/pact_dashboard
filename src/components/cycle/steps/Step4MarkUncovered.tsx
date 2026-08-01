@@ -7,9 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight, Search, ArrowUpDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import * as XLSX from 'xlsx';
+import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed' },
@@ -42,6 +44,28 @@ interface CoverageRow {
   notCovered: number;
 }
 
+interface SiteDetail {
+  id: string;
+  site_code: string;
+  site_name: string;
+  state: string;
+  locality: string;
+  hub_office: string;
+  /** Status stored in mmp_site_entries.status (Dispatched, Accepted, etc.) */
+  system_status: string;
+  /** Was a WFP row matched (or attempted) against this MMP site? */
+  wfp_in_file: boolean;
+  /** The primary-pair WFP column value for the matched row, if any */
+  wfp_row_primary: string | null;
+  match_score: number | null;
+  match_level: string | null;
+  /** Derived readable matching status */
+  matching_status: 'Auto-Confirmed' | 'Confirmed' | 'Extra' | 'Needs Review' | 'Rejected' | 'Not in WFP File' | 'Unmatched WFP Row';
+  action_taken: string | null;
+  not_covered_reason: string | null;
+  coverage: 'Covered' | 'Not Covered' | 'Pending';
+}
+
 interface Props {
   wizardState: WizardState;
   updateWizardState: (patch: Partial<WizardState>) => void;
@@ -61,13 +85,20 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [coverageRows, setCoverageRows] = useState<CoverageRow[]>([]);
   const [coverageExpanded, setCoverageExpanded] = useState(false);
   const [stateFilter, setStateFilter] = useState<string>('');
+  const [siteDetails, setSiteDetails] = useState<SiteDetail[]>([]);
+  const [siteDetailsLoading, setSiteDetailsLoading] = useState(false);
+  const [showSiteStatus, setShowSiteStatus] = useState(false);
+  const [siteSearch, setSiteSearch] = useState('');
+  const [sortCol, setSortCol] = useState<keyof SiteDetail>('state');
+  const [sortAsc, setSortAsc] = useState(true);
 
   useEffect(() => {
     if (wizardState.selectedMmpId) {
       loadUncoveredSites();
       loadCoverageBreakdown();
+      loadSiteStatusDetails();
     }
-  }, [wizardState.selectedMmpId, wizardState.resolvedSites, wizardState.unmatchedMmpSiteIds]);
+  }, [wizardState.selectedMmpId, wizardState.resolvedSites, wizardState.unmatchedMmpSiteIds, wizardState.matchResults]);
 
   const loadUncoveredSites = async () => {
     setLoading(true);
@@ -176,6 +207,89 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         .sort((a, b) => b[1].total - a[1].total)
         .map(([label, v]) => ({ label, ...v }))
     );
+  };
+
+  // ── Full per-site status table ────────────────────────────────────────────
+  const loadSiteStatusDetails = async () => {
+    if (!wizardState.selectedMmpId) return;
+    setSiteDetailsLoading(true);
+
+    const { data: allSites } = await supabase
+      .from('mmp_site_entries')
+      .select('id, site_code, site_name, state, locality, hub_office, status')
+      .eq('mmp_file_id', wizardState.selectedMmpId);
+
+    if (!allSites?.length) { setSiteDetailsLoading(false); return; }
+
+    // Build a map: mmpSiteId → first matchResult that claimed it
+    const siteToMatch: Record<string, typeof wizardState.matchResults[0]> = {};
+    for (const r of wizardState.matchResults) {
+      if (r.matchedSiteId && !siteToMatch[r.matchedSiteId]) {
+        siteToMatch[r.matchedSiteId] = r;
+      }
+    }
+
+    const notInWfpSet     = new Set(wizardState.unmatchedMmpSiteIds ?? []);
+    const resolvedNotCov  = new Set(
+      Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k)
+    );
+    const primaryWfpCol   = wizardState.matchingPairs[0]?.wfpColumn ?? '';
+
+    const details: SiteDetail[] = allSites.map(s => {
+      const mr            = siteToMatch[s.id] ?? null;
+      const notInWfp      = notInWfpSet.has(s.id);
+      const notCovReason  = wizardState.uncoveredReasons[s.id];
+
+      let matching_status: SiteDetail['matching_status'];
+      let action_taken: string | null = null;
+
+      if (notInWfp) {
+        matching_status = 'Not in WFP File';
+      } else if (!mr) {
+        matching_status = 'Unmatched WFP Row';
+      } else if (mr.status === 'auto') {
+        matching_status = 'Auto-Confirmed';
+      } else if (mr.status === 'actioned') {
+        if (mr.action === 'confirm') { matching_status = 'Confirmed'; action_taken = 'Confirm'; }
+        else if (mr.action === 'extra') { matching_status = 'Extra'; action_taken = 'Extra'; }
+        else if (mr.action === 'reject') { matching_status = 'Rejected'; action_taken = 'Reject'; }
+        else { matching_status = 'Confirmed'; action_taken = mr.action ?? null; }
+      } else if (mr.status === 'review') {
+        matching_status = 'Needs Review';
+      } else {
+        matching_status = 'Unmatched WFP Row';
+      }
+
+      const covered =
+        matching_status === 'Auto-Confirmed' ||
+        matching_status === 'Confirmed' ||
+        matching_status === 'Extra';
+      const notCovered =
+        notInWfp ||
+        matching_status === 'Rejected' ||
+        resolvedNotCov.has(s.id);
+
+      return {
+        id:              s.id,
+        site_code:       s.site_code ?? '',
+        site_name:       s.site_name ?? '',
+        state:           s.state ?? '',
+        locality:        s.locality ?? '',
+        hub_office:      s.hub_office ?? '',
+        system_status:   s.status ?? '—',
+        wfp_in_file:     !!mr,
+        wfp_row_primary: mr ? (mr.wfpRow[primaryWfpCol] ?? null) : null,
+        match_score:     mr ? mr.matchScore : null,
+        match_level:     mr ? mr.matchLevel : null,
+        matching_status,
+        action_taken,
+        not_covered_reason: notCovReason?.reason ?? null,
+        coverage: covered ? 'Covered' : notCovered ? 'Not Covered' : 'Pending',
+      };
+    });
+
+    setSiteDetails(details);
+    setSiteDetailsLoading(false);
   };
 
   const setReason = (siteId: string, patch: Partial<UncoveredReason>) => {
@@ -376,6 +490,229 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           )}
         </div>
       )}
+
+      {/* ── Full Site Status Table ─────────────────────────────────────────── */}
+      {siteDetails.length > 0 && (() => {
+        const toggleSort = (col: keyof SiteDetail) => {
+          if (sortCol === col) setSortAsc(a => !a);
+          else { setSortCol(col); setSortAsc(true); }
+        };
+
+        const matchingStatusColor = (s: SiteDetail['matching_status']) => {
+          if (s === 'Auto-Confirmed' || s === 'Confirmed') return 'bg-green-100 text-green-700 border-green-300';
+          if (s === 'Extra')          return 'bg-teal-100 text-teal-700 border-teal-300';
+          if (s === 'Needs Review')   return 'bg-amber-100 text-amber-700 border-amber-300';
+          if (s === 'Rejected')       return 'bg-red-100 text-red-700 border-red-300';
+          if (s === 'Not in WFP File')return 'bg-slate-100 text-slate-600 border-slate-300';
+          return 'bg-orange-100 text-orange-700 border-orange-300';
+        };
+        const coverageColor = (c: SiteDetail['coverage']) =>
+          c === 'Covered'     ? 'bg-green-100 text-green-700 border-green-300' :
+          c === 'Not Covered' ? 'bg-red-100 text-red-700 border-red-300'       :
+                                'bg-amber-100 text-amber-700 border-amber-300';
+
+        const searchLow = siteSearch.toLowerCase();
+        const filtered = siteDetails
+          .filter(s =>
+            (!stateFilter || s.state === stateFilter) &&
+            (!searchLow ||
+              s.site_name.toLowerCase().includes(searchLow) ||
+              s.locality.toLowerCase().includes(searchLow) ||
+              s.hub_office.toLowerCase().includes(searchLow) ||
+              s.site_code.toLowerCase().includes(searchLow))
+          )
+          .sort((a, b) => {
+            const av = String(a[sortCol] ?? '');
+            const bv = String(b[sortCol] ?? '');
+            return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+          });
+
+        const exportSiteStatus = () => {
+          const rows = filtered.map(s => ({
+            'Site Code':        s.site_code,
+            'Site Name':        s.site_name,
+            State:              s.state,
+            Locality:           s.locality,
+            'Hub / Office':     s.hub_office,
+            'System Status':    s.system_status,
+            'In WFP File':      s.wfp_in_file ? 'Yes' : 'No',
+            'WFP Row (Primary)':s.wfp_row_primary ?? '—',
+            'Match Score':      s.match_score != null ? `${s.match_score}%` : '—',
+            'Match Level':      s.match_level ?? '—',
+            'Matching Status':  s.matching_status,
+            'Action Taken':     s.action_taken ?? '—',
+            'Coverage':         s.coverage,
+            'Not-Covered Reason': s.not_covered_reason ?? '—',
+          }));
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Site Status');
+          XLSX.writeFile(wb, 'site-status-full.xlsx');
+        };
+
+        const SortTh = ({ col, label }: { col: keyof SiteDetail; label: string }) => (
+          <th
+            className="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 select-none"
+            onClick={() => toggleSort(col)}
+          >
+            <span className="flex items-center gap-1">
+              {label}
+              <ArrowUpDown className={`h-3 w-3 ${sortCol === col ? 'text-primary' : 'text-muted-foreground/40'}`} />
+            </span>
+          </th>
+        );
+
+        return (
+          <div className="border rounded-lg overflow-hidden">
+            {/* Header */}
+            <button
+              type="button"
+              onClick={() => setShowSiteStatus(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900 text-sm font-medium hover:bg-slate-100 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                🗂 Full Site Status Table
+                <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">{siteDetails.length} sites</Badge>
+                <span className="text-xs font-normal text-muted-foreground">WFP · System · Matching · Action</span>
+              </span>
+              {showSiteStatus ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+
+            {showSiteStatus && (
+              <>
+                {/* Toolbar */}
+                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white dark:bg-slate-900 flex-wrap">
+                  <div className="relative flex-1 min-w-48">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      className="h-8 pl-8 text-xs"
+                      placeholder="Search site name, locality, hub, code…"
+                      value={siteSearch}
+                      onChange={e => setSiteSearch(e.target.value)}
+                    />
+                  </div>
+                  {stateFilter && (
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
+                      {stateFilter}
+                      <button type="button" className="ml-1.5" onClick={() => setStateFilter('')}>×</button>
+                    </Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground">{filtered.length} of {siteDetails.length}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={exportSiteStatus}>
+                    <Download className="h-3 w-3 mr-1.5" /> Export All
+                  </Button>
+                  {(() => {
+                    const notInWfpFiltered = filtered.filter(s => s.matching_status === 'Not in WFP File');
+                    return notInWfpFiltered.length > 0 ? (
+                      <Button
+                        type="button" size="sm" variant="outline"
+                        className="h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                        onClick={() => exportNotInWfpReport(
+                          notInWfpFiltered.map(s => ({
+                            site_code:     s.site_code,
+                            site_name:     s.site_name,
+                            state:         s.state,
+                            locality:      s.locality,
+                            hub_office:    s.hub_office,
+                            system_status: s.system_status,
+                          } satisfies NotInWfpSite)),
+                          wizardState.selectedMmp?.name ?? 'Cycle'
+                        )}
+                      >
+                        <Download className="h-3 w-3 mr-1.5" />
+                        Not-in-WFP Report ({notInWfpFiltered.length})
+                      </Button>
+                    ) : null;
+                  })()}
+                </div>
+
+                {siteDetailsLoading ? (
+                  <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10">
+                        <tr>
+                          <SortTh col="site_name"        label="Site Name" />
+                          <SortTh col="state"            label="State" />
+                          <SortTh col="locality"         label="Locality" />
+                          <SortTh col="hub_office"       label="Hub" />
+                          <SortTh col="system_status"    label="System Status" />
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">In WFP File</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">WFP Row (Primary)</th>
+                          <SortTh col="match_score"      label="Score" />
+                          <SortTh col="matching_status"  label="Matching Status" />
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Action Taken</th>
+                          <SortTh col="coverage"         label="Coverage" />
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">NC Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((s, i) => (
+                          <tr key={s.id} className={`border-t ${i % 2 === 0 ? '' : 'bg-muted/20'} hover:bg-primary/5`}>
+                            <td className="px-3 py-1.5 font-medium max-w-[180px] truncate" title={s.site_name}>{s.site_name || '—'}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{s.state || '—'}</td>
+                            <td className="px-3 py-1.5 max-w-[120px] truncate" title={s.locality}>{s.locality || '—'}</td>
+                            <td className="px-3 py-1.5 max-w-[120px] truncate" title={s.hub_office}>{s.hub_office || '—'}</td>
+                            <td className="px-3 py-1.5">
+                              <Badge variant="outline" className="text-[10px] capitalize">{s.system_status}</Badge>
+                            </td>
+                            <td className="px-3 py-1.5 text-center">
+                              {s.wfp_in_file
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mx-auto" />
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5 max-w-[140px] truncate text-muted-foreground" title={s.wfp_row_primary ?? ''}>
+                              {s.wfp_row_primary ?? '—'}
+                            </td>
+                            <td className="px-3 py-1.5 text-center">
+                              {s.match_score != null
+                                ? <span className={`font-semibold ${s.match_score >= 80 ? 'text-green-600' : s.match_score >= 55 ? 'text-amber-600' : 'text-red-500'}`}>{s.match_score}%</span>
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <Badge variant="outline" className={`text-[10px] ${matchingStatusColor(s.matching_status)}`}>
+                                {s.matching_status}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-1.5">
+                              {s.action_taken
+                                ? <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">{s.action_taken}</Badge>
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <Badge variant="outline" className={`text-[10px] ${coverageColor(s.coverage)}`}>
+                                {s.coverage}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-1.5 max-w-[140px] truncate text-muted-foreground" title={s.not_covered_reason ?? ''}>
+                              {s.not_covered_reason ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                        {filtered.length === 0 && (
+                          <tr><td colSpan={12} className="px-4 py-8 text-center text-muted-foreground italic">No sites match the current filter</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Legend */}
+                <div className="border-t px-4 py-2.5 bg-muted/20 flex flex-wrap gap-3 text-[10px]">
+                  <span className="font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
+                  {(['Auto-Confirmed','Confirmed','Extra','Needs Review','Rejected','Not in WFP File'] as SiteDetail['matching_status'][]).map(s => (
+                    <span key={s} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${matchingStatusColor(s)}`}>{s}</span>
+                  ))}
+                  <span className="text-muted-foreground ml-2">Click a state in Coverage Breakdown to filter · Click column header to sort</span>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* State filter chip */}
       {stateFilter && (
