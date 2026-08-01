@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, MapPin, Users, Calendar, Info, Download, Clock, RotateCcw } from 'lucide-react';
+import { Loader2, AlertCircle, MapPin, Users, Calendar, Info, Download, Clock, RotateCcw, Trash2 } from 'lucide-react';
 import type { WizardState, SavedSession } from '../CycleCloseWizard';
 import * as XLSX from 'xlsx';
 
@@ -264,6 +264,17 @@ export default function Step1SelectCycle({
                       data-testid="button-start-fresh"
                     >
                       Start Fresh
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={onStartFresh}
+                      data-testid="button-discard-session"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      Remove session
                     </Button>
                   </div>
                 </div>
