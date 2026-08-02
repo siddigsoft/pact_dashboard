@@ -3848,21 +3848,26 @@ class _MMPScreenState extends State<MMPScreen> {
     } on StateError catch (e) {
       debugPrint('Duplicate advance blocked: $e');
       if (mounted) {
+        final _isAr = _currentLocale == 'ar';
         showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                SizedBox(width: 8),
-                Text('Already Claimed'),
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(_isAr ? 'طلب مكرر' : 'Already Claimed'),
               ],
             ),
-            content: Text(e.message),
+            content: Text(
+              _isAr
+                  ? 'يوجد طلب سلفة نشط بالفعل لهذا الموقع. لا يمكن تقديم طلب مكرر في نفس الوقت.'
+                  : e.message,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('OK'),
+                child: Text(_isAr ? 'حسناً' : 'OK'),
               ),
             ],
           ),

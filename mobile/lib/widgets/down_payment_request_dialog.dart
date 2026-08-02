@@ -180,7 +180,11 @@ class _DownPaymentRequestDialogState
                 Text(_isAr ? 'طلب مكرر' : 'Already Claimed'),
               ],
             ),
-            content: Text(e.message),
+            content: Text(
+              _isAr
+                  ? 'يوجد طلب سلفة نشط بالفعل لهذا الموقع. لا يمكن تقديم طلب مكرر في نفس الوقت.'
+                  : e.message,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
