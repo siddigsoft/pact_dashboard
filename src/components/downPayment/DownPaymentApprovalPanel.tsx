@@ -929,16 +929,57 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     if (actionType === 'pay') {
       setPaymentAmount(request.remainingAmount || request.requestedAmount);
       setSinglePayPreFundId(null);
-      // Load active pre-funds for "Charge to Pre-Fund" selector
+      // Load active pre-funds for "Charge to Pre-Fund" selector,
+      // filtered to funds the submitter is allocated to so Finance only sees
+      // the submitter's personal funds (not the full pool of all active funds).
       try {
         const { data: pfData } = await supabase
           .from('pre_fund_requests' as any)
           .select('id, name, currency, available_balance')
           .in('status', ['active', 'low_balance'])
           .order('name');
-        setSinglePayPreFunds(((pfData ?? []) as any[]).map((f: any) => ({
-          id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-        })));
+        const allFunds = (pfData ?? []) as any[];
+
+        // Fetch this submitter's allocations across all active funds
+        const submitterId = request.requestedBy;
+        let allocsByFund: Record<string, { allocated: number; spent: number }> = {};
+        if (submitterId && allFunds.length > 0) {
+          const { data: allocData } = await (supabase as any)
+            .from('pre_fund_allocations')
+            .select('pre_fund_request_id, allocated_amount, spent_amount')
+            .eq('user_id', submitterId)
+            .in('pre_fund_request_id', allFunds.map((f: any) => f.id));
+          for (const a of (allocData ?? []) as any[]) {
+            allocsByFund[a.pre_fund_request_id] = {
+              allocated: Number(a.allocated_amount) || 0,
+              spent: Number(a.spent_amount) || 0,
+            };
+          }
+        }
+
+        const hasAnyAllocation = Object.keys(allocsByFund).length > 0;
+
+        // If the submitter has personal allocations, show ONLY their funds with
+        // their personal remaining amount. Otherwise fall back to all active funds
+        // with the full available_balance (open-pool / no-allocation case).
+        const displayFunds = hasAnyAllocation
+          ? allFunds
+              .filter((f: any) => allocsByFund[f.id] !== undefined)
+              .map((f: any) => {
+                const alloc = allocsByFund[f.id];
+                return {
+                  id: f.id,
+                  name: f.name,
+                  currency: f.currency,
+                  available_balance: alloc.allocated - alloc.spent,
+                };
+              })
+          : allFunds.map((f: any) => ({
+              id: f.id, name: f.name, currency: f.currency,
+              available_balance: f.available_balance ?? 0,
+            }));
+
+        setSinglePayPreFunds(displayFunds);
       } catch (_) { setSinglePayPreFunds([]); }
     }
     if (actionType === 'approve') {
@@ -1844,9 +1885,42 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       .in('status', ['active', 'low_balance'])
       .eq('currency', 'SDG')
       .order('name');
-    const preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-      id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-    }));
+    const allFunds = (pfData ?? []) as any[];
+
+    // Fetch allocations for all unique submitters in this batch so we only show
+    // the funds each submitter actually holds, not the full pool.
+    const submitterIds = [...new Set(eligible.map(r => r.requestedBy).filter(Boolean))] as string[];
+    let allocsByFund: Record<string, { allocated: number; spent: number }> = {};
+    if (submitterIds.length > 0 && allFunds.length > 0) {
+      const { data: allocData } = await (supabase as any)
+        .from('pre_fund_allocations')
+        .select('pre_fund_request_id, allocated_amount, spent_amount')
+        .in('user_id', submitterIds)
+        .in('pre_fund_request_id', allFunds.map((f: any) => f.id));
+      // Aggregate remaining allocation per fund across all submitters
+      for (const a of (allocData ?? []) as any[]) {
+        const prev = allocsByFund[a.pre_fund_request_id] ?? { allocated: 0, spent: 0 };
+        allocsByFund[a.pre_fund_request_id] = {
+          allocated: prev.allocated + (Number(a.allocated_amount) || 0),
+          spent:     prev.spent     + (Number(a.spent_amount)     || 0),
+        };
+      }
+    }
+
+    const hasAnyAllocation = Object.keys(allocsByFund).length > 0;
+
+    const preFunds = hasAnyAllocation
+      ? allFunds
+          .filter((f: any) => allocsByFund[f.id] !== undefined)
+          .map((f: any) => {
+            const alloc = allocsByFund[f.id];
+            return { id: f.id, name: f.name, currency: f.currency,
+                     available_balance: alloc.allocated - alloc.spent };
+          })
+      : allFunds.map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency,
+          available_balance: f.available_balance ?? 0,
+        }));
 
     // Auto-detect the best pre-fund for these submitters so Finance doesn't
     // have to manually pick one when there is a clear allocation match.
