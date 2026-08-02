@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type FC } from "react";
+import { format, parseISO } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
@@ -7,7 +8,7 @@ import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, Info, Camera, RefreshCw } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature, Upload, Download, Trash2, Loader2, FileText, Eye, GraduationCap, Zap, Globe, FolderOpen, ChevronDown, ChevronUp, Info, Camera, RefreshCw, History } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -158,6 +159,8 @@ const UserDetail: FC = () => {
   const [bankAccountFormOpen, setBankAccountFormOpen] = useState(false);
   const [deleteBankAccountConfirmOpen, setDeleteBankAccountConfirmOpen] = useState(false);
   const [isDeletingBankAccount, setIsDeletingBankAccount] = useState(false);
+  const [bankHistory, setBankHistory] = useState<any[]>([]);
+  const [bankHistoryOpen, setBankHistoryOpen] = useState(false);
 
   const roleStr = (currentUser?.role || '').toLowerCase();
   const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
@@ -1056,6 +1059,18 @@ const UserDetail: FC = () => {
     };
     fetchClassificationHistory();
   }, [user?.id, canManageClassifications, getClassificationHistory]);
+
+  // ── Bank Account History fetch ────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('bank_account_history')
+      .select('id,changed_at,old_data,new_data,changed_by,profiles!bank_account_history_changed_by_fkey(full_name)')
+      .eq('profile_id', user.id)
+      .order('changed_at', { ascending: false })
+      .limit(30)
+      .then(({ data }) => setBankHistory(data ?? []));
+  }, [user?.id]);
 
   const handleDeleteBankAccount = async () => {
     if (!user || !updateUser) return;
@@ -2832,6 +2847,93 @@ const UserDetail: FC = () => {
                   )}
                 </div>
               )}
+
+            {/* ── Bank Account Change History ── */}
+            {bankHistory.length >= 0 && (
+              <div className="border-t pt-4 px-5 sm:px-6 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setBankHistoryOpen(o => !o)}
+                  className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors w-full"
+                >
+                  <History className="h-4 w-4 shrink-0" />
+                  Account Details History
+                  {bankHistory.length > 0 && (
+                    <span className="ml-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0 text-xs font-bold">
+                      {bankHistory.length}
+                    </span>
+                  )}
+                  <span className="ml-auto">
+                    {bankHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </span>
+                </button>
+
+                {bankHistoryOpen && (
+                  <div className="mt-3 space-y-3">
+                    {bankHistory.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No changes recorded yet.</p>
+                    ) : bankHistory.map((row, i) => {
+                      const nd  = row.new_data  as Record<string, any> | null;
+                      const od  = row.old_data  as Record<string, any> | null;
+                      const who = (row.profiles as any)?.full_name ?? 'Unknown';
+                      const when = (() => { try { return format(parseISO(row.changed_at), 'dd MMM yyyy, HH:mm'); } catch { return row.changed_at; } })();
+                      const isFirst  = !od && !!nd;
+                      const isDelete = !!od && !nd;
+                      return (
+                        <div key={row.id ?? i} className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold
+                              ${isFirst  ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                              : isDelete ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'}`}>
+                              {isFirst ? '✦ Added' : isDelete ? '✕ Removed' : '✎ Updated'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{when} · by {who}</span>
+                          </div>
+                          {nd && (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              {([['Account Name', nd.accountName ?? nd.account_name],
+                                 ['Account Number', nd.accountNumber ?? nd.account_number],
+                                 ['Bank Name', nd.bankName ?? nd.bank_name],
+                                 ['Branch', nd.branch]] as [string, string | undefined][])
+                                .filter(([, v]) => !!v)
+                                .map(([lbl, val]) => (
+                                <div key={lbl} className="bg-background rounded-lg p-2.5 border border-border/40">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">{lbl}</p>
+                                  <p className="text-sm font-semibold truncate">{val}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {od && !isFirst && (
+                            <details className="text-xs text-muted-foreground cursor-pointer group">
+                              <summary className="select-none list-none flex items-center gap-1 hover:text-foreground">
+                                <ChevronDown className="h-3 w-3 group-open:hidden" />
+                                <ChevronUp className="h-3 w-3 hidden group-open:inline-block" />
+                                Previous values
+                              </summary>
+                              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {([['Account Name', od.accountName ?? od.account_name],
+                                   ['Account Number', od.accountNumber ?? od.account_number],
+                                   ['Bank Name', od.bankName ?? od.bank_name],
+                                   ['Branch', od.branch]] as [string, string | undefined][])
+                                  .filter(([, v]) => !!v)
+                                  .map(([lbl, val]) => (
+                                  <div key={lbl} className="bg-muted/40 rounded p-2 border border-border/30">
+                                    <p className="text-[9px] uppercase tracking-wider mb-0.5 opacity-60">{lbl}</p>
+                                    <p className="text-xs line-through opacity-50 truncate">{val}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Classification sub-section — field staff only */}
             {showCompensation && canManageClassifications && (
