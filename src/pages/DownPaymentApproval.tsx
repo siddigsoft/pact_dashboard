@@ -453,6 +453,7 @@ export default function DownPaymentApproval() {
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
+  const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
 
   const [searchParams] = useSearchParams();
   const cycleContextMmpName = searchParams.get('mmpName') || undefined;
@@ -466,6 +467,32 @@ export default function DownPaymentApproval() {
     projectId: urlProjectId,
   }));
   const [showFilters, setShowFilters] = useState(true);
+
+  // ── Duplicate active-advance detection ────────────────────────────────────
+  // Find sites that have more than one active (non-cancelled/rejected/deleted)
+  // advance row — mirrors the STEP 2 verification query in the migration runbook.
+  const duplicateSites = useMemo(() => {
+    const INACTIVE = new Set(['cancelled', 'rejected', 'deleted']);
+    const active = requests.filter(r => !INACTIVE.has(r.status));
+
+    // Group by mmpSiteEntryId when available, otherwise by siteName+hubId
+    const groups = new Map<string, { siteName: string; hubId?: string; count: number; ids: string[] }>();
+    for (const req of active) {
+      const key = req.mmpSiteEntryId
+        ? `entry::${req.mmpSiteEntryId}`
+        : `name::${(req.siteName || '').toLowerCase().trim()}::${req.hubId ?? 'no-hub'}`;
+      if (!groups.has(key)) {
+        groups.set(key, { siteName: req.siteName, hubId: req.hubId, count: 0, ids: [] });
+      }
+      const g = groups.get(key)!;
+      g.count++;
+      g.ids.push(req.id);
+    }
+
+    return Array.from(groups.values())
+      .filter(g => g.count > 1)
+      .sort((a, b) => b.count - a.count);
+  }, [requests]);
 
   // ── disbursement tracker specific filters ─────────────────────────────────
   const [disbState, setDisbState] = useState('all');
@@ -956,6 +983,57 @@ export default function DownPaymentApproval() {
           { step: 5, role: 'النظام', action: 'يخصم تلقائياً', description: 'تُخصم السلفة تلقائياً عند إضافة أتعاب الزيارة.' },
         ]}
       />
+
+      {/* ── Duplicate active-advance warning banner ── */}
+      {isAdmin && duplicateSites.length > 0 && !duplicateBannerDismissed && (
+        <div
+          className="rounded-lg border border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30 px-4 py-3 space-y-2"
+          data-testid="banner-duplicate-advances"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                {duplicateSites.length} site{duplicateSites.length !== 1 ? 's' : ''} with duplicate active advances detected
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 shrink-0"
+              onClick={() => setDuplicateBannerDismissed(true)}
+              data-testid="button-dismiss-duplicate-banner"
+              aria-label="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <p className="text-xs text-red-700 dark:text-red-300 ml-6">
+            Each site below has more than one active (non-cancelled) advance row. The unique index cannot be applied until these are resolved. Click a site name to view its rows in the All Requests tab, then cancel the extra row.
+          </p>
+          <div className="ml-6 flex flex-wrap gap-2">
+            {duplicateSites.map((site, i) => (
+              <button
+                key={i}
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white dark:bg-red-950/50 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                onClick={() => {
+                  setFilters(f => ({ ...f, siteName: site.siteName }));
+                  setViewTab('allRequests');
+                }}
+                data-testid={`button-duplicate-site-${i}`}
+              >
+                <MapPin className="h-3 w-3" />
+                {site.siteName}
+                <span className="ml-0.5 rounded-full bg-red-200 dark:bg-red-800 px-1.5 text-[10px] font-semibold text-red-800 dark:text-red-200">
+                  {site.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Full filter panel (primary filter for all tabs) ── */}
       <div>
