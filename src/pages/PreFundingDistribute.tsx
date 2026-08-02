@@ -197,73 +197,77 @@ export default function PreFundingDistribute() {
 
       let payments: any[] = [];
 
+      // Fetch OCS and DP enrichment data in parallel (was sequential — 2 round-trips → 1)
+      const [{ data: ocsData }, { data: dpData }] = await Promise.all([
+        ocsIds.length > 0
+          ? (supabase as any)
+              .from('operational_cost_submissions')
+              .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
+              .in('id', ocsIds)
+          : Promise.resolve({ data: [] }),
+        dpIds.length > 0
+          ? (supabase as any)
+              .from('down_payment_requests')
+              .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
+              .in('id', dpIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
       // Enrich OCS-linked transactions. Track which source_ids were matched so
       // unresolved ones are added as fallback manual entries (not silently dropped).
       const matchedOcsIds = new Set<string>();
-      if (ocsIds.length > 0) {
-        const { data: ocsData } = await (supabase as any)
-          .from('operational_cost_submissions')
-          .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-          .in('id', ocsIds);
-        (ocsData ?? []).forEach((o: any) => {
-          matchedOcsIds.add(o.id);
-          const txn = ocsTxns.find((t: any) => t.source_id === o.id);
-          // Use the transaction amount as the authoritative amount (it is recorded in
-          // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
-          // the transaction row itself has no amount.
-          const txnAmt = Number(txn?.amount ?? 0);
+      (ocsData ?? []).forEach((o: any) => {
+        matchedOcsIds.add(o.id);
+        const txn = ocsTxns.find((t: any) => t.source_id === o.id);
+        // Use the transaction amount as the authoritative amount (it is recorded in
+        // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
+        // the transaction row itself has no amount.
+        const txnAmt = Number(txn?.amount ?? 0);
+        payments.push({
+          ...o,
+          _type: 'ocs',
+          _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
+          _txn_date: txn?.transaction_date,
+        });
+      });
+      // Unresolved OCS transactions → fallback manual entries so they aren't dropped
+      ocsTxns
+        .filter((t: any) => !matchedOcsIds.has(t.source_id))
+        .forEach((t: any) => {
           payments.push({
-            ...o,
-            _type: 'ocs',
-            _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
-            _txn_date: txn?.transaction_date,
+            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+            description: t.description || 'Cost submission (details unavailable)',
+            status: 'paid',
           });
         });
-        // Unresolved OCS transactions → fallback manual entries so they aren't dropped
-        ocsTxns
-          .filter((t: any) => !matchedOcsIds.has(t.source_id))
-          .forEach((t: any) => {
-            payments.push({
-              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-              description: t.description || 'Cost submission (details unavailable)',
-              status: 'paid',
-            });
-          });
-      }
 
       // Enrich DP-linked transactions with same fallback pattern
       const matchedDpIds = new Set<string>();
-      if (dpIds.length > 0) {
-        const { data: dpData } = await (supabase as any)
-          .from('down_payment_requests')
-          .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
-          .in('id', dpIds);
-        (dpData ?? []).forEach((dp: any) => {
-          matchedDpIds.add(dp.id);
-          const txn = dpTxns.find((t: any) => t.source_id === dp.id);
-          // Prefer the recorded transaction amount over the DP requested amount
-          const txnAmt = Number(txn?.amount ?? 0);
+      (dpData ?? []).forEach((dp: any) => {
+        matchedDpIds.add(dp.id);
+        const txn = dpTxns.find((t: any) => t.source_id === dp.id);
+        // Prefer the recorded transaction amount over the DP requested amount
+        const txnAmt = Number(txn?.amount ?? 0);
+        payments.push({
+          ...dp,
+          _type: 'dp',
+          _txn_amount: txnAmt || Number(dp.amount) || 0,
+          _txn_date: txn?.transaction_date,
+          amount: txnAmt || Number(dp.amount) || 0,
+        });
+      });
+      // Unresolved DP transactions → fallback manual entries
+      dpTxns
+        .filter((t: any) => !matchedDpIds.has(t.source_id))
+        .forEach((t: any) => {
           payments.push({
-            ...dp,
-            _type: 'dp',
-            _txn_amount: txnAmt || Number(dp.amount) || 0,
-            _txn_date: txn?.transaction_date,
-            amount: txnAmt || Number(dp.amount) || 0,
+            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+            description: t.description || 'Down payment (details unavailable)',
+            status: 'paid',
           });
         });
-        // Unresolved DP transactions → fallback manual entries
-        dpTxns
-          .filter((t: any) => !matchedDpIds.has(t.source_id))
-          .forEach((t: any) => {
-            payments.push({
-              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-              description: t.description || 'Down payment (details unavailable)',
-              status: 'paid',
-            });
-          });
-      }
 
       // Manual / other transactions — always included
       otherTxns.forEach((t: any) => {
@@ -441,32 +445,35 @@ export default function PreFundingDistribute() {
     if (!currentUser?.id) return;
     setLoading(true);
     try {
-      // Load funds held by this user (or all funds for finance admin in overview mode)
-      let q = (supabase as any)
+      // Build funds query first (needs runtime filter applied before awaiting)
+      let fundsQ = (supabase as any)
         .from('pre_fund_requests')
         .select('id,name,source,amount,currency,available_balance,paid_amount,status')
         .order('created_at', { ascending: false });
-      if (!isFinanceAdmin) q = q.eq('holder_user_id', currentUser.id);
-      else q = q.not('holder_user_id', 'is', null);
-      const { data: fundsData, error: fErr } = await q;
+      if (!isFinanceAdmin) fundsQ = fundsQ.eq('holder_user_id', currentUser.id);
+      else fundsQ = fundsQ.not('holder_user_id', 'is', null);
+
+      // Run all three independent queries in parallel — was sequential (3 round-trips → 1)
+      const [
+        { data: fundsData, error: fErr },
+        { data: profiles },
+        { data: myAllocs },
+      ] = await Promise.all([
+        fundsQ,
+        supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
+        (supabase as any)
+          .from('pre_fund_allocations')
+          .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: false }),
+      ]);
+
       if (fErr && !fErr.message.includes('does not exist')) throw fErr;
       setFunds((fundsData as HeldFund[]) ?? []);
-
-      // Load staff profiles for the user picker
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id,full_name,email,role')
-        .order('full_name');
       setStaff((profiles as any) ?? []);
 
-      // Load this user's OWN allocations (so staff can see what they received + request more)
-      const { data: myAllocs } = await (supabase as any)
-        .from('pre_fund_allocations')
-        .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
       if (myAllocs && myAllocs.length > 0) {
-        // Enrich with fund name/source/status/holder
+        // Fund details depends on myAllocs result — one extra query only when user has allocations
         const fundIds: string[] = [...new Set(myAllocs.map((a: any) => a.pre_fund_request_id as string))];
         const { data: fundDetails } = await (supabase as any)
           .from('pre_fund_requests')
