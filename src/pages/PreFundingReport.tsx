@@ -155,10 +155,12 @@ export default function PreFundingReport() {
     setError(null);
     try {
       // Build the funds query — holders only see their assigned fund(s)
-      let fundsQuery = supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false });
+      let fundsQuery = supabase.from('pre_fund_requests')
+        .select('id,name,source,status,currency,amount,available_balance,committed_amount,paid_amount,usd_to_sdg_rate,start_date,end_date,project_id,created_at')
+        .order('created_at', { ascending: false });
       if (holderUserId) fundsQuery = (fundsQuery as any).eq('holder_user_id', holderUserId);
 
-      const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes] = await Promise.all([
+      const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes, hubsRes, ratesRes] = await Promise.all([
         fundsQuery,
         (supabase as any).from('pre_fund_transactions')
           .select('id,pre_fund_request_id,transaction_type,amount,currency,reference,description,transaction_date,created_at,user_id,created_by,receipt_url,source_table,source_id,reconciled')
@@ -171,6 +173,9 @@ export default function PreFundingReport() {
         (supabase as any).from('pre_fund_allocations')
           .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes')
           .order('created_at', { ascending: false }),
+        // hubs + exchange-rates moved here from sequential post-processing
+        (supabase as any).from('hubs').select('id,name').limit(500),
+        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency'),
       ]);
       if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
 
@@ -229,21 +234,17 @@ export default function PreFundingReport() {
       setProjects((projRes.data as any) ?? []);
       setProfiles(profMap);
 
-      // Build hub map for Excel export: userId → hub name
-      try {
-        const hubsRes = await (supabase as any).from('hubs').select('id,name').limit(500);
-        if (!hubsRes.error && hubsRes.data) {
-          const hubM = new Map<string, string>((hubsRes.data as any[]).map((h: any) => [h.id, h.name as string]));
-          const phm = new Map<string, string>();
-          ((profRes.data as any) ?? []).forEach((p: any) => {
-            phm.set(p.id, p.hub_id ? (hubM.get(p.hub_id) ?? p.hub_id) : '—');
-          });
-          setProfHubMap(phm);
-        }
-      } catch { /* hubs table not available */ }
+      // Build hub map for Excel export (hubsRes already fetched above in Promise.all)
+      if (!hubsRes.error && hubsRes.data) {
+        const hubM = new Map<string, string>((hubsRes.data as any[]).map((h: any) => [h.id, h.name as string]));
+        const phm = new Map<string, string>();
+        ((profRes.data as any) ?? []).forEach((p: any) => {
+          phm.set(p.id, p.hub_id ? (hubM.get(p.hub_id) ?? p.hub_id) : '—');
+        });
+        setProfHubMap(phm);
+      }
 
-      // Build currency list from fund currencies + exchange rate pairs
-      const ratesRes = await (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency');
+      // Build currency list from fund currencies + exchange rate pairs (ratesRes already fetched above)
       const currSet = new Set<string>();
       enrichedFunds.forEach(f => { if (f.currency) currSet.add(f.currency); });
       if (!ratesRes.error) {
