@@ -1622,7 +1622,7 @@ export default function PreFundingDistribute() {
 
       {/* Top-Up / Add Funds Dialog */}
       <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); } }}>
-        <DialogContent className="max-w-lg w-full">
+        <DialogContent className="max-w-lg w-full flex flex-col max-h-[90vh]">
           {topUpDialog.alloc && (() => {
             const alloc = topUpDialog.alloc;
             const balance = alloc.allocated_amount - alloc.spent_amount;
@@ -1639,7 +1639,7 @@ export default function PreFundingDistribute() {
                       Confirm Fund Transfer
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-3 py-1">
+                  <div className="space-y-3 py-1 overflow-y-auto flex-1 min-h-0">
                     <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
                       <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-sm">
                         {alloc.user_name}
@@ -1701,7 +1701,7 @@ export default function PreFundingDistribute() {
                     Add Funds — {alloc.user_name}
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-1">
+                <div className="space-y-4 py-1 overflow-y-auto flex-1 min-h-0">
 
                   {/* ── Fund pool balance ── */}
                   {fundDialogData && (
