@@ -500,6 +500,16 @@ export default function PreFundingDistribute() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Eagerly load payment details for every fund where the current user has a
+  // personal allocation so the Paid-Out Breakdown is available without requiring
+  // the user to manually expand anything.
+  useEffect(() => {
+    if (!currentUser?.id || myAllocations.length === 0) return;
+    myAllocations.forEach(alloc => {
+      loadAllocPayments(alloc.id, currentUser.id, alloc.pre_fund_request_id);
+    });
+  }, [myAllocations, currentUser?.id, loadAllocPayments]);
+
   const loadAllocations = useCallback(async (fundId: string) => {
     setAllocLoading(prev => new Set(prev).add(fundId));
     try {
@@ -940,6 +950,25 @@ export default function PreFundingDistribute() {
           const usagePct       = fund.amount > 0 ? Math.min(100, Math.round((totalAllocated / fund.amount) * 100)) : 0;
           const isAllocLoading = allocLoading.has(fund.id);
 
+          // ── Current-user allocation scoping ────────────────────────────────
+          // When the viewer has a personal allocation on this fund, show THEIR
+          // figures instead of the all-staff fund totals. This applies even for
+          // admins — the Distribute tab represents each person's allocated piece
+          // of the fund, not a fund-management view (that belongs in Reconciliation).
+          const myAlloc        = myAllocations.find(a => a.pre_fund_request_id === fund.id);
+          const myAllocPays    = myAlloc ? (allocPayments.get(myAlloc.id) ?? []) : [];
+          const myPaysLoading  = myAlloc ? allocPaymentsLoading.has(myAlloc.id) : false;
+
+          const displayAlloc   = myAlloc ? myAlloc.allocated_amount : fund.amount;
+          const displaySpent   = myAlloc ? myAlloc.spent_amount     : totalSpent;
+          const displayRem     = myAlloc
+            ? myAlloc.allocated_amount - myAlloc.spent_amount
+            : remaining;
+          const displayPct     = displayAlloc > 0
+            ? Math.min(100, Math.round((displaySpent / displayAlloc) * 100))
+            : 0;
+          // ───────────────────────────────────────────────────────────────────
+
           return (
             <Card key={fund.id} className="overflow-hidden">
               {/* Fund summary row */}
@@ -975,14 +1004,19 @@ export default function PreFundingDistribute() {
                   </div>
                 </div>
 
-                {/* KPI mini-row */}
+                {/* KPI mini-row — scoped to current user's allocation when available */}
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
-                  {[
-                    { label: 'Fund Total',   value: formatNumber(fund.amount, 0),           icon: Wallet,       cls: 'text-sky-600' },
-                    { label: 'Allocated',    value: formatNumber(totalAllocated, 0),         icon: Users,        cls: 'text-violet-600' },
-                    { label: 'Spent',        value: formatNumber(totalSpent, 0),             icon: TrendingDown, cls: totalSpent > totalAllocated ? 'text-rose-600' : 'text-emerald-600' },
-                    { label: 'Unallocated',  value: formatNumber(Math.max(0, remaining), 0), icon: Check,        cls: remaining < 0 ? 'text-rose-600' : 'text-teal-600' },
-                  ].map(k => (
+                  {(myAlloc ? [
+                    { label: 'My Allocation', value: formatNumber(myAlloc.allocated_amount, 0), icon: Wallet,       cls: 'text-sky-600' },
+                    { label: 'Paid Out',       value: formatNumber(displaySpent, 0),              icon: TrendingDown, cls: displaySpent > myAlloc.allocated_amount ? 'text-rose-600' : 'text-emerald-600' },
+                    { label: 'Remaining',      value: formatNumber(Math.max(0, displayRem), 0),   icon: Check,        cls: displayRem < 0 ? 'text-rose-600' : 'text-teal-600' },
+                    { label: 'Fund Total',     value: formatNumber(fund.amount, 0),               icon: Layers,       cls: 'text-muted-foreground' },
+                  ] : [
+                    { label: 'Fund Total',   value: formatNumber(fund.amount, 0),            icon: Wallet,       cls: 'text-sky-600' },
+                    { label: 'Allocated',    value: formatNumber(totalAllocated, 0),          icon: Users,        cls: 'text-violet-600' },
+                    { label: 'Spent',        value: formatNumber(totalSpent, 0),              icon: TrendingDown, cls: totalSpent > totalAllocated ? 'text-rose-600' : 'text-emerald-600' },
+                    { label: 'Unallocated',  value: formatNumber(Math.max(0, remaining), 0),  icon: Check,        cls: remaining < 0 ? 'text-rose-600' : 'text-teal-600' },
+                  ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
                       <span className={cn('text-sm font-bold tabular-nums', k.cls)}>{fund.currency} {k.value}</span>
@@ -990,17 +1024,92 @@ export default function PreFundingDistribute() {
                   ))}
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress bar — scoped to current user when they have an allocation */}
                 <div className="mt-3">
                   <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                    <span>Allocated {usagePct}%</span>
-                    <span>{formatNumber(remaining, 0)} {fund.currency} still available to allocate</span>
+                    {myAlloc ? (
+                      <>
+                        <span>Spent {displayPct}% of my allocation</span>
+                        <span>{formatNumber(Math.max(0, displayRem), 0)} {fund.currency} remaining</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Allocated {usagePct}%</span>
+                        <span>{formatNumber(remaining, 0)} {fund.currency} still available to allocate</span>
+                      </>
+                    )}
                   </div>
                   <Progress
-                    value={usagePct}
-                    className={cn('h-1.5', usagePct >= 100 ? '[&>div]:bg-rose-500' : usagePct >= 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-sky-500')}
+                    value={myAlloc ? displayPct : usagePct}
+                    className={cn('h-1.5',
+                      (myAlloc ? displayPct : usagePct) >= 100 ? '[&>div]:bg-rose-500' :
+                      (myAlloc ? displayPct : usagePct) >= 80  ? '[&>div]:bg-amber-500' :
+                      myAlloc ? '[&>div]:bg-violet-500' : '[&>div]:bg-sky-500'
+                    )}
                   />
                 </div>
+
+                {/* Paid-Out Breakdown — shown when the current user has a personal allocation.
+                    Mirrors the Reconciliation tab's breakdown but scoped to this user's
+                    transactions (Down Payments vs Cost Submissions). */}
+                {myAlloc && (() => {
+                  if (myPaysLoading) {
+                    return (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Paid-Out Breakdown</p>
+                        <div className="flex gap-4">
+                          <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                          <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (myAllocPays.length === 0) return null;
+
+                  // Filter payments to those attributable to the current user and sum by type
+                  const uid = currentUser?.id;
+                  const mine = myAllocPays.filter((p: any) =>
+                    p.requested_by === uid ||   // DP (down payment)
+                    p.submitted_by === uid ||    // OCS (cost submission)
+                    p.user_id === uid ||          // transaction user_id
+                    p.created_by === uid          // transaction created_by fallback
+                  );
+
+                  // If no user-attributed entries, fall back to all (fund is holder-only, single user)
+                  const payPool = mine.length > 0 ? mine : myAllocPays;
+                  const dpTotal  = payPool.filter((p: any) => p._type === 'dp').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const ocsTotal = payPool.filter((p: any) => p._type === 'ocs').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const otherTotal = payPool.filter((p: any) => p._type === 'manual').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const grandTotal = dpTotal + ocsTotal + otherTotal;
+                  if (grandTotal === 0) return null;
+
+                  const breakdown = [
+                    { label: 'Down Payments',     value: dpTotal,    cls: 'text-sky-600' },
+                    { label: 'Cost Submissions',  value: ocsTotal,   cls: 'text-violet-600' },
+                    ...(otherTotal > 0 ? [{ label: 'Other', value: otherTotal, cls: 'text-muted-foreground' }] : []),
+                  ].filter(b => b.value > 0);
+
+                  return (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                        Paid-Out Breakdown
+                      </p>
+                      <div className="flex flex-wrap gap-x-6 gap-y-1">
+                        {breakdown.map(b => (
+                          <div key={b.label} className="flex flex-col">
+                            <span className="text-[10px] text-muted-foreground">{b.label}</span>
+                            <span className={cn('font-mono text-[12px] font-semibold', b.cls)}>
+                              {fund.currency} {formatNumber(b.value, 0)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {grandTotal > 0 ? Math.round(b.value / grandTotal * 100) : 0}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Expanded allocations list */}
                 {isOpen && (
