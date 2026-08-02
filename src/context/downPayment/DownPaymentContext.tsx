@@ -368,19 +368,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       // ── Duplicate guard (server-side) ────────────────────────────────────────
       // Block any active (non-cancelled, non-rejected, non-deleted) request for
-      // the same site entry. Two paths are checked:
+      // the same site entry. Three paths are checked to close a cross-path gap:
+      //
       //   Path A — by mmp_site_entry_id (precise, preferred)
-      //   Path B — by (site_name, hub_id) as fallback for old rows that have
-      //             mmp_site_entry_id = NULL (e.g. requests created before the
-      //             column was added). Without this fallback those old requests
-      //             were completely invisible to the guard.
+      //             Fires when the NEW request carries an entry ID.
+      //
+      //   Path B — by (site_name, hub_id) across ALL rows (not just IS-NULL ones)
+      //             Fires when the NEW request has no entry ID. Previously this
+      //             path filtered to "mmp_site_entry_id IS NULL" which meant it
+      //             was blind to existing requests that DO have an entry ID — the
+      //             exact scenario that occurs after a site is reclaimed and the
+      //             old collector's advance is still open. The IS NULL filter has
+      //             been removed so all active rows for that site/hub are checked.
+      //
+      //   Path C — extra cross-check: even when Path A would fire, also check
+      //             whether a legacy null-entry-id row exists for the same site.
       {
         let duplicateFound = false;
         let duplicateStatus = '';
         let duplicateAmount = 0;
 
         if (request.mmpSiteEntryId) {
-          // Path A — exact entry id match (covers 99% of cases)
+          // Path A — exact entry id match
           const { data: existingActive } = await supabase
             .from('down_payment_requests')
             .select('id, status, requested_amount')
@@ -395,19 +404,27 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         }
 
         if (!duplicateFound && request.siteName && hubId) {
-          // Path B — name + hub fallback for null-entry-id rows
+          // Path B — name + hub check across ALL rows (entry-id present or null).
+          // Previously restricted to IS NULL rows, which missed the cross-path case
+          // where the old request has an entry-id but the new one doesn't (or vice
+          // versa). Now checks all active rows for the site/hub combination.
           const { data: existingByName } = await supabase
             .from('down_payment_requests')
             .select('id, status, requested_amount')
-            .is('mmp_site_entry_id', null)
             .eq('site_name', request.siteName.trim())
             .eq('hub_id', hubId)
             .not('status', 'in', '("cancelled","rejected","deleted")')
             .limit(1);
           if (existingByName && existingByName.length > 0) {
-            duplicateFound = true;
-            duplicateStatus = existingByName[0].status;
-            duplicateAmount = existingByName[0].requested_amount;
+            // Skip if this row is the same entry we already checked in Path A
+            const isSameEntry =
+              request.mmpSiteEntryId &&
+              (existingByName[0] as any).mmp_site_entry_id === request.mmpSiteEntryId;
+            if (!isSameEntry) {
+              duplicateFound = true;
+              duplicateStatus = existingByName[0].status;
+              duplicateAmount = existingByName[0].requested_amount;
+            }
           }
         }
 

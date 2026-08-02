@@ -504,6 +504,54 @@ export async function reclaimFromCoordinator(opts: {
       }
     });
     await Promise.all(resetPromises);
+
+    // ── FIX: Cancel any open (pending) advance requests for the reclaimed entries ──
+    // When a site is reclaimed the collector who held it is no longer responsible.
+    // Leaving their advance open would (a) block any new collector from submitting
+    // an advance and (b) allow double-payment if the old request is later approved.
+    // We cancel only truly-open statuses — paid/partially-paid rows need human review.
+    try {
+      const CANCELLABLE = ['pending_supervisor', 'pending_admin'];
+      const { data: openAdvances, error: advFetchErr } = await supabase
+        .from('down_payment_requests')
+        .select('id, status, requested_by, site_name')
+        .in('mmp_site_entry_id', forwardedEntryIds)
+        .in('status', CANCELLABLE);
+
+      if (advFetchErr) {
+        console.warn('[MMP Reclaim] Could not fetch open advances to cancel:', advFetchErr.message);
+      } else if (openAdvances && openAdvances.length > 0) {
+        const advanceIds = openAdvances.map((a: any) => a.id);
+
+        // Cancel each advance individually so we can safely merge the metadata note
+        // without overwriting existing fields (a bulk .update() would replace the whole jsonb).
+        await Promise.all(
+          (openAdvances as any[]).map(async (adv: any) => {
+            const mergedMeta = {
+              ...(adv.metadata ?? {}),
+              auto_cancelled_reason: `Auto-cancelled: site reclaimed on ${now}. Reason: ${reasonCategory} — ${reason}`,
+              reclaimed_by: currentUserId,
+            };
+            const { error: cancelErr } = await supabase
+              .from('down_payment_requests')
+              .update({ status: 'cancelled', updated_at: now, metadata: mergedMeta })
+              .eq('id', adv.id);
+            if (cancelErr) {
+              console.warn(`[MMP Reclaim] Failed to cancel advance ${adv.id}:`, cancelErr.message);
+            }
+          })
+        );
+
+        console.log(
+          `[MMP Reclaim] Auto-cancelled ${advanceIds.length} open advance(s) for reclaimed sites:`,
+          openAdvances.map((a: any) => a.site_name).join(', '),
+        );
+      }
+    } catch (advErr) {
+      // Non-fatal — log but don't abort the reclaim
+      console.warn('[MMP Reclaim] Advance cancellation block failed:', advErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
   }
 
   // Log MMP-level audit

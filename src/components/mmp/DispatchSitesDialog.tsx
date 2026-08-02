@@ -741,7 +741,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         .in('status', ['approved', 'pending_supervisor', 'pending_admin']);
 
       if (priorAdvances && priorAdvances.length > 0) {
-        // Only hard-block on disbursed (approved) advances that are STILL unresolved
         const unresolvedDisbursed = priorAdvances.filter(a =>
           a.status === 'approved' &&
           (a.metadata as any)?.manual_reconciliation_required === true &&
@@ -751,29 +750,42 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           a.status === 'approved' &&
           ((a.metadata as any)?.manual_reconciliation_required !== true || (a.metadata as any)?.reconciliation_resolved_by)
         );
-        const pendingCount = priorAdvances.filter(a => a.status !== 'approved').length;
+        // FIX: pending advances are also a hard-block (require explicit override).
+        // Previously these only showed a non-blocking toast — meaning a new collector
+        // could be dispatched to a site that already had an uncancelled advance from
+        // the previous (reclaimed) collector, leading to two active advances for the
+        // same site. Now pending advances require the same "click again to confirm"
+        // override that unresolved disbursed advances already required.
+        const pendingAdvances = priorAdvances.filter(a => a.status !== 'approved');
+        const pendingCount = pendingAdvances.length;
+
         const parts: string[] = [];
         if (unresolvedDisbursed.length > 0) parts.push(`${unresolvedDisbursed.length} unresolved disbursed advance(s)`);
-        if (resolvedDisbursed.length > 0) parts.push(`${resolvedDisbursed.length} resolved advance(s)`);
-        if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s)`);
+        if (resolvedDisbursed.length > 0)   parts.push(`${resolvedDisbursed.length} resolved advance(s)`);
+        if (pendingCount > 0)               parts.push(`${pendingCount} pending advance(s)`);
 
-        if (unresolvedDisbursed.length > 0) {
+        const needsOverride = unresolvedDisbursed.length > 0 || pendingCount > 0;
+
+        if (needsOverride) {
           if (!pendingFinancialOverride) {
             setPendingFinancialOverride(true);
+            const isPendingOnly = unresolvedDisbursed.length === 0 && pendingCount > 0;
             toast({
-              title: '⚠ Financial Alert — Click Dispatch Again to Confirm',
-              description: `${unresolvedDisbursed.length} unresolved disbursed advance(s) require manual reconciliation. Re-dispatching creates new financial exposure. This will be logged.`,
+              title: '⚠ Open Advances Detected — Click Dispatch Again to Confirm',
+              description: isPendingOnly
+                ? `${pendingCount} pending (uncancelled) advance(s) already exist for the selected site(s). Re-dispatching without cancelling them can create duplicate advances. Click Dispatch again to proceed anyway.`
+                : `${unresolvedDisbursed.length} unresolved disbursed advance(s) require manual reconciliation. Re-dispatching creates new financial exposure. Click Dispatch again to confirm.`,
               variant: 'destructive',
             });
             return;
           }
           setPendingFinancialOverride(false);
-          console.warn('[DISPATCH OVERRIDE] Admin bypassed financial lockout for sites:', selectedIds);
-        } else if (parts.length > 0) {
-          // Non-blocking warning for resolved/pending-only
+          console.warn('[DISPATCH OVERRIDE] Admin bypassed advance lockout for sites:', selectedIds, { unresolvedDisbursed: unresolvedDisbursed.length, pending: pendingCount });
+        } else if (resolvedDisbursed.length > 0) {
+          // Non-blocking info-only for fully-resolved approved advances
           toast({
             title: '⚠ Prior Advances Detected',
-            description: `${parts.join(', ')}. No unresolved disbursed advances — proceeding.`,
+            description: `${parts.join(', ')} — all resolved, proceeding.`,
             variant: 'default',
           });
         }
