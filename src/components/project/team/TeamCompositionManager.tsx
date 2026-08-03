@@ -405,7 +405,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <CardTitle>Team Composition</CardTitle>
           <CardDescription>Assign team members and roles for this project</CardDescription>
         </div>
-        <Button onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
+        <Button type="button" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
           <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
         </Button>
       </CardHeader>
@@ -506,6 +506,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                             )}
                           </div>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="sm"
                             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
@@ -572,6 +573,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
+                                    type="button"
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 w-7 p-0"
@@ -589,7 +591,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRemoveTeamMember(member.userId)}>
+                          <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRemoveTeamMember(member.userId)}>
                             <UserMinus className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -604,7 +606,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <div className="flex flex-col items-center justify-center py-8 border border-dashed rounded-lg">
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-sm">No team members assigned yet</p>
-            <Button className="mt-4" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
+            <Button type="button" className="mt-4" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
               <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
             </Button>
           </div>
@@ -845,8 +847,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
             </div>
 
             <DialogFooter className="mt-2">
-              <Button variant="outline" onClick={() => setEditFeeOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveEditFee}>
+              <Button type="button" variant="outline" onClick={() => setEditFeeOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={handleSaveEditFee}>
                 <DollarSign className="h-4 w-4 mr-1.5" /> Save Fee & Schedule
               </Button>
             </DialogFooter>
@@ -1064,7 +1066,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                                 </TooltipProvider>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Button size="sm" onClick={() => handleAddTeamMember(user)}>
+                                <Button type="button" size="sm" onClick={() => handleAddTeamMember(user)}>
                                   <Plus className="h-4 w-4" />
                                 </Button>
                               </TableCell>
@@ -1177,10 +1179,10 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 </div>
 
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => { setDialogOpen(false); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields(); }}>
+                  <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields(); }}>
                     Cancel
                   </Button>
-                  <Button onClick={handleAddExternalMember} disabled={!extName.trim()}>
+                  <Button type="button" onClick={handleAddExternalMember} disabled={!extName.trim()}>
                     <Globe className="h-4 w-4 mr-1.5" /> Add External Member
                   </Button>
                 </DialogFooter>
@@ -1189,7 +1191,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
             {addMode === 'system' && (
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setDialogOpen(false); resetFeeFields(); }}>
+                <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetFeeFields(); }}>
                   Cancel
                 </Button>
               </DialogFooter>
