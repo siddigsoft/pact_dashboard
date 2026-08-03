@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Zap, RefreshCw, AlertTriangle, CheckCircle2, DollarSign, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseJournalError } from '@/lib/journalErrors';
 import { formatNumber } from '@/lib/accountingFormat';
 import { format } from 'date-fns';
 
@@ -83,7 +84,7 @@ export default function AccountingGLBridgePayroll() {
       toast.success(`Payroll bridge done — Posted: ${res?.posted ?? '?'}, Skipped: ${res?.skipped ?? '?'}, Errors: ${res?.errors ?? 0}`);
       await load();
     } catch (err: any) {
-      toast.error(`Bridge failed: ${err.message}`);
+      toast.error(`Bridge failed: ${parseJournalError(err)}`);
     } finally {
       setBridging(null);
     }
@@ -98,7 +99,7 @@ export default function AccountingGLBridgePayroll() {
       toast.success(`EOSB bridge done — Posted: ${res?.posted ?? '?'}, Errors: ${res?.errors ?? 0}`);
       await load();
     } catch (err: any) {
-      toast.error(`EOSB bridge failed: ${err.message}`);
+      toast.error(`EOSB bridge failed: ${parseJournalError(err)}`);
     } finally {
       setBridging(null);
     }

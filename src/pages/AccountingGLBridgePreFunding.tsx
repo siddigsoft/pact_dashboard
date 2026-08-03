@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Zap, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseJournalError } from '@/lib/journalErrors';
 import { formatNumber } from '@/lib/accountingFormat';
 import { format } from 'date-fns';
 
@@ -82,7 +83,7 @@ export default function AccountingGLBridgePreFunding() {
       );
       await load();
     } catch (err: any) {
-      toast.error(`Bridge failed: ${err.message}`);
+      toast.error(`Bridge failed: ${parseJournalError(err)}`);
     } finally {
       setBridging(false);
     }

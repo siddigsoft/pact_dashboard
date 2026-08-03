@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { parseJournalError } from '@/lib/journalErrors';
 import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
@@ -218,7 +219,7 @@ export default function AccountingJournals() {
     });
     setSubmitting(false);
     if (err) {
-      toast({ title: 'Post failed', description: err.message, variant: 'destructive' });
+      toast({ title: 'Post failed', description: parseJournalError(err), variant: 'destructive' });
     } else {
       toast({ title: `Journal entry posted (${String(entryId).slice(0, 8)}…)` });
       setNewOpen(false);
