@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuthorization } from '@/context/AuthorizationContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { restoreFromBin } from '@/utils/softDelete';
 import { Button } from '@/components/ui/button';
