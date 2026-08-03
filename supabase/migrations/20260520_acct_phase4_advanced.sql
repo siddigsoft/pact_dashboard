@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS acct_period_close_log (
 );
 
 ALTER TABLE acct_period_close_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS acct_period_close_log_read  ON acct_period_close_log;
+DROP POLICY IF EXISTS acct_period_close_log_write ON acct_period_close_log;
 CREATE POLICY acct_period_close_log_read ON acct_period_close_log FOR SELECT USING (true);
 CREATE POLICY acct_period_close_log_write ON acct_period_close_log FOR INSERT
   WITH CHECK (auth.role() = 'authenticated');
@@ -161,6 +163,8 @@ CREATE TABLE IF NOT EXISTS acct_budget_encumbrances (
 );
 
 ALTER TABLE acct_budget_encumbrances ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS acct_budget_encumbrances_read  ON acct_budget_encumbrances;
+DROP POLICY IF EXISTS acct_budget_encumbrances_write ON acct_budget_encumbrances;
 CREATE POLICY acct_budget_encumbrances_read  ON acct_budget_encumbrances FOR SELECT USING (true);
 CREATE POLICY acct_budget_encumbrances_write ON acct_budget_encumbrances FOR ALL
   USING (auth.role() = 'authenticated');
