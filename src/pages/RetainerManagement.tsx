@@ -163,7 +163,7 @@ const RetainerManagement = () => {
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
   const { hasAnyRole } = useAuthorization();
-  const { processMonthlyRetainers } = useWallet();
+  const { processMonthlyRetainers, reprocessFallbackRetainers } = useWallet();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
@@ -174,7 +174,9 @@ const RetainerManagement = () => {
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [showProcessDialog, setShowProcessDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number; fallbackCount: number } | null>(null);
+  const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number; fallbackCount: number; fallbackUserIds: string[] } | null>(null);
+  const [showReprocessDialog, setShowReprocessDialog] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
 
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
@@ -378,6 +380,36 @@ const RetainerManagement = () => {
       });
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleReprocess = async () => {
+    if (!processResult || processResult.fallbackUserIds.length === 0) return;
+    const period = getCurrentPeriod();
+    setReprocessing(true);
+    try {
+      const result = await reprocessFallbackRetainers(processResult.fallbackUserIds, period);
+      await fetchData();
+      // Use explicit failedUserIds to keep only users that genuinely still need correction
+      setProcessResult(prev =>
+        prev
+          ? {
+              ...prev,
+              fallbackCount: result.failedUserIds.length,
+              fallbackUserIds: result.failedUserIds,
+            }
+          : prev
+      );
+    } catch (error) {
+      console.error('Reprocess fallback retainers failed:', error);
+      toast({
+        title: 'Reprocessing Failed',
+        description: 'An unexpected error occurred. Check console for details.',
+        variant: 'destructive',
+      });
+    } finally {
+      setReprocessing(false);
+      setShowReprocessDialog(false);
     }
   };
 
@@ -1303,7 +1335,25 @@ const RetainerManagement = () => {
                     <Alert variant="destructive">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
-                        <span className="font-medium">{processResult.fallbackCount} retainer(s) paid in base currency</span> — no exchange rate was found for their configured payout currency. Please add the missing rate in Exchange Rates and reprocess to correct these payments.
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="font-medium">{processResult.fallbackCount} retainer(s) paid in base currency</span> — no exchange rate was found for their configured payout currency. Add the missing rate in Exchange Rates, then click "Reprocess" to correct only these payments.
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={() => setShowReprocessDialog(true)}
+                            disabled={reprocessing}
+                            data-testid="button-reprocess-fallback"
+                          >
+                            {reprocessing ? (
+                              <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" />Reprocessing...</>
+                            ) : (
+                              <><RefreshCw className="h-3 w-3 mr-1.5" />Reprocess {processResult.fallbackCount} Payment{processResult.fallbackCount !== 1 ? 's' : ''}</>
+                            )}
+                          </Button>
+                        </div>
                       </AlertDescription>
                     </Alert>
                   )}
@@ -1477,6 +1527,53 @@ const RetainerManagement = () => {
           </Tabs>
         </>
       )}
+
+      <Dialog open={showReprocessDialog} onOpenChange={setShowReprocessDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-amber-500" />
+              Reprocess Fallback Payments
+            </DialogTitle>
+            <DialogDescription>
+              This will reverse the base-currency payments and re-issue them in the correct payout currency for {processResult?.fallbackCount ?? 0} member{(processResult?.fallbackCount ?? 0) !== 1 ? 's' : ''}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="border rounded-lg p-3 bg-muted/30 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Members to correct:</span>
+                <span className="font-medium">{processResult?.fallbackCount ?? 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Period:</span>
+                <span className="font-medium">{getCurrentPeriod()}</span>
+              </div>
+            </div>
+            <Alert>
+              <AlertDescription className="text-sm">
+                Each fallback payment will be reversed and re-issued at the current exchange rate. Make sure the exchange rate for the affected currencies has been saved in Exchange Rates before proceeding.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowReprocessDialog(false)} data-testid="button-cancel-reprocess">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReprocess}
+              disabled={reprocessing}
+              data-testid="button-confirm-reprocess"
+            >
+              {reprocessing ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Reprocessing...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-2" />Confirm & Reprocess</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showProcessDialog} onOpenChange={setShowProcessDialog}>
         <DialogContent>

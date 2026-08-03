@@ -54,7 +54,8 @@ interface WalletContextType {
   updateSiteVisitCost: (costId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, complexityMultiplier?: number) => Promise<void>;
   calculateClassificationFee: (userId: string, complexityMultiplier?: number) => Promise<number>;
-  processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number; fallbackCount: number }>;
+  processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number; fallbackCount: number; fallbackUserIds: string[] }>;
+  reprocessFallbackRetainers: (userIds: string[], period: string) => Promise<{ reprocessed: number; failed: number; reprocessedUserIds: string[]; failedUserIds: string[] }>;
   addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
@@ -1269,7 +1270,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true; // monthly / anything else
   };
 
-  const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number; fallbackCount: number }> => {
+  const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number; fallbackCount: number; fallbackUserIds: string[] }> => {
     try {
       const now = new Date();
       const currentMonth = now.getMonth() + 1; // 1-based
@@ -1284,7 +1285,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (fetchError) throw fetchError;
 
       if (!eligibleUsers || eligibleUsers.length === 0) {
-        return { processed: 0, failed: 0, total: 0, fallbackCount: 0 };
+        return { processed: 0, failed: 0, total: 0, fallbackCount: 0, fallbackUserIds: [] };
       }
 
       // Only process users whose retainer frequency falls due this month
@@ -1293,6 +1294,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let processed = 0;
       let failed = 0;
       let fallbackCount = 0;
+      const fallbackUserIds: string[] = [];
 
       for (const user of dueUsers) {
         try {
@@ -1353,6 +1355,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               );
               // Fall back: pay in base currency so nobody is skipped silently
               fallbackCount++;
+              fallbackUserIds.push(user.user_id);
             } else {
               appliedFxRate   = Number(rateRow.rate);
               payoutAmountCents = Math.round(user.retainer_amount_cents * appliedFxRate);
@@ -1395,7 +1398,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      return { processed, failed, total: dueUsers.length, fallbackCount };
+      return { processed, failed, total: dueUsers.length, fallbackCount, fallbackUserIds };
     } catch (error: any) {
       console.error('Failed to process monthly retainers:', error);
       toast({
@@ -1405,6 +1408,119 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
       throw error;
     }
+  };
+
+  /**
+   * Reverses the base-currency fallback retainer payment for each given user
+   * and re-issues in their configured payout currency, using the atomic
+   * `reverse_and_reissue_retainer` RPC so all three DB writes (delete
+   * fallback tx → reverse balance → re-credit correct currency) happen inside
+   * a single server-side transaction with no risk of partial-write corruption.
+   *
+   * Returns explicit lists of which user IDs succeeded and which failed so the
+   * caller can update UI state precisely rather than inferring from counts.
+   */
+  const reprocessFallbackRetainers = async (
+    userIds: string[],
+    period: string
+  ): Promise<{ reprocessed: number; failed: number; reprocessedUserIds: string[]; failedUserIds: string[] }> => {
+    const reprocessedUserIds: string[] = [];
+    const failedUserIds: string[] = [];
+
+    for (const userId of userIds) {
+      try {
+        // Fetch classification to get base/payout currency and amount
+        const { data: classData, error: classError } = await supabase
+          .from('current_user_classifications')
+          .select('retainer_currency, retainer_payout_currency, retainer_amount_cents')
+          .eq('user_id', userId)
+          .eq('has_retainer', true)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (classError || !classData) {
+          console.error(`[Reprocess] No active classification for user ${userId}:`, classError);
+          failedUserIds.push(userId);
+          continue;
+        }
+
+        const needsFx =
+          classData.retainer_payout_currency &&
+          classData.retainer_payout_currency !== classData.retainer_currency;
+
+        if (!needsFx) {
+          // No FX needed — this user shouldn't be in the fallback list; skip silently
+          console.warn(`[Reprocess] User ${userId} does not need FX conversion — skipping`);
+          continue;
+        }
+
+        // Delegate all three writes to the atomic server-side RPC.
+        // The RPC reads the original amount_cents from the fallback transaction
+        // itself so classification changes after the initial payment don't affect
+        // the reversal/reissue calculation.
+        const { data: rpcResult, error: rpcError } = await supabase.rpc(
+          'reverse_and_reissue_retainer',
+          {
+            p_user_id:         userId,
+            p_period:          period,
+            p_base_currency:   classData.retainer_currency,
+            p_payout_currency: classData.retainer_payout_currency,
+            p_created_by:      currentUser?.id ?? null,
+          }
+        );
+
+        if (rpcError) {
+          console.error(`[Reprocess] RPC error for user ${userId}:`, rpcError);
+          failedUserIds.push(userId);
+          continue;
+        }
+
+        const status = (rpcResult as any)?.status as string | undefined;
+        const rpcMessage = (rpcResult as any)?.message as string | undefined;
+
+        if (status === 'ok' || status === 'already_correct') {
+          reprocessedUserIds.push(userId);
+          // Invalidate cache for this user if it's the current user
+          if (userId === currentUser?.id) {
+            await invalidate.invalidateWallet(userId);
+            await invalidate.invalidateTransactions(userId);
+          }
+        } else if (status === 'insufficient_balance') {
+          // The member spent part of the fallback before reprocess was run.
+          // The RPC restored the transaction record — no balance corruption.
+          console.warn(`[Reprocess] Insufficient balance for user ${userId}: ${rpcMessage}`);
+          failedUserIds.push(userId);
+        } else if (status === 'no_fx_rate') {
+          console.error(`[Reprocess] Exchange rate still missing for user ${userId}: ${rpcMessage}`);
+          failedUserIds.push(userId);
+        } else {
+          console.error(`[Reprocess] Unexpected RPC status for user ${userId}:`, rpcResult);
+          failedUserIds.push(userId);
+        }
+      } catch (error: any) {
+        console.error(`[Reprocess] Unexpected error for user ${userId}:`, error);
+        failedUserIds.push(userId);
+      }
+    }
+
+    const reprocessed = reprocessedUserIds.length;
+    const failed = failedUserIds.length;
+
+    if (reprocessed > 0) {
+      toast({
+        title: 'Reprocessing Complete',
+        description: `${reprocessed} retainer${reprocessed !== 1 ? 's' : ''} corrected to the right currency.${failed > 0 ? ` ${failed} could not be corrected — check that the exchange rate is saved.` : ''}`,
+        variant: failed > 0 ? 'destructive' : 'default',
+      });
+    } else if (failed > 0) {
+      toast({
+        title: 'Reprocessing Failed',
+        description: `Could not correct ${failed} retainer${failed !== 1 ? 's' : ''}. Make sure the exchange rate is saved in Exchange Rates and try again.`,
+        variant: 'destructive',
+      });
+    }
+
+    return { reprocessed, failed, reprocessedUserIds, failedUserIds };
   };
 
   const listWallets = async (): Promise<Wallet[]> => {
@@ -1801,6 +1917,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         addSiteVisitFeeToWallet,
         calculateClassificationFee,
         processMonthlyRetainers,
+        reprocessFallbackRetainers,
         addRetainerToWallet,
         listWallets,
         adminAdjustBalance,
