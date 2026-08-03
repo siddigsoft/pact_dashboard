@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.acct_opening_balances (
 
 ALTER TABLE public.acct_opening_balances ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Finance roles can manage opening balances" ON public.acct_opening_balances;
 CREATE POLICY "Finance roles can manage opening balances"
   ON public.acct_opening_balances
   FOR ALL
@@ -74,10 +75,12 @@ CREATE TABLE IF NOT EXISTS public.acct_annual_budget_lines (
 ALTER TABLE public.acct_annual_budgets      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.acct_annual_budget_lines ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Finance can manage annual budgets" ON public.acct_annual_budgets;
 CREATE POLICY "Finance can manage annual budgets"
   ON public.acct_annual_budgets FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant','auditor')));
 
+DROP POLICY IF EXISTS "Finance can manage budget lines" ON public.acct_annual_budget_lines;
 CREATE POLICY "Finance can manage budget lines"
   ON public.acct_annual_budget_lines FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant','auditor')));
@@ -95,6 +98,7 @@ CREATE TABLE IF NOT EXISTS public.acct_budget_versions (
 );
 
 ALTER TABLE public.acct_budget_versions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Finance can view budget versions" ON public.acct_budget_versions;
 CREATE POLICY "Finance can view budget versions"
   ON public.acct_budget_versions FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant','auditor')));
@@ -135,9 +139,11 @@ CREATE INDEX IF NOT EXISTS idx_unified_assets_hub    ON public.unified_assets(hu
 CREATE INDEX IF NOT EXISTS idx_unified_assets_status ON public.unified_assets(status);
 
 ALTER TABLE public.unified_assets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Staff can view assets" ON public.unified_assets;
 CREATE POLICY "Staff can view assets"
   ON public.unified_assets FOR SELECT
   USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "Asset managers can create/update" ON public.unified_assets;
 CREATE POLICY "Asset managers can create/update"
   ON public.unified_assets FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','hr_admin','ICT','ict')));
@@ -158,8 +164,10 @@ CREATE TABLE IF NOT EXISTS public.asset_assignment_logs (
 );
 
 ALTER TABLE public.asset_assignment_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Staff can view assignment logs" ON public.asset_assignment_logs;
 CREATE POLICY "Staff can view assignment logs"
   ON public.asset_assignment_logs FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "Asset managers can insert assignment logs" ON public.asset_assignment_logs;
 CREATE POLICY "Asset managers can insert assignment logs"
   ON public.asset_assignment_logs FOR INSERT
   WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','hr_admin','ICT','ict','finance','financialAdmin')));
@@ -180,6 +188,7 @@ CREATE TABLE IF NOT EXISTS public.asset_disposals (
 );
 
 ALTER TABLE public.asset_disposals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Finance can manage disposals" ON public.asset_disposals;
 CREATE POLICY "Finance can manage disposals"
   ON public.asset_disposals FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin')));
@@ -220,9 +229,11 @@ CREATE INDEX IF NOT EXISTS idx_bsl_status    ON public.bank_statement_lines(stat
 ALTER TABLE public.bank_statements      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bank_statement_lines ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Finance can manage bank statements" ON public.bank_statements;
 CREATE POLICY "Finance can manage bank statements"
   ON public.bank_statements FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant')));
+DROP POLICY IF EXISTS "Finance can manage statement lines" ON public.bank_statement_lines;
 CREATE POLICY "Finance can manage statement lines"
   ON public.bank_statement_lines FOR ALL
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant')));
