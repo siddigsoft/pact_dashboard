@@ -1,4 +1,4 @@
-﻿  import { useLocation, Link, useNavigate } from "react-router-dom";
+  import { useLocation, Link, useNavigate } from "react-router-dom";
   import { Button } from "@/components/ui/button";
   import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
   import { Input } from "@/components/ui/input";
@@ -165,9 +165,21 @@
   const SIDEBAR_NAV_SUB_ITEM =
     "h-8 rounded-md text-[12px] font-medium transition-all duration-200";
 
-  const isNavPathActive = (pathname: string, url: string) => {
-    const base = url.split('?')[0];
-    if (pathname === base) return true;
+  const isNavPathActive = (pathname: string, search: string, url: string) => {
+    const [base, query] = url.split('?');
+    const itemTab  = new URLSearchParams(query ?? '').get('tab');
+    const currentTab = new URLSearchParams(search).get('tab');
+
+    if (pathname === base) {
+      if (itemTab) {
+        // Tab-specific item: only active when the current ?tab matches exactly
+        return currentTab === itemTab;
+      } else {
+        // Base-path item (no tab): active only when no tab is in the URL
+        return !currentTab;
+      }
+    }
+    // Child-route match (e.g. /hr/employee/123)
     if (base !== '/' && pathname.startsWith(base + '/')) return true;
     return false;
   };
@@ -607,7 +619,7 @@
   };
 
   const AppSidebar = () => {
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const navigate = useNavigate();
     const { currentUser, logout, roles } = useAppContext();
     const { showDueReminders } = useSiteVisitReminders();
@@ -975,7 +987,7 @@
       if (!menuGroups.length) return;
       const toExpand = new Set<string>();
       menuGroups.forEach((group: MenuGroup & { parentGroup?: string }) => {
-        if (group.items.some(item => isNavPathActive(pathname, item.url))) {
+        if (group.items.some(item => isNavPathActive(pathname, search, item.url))) {
           toExpand.add(group.id);
           if ((group as { parentGroup?: string }).parentGroup) {
             toExpand.add((group as { parentGroup?: string }).parentGroup!);
@@ -1126,7 +1138,7 @@
                             <SortableFavoriteItem
                               key={item.url}
                               item={item}
-                              isActive={isNavPathActive(pathname, item.url)}
+                              isActive={isNavPathActive(pathname, search, item.url)}
                               onRemove={removeFavorite}
                             />
                           ))}
@@ -1200,7 +1212,7 @@
                 return (
                   <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
                     {items.map((item) => {
-                      const isActive = isNavPathActive(pathname, item.url);
+                      const isActive = isNavPathActive(pathname, search, item.url);
                       const isItemFavorite = isFavorite(item.url);
                       return (
                         <SidebarMenuSubItem key={item.id} className="group/subitem relative">
@@ -1260,7 +1272,7 @@
               return (
                 <SidebarMenu className="gap-0.5 px-0.5">
                   {items.map((item, itemIndex) => {
-                    const isActive = isNavPathActive(pathname, item.url);
+                    const isActive = isNavPathActive(pathname, search, item.url);
                     const isItemFavorite = isFavorite(item.url);
                     return (
                       <SidebarMenuItem key={item.id} index={itemIndex}>
@@ -1383,7 +1395,7 @@
               }
 
               const isCollapsed = collapsedGroups.has(group.id);
-              const hasActiveItem = group.items.some(item => isNavPathActive(pathname, item.url));
+              const hasActiveItem = group.items.some(item => isNavPathActive(pathname, search, item.url));
 
               rendered.push(
                 <Collapsible key={group.id} open={!isCollapsed}>

@@ -284,7 +284,7 @@ const GROUP_COLORS: Record<string, { icon: string; bg: string }> = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 const AppSidebarIconFirst = () => {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const { currentUser, effectiveCurrentUser, logout, roles } = useAppContext();
   const { showDueReminders } = useSiteVisitReminders();
@@ -394,9 +394,21 @@ const AppSidebarIconFirst = () => {
   );
 
   // Is any item in a group currently active?
+  const isNavItemActive = useCallback(
+    (url: string) => {
+      const [base, query] = url.split('?');
+      const itemTab    = new URLSearchParams(query ?? '').get('tab');
+      const currentTab = new URLSearchParams(search).get('tab');
+      if (pathname === base) {
+        return itemTab ? currentTab === itemTab : !currentTab;
+      }
+      return base !== '/' && pathname.startsWith(base + '/');
+    },
+    [pathname, search]
+  );
   const isGroupActive = useCallback(
-    (group: MenuGroup) => group.items.some((i) => pathname === i.url || pathname.startsWith(i.url + "/")),
-    [pathname]
+    (group: MenuGroup) => group.items.some((i) => isNavItemActive(i.url)),
+    [isNavItemActive]
   );
 
   const getInitials = (name: string) =>
@@ -655,7 +667,7 @@ const AppSidebarIconFirst = () => {
               <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
                 {expandedGroup.items.map((item) => {
                   const Icon    = item.icon;
-                  const active  = pathname === item.url || pathname.startsWith(item.url + "/");
+                  const active  = isNavItemActive(item.url);
                   const badge   = getBadgeForItem(item.id, allCounts);
                   const colors  = GROUP_COLORS[expandedGroup.id] ?? { icon: "text-indigo-300", bg: "bg-white/10" };
 
