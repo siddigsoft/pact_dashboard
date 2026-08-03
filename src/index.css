@@ -1420,9 +1420,10 @@
     text-align: left;
   }
 
-  /* Font size scaling for accessibility */
+  /* Dashboard density: 14px root ≈ browser ~87% zoom so rem-based
+     UI fits at 100% the way it previously did at ~80–90%. */
   :root {
-    --base-font-size: 16px;
+    --base-font-size: 14px;
   }
 
   html {

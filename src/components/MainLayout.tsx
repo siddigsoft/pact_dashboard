@@ -99,8 +99,8 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
                 showOnlyWhenDisconnected={true}
               />
               <Navbar />
-              <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-2 py-2 sm:px-3 sm:py-3 lg:px-5 lg:py-4">
-                <div className="w-full rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
+              <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5">
+                <div className="w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
                   {showAccessSpinner ? (
                     <div className="flex items-center justify-center min-h-[60vh]">
                       <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
