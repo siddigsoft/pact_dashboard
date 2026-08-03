@@ -14,24 +14,42 @@
  *   • CSV export
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Plus, Search, Download, Archive, RefreshCw, UserCheck, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  Loader2, Plus, Search, Download, Archive, RefreshCw,
+  UserCheck, Trash2, AlertTriangle, RotateCcw, CalendarDays, Info,
+  CheckCircle2, TrendingDown,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
+import { cn } from '@/lib/utils';
 
 type AssetType = 'hr' | 'field_equipment' | 'fixed_asset';
 type DepMethod = 'straight_line' | 'declining_balance';
+
+interface FiscalPeriod { id: string; period_label: string; start_date: string; end_date: string; status: string }
+interface DepPreview {
+  asset_id: string; asset_code: string; asset_name: string;
+  depreciation_method: string; purchase_value: number;
+  accumulated_dep: number; nbv: number; period_charge: number;
+  already_fully_dep: boolean;
+}
+interface DepRun {
+  id: string; period_label: string; periods_per_year: number; run_date: string;
+  asset_count: number; total_depreciation: number; skipped_count: number;
+  error_count: number; status: string; created_at: string;
+}
 
 interface Asset {
   id: string; asset_code: string; name: string; asset_type: AssetType; category: string;
@@ -83,7 +101,11 @@ export default function UnifiedAssetMaster() {
   const { currentUser } = useAppContext();
   const canEdit    = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'hr_admin', 'ict']);
   const canDispose = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin']);
+  const canRunDep  = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
+  const [mainTab, setMainTab] = useState<'register' | 'depreciation'>('register');
+
+  // ── Register state ────────────────────────────────────────────────────────
   const [assets, setAssets] = useState<Asset[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [assignLogs, setAssignLogs] = useState<AssignLog[]>([]);
@@ -105,6 +127,17 @@ export default function UnifiedAssetMaster() {
   const [disposalForm, setDisposalForm] = useState(emptyDisposalForm());
   const [logAsset, setLogAsset] = useState<Asset | null>(null);
 
+  // ── Depreciation tab state ────────────────────────────────────────────────
+  const [fiscalPeriods, setFiscalPeriods] = useState<FiscalPeriod[]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+  const [periodsPerYear, setPeriodsPerYear] = useState<string>('12');
+  const [preview, setPreview] = useState<DepPreview[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [depRuns, setDepRuns] = useState<DepRun[]>([]);
+  const [depRunsLoading, setDepRunsLoading] = useState(false);
+  const [runningDep, setRunningDep] = useState(false);
+  const [depConfirmOpen, setDepConfirmOpen] = useState(false);
+
   async function load() {
     setLoading(true);
     const [aRes, pRes] = await Promise.all([
@@ -114,6 +147,67 @@ export default function UnifiedAssetMaster() {
     setAssets((aRes.data ?? []) as Asset[]);
     setProfiles((pRes.data ?? []) as Profile[]);
     setLoading(false);
+  }
+
+  const loadDepData = useCallback(async () => {
+    setDepRunsLoading(true);
+    const [periodRes, runRes] = await Promise.all([
+      supabase
+        .from('acct_fiscal_periods')
+        .select('id,period_label,start_date,end_date,status')
+        .eq('status', 'open')
+        .order('start_date', { ascending: false })
+        .limit(24),
+      supabase
+        .from('asset_depreciation_runs' as any)
+        .select('id,period_label,periods_per_year,run_date,asset_count,total_depreciation,skipped_count,error_count,status,created_at')
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
+    const periods = (periodRes.data ?? []) as FiscalPeriod[];
+    setFiscalPeriods(periods);
+    if (periods.length > 0 && !selectedPeriodId) setSelectedPeriodId(periods[0].id);
+    setDepRuns((runRes.data ?? []) as DepRun[]);
+    setDepRunsLoading(false);
+  }, [selectedPeriodId]);
+
+  const loadPreview = useCallback(async () => {
+    setPreviewLoading(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        'preview_asset_depreciation' as any,
+        { p_periods_per_year: parseInt(periodsPerYear) || 12 }
+      );
+      if (error) throw error;
+      setPreview((data ?? []) as DepPreview[]);
+    } catch (err: any) {
+      toast.error(`Preview failed: ${err.message}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [periodsPerYear]);
+
+  async function runDepreciation() {
+    if (!selectedPeriodId) { toast.error('Select a fiscal period'); return; }
+    setRunningDep(true);
+    setDepConfirmOpen(false);
+    try {
+      const { data, error } = await supabase.rpc(
+        'post_asset_depreciation_to_gl' as any,
+        { p_fiscal_period_id: selectedPeriodId, p_periods_per_year: parseInt(periodsPerYear) || 12 }
+      );
+      if (error) throw error;
+      const res = data as { posted: number; skipped: number; errors: number; total_depreciation: number } | null;
+      toast.success(
+        `Depreciation run complete — Posted: ${res?.posted ?? 0}, Skipped: ${res?.skipped ?? 0}, ` +
+        `Errors: ${res?.errors ?? 0}, Total: ${formatNumber(res?.total_depreciation ?? 0)}`
+      );
+      await Promise.all([load(), loadDepData(), loadPreview()]);
+    } catch (err: any) {
+      toast.error(`Run failed: ${err.message}`);
+    } finally {
+      setRunningDep(false);
+    }
   }
 
   async function loadLogs(assetId: string) {
@@ -126,6 +220,12 @@ export default function UnifiedAssetMaster() {
   }
 
   useEffect(() => { if (isAuthenticated) load(); }, [isAuthenticated]);
+  useEffect(() => {
+    if (isAuthenticated && mainTab === 'depreciation') {
+      loadDepData();
+      loadPreview();
+    }
+  }, [isAuthenticated, mainTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     let list = assets;
@@ -234,128 +334,354 @@ export default function UnifiedAssetMaster() {
     lost: 'bg-red-100 text-red-700', disposed: 'bg-slate-100 text-slate-500',
   };
 
+  // ── Depreciation preview helpers ──────────────────────────────────────────
+  const eligibleForDep = preview.filter(p => !p.already_fully_dep && p.period_charge > 0);
+  const totalPeriodCharge = eligibleForDep.reduce((s, p) => s + p.period_charge, 0);
+
+  const selectedPeriod = fiscalPeriods.find(p => p.id === selectedPeriodId);
+
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 p-6">
+      {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Unified Asset Register</h2>
           <p className="text-muted-foreground text-sm mt-1">All HR, field equipment, and fixed assets in one place.</p>
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => downloadCsv('assets.csv', [
-            ['Code','Name','Type','Category','Serial','Hub','Status','Purchase Value','NBV','Currency','Custodian'],
-            ...assets.map(a => [a.asset_code, a.name, a.asset_type, a.category, a.serial_number??'', a.hub??'', a.status, a.purchase_value??'', nbv(a)??'', a.currency, a.custodian_name??'']),
-          ])}>
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
-          {canEdit && (
-            <Button size="sm" onClick={() => { setForm(emptyForm()); setCreateOpen(true); }}>
-              <Plus className="h-4 w-4 mr-1" /> New Asset
+      </div>
+
+      {/* Top-level tabs: Register | Depreciation */}
+      <Tabs value={mainTab} onValueChange={v => setMainTab(v as typeof mainTab)}>
+        <TabsList>
+          <TabsTrigger value="register">Asset Register</TabsTrigger>
+          <TabsTrigger value="depreciation">
+            <TrendingDown className="h-4 w-4 mr-1.5" />
+            Depreciation
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── REGISTER TAB ──────────────────────────────────────────────────── */}
+        <TabsContent value="register" className="space-y-4 mt-4">
+          {/* Header actions */}
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => downloadCsv('assets.csv', [
+              ['Code','Name','Type','Category','Serial','Hub','Status','Purchase Value','NBV','Currency','Custodian'],
+              ...assets.map(a => [a.asset_code, a.name, a.asset_type, a.category, a.serial_number??'', a.hub??'', a.status, a.purchase_value??'', nbv(a)??'', a.currency, a.custodian_name??'']),
+            ])}>
+              <Download className="h-4 w-4 mr-1" /> Export
             </Button>
-          )}
-        </div>
-      </div>
+            {canEdit && (
+              <Button size="sm" onClick={() => { setForm(emptyForm()); setCreateOpen(true); }}>
+                <Plus className="h-4 w-4 mr-1" /> New Asset
+              </Button>
+            )}
+          </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Assets', value: assets.length },
-          { label: 'Assigned', value: assets.filter(a => a.status === 'assigned').length },
-          { label: 'Available', value: assets.filter(a => a.status === 'available').length },
-          { label: 'Total Cost', value: formatNumber(assets.reduce((s, a) => s + (a.purchase_value ?? 0), 0)) },
-        ].map(s => (
-          <Card key={s.label}><CardContent className="pt-4"><p className="text-xs text-muted-foreground">{s.label}</p><p className="text-2xl font-bold">{s.value}</p></CardContent></Card>
-        ))}
-      </div>
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Assets', value: assets.length },
+              { label: 'Assigned', value: assets.filter(a => a.status === 'assigned').length },
+              { label: 'Available', value: assets.filter(a => a.status === 'available').length },
+              { label: 'Total Cost', value: formatNumber(assets.reduce((s, a) => s + (a.purchase_value ?? 0), 0)) },
+            ].map(s => (
+              <Card key={s.label}><CardContent className="pt-4"><p className="text-xs text-muted-foreground">{s.label}</p><p className="text-2xl font-bold">{s.value}</p></CardContent></Card>
+            ))}
+          </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 w-56" />
-        </div>
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Asset type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {ASSET_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterHub} onValueChange={setFilterHub}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Hub" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All hubs</SelectItem>
-            {HUBS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="pt-4">
-          {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto my-8" /> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground border-b text-xs">
-                    <th className="text-left pb-2 pr-3">Code</th>
-                    <th className="text-left pb-2 pr-3">Name / Category</th>
-                    <th className="text-left pb-2 pr-3">Hub</th>
-                    <th className="text-left pb-2 pr-3">Custodian</th>
-                    <th className="text-right pb-2 pr-3">Cost</th>
-                    <th className="text-right pb-2 pr-3">NBV</th>
-                    <th className="text-left pb-2 pr-3">Status</th>
-                    <th className="text-left pb-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(a => (
-                    <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-2 pr-3 font-mono text-xs">{a.asset_code}</td>
-                      <td className="py-2 pr-3">
-                        <div className="font-medium">{a.name}</div>
-                        <div className="text-xs text-muted-foreground">{a.category}{a.serial_number ? ` • ${a.serial_number}` : ''}</div>
-                      </td>
-                      <td className="py-2 pr-3 text-xs">{a.hub ?? '—'}</td>
-                      <td className="py-2 pr-3 text-xs">{a.custodian_name ?? '—'}</td>
-                      <td className="py-2 pr-3 text-right font-mono text-xs">{a.purchase_value ? formatNumber(a.purchase_value) : '—'}</td>
-                      <td className="py-2 pr-3 text-right font-mono text-xs">{nbv(a) !== null ? formatNumber(nbv(a)!) : '—'}</td>
-                      <td className="py-2 pr-3"><Badge className={`text-xs ${statusColor[a.status] ?? ''}`}>{a.status}</Badge></td>
-                      <td className="py-2">
-                        <div className="flex gap-1">
-                          {canEdit && a.status !== 'disposed' && (
-                            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Assign" onClick={() => { setAssignAsset(a); setAssignOpen(true); }}>
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="History" onClick={() => { setLogAsset(a); loadLogs(a.id); }}>
-                            <Archive className="h-3.5 w-3.5" />
-                          </Button>
-                          {canDispose && a.status !== 'disposed' && (
-                            <Button type="button" size="icon" variant="ghost" className="h-7 w-7 hover:text-destructive" title="Dispose" onClick={() => { setDisposeAsset(a); setDisposalForm(emptyDisposalForm()); }}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={8} className="py-8 text-center text-muted-foreground text-sm">No assets found.</td></tr>
-                  )}
-                </tbody>
-              </table>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 w-56" />
             </div>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Asset type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {ASSET_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterHub} onValueChange={setFilterHub}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Hub" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All hubs</SelectItem>
+                {HUBS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Table */}
+          <Card>
+            <CardContent className="pt-4">
+              {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto my-8" /> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-muted-foreground border-b text-xs">
+                        <th className="text-left pb-2 pr-3">Code</th>
+                        <th className="text-left pb-2 pr-3">Name / Category</th>
+                        <th className="text-left pb-2 pr-3">Hub</th>
+                        <th className="text-left pb-2 pr-3">Custodian</th>
+                        <th className="text-right pb-2 pr-3">Cost</th>
+                        <th className="text-right pb-2 pr-3">NBV</th>
+                        <th className="text-left pb-2 pr-3">Status</th>
+                        <th className="text-left pb-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(a => (
+                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 pr-3 font-mono text-xs">{a.asset_code}</td>
+                          <td className="py-2 pr-3">
+                            <div className="font-medium">{a.name}</div>
+                            <div className="text-xs text-muted-foreground">{a.category}{a.serial_number ? ` • ${a.serial_number}` : ''}</div>
+                          </td>
+                          <td className="py-2 pr-3 text-xs">{a.hub ?? '—'}</td>
+                          <td className="py-2 pr-3 text-xs">{a.custodian_name ?? '—'}</td>
+                          <td className="py-2 pr-3 text-right font-mono text-xs">{a.purchase_value ? formatNumber(a.purchase_value) : '—'}</td>
+                          <td className="py-2 pr-3 text-right font-mono text-xs">{nbv(a) !== null ? formatNumber(nbv(a)!) : '—'}</td>
+                          <td className="py-2 pr-3"><Badge className={`text-xs ${statusColor[a.status] ?? ''}`}>{a.status}</Badge></td>
+                          <td className="py-2">
+                            <div className="flex gap-1">
+                              {canEdit && a.status !== 'disposed' && (
+                                <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Assign" onClick={() => { setAssignAsset(a); setAssignOpen(true); }}>
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="History" onClick={() => { setLogAsset(a); loadLogs(a.id); }}>
+                                <Archive className="h-3.5 w-3.5" />
+                              </Button>
+                              {canDispose && a.status !== 'disposed' && (
+                                <Button type="button" size="icon" variant="ghost" className="h-7 w-7 hover:text-destructive" title="Dispose" onClick={() => { setDisposeAsset(a); setDisposalForm(emptyDisposalForm()); }}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {filtered.length === 0 && (
+                        <tr><td colSpan={8} className="py-8 text-center text-muted-foreground text-sm">No assets found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── DEPRECIATION TAB ──────────────────────────────────────────────── */}
+        <TabsContent value="depreciation" className="space-y-5 mt-4">
+          {/* Info banner */}
+          <div className="flex gap-3 p-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-800 text-sm">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <span className="font-medium">How depreciation posting works:</span>{' '}
+              Select an open fiscal period, choose the frequency (monthly/quarterly/annual), preview the charges,
+              then click "Run Depreciation". The RPC posts one journal entry per asset
+              (DR Depreciation Expense / CR Accumulated Depreciation), updates each asset's accumulated
+              depreciation balance, and logs to the GL bridge log. Runs are idempotent — re-running for
+              the same period + asset is safely skipped. GL accounts are configured in{' '}
+              <strong>GL Bridge Settings → asset_depreciation</strong>.
+            </div>
+          </div>
+
+          {/* Controls */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" /> Run Configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fiscal Period</label>
+                  {depRunsLoading ? (
+                    <div className="flex items-center gap-2 h-9 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading periods…</div>
+                  ) : fiscalPeriods.length === 0 ? (
+                    <p className="text-sm text-amber-600">No open fiscal periods found. Open a period in Fiscal Years first.</p>
+                  ) : (
+                    <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
+                      <SelectTrigger className="w-56">
+                        <SelectValue placeholder="Select period…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalPeriods.map(p => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.period_label} ({p.start_date} → {p.end_date})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Frequency</label>
+                  <Select value={periodsPerYear} onValueChange={v => setPeriodsPerYear(v)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12">Monthly (12/yr)</SelectItem>
+                      <SelectItem value="4">Quarterly (4/yr)</SelectItem>
+                      <SelectItem value="1">Annual (1/yr)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={loadPreview} disabled={previewLoading}>
+                    <RefreshCw className={cn('h-4 w-4 mr-1', previewLoading && 'animate-spin')} />
+                    Preview
+                  </Button>
+                  {canRunDep && (
+                    <Button
+                      size="sm"
+                      disabled={runningDep || !selectedPeriodId || eligibleForDep.length === 0}
+                      onClick={() => setDepConfirmOpen(true)}
+                      className="gap-2"
+                    >
+                      {runningDep ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                      Run Depreciation ({eligibleForDep.length} assets)
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preview table */}
+          {preview.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Preview — Period Charges</CardTitle>
+                <CardDescription>
+                  {eligibleForDep.length} of {preview.length} assets will be charged •{' '}
+                  Total: <strong>{formatNumber(totalPeriodCharge)}</strong>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {previewLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-muted-foreground border-b">
+                          <th className="text-left pb-2 pr-3">Code</th>
+                          <th className="text-left pb-2 pr-3">Name</th>
+                          <th className="text-left pb-2 pr-3">Method</th>
+                          <th className="text-right pb-2 pr-3">Cost</th>
+                          <th className="text-right pb-2 pr-3">Accum. Dep</th>
+                          <th className="text-right pb-2 pr-3">NBV</th>
+                          <th className="text-right pb-2 pr-3">Period Charge</th>
+                          <th className="text-left pb-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.map(p => (
+                          <tr key={p.asset_id} className={cn('border-b last:border-0 hover:bg-muted/20', p.already_fully_dep && 'opacity-50')}>
+                            <td className="py-1.5 pr-3 font-mono">{p.asset_code}</td>
+                            <td className="py-1.5 pr-3">{p.asset_name}</td>
+                            <td className="py-1.5 pr-3">{p.depreciation_method.replace('_',' ')}</td>
+                            <td className="py-1.5 pr-3 text-right font-mono">{formatNumber(p.purchase_value)}</td>
+                            <td className="py-1.5 pr-3 text-right font-mono text-muted-foreground">{formatNumber(p.accumulated_dep)}</td>
+                            <td className="py-1.5 pr-3 text-right font-mono">{formatNumber(p.nbv)}</td>
+                            <td className={cn('py-1.5 pr-3 text-right font-mono font-medium', p.already_fully_dep ? 'text-muted-foreground' : 'text-rose-600')}>
+                              {p.already_fully_dep ? '—' : formatNumber(p.period_charge)}
+                            </td>
+                            <td className="py-1.5">
+                              {p.already_fully_dep
+                                ? <Badge className="text-xs bg-gray-100 text-gray-500">Fully Dep.</Badge>
+                                : <Badge className="text-xs bg-green-100 text-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />Eligible</Badge>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 bg-muted/20 font-semibold">
+                          <td className="py-1.5 pr-3 font-mono" colSpan={6}>TOTAL ({eligibleForDep.length} eligible)</td>
+                          <td className="py-1.5 pr-3 text-right font-mono text-rose-600">{formatNumber(totalPeriodCharge)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+
+          {/* Run history */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Run History</CardTitle>
+                <Button type="button" variant="ghost" size="sm" onClick={loadDepData} disabled={depRunsLoading}>
+                  <RefreshCw className={cn('h-4 w-4', depRunsLoading && 'animate-spin')} />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {depRunsLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : depRuns.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No depreciation runs yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground border-b">
+                        <th className="text-left pb-2 pr-3">Run Date</th>
+                        <th className="text-left pb-2 pr-3">Period</th>
+                        <th className="text-left pb-2 pr-3">Frequency</th>
+                        <th className="text-right pb-2 pr-3">Assets</th>
+                        <th className="text-right pb-2 pr-3">Skipped</th>
+                        <th className="text-right pb-2 pr-3">Errors</th>
+                        <th className="text-right pb-2 pr-3">Total Dep</th>
+                        <th className="text-left pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {depRuns.map(r => (
+                        <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
+                          <td className="py-1.5 pr-3">{r.run_date}</td>
+                          <td className="py-1.5 pr-3">{r.period_label}</td>
+                          <td className="py-1.5 pr-3">{r.periods_per_year === 12 ? 'Monthly' : r.periods_per_year === 4 ? 'Quarterly' : 'Annual'}</td>
+                          <td className="py-1.5 pr-3 text-right">{r.asset_count}</td>
+                          <td className="py-1.5 pr-3 text-right text-muted-foreground">{r.skipped_count}</td>
+                          <td className={cn('py-1.5 pr-3 text-right', r.error_count > 0 ? 'text-red-600 font-medium' : 'text-muted-foreground')}>{r.error_count}</td>
+                          <td className="py-1.5 pr-3 text-right font-mono font-medium text-rose-600">{formatNumber(r.total_depreciation)}</td>
+                          <td className="py-1.5">
+                            <Badge className={cn('text-xs', {
+                              'bg-green-100 text-green-700': r.status === 'completed',
+                              'bg-yellow-100 text-yellow-700': r.status === 'partial',
+                              'bg-red-100 text-red-700': r.status === 'error',
+                            })}>
+                              {r.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* ── DIALOGS (shared across tabs) ────────────────────────────────────── */}
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -505,6 +831,48 @@ export default function UnifiedAssetMaster() {
             )}
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setLogAsset(null)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Depreciation run confirmation dialog */}
+      <Dialog open={depConfirmOpen} onOpenChange={setDepConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-rose-500" /> Confirm Depreciation Run
+            </DialogTitle>
+            <DialogDescription>
+              This will post journal entries and update accumulated depreciation balances.
+              This action is idempotent — safe to re-run, but the first successful run is permanent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-2">
+            <div className="rounded-lg bg-muted/40 p-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fiscal period</span>
+                <span className="font-semibold">{selectedPeriod?.period_label ?? '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Assets to post</span>
+                <span className="font-semibold">{eligibleForDep.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total charge</span>
+                <span className="font-semibold text-rose-600">{formatNumber(totalPeriodCharge)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Frequency</span>
+                <span className="font-semibold">{periodsPerYear === '12' ? 'Monthly' : periodsPerYear === '4' ? 'Quarterly' : 'Annual'}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDepConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={runDepreciation} disabled={runningDep} className="gap-2">
+              {runningDep ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Post Depreciation
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
