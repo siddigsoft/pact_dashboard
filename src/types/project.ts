@@ -135,6 +135,8 @@ export interface Project {
   budget?: {
     total: number;
     currency: string;
+    /** Currency used for operational cost / expense submissions */
+    expenseCurrency?: string;
     allocated: number;
     remaining: number;
   };
