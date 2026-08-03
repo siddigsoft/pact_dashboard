@@ -44,7 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
-import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3, Archive, ArchiveRestore } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3, Archive, ArchiveRestore, Search, X } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
 import MmpFullReportDialog from './MmpFullReportDialog';
 import MMPProgressDialog from './MMPProgressDialog';
@@ -85,6 +85,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // Archived view state
   const [showArchived, setShowArchived] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveHubFilter, setArchiveHubFilter] = useState('__none__');
+  const [archiveMonthFilter, setArchiveMonthFilter] = useState('__none__');
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -251,6 +254,24 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // Archived MMPs are filtered from the parent's mmpFiles prop; read from full context list
   const archivedMMPs = (allMMPFiles || []).filter((m) => m.status === 'archived');
 
+  // Unique hubs and months for filter dropdowns
+  const archivedHubs = Array.from(new Set(archivedMMPs.map((m) => m.hub).filter(Boolean))) as string[];
+  const archivedMonths = Array.from(new Set(archivedMMPs.map((m) => m.month).filter(Boolean))) as string[];
+
+  // Filtered archived MMPs (search + hub + month)
+  const filteredArchivedMMPs = archivedMMPs.filter((m) => {
+    const q = archiveSearch.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      m.name.toLowerCase().includes(q) ||
+      (m.mmpId || '').toLowerCase().includes(q);
+    const matchesHub = archiveHubFilter === '__none__' || m.hub === archiveHubFilter;
+    const matchesMonth = archiveMonthFilter === '__none__' || m.month === archiveMonthFilter;
+    return matchesSearch && matchesHub && matchesMonth;
+  });
+
+  const showArchiveFilters = archivedMMPs.length > 5;
+
   const handleRestore = async (mmp: MMPFile) => {
     if (restoringId) return;
     setRestoringId(mmp.id);
@@ -298,10 +319,94 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
       {/* Archived MMPs list */}
       {showArchived && isSuperAdmin && (
         <div className="grid gap-3 mb-4">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide px-1">
-            Archived MMPs — {archivedMMPs.length} total
-          </p>
-          {archivedMMPs.map((mmp) => (
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+              Archived MMPs — {archivedMMPs.length} total
+              {(archiveSearch.trim() || archiveHubFilter !== '__none__' || archiveMonthFilter !== '__none__') && filteredArchivedMMPs.length !== archivedMMPs.length && (
+                <span className="ml-1 normal-case">({filteredArchivedMMPs.length} shown)</span>
+              )}
+            </p>
+          </div>
+
+          {/* Search & filter bar — only shown when there are more than 5 archived MMPs */}
+          {showArchiveFilters && (
+            <div className="flex flex-wrap gap-2 px-1">
+              {/* Search input */}
+              <div className="relative flex-1 min-w-[160px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={archiveSearch}
+                  onChange={(e) => setArchiveSearch(e.target.value)}
+                  placeholder="Search by name or ID…"
+                  className="pl-8 pr-8 h-8 text-xs"
+                  data-testid="input-archive-search"
+                />
+                {archiveSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setArchiveSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Hub filter */}
+              {archivedHubs.length > 0 && (
+                <select
+                  value={archiveHubFilter}
+                  onChange={(e) => setArchiveHubFilter(e.target.value)}
+                  className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring min-w-[120px]"
+                  data-testid="select-archive-hub"
+                >
+                  <option value="__none__">All Hubs</option>
+                  {archivedHubs.map((hub) => (
+                    <option key={hub} value={hub}>{hub}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Month filter */}
+              {archivedMonths.length > 0 && (
+                <select
+                  value={archiveMonthFilter}
+                  onChange={(e) => setArchiveMonthFilter(e.target.value)}
+                  className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring min-w-[130px]"
+                  data-testid="select-archive-month"
+                >
+                  <option value="__none__">All Months</option>
+                  {archivedMonths.map((month) => {
+                    const label = month.includes('-')
+                      ? format(new Date(month + '-01'), 'MMMM yyyy')
+                      : new Date(2024, parseInt(month, 10) - 1).toLocaleDateString('en-US', { month: 'long' });
+                    return <option key={month} value={month}>{label}</option>;
+                  })}
+                </select>
+              )}
+
+              {/* Clear all filters */}
+              {(archiveSearch.trim() || archiveHubFilter !== '__none__' || archiveMonthFilter !== '__none__') && (
+                <button
+                  type="button"
+                  onClick={() => { setArchiveSearch(''); setArchiveHubFilter('__none__'); setArchiveMonthFilter('__none__'); }}
+                  className="h-8 px-2.5 text-xs rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 hover:text-foreground hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  data-testid="button-archive-clear-filters"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {filteredArchivedMMPs.length === 0 && (
+            <p className="text-xs text-muted-foreground px-1 py-2">
+              No archived MMPs match your search.
+            </p>
+          )}
+
+          {filteredArchivedMMPs.map((mmp) => (
             <Card key={mmp.id} className="border-dashed border-slate-300 dark:border-slate-600 opacity-80">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
