@@ -387,6 +387,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         let duplicateFound = false;
         let duplicateStatus = '';
         let duplicateAmount = 0;
+        let duplicateId = '';
 
         if (request.mmpSiteEntryId) {
           // Path A — exact entry id match
@@ -398,6 +399,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             .limit(1);
           if (existingActive && existingActive.length > 0) {
             duplicateFound = true;
+            duplicateId = existingActive[0].id;
             duplicateStatus = existingActive[0].status;
             duplicateAmount = existingActive[0].requested_amount;
           }
@@ -422,6 +424,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
               (existingByName[0] as any).mmp_site_entry_id === request.mmpSiteEntryId;
             if (!isSameEntry) {
               duplicateFound = true;
+              duplicateId = existingByName[0].id;
               duplicateStatus = existingByName[0].status;
               duplicateAmount = existingByName[0].requested_amount;
             }
@@ -429,9 +432,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         }
 
         if (duplicateFound) {
+          const shortId = duplicateId ? ` (Request ID: ${duplicateId.slice(0, 8)}…)` : '';
           toastRef.current({
             title: 'Duplicate Request Blocked / تم منع الطلب المكرر',
-            description: `An active advance request (${duplicateAmount?.toLocaleString() || '?'} SDG — status: ${duplicateStatus?.replace(/_/g, ' ')}) already exists for this site. Cancel or resolve it before submitting a new one.`,
+            description: `An active advance request already exists for this site${shortId} — status: ${duplicateStatus?.replace(/_/g, ' ')}, amount: ${duplicateAmount?.toLocaleString() || '?'} SDG. Please cancel or resolve the existing request before submitting a new one. Go to the Down Payment Approval page to view it.`,
             variant: 'destructive',
           });
           return false;
@@ -513,9 +517,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       );
     } catch (error: any) {
       console.error('Failed to create down-payment request:', error);
+      // DB trigger (trg_dp_request_uniqueness) raises a unique_violation with the
+      // message prefix 'DUPLICATE_DP_REQUEST' when a second active advance is attempted
+      // for the same site. Surface a clear, actionable message instead of the raw SQL error.
+      const isDuplicateAdvance =
+        error?.message?.includes('DUPLICATE_DP_REQUEST') ||
+        (error?.code === '23505' && error?.message?.toLowerCase().includes('advance'));
       toastRef.current({
-        title: 'Error',
-        description: error?.message || 'Failed to submit request',
+        title: isDuplicateAdvance
+          ? 'Duplicate Request Blocked / تم منع الطلب المكرر'
+          : 'Error',
+        description: isDuplicateAdvance
+          ? 'An active advance request already exists for this site. Please cancel or resolve the existing request before submitting a new one. Go to the Down Payment Approval page to view it.'
+          : (error?.message || 'Failed to submit request'),
         variant: 'destructive',
       });
       return false;
