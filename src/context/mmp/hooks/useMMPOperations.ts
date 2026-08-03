@@ -240,6 +240,53 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
             console.error('[MMP Delete] Exception deleting site photos:', photoError);
           }
 
+          // 4.5. Nullify NO-ACTION FK columns that block cascade deletion.
+          //
+          // Three FK constraints use ON DELETE NO ACTION (i.e. RESTRICT) and will
+          // block the delete chain if we don't clear them first:
+          //
+          //   a) site_visit_costs.mmp_site_entry_id  → mmp_site_entries  (NO ACTION)
+          //   b) site_visits.mmp_site_entry_id        → mmp_site_entries  (NO ACTION)
+          //   c) site_visits.mmp_id                   → mmp_files         (NO ACTION)
+          //   d) mmp_site_entries.mmp_file_id         → mmp_files         (NO ACTION)
+          //
+          // We resolve (a) and (b) by collecting all entry IDs for this MMP and
+          // nullifying the columns; (c) is resolved by nullifying mmp_id on
+          // site_visits for this MMP. (d) is resolved by deleting the entries
+          // explicitly in step 5.
+          //
+          // NOTE: down_payment_requests.mmp_site_entry_id already uses SET NULL,
+          // so it does not need manual handling here.
+          try {
+            // Collect all site entry IDs for this MMP so we can batch-nullify the FKs
+            const { data: entryIds } = await supabase
+              .from('mmp_site_entries')
+              .select('id')
+              .eq('mmp_file_id', id);
+
+            const ids = (entryIds ?? []).map((e: any) => e.id as string).filter(Boolean);
+            console.log('[MMP Delete] Found', ids.length, 'site entries to pre-clean FK refs for');
+
+            await Promise.allSettled([
+              // (a) site_visit_costs → mmp_site_entries
+              ids.length > 0
+                ? supabase.from('site_visit_costs' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
+                : Promise.resolve(),
+
+              // (b) site_visits → mmp_site_entries (via mmp_site_entry_id column)
+              ids.length > 0
+                ? supabase.from('site_visits' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
+                : Promise.resolve(),
+
+              // (c) site_visits → mmp_files (via mmp_id column)
+              supabase.from('site_visits' as any).update({ mmp_id: null } as any).eq('mmp_id', id),
+            ]);
+
+            console.log('[MMP Delete] Nullified NO-ACTION FK columns — delete chain unblocked');
+          } catch (fkClearErr) {
+            console.warn('[MMP Delete] FK pre-clear failed (may still succeed if refs do not exist):', fkClearErr);
+          }
+
           // 5. Explicitly delete mmp_site_entries (in case CASCADE is not set)
           try {
             const { error: siteEntriesDelError, data: deletedEntries } = await supabase
