@@ -687,10 +687,27 @@ const RetainerManagement = () => {
   }, [eligibleUsers]);
 
   useEffect(() => {
-    if (activeTab === 'process' && eligibleUsers.length > 0) {
+    if ((activeTab === 'process' || activeTab === 'eligible') && eligibleUsers.length > 0) {
       checkExchangeRates();
     }
   }, [activeTab, eligibleUsers, checkExchangeRates]);
+
+  // True when at least one eligible user has a payout currency different from their base currency.
+  const anyPayoutMismatch = useMemo(
+    () => eligibleUsers.some(u => u.retainer_payout_currency && u.retainer_payout_currency !== u.retainer_currency),
+    [eligibleUsers],
+  );
+
+  // Set of user_ids whose FX pair has no rate configured in acct_exchange_rates.
+  const missingRateUserIds = useMemo(() => {
+    const missingPairs = new Set(fxWarnings.map(w => `${w.fromCurrency}|${w.toCurrency}`));
+    return new Set(
+      eligibleUsers
+        .filter(u => u.retainer_payout_currency && u.retainer_payout_currency !== u.retainer_currency)
+        .filter(u => missingPairs.has(`${u.retainer_currency}|${u.retainer_payout_currency}`))
+        .map(u => u.user_id),
+    );
+  }, [eligibleUsers, fxWarnings]);
 
   if (!canManage) {
     return (
@@ -1331,6 +1348,7 @@ const RetainerManagement = () => {
                             <TableHead>Level</TableHead>
                             <TableHead>Role Scope</TableHead>
                             <TableHead className="text-right">Retainer Amount</TableHead>
+                            {anyPayoutMismatch && <TableHead>Payout Currency</TableHead>}
                             <TableHead>Frequency</TableHead>
                             <TableHead>Status</TableHead>
                           </TableRow>
@@ -1359,6 +1377,22 @@ const RetainerManagement = () => {
                                 <TableCell className="text-right font-medium text-sm">
                                   {formatCurrency(user.retainer_amount_cents / 100, user.retainer_currency || 'SDG')}
                                 </TableCell>
+                                {anyPayoutMismatch && (
+                                  <TableCell>
+                                    {user.retainer_payout_currency && user.retainer_payout_currency !== user.retainer_currency ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-sm font-medium">{user.retainer_payout_currency}</span>
+                                        {missingRateUserIds.has(user.user_id) && (
+                                          <Badge className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" title="No FX rate configured for this currency pair">
+                                            <AlertTriangle className="h-3 w-3 mr-1" />No rate
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                )}
                                 <TableCell>
                                   <div>
                                     <span className="text-sm">{getFrequencyLabel(user.retainer_frequency)}</span>
