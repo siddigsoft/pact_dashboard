@@ -132,6 +132,15 @@ ALTER TABLE public.location_logs
   ON DELETE CASCADE;
 
 -- 2e. reports.site_visit_id → mmp_site_entries
+--     Null out any orphaned references before adding the constraint,
+--     so existing rows with stale site_visit_id values don't block the ALTER.
+UPDATE public.reports
+   SET site_visit_id = NULL
+ WHERE site_visit_id IS NOT NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM public.mmp_site_entries e WHERE e.id = reports.site_visit_id
+   );
+
 ALTER TABLE public.reports
   DROP CONSTRAINT IF EXISTS reports_site_visit_id_fkey;
 
