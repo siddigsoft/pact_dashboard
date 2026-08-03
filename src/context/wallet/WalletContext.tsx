@@ -1468,9 +1468,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const status = (rpcResult as any)?.status as string | undefined;
         const rpcMessage = (rpcResult as any)?.message as string | undefined;
 
-        if (status === 'ok' || status === 'already_correct') {
+        if (status === 'already_correct') {
+          // Transaction was already in the right currency — accept without re-verification
           reprocessedUserIds.push(userId);
-          // Invalidate cache for this user if it's the current user
+          if (userId === currentUser?.id) {
+            await invalidate.invalidateWallet(userId);
+            await invalidate.invalidateTransactions(userId);
+          }
+        } else if (status === 'ok') {
+          // RPC claims success — verify the resulting transaction actually has the
+          // correct payout currency and a non-null fx_rate before declaring victory.
+          const { data: newTx } = await supabase
+            .from('wallet_transactions')
+            .select('currency, metadata')
+            .eq('user_id', userId)
+            .eq('metadata->>type', 'retainer')
+            .eq('metadata->>period', period)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const txCurrency = newTx?.currency;
+          const txFxRate = (newTx?.metadata as any)?.fx_rate;
+          const expectedCurrency = classData.retainer_payout_currency;
+
+          if (!newTx || txCurrency !== expectedCurrency || txFxRate == null) {
+            console.error(
+              `[Reprocess] Post-reissue currency/fx_rate verification failed for user ${userId}: ` +
+              `expected currency=${expectedCurrency}, got currency=${txCurrency}, fx_rate=${txFxRate}`
+            );
+            failedUserIds.push(userId);
+            continue;
+          }
+
+          reprocessedUserIds.push(userId);
           if (userId === currentUser?.id) {
             await invalidate.invalidateWallet(userId);
             await invalidate.invalidateTransactions(userId);

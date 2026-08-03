@@ -426,6 +426,25 @@ const RetainerManagement = () => {
             }
           : prev
       );
+      // Surface currency-verification failures explicitly so admins know the
+      // transaction did not land in the expected payout currency / fx_rate.
+      if (result.failedUserIds.length > 0 && result.reprocessedUserIds.length === 0) {
+        toast({
+          title: 'Currency Verification Failed',
+          description:
+            `${result.failedUserIds.length} retainer${result.failedUserIds.length !== 1 ? 's' : ''} could not be confirmed in the correct currency. ` +
+            'Ensure the exchange rate is saved and try again.',
+          variant: 'destructive',
+        });
+      } else if (result.failedUserIds.length > 0) {
+        toast({
+          title: 'Partial Currency Correction',
+          description:
+            `${result.reprocessedUserIds.length} corrected. ` +
+            `${result.failedUserIds.length} still need attention — their new transaction did not land in the expected currency or is missing an FX rate.`,
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       console.error('Reprocess fallback retainers failed:', error);
       toast({
