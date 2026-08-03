@@ -134,8 +134,7 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
                 .limit(1);
               if (linkedDPs && linkedDPs.length > 0) {
                 toast.error(
-                  'This MMP has linked field submissions and cannot be permanently deleted. ' +
-                  'Use "Archive MMP" instead to preserve the full submission history.'
+                  'Blocked: this MMP has linked advance requests. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
                 );
                 return false;
               }
@@ -148,8 +147,7 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
               .limit(1);
             if (linkedCosts && linkedCosts.length > 0) {
               toast.error(
-                'This MMP has linked cost submissions and cannot be permanently deleted. ' +
-                'Use "Archive MMP" instead to preserve the full submission history.'
+                'Blocked: this MMP has linked cost submissions. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
               );
               return false;
             }
