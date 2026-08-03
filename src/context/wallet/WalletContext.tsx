@@ -1195,105 +1195,44 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     period: string
   ) => {
     try {
+      // credit_retainer_wallet is a SECURITY DEFINER RPC that wraps the
+      // transaction insert + wallet balance update in a single DB transaction.
+      // This eliminates the mid-write drift risk where a crash between the two
+      // client-side writes would leave the transaction recorded but the balance
+      // not updated.  The DB partial unique index on (user_id, period) filtered
+      // to metadata->>'type' = 'retainer' still acts as the idempotency gate.
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'credit_retainer_wallet',
+        {
+          p_user_id:      userId,
+          p_amount_cents: amountCents,
+          p_currency:     currency,
+          p_period:       period,
+          p_created_by:   currentUser?.id ?? null,
+        }
+      );
+
+      if (rpcError) {
+        // The brand-new-wallet unique_violation edge case raises a PG exception
+        // with message 'already_processed'; surface it the same way.
+        if (rpcError.message?.includes('already_processed')) {
+          console.log(`[Wallet] Retainer for user ${userId} period ${period} already processed (RPC).`);
+          return;
+        }
+        throw rpcError;
+      }
+
+      if (rpcResult === 'already_processed') {
+        console.log(`[Wallet] Retainer for user ${userId} period ${period} already processed (idempotent).`);
+        return;
+      }
+
+      // 'ok' — credit landed; send notification (best-effort) and refresh cache.
       const amount = amountCents / 100;
-
-      const { data: targetWallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (walletError) {
-        if (walletError.code === 'PGRST116') {
-          const { data: newWallet, error: createError } = await supabase
-            .from('wallets')
-            .insert({ user_id: userId, balances: { [currency]: amount }, total_earned: amount })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-
-          const { data: newTxData } = await supabase.from('wallet_transactions').insert({
-            wallet_id: newWallet.id,
-            user_id: userId,
-            type: 'adjustment',
-            amount,
-            amount_cents: Math.round(amount * 100),
-            currency,
-            description: `Monthly retainer - ${period}`,
-            balance_before: 0,
-            balance_after: amount,
-            created_by: currentUser?.id,
-            metadata: { type: 'retainer', period },
-          }).select('id').single();
-
-          try {
-            await NotificationTriggerService.walletCredited(
-              userId, amount, currency,
-              `Monthly retainer for ${period} / مكافأة شهرية لـ ${period}`,
-              newTxData?.id
-            );
-          } catch (notifErr) {
-            console.warn('[Wallet] Failed to send retainer wallet credited notification:', notifErr);
-          }
-
-          return;
-        }
-        throw walletError;
-      }
-
-      const currentBalance = Number(targetWallet.balances?.[currency] ?? 0) || 0;
-      const newBalance = Number((currentBalance + Number(amount)).toFixed(2));
-      const newBalances = { ...targetWallet.balances, [currency]: newBalance };
-
-      // Insert the transaction FIRST so the DB unique index (user_id, metadata->>'period')
-      // acts as an atomic gate. If two concurrent calls race here, only one wins;
-      // the loser gets 23505 and returns before ever touching the wallet balance.
-      // This prevents a double-credit where two calls both update the balance but
-      // only one transaction record is created.
-      const { data: txData, error: transactionError } = await supabase.from('wallet_transactions').insert({
-        wallet_id: targetWallet.id,
-        user_id: userId,
-        type: 'adjustment',
-        amount,
-        amount_cents: Math.round(amount * 100),
-        currency,
-        description: `Monthly retainer - ${period}`,
-        balance_before: currentBalance,
-        balance_after: newBalance,
-        created_by: currentUser?.id,
-        metadata: { type: 'retainer', period },
-      }).select('id').single();
-
-      // 23505 = unique_violation: the DB partial unique index fired, meaning
-      // another concurrent call already inserted this retainer. Treat it as
-      // "already processed" and return without error instead of double-crediting.
-      if (transactionError) {
-        if (transactionError.code === '23505') {
-          console.log(`[Wallet] Retainer for user ${userId} period ${period} already exists (concurrent insert blocked by DB constraint).`);
-          return;
-        }
-        throw transactionError;
-      }
-
-      // Transaction insert succeeded — now safely update the wallet balance.
-      const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
-      const { error: updateError } = await supabase
-        .from('wallets')
-        .update({
-          balances: newBalances,
-          total_earned: currentTotalEarned + amount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', targetWallet.id);
-
-      if (updateError) throw updateError;
-
       try {
         await NotificationTriggerService.walletCredited(
           userId, amount, currency,
           `Monthly retainer for ${period} / مكافأة شهرية لـ ${period}`,
-          txData?.id
         );
       } catch (notifErr) {
         console.warn('[Wallet] Failed to send retainer wallet credited notification:', notifErr);
