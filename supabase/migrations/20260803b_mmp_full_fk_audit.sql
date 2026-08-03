@@ -268,4 +268,4 @@ COMMIT;
 -- ORDER BY tc.table_name, kcu.column_name;
 --
 -- Expected: zero rows with delete_rule = 'NO ACTION' or 'RESTRICT'
--- ─────────────────────────────────────────────────────────────────────────────
+-- ────────────────────────────────────────────────────────────────────────

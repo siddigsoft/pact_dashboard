@@ -284,13 +284,12 @@ export default function AccountingGLAudit() {
       return;
     }
     setReversalSubmitting(true);
+    const originalEntryId = reversalEntry.id;
     const idempotencyKey = `reversal-${reversalEntry.id}-${Date.now()}`;
     const payload = {
       period_id:      reversalPeriodId,
       posting_date:   format(new Date(), 'yyyy-MM-dd'),
       description_en: `Reversal of: ${reversalEntry.description_en ?? reversalEntry.idempotency_key ?? reversalEntry.id}`,
-      source_type:    'reversal',
-      source_id:      reversalEntry.id,
       lines: reversalLines.map((l, i) => ({
         line_no:            i + 1,
         account_id:         l.account_id,
@@ -309,19 +308,27 @@ export default function AccountingGLAudit() {
         description:        `[Reversal] ${l.description ?? ''}`.trim(),
       })),
     };
-    const { error } = await supabase.rpc('acct_post_journal' as any, {
-      p_payload: payload,
-      p_idempotency_key: idempotencyKey,
-    });
-    setReversalSubmitting(false);
-    if (error) {
-      toast({ title: 'Reversal failed', description: error.message, variant: 'destructive' });
-      return;
+    try {
+      // acct_post_reversal is SECURITY DEFINER — it posts the reversal entry AND
+      // atomically marks the original as 'reversed', bypassing acct_je_no_direct_update RLS.
+      const { error } = await supabase.rpc('acct_post_reversal' as any, {
+        p_original_entry_id: originalEntryId,
+        p_payload:           payload,
+        p_idempotency_key:   idempotencyKey,
+      });
+      if (error) {
+        toast({ title: 'Reversal failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+
+      // Close dialog before any further awaits so the button cannot be clicked again
+      setReversalEntry(null);
+      toast({ title: 'Reversal posted', description: 'The reversal journal entry has been created and posted.' });
+      // Re-run integrity check — original is now 'reversed' so it drops off the list
+      void loadIntegrity();
+    } finally {
+      setReversalSubmitting(false);
     }
-    toast({ title: 'Reversal posted', description: 'The reversal journal entry has been created and posted.' });
-    setReversalEntry(null);
-    // Re-run integrity check to reflect the fix
-    void loadIntegrity();
   };
 
   const load = useCallback(() => {

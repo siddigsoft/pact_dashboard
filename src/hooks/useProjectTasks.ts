@@ -6,6 +6,17 @@ import { dispatchNotification } from '@/lib/notify';
 
 export type FieldTaskStatus   = 'todo' | 'inprogress' | 'done' | 'cancelled';
 export type FieldTaskPriority = 'low' | 'medium' | 'high' | 'critical';
+export type ResourceType = 'people' | 'vehicle' | 'equipment' | 'material' | 'other';
+
+export interface ResourceLine {
+  /** Client-side UUID used as React key — not persisted separately. */
+  id: string;
+  resourceType: ResourceType;
+  name: string;
+  quantity: number;
+  unit: string;
+  notes?: string;
+}
 
 export interface FieldTask {
   id: string;
@@ -29,6 +40,7 @@ export interface FieldTask {
   estimatedCost: number | null;
   actualCost: number | null;
   dependencies: string[];
+  resources: ResourceLine[];
   createdBy: string | null;
   createdByName: string | null;
   createdAt: string;
@@ -53,6 +65,7 @@ export interface CreateFieldTask {
   estimatedCost?: number | null;
   actualCost?: number | null;
   dependencies?: string[];
+  resources?: ResourceLine[];
 }
 
 // Simplified type for the My Tasks page
@@ -206,7 +219,7 @@ export function useProjectTasks(projectId: string) {
           id, project_id, title, description, priority, status,
           assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
-          estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies,
+          estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies, resources,
           assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
@@ -235,6 +248,7 @@ export function useProjectTasks(projectId: string) {
         estimatedCost: r.estimated_cost ?? null,
         actualCost: r.actual_cost ?? null,
         dependencies: r.dependencies ?? [],
+        resources: (r.resources ?? []) as ResourceLine[],
         createdBy: r.created_by,
         createdByName: r.creator?.full_name ?? null,
         createdAt: r.created_at,
@@ -279,6 +293,7 @@ export function useProjectTasks(projectId: string) {
           estimated_cost: task.estimatedCost ?? null,
           actual_cost: task.actualCost ?? null,
           dependencies: task.dependencies ?? [],
+          resources: task.resources ?? [],
           created_by: currentUserId,
         })
         .select()
@@ -340,6 +355,7 @@ export function useProjectTasks(projectId: string) {
       if (patch.estimatedCost  !== undefined) updates.estimated_cost  = patch.estimatedCost;
       if (patch.actualCost     !== undefined) updates.actual_cost     = patch.actualCost;
       if (patch.dependencies   !== undefined) updates.dependencies    = patch.dependencies;
+      if (patch.resources      !== undefined) updates.resources       = patch.resources ?? [];
 
       const { error } = await supabase
         .from('project_field_tasks')
