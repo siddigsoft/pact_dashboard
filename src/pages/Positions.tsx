@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { softDelete } from '@/utils/softDelete';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,7 +72,8 @@ const BLANK = {
 
 export default function PositionsPage() {
   const { currentUser } = useAppContext();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const isSA = isSuperAdmin();
   const { toast } = useToast();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
 
@@ -164,10 +166,19 @@ export default function PositionsPage() {
   }
 
   async function handleDelete(p: Position) {
-    if (!confirm(`Delete position "${p.title}"?`)) return;
+    if (!isSA) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can delete positions.', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Delete position "${p.title}"? It will go to the Recycle Bin for 28 days.`)) return;
+    const { data: snap } = await supabase.from('positions').select('*').eq('id', p.id).single();
+    if (snap) {
+      const ok = await softDelete(supabase, 'positions', p.id, snap as any, currentUser?.id, currentUser?.name || currentUser?.email);
+      if (!ok) { toast({ title: 'Could not save to Recycle Bin — delete aborted', variant: 'destructive' }); return; }
+    }
     const { error } = await supabase.from('positions').delete().eq('id', p.id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Position deleted' }); fetchAll(); }
+    else { toast({ title: 'Position moved to Recycle Bin' }); fetchAll(); }
   }
 
   const profileMap = useMemo(() => Object.fromEntries(profiles.map(p => [p.id, p.full_name])), [profiles]);

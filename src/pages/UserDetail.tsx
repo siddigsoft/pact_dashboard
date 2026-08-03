@@ -471,10 +471,16 @@ const UserDetail: FC = () => {
   };
 
   const handleContractDelete = async (contract: StaffContract) => {
+    if (!isSA) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can delete contracts.', variant: 'destructive' });
+      return;
+    }
     try {
+      const { softDelete: sd } = await import('@/utils/softDelete');
+      await sd(supabase, 'staff_contracts', contract.id, contract as any, currentUser?.id, currentUser?.name || currentUser?.email);
       await supabase.storage.from('staff-contracts').remove([contract.file_path]);
       await supabase.from('staff_contracts').delete().eq('id', contract.id);
-      toast({ title: 'Contract deleted', description: contract.file_name });
+      toast({ title: 'Contract moved to Recycle Bin', description: contract.file_name });
       setContractDeleteId(null);
       if (user) await fetchContracts(user.id);
     } catch (e: any) {
@@ -483,7 +489,8 @@ const UserDetail: FC = () => {
   };
 
   // Classification management
-  const { canManageFinances } = useAuthorization();
+  const { canManageFinances, isSuperAdmin } = useAuthorization();
+  const isSA = isSuperAdmin();
   const { getUserClassification, getClassificationHistory, assignClassification, refreshUserClassifications } = useClassification();
   const [classificationDialogOpen, setClassificationDialogOpen] = useState(false);
   
@@ -685,13 +692,22 @@ const UserDetail: FC = () => {
   };
 
   const handleDeleteReview = async (id: string) => {
+    if (!isSA) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can delete performance reviews.', variant: 'destructive' });
+      return;
+    }
     setDeletingReviewId(id);
+    const { data: snap } = await supabase.from('performance_reviews').select('*').eq('id', id).single();
+    if (snap) {
+      const { softDelete: sd } = await import('@/utils/softDelete');
+      await sd(supabase, 'performance_reviews', id, snap as any, currentUser?.id, currentUser?.name || currentUser?.email);
+    }
     const { error } = await supabase.from('performance_reviews').delete().eq('id', id);
     setDeletingReviewId(null);
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
-      toast({ title: 'Review deleted' });
+      toast({ title: 'Review moved to Recycle Bin' });
       loadEmployeeReviews();
     }
   };

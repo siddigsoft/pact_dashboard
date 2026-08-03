@@ -1451,8 +1451,8 @@ export default function PreFundingRegistry() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    if (!canManage) {
-      toast({ title: 'Permission denied', description: 'Admin or higher required to delete pre-funds.', variant: 'destructive' });
+    if (!isSuper) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can permanently delete pre-funds.', variant: 'destructive' });
       return;
     }
     if (deleteFundTxns.length > 0) {
@@ -1461,9 +1461,15 @@ export default function PreFundingRegistry() {
     }
     setDeleting(true);
     try {
+      // Save to recycle bin before deleting
+      const { data: snap } = await (supabase as any).from('pre_fund_requests').select('*').eq('id', deleteId).single();
+      if (snap) {
+        const { softDelete: sd } = await import('@/utils/softDelete');
+        await sd(supabase as any, 'pre_fund_requests', deleteId, snap, currentUser?.id, currentUser?.name || currentUser?.email);
+      }
       const { error: e } = await supabase.from('pre_fund_requests').delete().eq('id', deleteId);
       if (e) throw e;
-      toast({ title: 'Fund deleted' });
+      toast({ title: 'Fund moved to Recycle Bin' });
       setDeleteId(null);
       await load();
     } catch (e: any) {
@@ -1577,7 +1583,10 @@ export default function PreFundingRegistry() {
   };
 
   const handleDeleteFundTxn = async (txnId: string) => {
-    if (!canManage) return;
+    if (!isSuper) {
+      toast({ title: 'Permission denied', description: 'Only Super Admin can delete transactions.', variant: 'destructive' });
+      return;
+    }
     setDeletingTxnId(txnId);
     try {
       // Fetch the transaction so we can recalculate fund balances after removal
@@ -1590,6 +1599,11 @@ export default function PreFundingRegistry() {
 
       const fundId = txn?.pre_fund_request_id;
 
+      // Save to recycle bin before deleting
+      if (txn) {
+        const { softDelete: sd } = await import('@/utils/softDelete');
+        await sd(supabase as any, 'pre_fund_transactions', txnId, txn, currentUser?.id, currentUser?.name || currentUser?.email);
+      }
       // Remove the transaction
       const { error: delErr } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
       if (delErr) throw delErr;

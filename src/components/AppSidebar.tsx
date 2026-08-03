@@ -601,6 +601,9 @@
       if (!isHidden('/super-admin-hub')) {
         superAdminItems.push({ id: 'super-admin-hub', title: "Super Admin Hub", url: "/super-admin-hub", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-hub') });
       }
+      if (!isHidden('/recycle-bin')) {
+        superAdminItems.push({ id: 'recycle-bin', title: "Recycle Bin", url: "/recycle-bin", icon: Archive, priority: 2, isPinned: isPinned('/recycle-bin') });
+      }
       if (!isHidden('/system-diagrams')) {
         superAdminItems.push({ id: 'system-diagrams', title: "System Diagrams", url: "/system-diagrams", icon: Network, priority: 2, isPinned: isPinned('/system-diagrams') });
       }

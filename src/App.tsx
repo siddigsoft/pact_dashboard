@@ -235,6 +235,7 @@ const MyAdvances = lazy(() => import('./pages/MyAdvances'));
 const MyExpenses = lazy(() => import('./pages/MyExpenses'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const Offboarding = lazy(() => import('./pages/Offboarding'));
+const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -715,6 +716,7 @@ const AppRoutes = () => {
         <Route path="/benefits-administration" element={<Navigate to="/hr?tab=benefits" replace />} />
         <Route path="/headcount-planning" element={<Navigate to="/hr?tab=headcount" replace />} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
+        <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
         <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
         <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
