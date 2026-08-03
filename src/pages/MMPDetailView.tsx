@@ -120,7 +120,8 @@ const MMPDetailView = () => {
   const canAccessQuestionnaires = isSuperAdmin() || isAdmin || isDataTeam || isFOM || isCountryDirector;
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam;
   const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor) ? true : false;
-  const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
+  // Only Super Admins may delete MMPs — permission checks and isAdmin are insufficient alone.
+  const canDelete = isSuperAdmin();
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
   const canReject = (checkPermission('mmp', 'approve') || isAdmin) && (mmpFile?.status === 'pending' || mmpFile?.status === 'verified');

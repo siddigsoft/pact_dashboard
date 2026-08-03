@@ -14,6 +14,15 @@ import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
   AlertDialog,
   AlertDialogTrigger,
   AlertDialogContent,
@@ -39,14 +48,6 @@ import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3 } from 'lucide
 import { RecallDialog } from './RecallDialog';
 import MmpFullReportDialog from './MmpFullReportDialog';
 import MMPProgressDialog from './MMPProgressDialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 interface MMPListProps {
@@ -77,6 +78,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [isSavingRename, setIsSavingRename] = useState(false);
   const [fullReportOpen, setFullReportOpen] = useState(false);
   const [selectedMmpForReport, setSelectedMmpForReport] = useState<{ id: string; name: string } | null>(null);
+  // Staged delete dialog: stage 0 = closed, 1 = first warning, 2 = type-to-confirm
+  const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -94,7 +98,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const userRole = isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : isICT ? 'ict' : isFOM ? 'fom' : 'user';
   const userCanForceRecall = canForceRecall(userRole);
   // Supervisors are VIEW-ONLY on the MMP management page — they cannot create, edit, delete or forward MMPs.
-  const canDeleteMMP = !isSupervisor && (checkPermission('mmp', 'delete') || isAdmin || isICT);
+  // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
+  const canDeleteMMP = isSuperAdmin;
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Full Report is visible to management/oversight roles only
@@ -480,6 +485,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                             onClick={e => {
                               e.stopPropagation();
                               setConfirmId(mmp.id);
+                              setDeleteStage(1);
+                              setDeleteConfirmText('');
                             }}
                             className="text-destructive"
                           >
@@ -564,33 +571,99 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={confirmId !== null} onOpenChange={open => { if (!open) setConfirmId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete MMP File?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to permanently delete this MMP file and all its data? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmId(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deletingId === confirmId}
+      {/* Staged Delete Confirmation Dialog — Super Admin only */}
+      {/* Stage 1: Impact warning */}
+      <Dialog
+        open={confirmId !== null && deleteStage === 1}
+        onOpenChange={open => {
+          if (!open) { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Permanently Delete MMP?
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-1">
+                <p className="text-sm text-muted-foreground">
+                  This is a <strong>Super Admin</strong> action that <strong>cannot be undone</strong>. The following data will be permanently removed:
+                </p>
+                <ul className="text-sm space-y-1 pl-4 list-disc text-muted-foreground">
+                  <li>The MMP file record and all metadata</li>
+                  <li>All site entries linked to this MMP</li>
+                  <li>All attached documents and stored files</li>
+                  <li>All site visit records linked to this MMP</li>
+                  <li>All site visit costs linked to this MMP's entries</li>
+                  <li>Audit history for this MMP</li>
+                </ul>
+                <p className="text-sm font-medium text-destructive">Down payment requests will have their MMP reference cleared but will not be deleted.</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setDeleteStage(2)}
+            >
+              I understand — proceed to confirm →
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stage 2: Typed confirmation */}
+      <Dialog
+        open={confirmId !== null && deleteStage === 2}
+        onOpenChange={open => {
+          if (!open) { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Type <strong>DELETE</strong> in the box below to confirm you want to permanently destroy this MMP and all its data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              autoFocus
+              placeholder="Type DELETE to confirm"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteConfirmText !== 'DELETE' || deletingId === confirmId}
               onClick={async () => {
                 if (confirmId) {
                   setDeletingId(confirmId);
                   await deleteMMPFile(confirmId);
                   setDeletingId(null);
                   setConfirmId(null);
+                  setDeleteStage(0);
+                  setDeleteConfirmText('');
                 }
               }}
             >
-              {deletingId === confirmId ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {deletingId === confirmId ? 'Deleting…' : 'Delete permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Full MMP Status Report Dialog */}
       {selectedMmpForReport && (
