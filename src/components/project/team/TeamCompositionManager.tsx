@@ -14,6 +14,8 @@ import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeRole, toDisplayLabel } from '@/utils/roleMapping';
+import type { RoleCode } from '@/utils/roleMapping';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -64,6 +66,37 @@ function fmtMoney(amount: number, cur = 'SDG') {
   return `${cur} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Map a system account role onto the closest project-team role for storage. */
+function systemRoleToProjectRole(systemRole: string): ProjectRole {
+  const code = normalizeRole(systemRole);
+  const map: Partial<Record<RoleCode, ProjectRole>> = {
+    projectManager: 'projectManager',
+    seniorOperationsLead: 'projectManager',
+    fom: 'projectManager',
+    supervisor: 'supervisor',
+    coordinator: 'coordinator',
+    dataCollector: 'dataCollector',
+    dataTeam: 'dataCollector',
+    reviewer: 'reviewer',
+    auditor: 'reviewer',
+  };
+  if (code && map[code]) return map[code]!;
+  const allowed: ProjectRole[] = [
+    'projectManager', 'fieldAssistant', 'dataCollector', 'supervisor',
+    'coordinator', 'analyst', 'reviewer', 'consultant', 'other',
+  ];
+  if (allowed.includes(systemRole as ProjectRole)) return systemRole as ProjectRole;
+  return 'other';
+}
+
+/** Human-readable label for a role string (system or project). */
+function formatRoleLabel(role: string | undefined | null): string {
+  if (!role) return '—';
+  const labeled = toDisplayLabel(role);
+  if (labeled !== role) return labeled;
+  return role.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+}
+
 export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   project,
   onTeamChange,
@@ -72,7 +105,6 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<ProjectRole>('dataCollector');
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     project.team?.teamComposition || []
   );
@@ -202,7 +234,6 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     setPlannedHours('');
     setFeeCurrency('SDG');
     setPaymentDueDate('');
-    setSelectedRole('dataCollector');
     setSearchTerm('');
   };
 
@@ -326,10 +357,12 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   };
 
   const handleAddTeamMember = (user: User) => {
+    const actualRole = systemRoleToProjectRole(user.role || '');
+    const roleLabel = formatRoleLabel(user.role);
     const newMember: ProjectTeamMember = {
       userId: user.id,
       name: user.name,
-      role: selectedRole,
+      role: actualRole,
       joinedAt: new Date().toISOString(),
       workload: user.performance?.currentWorkload || getWorkload(user.id),
       memberType,
@@ -352,8 +385,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     toast({
       title: 'Team member added',
       description: feeType
-        ? `${user.name} added as ${selectedRole}. Fee: ${fmtMoney(totalCost, feeCurrency)}`
-        : `${user.name} has been added as ${selectedRole}.`,
+        ? `${user.name} added as ${roleLabel}. Fee: ${fmtMoney(totalCost, feeCurrency)}`
+        : `${user.name} has been added as ${roleLabel}.`,
       variant: 'success',
     });
   };
@@ -368,16 +401,6 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
       description: removedMember ? `${removedMember.name} has been removed.` : 'Team member removed.',
       variant: 'default',
     });
-  };
-
-  const handleRoleChange = (userId: string, role: ProjectRole) => {
-    const member = teamMembers.find(m => m.userId === userId);
-    const updatedTeam = teamMembers.map(m => m.userId === userId ? { ...m, role } : m);
-    setTeamMembers(updatedTeam);
-    onTeamChange(updatedTeam);
-    if (member) {
-      toast({ title: 'Role updated', description: `${member.name}'s role changed to ${role}.`, variant: 'success' });
-    }
   };
 
   const handlePaymentStatusChange = (userId: string, paymentStatus: 'unpaid' | 'partially_paid' | 'paid') => {
@@ -405,7 +428,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <CardTitle>Team Composition</CardTitle>
           <CardDescription>Assign team members and roles for this project</CardDescription>
         </div>
-        <Button onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
+        <Button type="button" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
           <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
         </Button>
       </CardHeader>
@@ -458,22 +481,17 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Select value={member.role} onValueChange={(value) => handleRoleChange(member.userId, value as ProjectRole)}>
-                          <SelectTrigger className="w-[150px]">
-                            <SelectValue placeholder="Select role" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="projectManager">Project Manager</SelectItem>
-                            <SelectItem value="fieldAssistant">Field Assistant</SelectItem>
-                            <SelectItem value="dataCollector">Data Collector</SelectItem>
-                            <SelectItem value="supervisor">Supervisor</SelectItem>
-                            <SelectItem value="coordinator">Coordinator</SelectItem>
-                            <SelectItem value="analyst">Analyst</SelectItem>
-                            <SelectItem value="reviewer">Reviewer</SelectItem>
-                            <SelectItem value="consultant">Consultant</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {(() => {
+                          const systemUser = users.find(u => u.id === member.userId);
+                          const label = systemUser
+                            ? formatRoleLabel(systemUser.role)
+                            : formatRoleLabel(member.role);
+                          return (
+                            <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+                              {label}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-start gap-1.5 group">
@@ -506,6 +524,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                             )}
                           </div>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="sm"
                             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
@@ -572,6 +591,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
+                                    type="button"
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 w-7 p-0"
@@ -589,7 +609,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRemoveTeamMember(member.userId)}>
+                          <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleRemoveTeamMember(member.userId)}>
                             <UserMinus className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -604,7 +624,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <div className="flex flex-col items-center justify-center py-8 border border-dashed rounded-lg">
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-sm">No team members assigned yet</p>
-            <Button className="mt-4" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
+            <Button type="button" className="mt-4" onClick={() => { resetFeeFields(); setDialogOpen(true); }}>
               <UserPlus className="h-4 w-4 mr-2" /> Add Team Member
             </Button>
           </div>
@@ -845,8 +865,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
             </div>
 
             <DialogFooter className="mt-2">
-              <Button variant="outline" onClick={() => setEditFeeOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveEditFee}>
+              <Button type="button" variant="outline" onClick={() => setEditFeeOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={handleSaveEditFee}>
                 <DollarSign className="h-4 w-4 mr-1.5" /> Save Fee & Schedule
               </Button>
             </DialogFooter>
@@ -855,14 +875,15 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
         {/* Add Member Dialog */}
         <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) { resetFeeFields(); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); } }}>
-          <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100vw-2rem)] max-w-xl max-h-[92vh] overflow-x-hidden overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Team Member</DialogTitle>
             </DialogHeader>
 
             {/* ── Mode toggle ─────────────────────────────────────────── */}
-            <div className="flex gap-1 p-1 rounded-lg bg-muted w-fit">
+            <div className="flex gap-1 p-1 rounded-lg bg-muted w-fit max-w-full flex-wrap">
               <button
+                type="button"
                 onClick={() => setAddMode('system')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                   addMode === 'system' ? 'bg-white dark:bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -871,6 +892,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 <Users className="h-4 w-4" /> System User
               </button>
               <button
+                type="button"
                 onClick={() => setAddMode('external')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                   addMode === 'external' ? 'bg-white dark:bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -882,55 +904,35 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
             {/* ── SYSTEM USER MODE ────────────────────────────────────── */}
             {addMode === 'system' && (
-              <div className="space-y-4">
-                {/* Search + role */}
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <Input
-                      placeholder="Search by name, email or role..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as ProjectRole)}>
-                    <SelectTrigger className="w-[160px]">
-                      <SelectValue placeholder="Role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="projectManager">Project Manager</SelectItem>
-                      <SelectItem value="fieldAssistant">Field Assistant</SelectItem>
-                      <SelectItem value="dataCollector">Data Collector</SelectItem>
-                      <SelectItem value="supervisor">Supervisor</SelectItem>
-                      <SelectItem value="coordinator">Coordinator</SelectItem>
-                      <SelectItem value="analyst">Analyst</SelectItem>
-                      <SelectItem value="reviewer">Reviewer</SelectItem>
-                      <SelectItem value="consultant">Consultant</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-3 min-w-0">
+                <Input
+                  placeholder="Search by name, email or role..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full"
+                />
 
                 {/* Fee configuration */}
-                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-3 min-w-0">
                   <p className="text-sm font-semibold flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-violet-500" />
+                    <DollarSign className="h-4 w-4 text-violet-500 shrink-0" />
                     Professional Fee (optional)
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                    <div className="space-y-1.5 min-w-0">
                       <Label className="text-xs">Member Type</Label>
                       <Select value={memberType} onValueChange={v => setMemberType(v as TeamMemberType)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="internal">Internal (Staff)</SelectItem>
                           <SelectItem value="external">External / Consultant</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 min-w-0">
                       <Label className="text-xs">Fee Type</Label>
                       <Select value={feeType || '__none__'} onValueChange={v => setFeeType(v === '__none__' ? '' : v as TeamFeeType)}>
-                        <SelectTrigger><SelectValue placeholder="None (no fee)" /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="None (no fee)" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">None (no fee)</SelectItem>
                           <SelectItem value="per_hour">Per Hour</SelectItem>
@@ -941,24 +943,24 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     </div>
                   </div>
                   {feeType && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                      <div className="space-y-1.5 min-w-0">
                         <Label className="text-xs">
                           {feeType === 'per_hour' ? 'Hourly Rate' : feeType === 'percent_budget' ? '% of Budget' : 'Fixed Amount'}
                         </Label>
                         <Input type="number" min="0" step="0.01" placeholder={feeType === 'percent_budget' ? 'e.g. 5' : '0.00'} value={rate} onChange={e => setRate(e.target.value)} />
                       </div>
                       {feeType === 'per_hour' && (
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 min-w-0">
                           <Label className="text-xs">Planned Hours</Label>
                           <Input type="number" min="0" placeholder="e.g. 40" value={plannedHours} onChange={e => setPlannedHours(e.target.value)} />
                         </div>
                       )}
                       {feeType !== 'percent_budget' && (
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 min-w-0">
                           <Label className="text-xs">Currency</Label>
                           <Select value={feeCurrency} onValueChange={setFeeCurrency}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="SDG">SDG</SelectItem>
                               <SelectItem value="USD">USD</SelectItem>
@@ -968,14 +970,14 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                           </Select>
                         </div>
                       )}
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 min-w-0">
                         <Label className="text-xs">Payment Due Date</Label>
                         <Input type="date" value={paymentDueDate} onChange={e => setPaymentDueDate(e.target.value)} />
                       </div>
                     </div>
                   )}
                   {feeType && rate && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-md bg-background border text-sm">
+                    <div className="flex items-center gap-2 p-2.5 rounded-md bg-background border text-sm min-w-0 flex-wrap">
                       <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
                       <span className="text-muted-foreground">Estimated total:</span>
                       <span className="font-bold text-emerald-600">
@@ -990,125 +992,101 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                   )}
                 </div>
 
-                {/* User list */}
-                <div className="border rounded-md overflow-hidden max-h-[260px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>System Role</TableHead>
-                        <TableHead className="w-[180px] text-right">Workload</TableHead>
-                        <TableHead className="w-[80px] text-right">Add</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredUsers.length > 0 ? (
-                        filteredUsers.map((user) => {
-                          const workload = user.performance?.currentWorkload || getWorkload(user.id);
-                          return (
-                            <TableRow key={user.id}>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-7 w-7">
-                                    <AvatarImage src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`} alt={user.name} />
-                                    <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <p className="font-medium text-sm">{user.name}</p>
-                                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{user.role}</TableCell>
-                              <TableCell className="text-right">
-                                <TooltipProvider>
-                                  <div className="flex flex-col items-end gap-1">
-                                    <div className="flex items-center gap-1.5 justify-end">
-                                      <span className="text-[10px] text-muted-foreground shrink-0">Field ops</span>
-                                      <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
-                                        <div className={`h-full ${getWorkloadColor(workload)}`} style={{ width: `${workload}%` }} />
-                                      </div>
-                                      <span className="text-xs text-muted-foreground tabular-nums">{workload}%</span>
-                                    </div>
-                                    {(() => {
-                                      const count = crossProjectCounts[user.id] || 0;
-                                      const projNames = crossProjectNames[user.id] || [];
-                                      return (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <div className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border cursor-default ${
-                                              count === 0 ? 'text-muted-foreground border-border bg-muted/40'
-                                                : count <= 2 ? 'text-amber-700 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700'
-                                                : 'text-red-700 border-red-200 bg-red-50 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700'
-                                            }`}>
-                                              <Briefcase className="h-2.5 w-2.5 shrink-0" />
-                                              <span>{count} other project{count !== 1 ? 's' : ''}</span>
-                                            </div>
-                                          </TooltipTrigger>
-                                          {count > 0 && (
-                                            <TooltipContent side="left" className="max-w-56">
-                                              <p className="font-medium text-xs mb-1">Also on:</p>
-                                              <ul className="space-y-0.5">
-                                                {projNames.map((n, i) => (
-                                                  <li key={i} className="text-xs text-muted-foreground flex items-center gap-1">
-                                                    <Briefcase className="h-3 w-3 shrink-0" />{n}
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            </TooltipContent>
-                                          )}
-                                        </Tooltip>
-                                      );
-                                    })()}
-                                  </div>
-                                </TooltipProvider>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button size="sm" onClick={() => handleAddTeamMember(user)}>
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-4 text-muted-foreground text-sm">
-                            No users found matching your search
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                {/* User list — compact cards, no wide table overflow */}
+                <div className="border rounded-md max-h-[280px] overflow-y-auto overflow-x-hidden divide-y">
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map((user) => {
+                      const workload = user.performance?.currentWorkload || getWorkload(user.id);
+                      const count = crossProjectCounts[user.id] || 0;
+                      const projNames = crossProjectNames[user.id] || [];
+                      return (
+                        <div key={user.id} className="flex items-center gap-2 p-2.5 min-w-0">
+                          <Avatar className="h-8 w-8 shrink-0">
+                            <AvatarImage src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`} alt={user.name} />
+                            <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate">{user.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                            <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                              <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 h-5">
+                                {formatRoleLabel(user.role)}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground tabular-nums">
+                                Ops {workload}%
+                              </span>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                      count === 0 ? 'text-muted-foreground border-border bg-muted/40'
+                                        : count <= 2 ? 'text-amber-700 border-amber-200 bg-amber-50'
+                                        : 'text-red-700 border-red-200 bg-red-50'
+                                    }`}>
+                                      <Briefcase className="h-2.5 w-2.5" />
+                                      {count} proj.
+                                    </span>
+                                  </TooltipTrigger>
+                                  {count > 0 && (
+                                    <TooltipContent side="left" className="max-w-56">
+                                      <p className="font-medium text-xs mb-1">Also on:</p>
+                                      <ul className="space-y-0.5">
+                                        {projNames.map((n, i) => (
+                                          <li key={i} className="text-xs text-muted-foreground truncate">{n}</li>
+                                        ))}
+                                      </ul>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="shrink-0 h-8 w-8 p-0"
+                            onClick={() => handleAddTeamMember(user)}
+                            aria-label={`Add ${user.name}`}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-8 text-center text-sm text-muted-foreground">
+                      No users found matching your search
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {/* ── EXTERNAL PERSON MODE ─────────────────────────────────── */}
             {addMode === 'external' && (
-              <div className="space-y-4">
+              <div className="space-y-3 min-w-0">
                 <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300 flex gap-2">
                   <Globe className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>External members don't need a system account. They'll get a unique portal link to view assigned activities and update their progress.</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                  <div className="space-y-1.5 sm:col-span-2 min-w-0">
                     <Label className="text-xs font-medium">Full Name <span className="text-destructive">*</span></Label>
                     <Input placeholder="e.g. Dr. Ahmed Hassan" value={extName} onChange={e => setExtName(e.target.value)} />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 min-w-0">
                     <Label className="text-xs font-medium">Email (optional)</Label>
                     <Input type="email" placeholder="ahmed@org.org" value={extEmail} onChange={e => setExtEmail(e.target.value)} />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 min-w-0">
                     <Label className="text-xs font-medium">Organization (optional)</Label>
                     <Input placeholder="e.g. WHO, UNICEF, independent" value={extOrg} onChange={e => setExtOrg(e.target.value)} />
                   </div>
-                  <div className="space-y-1.5 col-span-2">
+                  <div className="space-y-1.5 sm:col-span-2 min-w-0">
                     <Label className="text-xs font-medium">Project Role</Label>
                     <Select value={extRole} onValueChange={v => setExtRole(v as ProjectRole)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="consultant">Consultant</SelectItem>
                         <SelectItem value="reviewer">Reviewer</SelectItem>
@@ -1121,15 +1099,15 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 </div>
 
                 {/* Optional fee for external */}
-                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-3 min-w-0">
                   <p className="text-sm font-semibold flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-violet-500" /> Professional Fee (optional)
+                    <DollarSign className="h-4 w-4 text-violet-500 shrink-0" /> Professional Fee (optional)
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                    <div className="space-y-1.5 min-w-0">
                       <Label className="text-xs">Fee Type</Label>
                       <Select value={feeType || '__none__'} onValueChange={v => setFeeType(v === '__none__' ? '' : v as TeamFeeType)}>
-                        <SelectTrigger><SelectValue placeholder="None (no fee)" /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="None (no fee)" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">None (no fee)</SelectItem>
                           <SelectItem value="per_hour">Per Hour</SelectItem>
@@ -1139,10 +1117,10 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                       </Select>
                     </div>
                     {feeType && feeType !== 'percent_budget' && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 min-w-0">
                         <Label className="text-xs">Currency</Label>
                         <Select value={feeCurrency} onValueChange={setFeeCurrency}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="SDG">SDG</SelectItem>
                             <SelectItem value="USD">USD</SelectItem>
@@ -1154,15 +1132,15 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     )}
                   </div>
                   {feeType && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                      <div className="space-y-1.5 min-w-0">
                         <Label className="text-xs">
                           {feeType === 'per_hour' ? 'Hourly Rate' : feeType === 'percent_budget' ? '% of Budget' : 'Fixed Amount'}
                         </Label>
                         <Input type="number" min="0" step="0.01" placeholder="0.00" value={rate} onChange={e => setRate(e.target.value)} />
                       </div>
                       {feeType === 'per_hour' && (
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 min-w-0">
                           <Label className="text-xs">Planned Hours</Label>
                           <Input type="number" min="0" placeholder="e.g. 40" value={plannedHours} onChange={e => setPlannedHours(e.target.value)} />
                         </div>
@@ -1177,10 +1155,10 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                 </div>
 
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => { setDialogOpen(false); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields(); }}>
+                  <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields(); }}>
                     Cancel
                   </Button>
-                  <Button onClick={handleAddExternalMember} disabled={!extName.trim()}>
+                  <Button type="button" onClick={handleAddExternalMember} disabled={!extName.trim()}>
                     <Globe className="h-4 w-4 mr-1.5" /> Add External Member
                   </Button>
                 </DialogFooter>
@@ -1189,7 +1167,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
             {addMode === 'system' && (
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setDialogOpen(false); resetFeeFields(); }}>
+                <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetFeeFields(); }}>
                   Cancel
                 </Button>
               </DialogFooter>

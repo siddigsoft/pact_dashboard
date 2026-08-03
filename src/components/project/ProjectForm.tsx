@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, Handshake } from 'lucide-react';
+import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, Handshake, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getProjectFlow } from '@/config/projectFlows';
 
@@ -95,7 +95,7 @@ const createFormSchema = (isEditing: boolean) => z.object({
 type FormSchema = z.infer<ReturnType<typeof createFormSchema>>;
 
 interface ProjectFormProps {
-  onSubmit: (data: Project) => void;
+  onSubmit: (data: Project) => void | Promise<void>;
   initialData?: Partial<Project>;
   isEditing?: boolean;
 }
@@ -173,6 +173,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const [relatedMMPs, setRelatedMMPs] = useState<string[]>(initialData?.relatedMMPs ?? []);
   const [relatedSiteVisits, setRelatedSiteVisits] = useState<string[]>(initialData?.relatedSiteVisits ?? []);
   const [crmPartners, setCrmPartners] = useState<{ id: string; name: string; type: string }[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
     supabase.from('crm_partners').select('id, name, type').eq('status', 'active').order('name')
       .then(({ data }) => { if (data) setCrmPartners(data); });
@@ -190,7 +191,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       budgetTotal: initialData?.budget?.total || 0,
       budgetCurrency: initialData?.budget?.currency || 'USD',
-      budgetExpenseCurrency: (initialData?.budget as any)?.expenseCurrency || initialData?.budget?.currency || 'SDG',
+      budgetExpenseCurrency: initialData?.budget?.expenseCurrency || initialData?.budget?.currency || 'SDG',
       projectManager: initialData?.team?.projectManager || '',
       country: initialData?.location?.country || '',
       region: initialData?.location?.region || '',
@@ -206,21 +207,22 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   });
 
   const handleFormSubmit = async (values: FormSchema) => {
-    try {
-      // T35 — region validation: a Sudan project without any state selection
-      // breaks geo-zone matching, MMP coverage, and site dispatch. Block submit
-      // and tell the user exactly what to do.
-      const isSudan = (values.country || '').toLowerCase() === 'sudan';
-      const hasAnyRegion = !!(values.selectedState || values.state);
-      if (isSudan && !hasAnyRegion) {
-        toast({
-          title: "Region required",
-          description: "Sudan projects need at least a state. Pick one in the Location section before saving.",
-          variant: "destructive",
-        });
-        return;
-      }
+    // T35 — region validation: a Sudan project without any state selection
+    // breaks geo-zone matching, MMP coverage, and site dispatch. Block submit
+    // and tell the user exactly what to do.
+    const isSudan = (values.country || '').toLowerCase() === 'sudan';
+    const hasAnyRegion = !!(values.selectedState || values.state);
+    if (isSudan && !hasAnyRegion) {
+      toast({
+        title: "Region required",
+        description: "Sudan projects need at least a state. Pick one in the Location section before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    setIsSubmitting(true);
+    try {
       const projectCode = isEditing && initialData?.projectCode
         ? initialData.projectCode
         : `PROJ-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
@@ -278,6 +280,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         description: "Failed to save project. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -895,9 +899,16 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
             />
 
             <div className="flex justify-end space-x-4">
-              <Button type="button" variant="outline">Cancel</Button>
-              <Button type="submit" className="bg-primary">
-                {isEditing ? 'Update Project' : 'Create Project'}
+              <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" className="bg-primary" disabled={isSubmitting} data-testid="button-submit-project">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {isEditing ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  isEditing ? 'Update Project' : 'Create Project'
+                )}
               </Button>
             </div>
           </form>
