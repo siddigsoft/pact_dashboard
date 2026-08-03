@@ -460,6 +460,22 @@ export const useMMPProvider = () => {
         const toInsert = entries.filter((e: any) => !e.id).map(mapRow);
 
         if (deleteIds.length) {
+          // Guard: refuse to delete site entries that have linked down-payment requests.
+          // This prevents "Edit MMP" from mass-wiping entries that field teams have already
+          // submitted advances against — which would orphan all those requests.
+          const { data: linkedDPs, error: linkCheckErr } = await supabase
+            .from('down_payment_requests')
+            .select('id')
+            .in('mmp_site_entry_id', deleteIds)
+            .limit(1);
+          if (!linkCheckErr && linkedDPs && linkedDPs.length > 0) {
+            console.error(
+              'Blocked deletion of mmp_site_entries: linked down_payment_requests exist. ' +
+              'Removing these entries would orphan active field submissions.',
+              { deleteIds }
+            );
+            return false;
+          }
           const { error: delErr } = await supabase.from('mmp_site_entries').delete().in('id', deleteIds);
           if (delErr) {
             console.error('mmp_site_entries delete error:', delErr);
