@@ -692,6 +692,7 @@ export default function PreFundingReconciliation() {
   const [unlinkingId, setUnlinkingId]           = useState<string | null>(null);
   // ── Bulk-select state ────────────────────────────────────────────────────
   const [selectedTxnIds, setSelectedTxnIds]   = useState<Set<string>>(new Set());
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting]        = useState(false);
   const [groupByRef, setGroupByRef]            = useState('');
@@ -1855,7 +1856,10 @@ export default function PreFundingReconciliation() {
   const totalUnreconciled = accountingTxns.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
   // Unattributed = payment txns with no user_id assigned
   const unattributedPayments = transactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
-  const displayTxns = showUnattributed ? unattributedPayments : transactions;
+  const baseTxns    = showUnattributed ? unattributedPayments : transactions;
+  const displayTxns = showOnlySelected && selectedTxnIds.size > 0
+    ? baseTxns.filter(t => selectedTxnIds.has(t.id))
+    : baseTxns;
 
   if (!canAccess) return (
     <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
@@ -2381,8 +2385,22 @@ export default function PreFundingReconciliation() {
                               · {currency} {formatNumber(selectedTotal, 0)}
                             </span>
                           </div>
+                          {/* Show-only-selected toggle */}
                           <button
-                            onClick={() => setSelectedTxnIds(new Set())}
+                            onClick={() => setShowOnlySelected(v => !v)}
+                            className={cn(
+                              'flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border transition-colors shrink-0',
+                              showOnlySelected
+                                ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                                : 'bg-background text-muted-foreground border-border hover:text-foreground hover:border-[#1D3461]/40'
+                            )}
+                            data-testid="button-show-only-selected"
+                          >
+                            <Filter className="h-2.5 w-2.5" />
+                            {showOnlySelected ? 'Showing selected' : 'Show selected only'}
+                          </button>
+                          <button
+                            onClick={() => { setSelectedTxnIds(new Set()); setShowOnlySelected(false); }}
                             className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
                             data-testid="button-clear-selection"
                           >
