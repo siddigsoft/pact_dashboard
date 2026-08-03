@@ -18,7 +18,10 @@ ALTER TABLE public.user_classifications
   ADD COLUMN IF NOT EXISTS retainer_payout_currency text;
 
 -- 2. Refresh view to expose the new column --------------------------------------
-CREATE OR REPLACE VIEW public.current_user_classifications AS
+-- DROP + recreate because the new column is inserted mid-list; PostgreSQL's
+-- CREATE OR REPLACE VIEW only allows appending columns at the end.
+DROP VIEW IF EXISTS public.current_user_classifications CASCADE;
+CREATE VIEW public.current_user_classifications AS
 SELECT DISTINCT ON (user_id)
   uc.id,
   uc.user_id,
