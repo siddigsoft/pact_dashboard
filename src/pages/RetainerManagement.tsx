@@ -689,20 +689,26 @@ const RetainerManagement = () => {
               <TabsTrigger value="overview" className="text-xs sm:text-sm" data-testid="tab-overview">
                 <BarChart3 className="h-4 w-4 mr-1" />Overview
               </TabsTrigger>
-              <TabsTrigger value="history" className="text-xs sm:text-sm" data-testid="tab-history">
-                <History className="h-4 w-4 mr-1" />Payment History
-              </TabsTrigger>
-              <TabsTrigger value="tracking" className="text-xs sm:text-sm" data-testid="tab-tracking">
-                <Calendar className="h-4 w-4 mr-1" />Tracking Grid
+              {/* Review & Process moved up — it's the primary action tab */}
+              <TabsTrigger value="process" className="text-xs sm:text-sm relative" data-testid="tab-process">
+                <Banknote className="h-4 w-4 mr-1" />Review & Process
+                {kpis.unpaidThisMonth > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1">
+                    {kpis.unpaidThisMonth}
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="eligible" className="text-xs sm:text-sm" data-testid="tab-eligible">
                 <Users className="h-4 w-4 mr-1" />Eligible Users
               </TabsTrigger>
+              <TabsTrigger value="tracking" className="text-xs sm:text-sm" data-testid="tab-tracking">
+                <Calendar className="h-4 w-4 mr-1" />Tracking Grid
+              </TabsTrigger>
+              <TabsTrigger value="history" className="text-xs sm:text-sm" data-testid="tab-history">
+                <History className="h-4 w-4 mr-1" />Payment History
+              </TabsTrigger>
               <TabsTrigger value="audit" className="text-xs sm:text-sm" data-testid="tab-audit">
                 <ClipboardList className="h-4 w-4 mr-1" />Audit Trail
-              </TabsTrigger>
-              <TabsTrigger value="process" className="text-xs sm:text-sm" data-testid="tab-process">
-                <Banknote className="h-4 w-4 mr-1" />Review & Process
               </TabsTrigger>
             </TabsList>
 
@@ -1244,95 +1250,132 @@ const RetainerManagement = () => {
                     </Alert>
                   )}
 
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-sm">Eligible Users for {getCurrentPeriod()}</h4>
-                      <Badge variant="secondary">{eligibleUsers.length} users</Badge>
-                    </div>
+                  {(() => {
+                    const currentPeriod = getCurrentPeriod();
+                    const pendingUsers  = eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
+                    const paidUsers     = eligibleUsers.filter(u =>  transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
+                    const pendingTotal  = pendingUsers.reduce((s, u) => s + u.retainer_amount_cents / 100, 0);
+                    // Pending users first, already-paid second
+                    const sortedUsers   = [...pendingUsers, ...paidUsers];
 
-                    {eligibleUsers.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground border rounded-lg" data-testid="empty-process">
-                        <Users className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                        <p className="font-medium">No eligible users</p>
-                        <p className="text-sm">No active retainer classifications found</p>
-                      </div>
-                    ) : (
-                      <ScrollArea className="h-[400px]">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>User</TableHead>
-                              <TableHead>Level</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                              <TableHead>This Month</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {eligibleUsers.map(user => {
-                              const alreadyPaid = transactions.some(
-                                t => t.user_id === user.user_id && t.metadata?.period === getCurrentPeriod()
-                              );
-                              return (
-                                <TableRow key={user.id} className={alreadyPaid ? 'opacity-60' : ''} data-testid={`process-row-${user.user_id}`}>
-                                  <TableCell>
-                                    <div>
-                                      <span className="font-medium text-sm">{user.full_name || 'Unknown'}</span>
-                                      <span className="block text-xs text-muted-foreground">{user.email}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge className={`text-xs border-0 ${getLevelBadgeClass(user.classification_level)}`}>
-                                      {user.classification_level}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium text-sm">
-                                    {formatCurrency(user.retainer_amount_cents / 100, user.retainer_currency || 'SDG')}
-                                  </TableCell>
-                                  <TableCell>
-                                    {alreadyPaid ? (
-                                      <Badge className="text-xs border-0 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
-                                        <CheckCircle2 className="h-3 w-3 mr-1" />Already Paid
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
-                                        <Clock className="h-3 w-3 mr-1" />Will Be Processed
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
-                    )}
-                  </div>
+                    return (
+                      <>
+                        {/* Summary bar */}
+                        <div className="flex items-center gap-4 rounded-lg border p-3 bg-muted/20 text-sm flex-wrap">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <span className="h-2 w-2 rounded-full bg-amber-500" />
+                            {pendingUsers.length} pending payment
+                          </span>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <span className="h-2 w-2 rounded-full bg-green-500" />
+                            {paidUsers.length} already paid
+                          </span>
+                          <span className="ml-auto font-semibold">
+                            Total to process: {formatCurrency(pendingTotal)}
+                          </span>
+                        </div>
 
-                  <div className="border-t pt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">
-                        Total to process: {formatCurrency(
-                          eligibleUsers
-                            .filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === getCurrentPeriod()))
-                            .reduce((s, u) => s + u.retainer_amount_cents / 100, 0)
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === getCurrentPeriod())).length} users pending payment
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => setShowProcessDialog(true)}
-                      disabled={processing || eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === getCurrentPeriod())).length === 0}
-                      data-testid="button-start-processing"
-                    >
-                      {processing ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
-                      ) : (
-                        <><Banknote className="h-4 w-4 mr-2" />Process Retainers</>
-                      )}
-                    </Button>
-                  </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-sm">All Eligible Users — {currentPeriod}</h4>
+                            <Badge variant="secondary">{eligibleUsers.length} users</Badge>
+                          </div>
+
+                          {eligibleUsers.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground border rounded-lg" data-testid="empty-process">
+                              <Users className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                              <p className="font-medium">No eligible users</p>
+                              <p className="text-sm">No active retainer classifications found</p>
+                            </div>
+                          ) : (
+                            <ScrollArea className="h-[400px]">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Level</TableHead>
+                                    <TableHead className="text-right">Monthly Amount</TableHead>
+                                    <TableHead>{currentPeriod} Status</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {/* Section divider between pending and paid */}
+                                  {sortedUsers.map((user, idx) => {
+                                    const alreadyPaid = paidUsers.some(p => p.user_id === user.user_id);
+                                    const showDivider = idx === pendingUsers.length && paidUsers.length > 0 && pendingUsers.length > 0;
+                                    return (
+                                      <>
+                                        {showDivider && (
+                                          <TableRow key="divider">
+                                            <TableCell colSpan={4} className="py-1.5 px-3 bg-muted/30 text-[10px] uppercase font-semibold tracking-wide text-muted-foreground border-y">
+                                              Already paid this month
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                        <TableRow key={user.id} className={alreadyPaid ? 'opacity-50' : ''} data-testid={`process-row-${user.user_id}`}>
+                                          <TableCell>
+                                            <div>
+                                              <span className="font-medium text-sm">{user.full_name || 'Unknown'}</span>
+                                              <span className="block text-xs text-muted-foreground">{user.email}</span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge className={`text-xs border-0 ${getLevelBadgeClass(user.classification_level)}`}>
+                                              {user.classification_level}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium text-sm">
+                                            {formatCurrency(user.retainer_amount_cents / 100, user.retainer_currency || 'SDG')}
+                                          </TableCell>
+                                          <TableCell>
+                                            {alreadyPaid ? (
+                                              <Badge className="text-xs border-0 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                                                <CheckCircle2 className="h-3 w-3 mr-1" />Paid
+                                              </Badge>
+                                            ) : (
+                                              <Badge className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                                                <Clock className="h-3 w-3 mr-1" />Will be processed
+                                              </Badge>
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
+                                      </>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </ScrollArea>
+                          )}
+                        </div>
+
+                        <div className="border-t pt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {pendingUsers.length > 0
+                                ? `${pendingUsers.length} member${pendingUsers.length !== 1 ? 's' : ''} will receive payment`
+                                : 'All members have been paid for this month'}
+                            </p>
+                            {pendingUsers.length > 0 && (
+                              <p className="text-xs text-muted-foreground">Total: {formatCurrency(pendingTotal)}</p>
+                            )}
+                          </div>
+                          <Button
+                            onClick={() => setShowProcessDialog(true)}
+                            disabled={processing || pendingUsers.length === 0}
+                            data-testid="button-start-processing"
+                          >
+                            {processing ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
+                            ) : pendingUsers.length === 0 ? (
+                              <><CheckCircle2 className="h-4 w-4 mr-2" />All Paid</>
+                            ) : (
+                              <><Banknote className="h-4 w-4 mr-2" />Process {pendingUsers.length} Retainer{pendingUsers.length !== 1 ? 's' : ''}</>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1351,35 +1394,39 @@ const RetainerManagement = () => {
               You are about to process monthly retainer payments for {getCurrentPeriod()}.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Eligible users:</span>
-                <span className="font-medium">{eligibleUsers.length}</span>
+          {(() => {
+            const cp = getCurrentPeriod();
+            const pendingInDialog  = eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === cp));
+            const alreadyPaidCount = eligibleUsers.length - pendingInDialog.length;
+            const pendingTotalAmt  = pendingInDialog.reduce((s, u) => s + u.retainer_amount_cents / 100, 0);
+            return (
+              <div className="space-y-3 py-2">
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Total eligible users:</span>
+                    <span className="font-medium">{eligibleUsers.length}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Already paid this month:</span>
+                    <span className="font-medium">{alreadyPaidCount} — will be skipped</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t pt-2">
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">Pending — will be paid now:</span>
+                    <span className="font-bold">{pendingInDialog.length} users</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t pt-2">
+                    <span className="font-medium">Total amount:</span>
+                    <span className="font-bold text-green-700 dark:text-green-400">{formatCurrency(pendingTotalAmt)}</span>
+                  </div>
+                </div>
+                <Alert>
+                  <AlertDescription className="text-sm">
+                    Retainer amounts will be added to each pending member's wallet. Already-paid members are automatically skipped — no duplicates.
+                  </AlertDescription>
+                </Alert>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>Already paid:</span>
-                <span className="font-medium">
-                  {eligibleUsers.filter(u => transactions.some(t => t.user_id === u.user_id && t.metadata?.period === getCurrentPeriod())).length}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-2">
-                <span className="font-medium">To be processed:</span>
-                <span className="font-bold">
-                  {formatCurrency(
-                    eligibleUsers
-                      .filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === getCurrentPeriod()))
-                      .reduce((s, u) => s + u.retainer_amount_cents / 100, 0)
-                  )}
-                </span>
-              </div>
-            </div>
-            <Alert>
-              <AlertDescription className="text-sm">
-                This action will add retainer amounts to each user's wallet and create transaction records. Users already paid this month will be skipped.
-              </AlertDescription>
-            </Alert>
-          </div>
+            );
+          })()}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowProcessDialog(false)} data-testid="button-cancel-process">
               Cancel
