@@ -1,7 +1,8 @@
 # Runbook: Apply `uq_dp_requests_active_entry` Unique Index
 
-**Status:** Waiting on finance to resolve paid duplicates (34 sites flagged)  
-**Migration file:** `supabase/migrations/down_payment_uniqueness_complete_fix.sql`
+**Status:** Migration file ready — apply once the duplicate-advance banner is gone (0 active duplicates)  
+**Migration file:** `supabase/migrations/20260803_apply_dp_unique_index.sql` (STEP 3 only, safe to run standalone)  
+**Full reference script:** `supabase/migrations/down_payment_uniqueness_complete_fix.sql`
 
 ---
 
