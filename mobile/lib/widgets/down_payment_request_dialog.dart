@@ -168,6 +168,32 @@ class _DownPaymentRequestDialogState
           ),
         );
       }
+    } on StateError catch (e) {
+      if (mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(_isAr ? 'طلب مكرر' : 'Already Claimed'),
+              ],
+            ),
+            content: Text(
+              _isAr
+                  ? 'يوجد طلب سلفة نشط بالفعل لهذا الموقع. لا يمكن تقديم طلب مكرر في نفس الوقت.'
+                  : e.message,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(_isAr ? 'حسناً' : 'OK'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

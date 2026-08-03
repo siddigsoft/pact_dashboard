@@ -989,7 +989,9 @@ export default function PreFundingRegistry() {
     setLoading(true);
     try {
       const [fundsRes, ptRes, projRes, settingsRes] = await Promise.all([
-        supabase.from('pre_fund_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('pre_fund_requests')
+          .select('id,name,source,amount,currency,usd_to_sdg_rate,available_balance,committed_amount,paid_amount,status,warning_days,period_type_id,period_type_name,start_date,end_date,country_id,project_id,grant_id,matching_scope,cost_category,auto_renewal_mode,auto_renewal_days_before,notes,created_at,created_by,holder_user_id,allow_overpay')
+          .order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
         (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),

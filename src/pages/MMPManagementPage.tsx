@@ -23,7 +23,7 @@ interface PartialPaymentRow {
 const FieldOperationManagerPage = () => {
   const { currentUser } = useAppContext();
   const { mmpFiles, deleteMMPFile } = useMMP();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
@@ -31,7 +31,8 @@ const FieldOperationManagerPage = () => {
   const [partialRows, setPartialRows] = useState<PartialPaymentRow[]>([]);
   const [partialLoading, setPartialLoading] = useState(true);
 
-  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['admin', 'ict']);
+  // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
+  const canDeleteMMP = isSuperAdmin();
 
   const allowed = hasAnyRole(['admin', 'ict', 'fom', 'superAdmin']);
 
@@ -164,35 +165,37 @@ const FieldOperationManagerPage = () => {
                       >
                         View
                       </button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="destructive" className="ml-2" onClick={() => setDeleteId(mmp.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete MMP File "{(mmp as any).projectName || mmp.mmpId}"?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. The MMP file and all its data will be permanently deleted from the system.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              disabled={deleting}
-                              onClick={async () => {
-                                setDeleting(true);
-                                await deleteMMPFile(mmp.id);
-                                setDeleting(false);
-                                setDeleteId(null);
-                              }}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      {canDeleteMMP && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="destructive" className="ml-2" onClick={() => setDeleteId(mmp.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete MMP File "{(mmp as any).projectName || mmp.mmpId}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. The MMP file and all its data will be permanently deleted from the system.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                disabled={deleting}
+                                onClick={async () => {
+                                  setDeleting(true);
+                                  await deleteMMPFile(mmp.id);
+                                  setDeleting(false);
+                                  setDeleteId(null);
+                                }}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </td>
                   </tr>
                 );

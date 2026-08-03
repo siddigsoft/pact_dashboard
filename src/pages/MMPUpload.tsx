@@ -92,7 +92,7 @@ const MMPUpload = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { uploadMMP, currentUser } = useAppContext();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
   const { projects, loading: projectsLoading } = useProjectContext();
   const { projectBudgets } = useBudget();
   const [isUploading, setIsUploading] = useState(false);
@@ -652,7 +652,8 @@ const MMPUpload = () => {
   const uploadedMmp = uploadedMmpId ? getMMPById(uploadedMmpId) : undefined;
   const canApproveAction = checkPermission('mmp', 'approve') || isAdmin;
   const canArchiveAction = checkPermission('mmp', 'archive') || isAdmin;
-  const canDeleteAction = checkPermission('mmp', 'delete') || isAdmin;
+  // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
+  const canDeleteAction = isSuperAdmin();
   const canForwardAction = hasAnyRole(['admin', 'super_admin', 'Super Admin', 'ict']);
 
   const handleApproveAction = async () => {

@@ -107,8 +107,6 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin','admin','coordinator','supervisor'] },
   { slug:'supervisor-sites',    label:'Supervisor Sites',       path:'/supervisor/sites',       icon:Map, group:'Coordination',
     roles:['superAdmin','admin','supervisor','fom'] },
-  { slug:'cycle-management',    label:'Cycle Management',       path:'/mmp/cycle-close',        icon:Activity, group:'Coordination',
-    roles:['superAdmin','admin','fom','supervisor'] },
   { slug:'coordinator-dashboard', label:'Coordinator Dashboard', path:'/coordinator-dashboard', icon:LayoutDashboard, group:'Coordination',
     roles:['superAdmin','admin','fom','coordinator','supervisor'] },
   { slug:'monitoring-plan',     label:'Monitoring Plan',        path:'/monitoring-plan',        icon:ClipboardList, group:'Coordination',

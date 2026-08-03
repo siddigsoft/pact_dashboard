@@ -1574,6 +1574,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       }
 
+      // ── Bank-account change audit log ────────────────────────────────────
+      // Compare old vs new bank_account and write a history row when they differ.
+      // We do this fire-and-forget (no await at top level) so it never blocks
+      // the main save path.
+      const oldBA  = existingUser ? (existingUser as any).bankAccount ?? null : null;
+      const newBA  = (updatedUser as any).bankAccount ?? null;
+      const baChanged =
+        JSON.stringify(oldBA ?? null) !== JSON.stringify(newBA ?? null);
+      if (baChanged) {
+        supabase.from('bank_account_history').insert({
+          profile_id: updatedUser.id,
+          changed_by: currentUser?.id ?? null,
+          old_data:   oldBA,
+          new_data:   newBA,
+        }).then(({ error }) => {
+          if (error) console.warn('[bank_account_history] insert failed:', error.message);
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       // Standard update path (non-owner users, or owner bypass RPC fallback)
       const { error: directError } = await supabase
         .from('profiles')

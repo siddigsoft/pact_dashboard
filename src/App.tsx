@@ -135,7 +135,7 @@ const ExternalContributorPage = lazy(() => import('./pages/ExternalContributorPa
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
-const MMPCycleClose = lazy(() => import('./pages/MMPCycleClose'));
+
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
 const SafetyHub = lazy(() => import('./pages/SafetyHub'));
 const IncidentReports = lazy(() => import('./pages/IncidentReports'));
@@ -527,7 +527,6 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
-        <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/mmp/:id" element={<MMPDetailView />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />

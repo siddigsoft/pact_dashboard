@@ -240,6 +240,45 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
             console.error('[MMP Delete] Exception deleting site photos:', photoError);
           }
 
+          // 4.5. Defensively nullify NO-ACTION FK columns before deleting site entries.
+          //
+          // Migration 20260803_mmp_fk_set_null_on_delete.sql converts these to SET NULL
+          // at the DB level, but that migration must be run manually in Supabase SQL Editor.
+          // This pre-clearing step is kept as a belt-and-suspenders guard so the delete
+          // works whether or not the migration has been applied yet.
+          //
+          //   a) site_visit_costs.mmp_site_entry_id → mmp_site_entries  (blocks step 5)
+          //   b) site_visits.mmp_site_entry_id       → mmp_site_entries  (blocks step 5)
+          //   c) site_visits.mmp_id                  → mmp_files         (blocks step 7)
+          //
+          // down_payment_requests.mmp_site_entry_id is already SET NULL in the DB — skip.
+          try {
+            const { data: entryIds } = await supabase
+              .from('mmp_site_entries')
+              .select('id')
+              .eq('mmp_file_id', id);
+
+            const ids = (entryIds ?? []).map((e: any) => e.id as string).filter(Boolean);
+            console.log('[MMP Delete] Pre-clearing FK refs for', ids.length, 'site entries');
+
+            await Promise.allSettled([
+              // (a) site_visit_costs.mmp_site_entry_id
+              ids.length > 0
+                ? supabase.from('site_visit_costs' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
+                : Promise.resolve(),
+              // (b) site_visits.mmp_site_entry_id
+              ids.length > 0
+                ? supabase.from('site_visits' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
+                : Promise.resolve(),
+              // (c) site_visits.mmp_id
+              supabase.from('site_visits' as any).update({ mmp_id: null } as any).eq('mmp_id', id),
+            ]);
+
+            console.log('[MMP Delete] FK pre-clear complete — delete chain unblocked');
+          } catch (fkClearErr) {
+            console.warn('[MMP Delete] FK pre-clear failed (continuing anyway):', fkClearErr);
+          }
+
           // 5. Explicitly delete mmp_site_entries (in case CASCADE is not set)
           try {
             const { error: siteEntriesDelError, data: deletedEntries } = await supabase

@@ -29,6 +29,11 @@ interface DeprRun {
   id: string; run_date: string; period_label: string; total_depreciation: number;
   asset_count: number; journal_entry_id: string | null; status: string; notes: string | null;
 }
+interface UnifiedDepRun {
+  id: string; period_label: string; periods_per_year: number; run_date: string;
+  asset_count: number; total_depreciation: number; skipped_count: number;
+  error_count: number; status: string; created_at: string;
+}
 
 const MIGRATION_NOTICE = (
   <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/10 p-4 flex items-start gap-3">
@@ -69,6 +74,21 @@ export default function AccountingDepreciationRun() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [periodLabel, setPeriodLabel] = useState(format(new Date(), 'MMMM yyyy'));
 
+  // Unified Asset depreciation runs
+  const [unifiedRuns, setUnifiedRuns] = useState<UnifiedDepRun[]>([]);
+  const [unifiedLoading, setUnifiedLoading] = useState(false);
+
+  const loadUnifiedRuns = useCallback(async () => {
+    setUnifiedLoading(true);
+    const { data } = await supabase
+      .from('asset_depreciation_runs' as any)
+      .select('id,period_label,periods_per_year,run_date,asset_count,total_depreciation,skipped_count,error_count,status,created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setUnifiedRuns((data ?? []) as UnifiedDepRun[]);
+    setUnifiedLoading(false);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [assetRes, runRes] = await Promise.all([
@@ -97,7 +117,7 @@ export default function AccountingDepreciationRun() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); void loadUnifiedRuns(); }, [load, loadUnifiedRuns]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -185,6 +205,7 @@ export default function AccountingDepreciationRun() {
             <TabsList className="mb-4">
               <TabsTrigger value="schedule">Depreciation Schedule ({assets.length})</TabsTrigger>
               <TabsTrigger value="history">Run History ({runs.length})</TabsTrigger>
+              <TabsTrigger value="unified">Unified Assets ({unifiedRuns.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="schedule">
@@ -285,6 +306,75 @@ export default function AccountingDepreciationRun() {
                           </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* ── Unified Asset depreciation runs ──────────────────────────── */}
+            <TabsContent value="unified">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm text-muted-foreground max-w-lg">
+                  Runs posted from <strong>Unified Asset Register → Depreciation tab</strong>.
+                  Each run computes straight-line or declining-balance charges, posts one journal entry
+                  per asset, and updates the asset's accumulated depreciation balance.
+                </p>
+                <Button variant="outline" size="sm" onClick={loadUnifiedRuns} disabled={unifiedLoading}>
+                  <RefreshCw className={cn('h-4 w-4 mr-1', unifiedLoading && 'animate-spin')} /> Refresh
+                </Button>
+              </div>
+              {unifiedLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : unifiedRuns.length === 0 ? (
+                <div className="text-center text-muted-foreground py-16 text-sm">
+                  No unified-asset depreciation runs yet.
+                  Go to <strong>Unified Asset Register → Depreciation</strong> to run the first batch.
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="px-0 pb-0">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/40">
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground">Run Date</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground">Period</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground">Frequency</th>
+                          <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Posted</th>
+                          <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Skipped</th>
+                          <th className="text-right px-4 py-2 font-medium text-muted-foreground w-20">Errors</th>
+                          <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Total Dep</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unifiedRuns.map((r, i) => (
+                          <tr key={r.id} className={cn('border-b hover:bg-muted/20', i % 2 === 0 ? '' : 'bg-muted/10')}>
+                            <td className="px-4 py-2">{r.run_date}</td>
+                            <td className="px-4 py-2">{r.period_label}</td>
+                            <td className="px-4 py-2 text-muted-foreground">
+                              {r.periods_per_year === 12 ? 'Monthly' : r.periods_per_year === 4 ? 'Quarterly' : 'Annual'}
+                            </td>
+                            <td className="px-4 py-2 text-right">{r.asset_count}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{r.skipped_count}</td>
+                            <td className={cn('px-4 py-2 text-right', r.error_count > 0 ? 'text-rose-700 font-medium' : 'text-muted-foreground')}>
+                              {r.error_count}
+                            </td>
+                            <td className="px-4 py-2 text-right tabular-nums font-medium text-rose-700 dark:text-rose-400">
+                              {formatNumber(r.total_depreciation, 0)}
+                            </td>
+                            <td className="px-4 py-2">
+                              <Badge variant="outline" className={cn('text-[10px]',
+                                r.status === 'completed' ? 'text-emerald-700 border-emerald-300' :
+                                r.status === 'partial'   ? 'text-amber-700 border-amber-300' :
+                                                           'text-rose-700 border-rose-300'
+                              )}>
+                                {r.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </CardContent>

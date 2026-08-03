@@ -1,3 +1,5 @@
+- [radix-select-empty-value](radix-select-empty-value.md) — SelectItem value="" is forbidden by Radix; use sentinel '__none__' or it throws a render error caught by ErrorBoundary.
+- [wizard-button-type-fix](wizard-button-type-fix.md) — sed 's/<Button /<Button type="button" /g' misses multiline <Button\n tags; always grep for them after running sed.
 - [profile-role-vs-user-roles-perm-gap](profile-role-vs-user-roles-perm-gap.md) — hasPermission & Permission Tester miss profiles.role; fixed via profileRolesCache in refreshUserPermissions + step 5 in hasPermission.
 - [tier4-default-pending-bug](tier4-default-pending-bug.md) — 20260607 migration set tier4_status DEFAULT 'pending' on ALL rows; hasFourTiers() must use submitter_role only.
 - [cost-submission-supervisor-filter](cost-submission-supervisor-filter.md) — Supervisor visibility filter and canTier1Approve must both be hub-scoped for Coordinator submissions.
@@ -17,3 +19,4 @@
 - [role-management-permission-system](role-management-permission-system.md) — isSuperAdmin bug fixed; 34 resources in roles.ts; checkPermission() must be used for overrides to work; page_access vs user_permission_overrides are separate tables.
 - [protected-owner-role-lock](protected-owner-role-lock.md) — protect_owner_profile DB trigger blocks profiles.role SQL updates; fix must be 3 isProtectedOwner() overrides in UserContext.
 - [route-guard-permission-enforcement](route-guard-permission-enforcement.md) — PageRouteGuard wraps all routes; resolveSlug handles dynamic paths; AND pattern for button-level Security Panel REVOKE; CostSubmission/HRHub/AdminHub buttons still use raw role checks.
+- [sidebar-fixed-overlay-stacking-context](sidebar-fixed-overlay-stacking-context.md) — Shadcn sidebar panel is `fixed z-50` in ROOT; any `fixed` overlay inside SidebarInset+global-scrollable (both `relative z-0`) renders BEHIND it; fix by removing z-0 from both in MainLayout and using z-[200]+ on the overlay.

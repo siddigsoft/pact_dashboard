@@ -3815,27 +3815,20 @@ class _MMPScreenState extends State<MMPScreen> {
 
       final finalHubId = hubId ?? profile?['hub_id'] as String?;
 
-      // Create advance request
-      await Supabase.instance.client
-          .from('down_payment_requests')
-          .insert({
-            'mmp_site_entry_id': site['id'],
-            'site_name': siteName,
-            'requested_by': _userId,
-            'requester_role': requesterRole,
-            'hub_id': finalHubId,
-            'hub_name': hubName,
-            'total_transportation_budget': transportFee,
-            'requested_amount': requestedAmount,
-            'payment_type': paymentType,
-            'installment_plan': installmentPlan,
-            'justification': justification,
-            'supporting_documents': [],
-            'status': 'pending_supervisor',
-            'supervisor_status': 'pending',
-          })
-          .select()
-          .single();
+      // Create advance request via service (includes duplicate guard)
+      await AdvanceRequestService.createRequest(
+        userId: _userId!,
+        siteId: site['id'] as String?,
+        siteName: siteName,
+        transportationBudget: transportFee,
+        requestedAmount: requestedAmount,
+        paymentType: paymentType,
+        justification: justification,
+        installmentPlan: installmentPlan,
+        hubId: finalHubId as String?,
+        hubName: hubName as String?,
+        requesterRole: requesterRole,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3852,6 +3845,34 @@ class _MMPScreenState extends State<MMPScreen> {
       await _loadAdvanceRequests();
       if (!mounted) return;
       setState(() {});
+    } on StateError catch (e) {
+      debugPrint('Duplicate advance blocked: $e');
+      if (mounted) {
+        final _isAr = _currentLocale == 'ar';
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(_isAr ? 'طلب مكرر' : 'Already Claimed'),
+              ],
+            ),
+            content: Text(
+              _isAr
+                  ? 'يوجد طلب سلفة نشط بالفعل لهذا الموقع. لا يمكن تقديم طلب مكرر في نفس الوقت.'
+                  : e.message,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(_isAr ? 'حسناً' : 'OK'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Error requesting advance: $e');
       if (mounted) {

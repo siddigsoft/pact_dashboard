@@ -104,7 +104,11 @@ const MGMT_ROLES = ['fom', 'field_operation_manager', 'countryDirector', 'countr
 
 async function notifyManagementTeam(
   event: 'cost_submitted' | 'cost_tier_approved' | 'cost_approved' | 'cost_rejected' | 'cost_paid',
-  detail: { submitterName: string; refNum: string; amountStr: string; tier?: number; notes?: string },
+  detail: {
+    submitterName: string; refNum: string; amountStr: string;
+    tier?: number; notes?: string; category?: string; title?: string;
+    expenseDate?: string; vendor?: string; disbursedBy?: string;
+  },
   excludeUserId?: string
 ): Promise<void> {
   type Msg = { title: string; titleAr: string; message: string; type: 'info' | 'success' | 'warning' | 'error'; priority: 'normal' | 'high' };
@@ -113,10 +117,26 @@ async function notifyManagementTeam(
     cost_tier_approved:{ title: `Cost Submission Pending Your Review — ${detail.refNum}`, titleAr: `طلب مراجعة تكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) passed Tier ${detail.tier ?? 1} and is now awaiting your approval. Ref: ${detail.refNum}`, type: 'info', priority: 'high' },
     cost_approved:     { title: `Cost Submission Fully Approved — ${detail.refNum}`, titleAr: `تمت الموافقة على التكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) has been fully approved. Ref: ${detail.refNum}`, type: 'success', priority: 'normal' },
     cost_rejected:     { title: `Cost Submission Rejected — ${detail.refNum}`, titleAr: `تم رفض طلب التكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) was rejected${detail.notes ? '. Reason: ' + detail.notes : ''}. Ref: ${detail.refNum}`, type: 'warning', priority: 'normal' },
-    cost_paid:         { title: `Cost Submission Marked as Paid — ${detail.refNum}`, titleAr: `تم تحديد التكلفة كمدفوعة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) has been marked as paid. Ref: ${detail.refNum}`, type: 'success', priority: 'normal' },
+    cost_paid:         { title: `Cost Submission Paid — ${detail.refNum}`, titleAr: `تم صرف مطالبة التكلفة — ${detail.refNum}`, message: `Cost submission by ${detail.submitterName} (${detail.amountStr}) has been paid. Ref: ${detail.refNum}`, type: 'success', priority: 'high' },
   };
   const msg = msgMap[event];
   if (!msg) return;
+
+  const emailDetails: Array<{ label: string; value: string }> = [
+    { label: 'Request Type',  value: 'Cost Submission' },
+    { label: 'Reference No.', value: detail.refNum },
+    ...(detail.title    ? [{ label: 'Title / Description', value: detail.title }]    : []),
+    { label: 'Amount',        value: detail.amountStr },
+    ...(detail.category ? [{ label: 'Category',     value: detail.category }]    : []),
+    ...(detail.expenseDate ? [{ label: 'Expense Date', value: detail.expenseDate }] : []),
+    ...(detail.vendor   ? [{ label: 'Vendor / Payee', value: detail.vendor }]    : []),
+    { label: 'Submitted By',  value: detail.submitterName },
+    ...(detail.disbursedBy ? [{ label: 'Disbursed By',  value: detail.disbursedBy }] : []),
+    ...(event === 'cost_paid' ? [{ label: 'Payment Date', value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
+    ...(detail.tier ? [{ label: 'Approval Tier', value: `Tier ${detail.tier}` }] : []),
+    ...(detail.notes ? [{ label: event === 'cost_rejected' ? 'Rejection Reason' : 'Notes', value: detail.notes }] : []),
+  ];
+
   try {
     const { data: mgmt } = await supabase.from('profiles').select('id').in('role', MGMT_ROLES).eq('status', 'approved');
     const ids = (mgmt || []).map((u: any) => u.id as string).filter(id => id !== excludeUserId);
@@ -125,8 +145,10 @@ async function notifyManagementTeam(
       userId: uid, title: msg.title, titleAr: msg.titleAr, message: msg.message,
       type: msg.type, category: 'financial', priority: msg.priority,
       link: '/cost-submission', relatedEntityType: 'costSubmission',
-      sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View Submission',
-    })));
+      sendEmail: true, emailActionUrl: '/cost-submission',
+      emailActionLabel: 'View Submission | عرض المطالبة',
+      emailDetails,
+    } as any)));
     // WhatsApp — fire for all cost events so management always receives it on WA too
     dispatchNotification({
       event: event === 'cost_paid' ? 'payment_processed' : 'cost_status_update',
@@ -138,6 +160,18 @@ async function notifyManagementTeam(
       actionUrl: '/cost-submission',
       sendEmail: false,
       sendWhatsApp: true,
+      metadata: {
+        submission_type: 'Cost Submission',
+        ref_number: detail.refNum,
+        submission_title: detail.title,
+        amount: detail.amountStr,
+        category: detail.category,
+        expense_date: detail.expenseDate,
+        vendor: detail.vendor,
+        submitted_by: detail.submitterName,
+        disbursed_by: detail.disbursedBy,
+        payment_date: event === 'cost_paid' ? new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined,
+      },
     }).catch(() => {/* non-fatal */});
   } catch (e) { console.warn('[CostNotify] Management notification failed (non-fatal):', e); }
 }
@@ -145,7 +179,10 @@ async function notifyManagementTeam(
 async function notifySubmitterOfCostStatus(
   submittedBy: string,
   event: 'cost_tier_approved' | 'cost_approved' | 'cost_rejected' | 'cost_paid',
-  detail: { refNum: string; amountStr: string; tier?: number; notes?: string }
+  detail: {
+    refNum: string; amountStr: string; tier?: number; notes?: string;
+    category?: string; title?: string; expenseDate?: string; vendor?: string; disbursedBy?: string;
+  }
 ): Promise<void> {
   if (!submittedBy) return;
   type Msg = { title: string; titleAr: string; message: string; messageAr: string; type: 'info' | 'success' | 'warning' | 'error' };
@@ -153,19 +190,35 @@ async function notifySubmitterOfCostStatus(
     cost_tier_approved:{ title: `Cost Submission Under Review — ${detail.refNum}`, titleAr: `طلبك قيد المراجعة — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) passed Tier ${detail.tier ?? 1} and is now awaiting final review. Ref: ${detail.refNum}`, messageAr: `تمت الموافقة على طلبك (${detail.amountStr}) في المرحلة ${detail.tier ?? 1} وهو قيد المراجعة النهائية. المرجع: ${detail.refNum}`, type: 'info' },
     cost_approved:     { title: `Cost Submission Approved ✓ — ${detail.refNum}`, titleAr: `تمت الموافقة على طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) has been fully approved. Ref: ${detail.refNum}`, messageAr: `تمت الموافقة النهائية على طلبك (${detail.amountStr}). المرجع: ${detail.refNum}`, type: 'success' },
     cost_rejected:     { title: `Cost Submission Rejected — ${detail.refNum}`, titleAr: `تم رفض طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) was rejected${detail.notes ? '. Reason: ' + detail.notes : ''}. Ref: ${detail.refNum}`, messageAr: `تم رفض طلبك (${detail.amountStr})${detail.notes ? '. السبب: ' + detail.notes : ''}. المرجع: ${detail.refNum}`, type: 'error' },
-    cost_paid:         { title: `Cost Submission Paid — ${detail.refNum}`, titleAr: `تم صرف مبلغ طلبك — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) has been marked as paid. Ref: ${detail.refNum}`, messageAr: `تم تحديد طلبك (${detail.amountStr}) كمدفوع. المرجع: ${detail.refNum}`, type: 'success' },
+    cost_paid:         { title: `Cost Submission Paid ✅ — ${detail.refNum}`, titleAr: `تم صرف مبلغ طلبك ✅ — ${detail.refNum}`, message: `Your cost submission (${detail.amountStr}) has been paid. Please confirm receipt in your Cost Submissions tab. Ref: ${detail.refNum}`, messageAr: `تم صرف مطالبتك (${detail.amountStr}). يرجى تأكيد الاستلام في تبويب المطالبات. المرجع: ${detail.refNum}`, type: 'success' },
   };
   const msg = msgMap[event];
   if (!msg) return;
+
+  const emailDetails: Array<{ label: string; value: string }> = [
+    { label: 'Request Type',  value: 'Cost Submission' },
+    { label: 'Reference No.', value: detail.refNum },
+    ...(detail.title    ? [{ label: 'Title / Description', value: detail.title }]    : []),
+    { label: 'Amount',        value: detail.amountStr },
+    ...(detail.category ? [{ label: 'Category',     value: detail.category }]    : []),
+    ...(detail.expenseDate ? [{ label: 'Expense Date', value: detail.expenseDate }] : []),
+    ...(detail.vendor   ? [{ label: 'Vendor / Payee', value: detail.vendor }]    : []),
+    ...(detail.disbursedBy ? [{ label: 'Disbursed By',  value: detail.disbursedBy }] : []),
+    ...(event === 'cost_paid' ? [{ label: 'Payment Date', value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
+    ...(detail.notes ? [{ label: event === 'cost_rejected' ? 'Rejection Reason' : 'Notes', value: detail.notes }] : []),
+  ];
+
   try {
     await NotificationTriggerService.send({
       userId: submittedBy, title: msg.title, titleAr: msg.titleAr,
       message: msg.message, messageAr: msg.messageAr,
       type: msg.type, category: 'financial',
-      priority: event === 'cost_rejected' ? 'high' : 'normal',
+      priority: event === 'cost_rejected' ? 'high' : event === 'cost_paid' ? 'high' : 'normal',
       link: '/cost-submission', relatedEntityType: 'costSubmission',
-      sendEmail: true, emailActionUrl: '/cost-submission', emailActionLabel: 'View My Submissions',
-    });
+      sendEmail: true, emailActionUrl: '/cost-submission',
+      emailActionLabel: event === 'cost_paid' ? 'Confirm Receipt | تأكيد الاستلام' : 'View My Submissions | عرض مطالباتي',
+      emailDetails,
+    } as any);
     // WhatsApp — notify submitter on every status change including payment
     dispatchNotification({
       event: event === 'cost_paid' ? 'payment_processed' : 'cost_status_update',
@@ -177,6 +230,17 @@ async function notifySubmitterOfCostStatus(
       actionUrl: '/cost-submission',
       sendEmail: false,
       sendWhatsApp: true,
+      metadata: {
+        submission_type: 'Cost Submission',
+        ref_number: detail.refNum,
+        submission_title: detail.title,
+        amount: detail.amountStr,
+        category: detail.category,
+        expense_date: detail.expenseDate,
+        vendor: detail.vendor,
+        disbursed_by: detail.disbursedBy,
+        payment_date: event === 'cost_paid' ? new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined,
+      },
     }).catch(() => {/* non-fatal */});
   } catch (e) { console.warn('[CostNotify] Submitter notification failed (non-fatal):', e); }
 }
@@ -792,8 +856,23 @@ const MobileCostSubmission = () => {
         const paidSubmitterName = paidSubmitter?.name || paidSubmitter?.email || 'Unknown';
         const paidRefNum = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
         const paidAmountStr = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
-        void notifySubmitterOfCostStatus(oc.submitted_by, 'cost_paid', { refNum: paidRefNum, amountStr: paidAmountStr });
-        void notifyManagementTeam('cost_paid', { submitterName: paidSubmitterName, refNum: paidRefNum, amountStr: paidAmountStr }, currentUser?.id);
+        const paidCatLabels: Record<string, string> = { permits: 'Permits & Licenses', incentives: 'Incentives & Allowances', communications: 'Internet & Comms', training: 'Training', transport: 'Transportation', general_transport: 'Transportation', equipment: 'Equipment & Supplies', printing: 'Printing & Stationery', meetings: 'Meetings', office_admin: 'Office Admin', other: 'Other' };
+        const paidCatLabel = paidCatLabels[oc.expense_category] || oc.expense_category;
+        const paidTitleMobile = (oc as any).request_title || oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '').trim() || '';
+        const paidByNameMobile = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
+        const paidExpDateMobile = oc.expense_date ? new Date(oc.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined;
+        void notifySubmitterOfCostStatus(oc.submitted_by, 'cost_paid', {
+          refNum: paidRefNum, amountStr: paidAmountStr,
+          category: paidCatLabel, title: paidTitleMobile,
+          expenseDate: paidExpDateMobile, vendor: oc.vendor || undefined,
+          disbursedBy: paidByNameMobile,
+        });
+        void notifyManagementTeam('cost_paid', {
+          submitterName: paidSubmitterName, refNum: paidRefNum, amountStr: paidAmountStr,
+          category: paidCatLabel, title: paidTitleMobile,
+          expenseDate: paidExpDateMobile, vendor: oc.vendor || undefined,
+          disbursedBy: paidByNameMobile,
+        }, currentUser?.id);
       }
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to mark as paid.", variant: "destructive" });

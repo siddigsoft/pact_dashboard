@@ -82,7 +82,9 @@ async function notifyMgmtOfCostEvent(
   eventTitle: string,
   eventMessage: string,
   submissionId: string,
-  excludeUserId?: string
+  excludeUserId?: string,
+  emailDetails?: Array<{ label: string; value: string }>,
+  titleAr?: string,
 ): Promise<void> {
   try {
     const { data } = await supabase
@@ -94,21 +96,31 @@ async function notifyMgmtOfCostEvent(
       NotificationTriggerService.send({
         userId: u.id,
         title: eventTitle,
+        titleAr: titleAr || eventTitle,
         message: eventMessage,
-        type: 'info',
+        type: 'success',
         category: 'financial',
-        priority: 'normal',
+        priority: 'high',
         link: `/cost-submission?open=${submissionId}`,
         relatedEntityType: 'costSubmission',
         relatedEntityId: submissionId,
         sendEmail: true,
-        emailActionLabel: 'View Submission',
-      }).catch(console.warn);
+        emailActionLabel: 'View Submission | عرض المطالبة',
+        emailDetails,
+      } as any).catch(console.warn);
     });
   } catch (e) {
     console.warn('[CostSubmission] notifyMgmtOfCostEvent failed:', e);
   }
 }
+
+const COST_CATEGORY_LABELS: Record<string, string> = {
+  permits: 'Permits & Licenses', incentives: 'Incentives & Allowances',
+  communications: 'Internet & Comms', training: 'Training',
+  transport: 'Transportation', general_transport: 'Transportation',
+  equipment: 'Equipment & Supplies', printing: 'Printing & Stationery',
+  meetings: 'Meetings', office_admin: 'Office Admin', other: 'Other',
+};
 
 const PROJECT_PALETTE = [
   { bg: 'rgba(59,130,246,0.25)',  border: '#3B82F6', text: '#93C5FD' },  // blue
@@ -2658,11 +2670,32 @@ const CostSubmission = () => {
         const submitterName = (users || []).find((u: any) => u.id === oc.submitted_by)?.name
           || (users || []).find((u: any) => u.id === oc.submitted_by)?.fullName
           || 'Staff';
+        const disbursedByName = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
+        const submissionTitle = (oc as any).request_title || oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '').trim() || '';
+        const categoryLabel = COST_CATEGORY_LABELS[oc.expense_category] || oc.expense_category || '';
+        const paidEventDetails: Array<{ label: string; value: string }> = [
+          { label: 'Request Type',    value: 'Cost Submission' },
+          { label: 'Reference No.',   value: paidRef },
+          ...(submissionTitle ? [{ label: 'Title / Description', value: submissionTitle }] : []),
+          { label: isFullPayment ? 'Amount Disbursed' : 'Partial Amount Paid', value: `${oc.currency} ${paidNowAmount}` },
+          ...(isFullPayment ? [] : [
+            { label: 'Total Amount',     value: `${oc.currency} ${totalAmount}` },
+            { label: 'Remaining Balance', value: `${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}` },
+          ]),
+          ...(categoryLabel ? [{ label: 'Category', value: categoryLabel }] : []),
+          ...(oc.expense_date ? [{ label: 'Expense Date', value: new Date(oc.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
+          ...(oc.vendor ? [{ label: 'Vendor / Payee', value: oc.vendor }] : []),
+          { label: 'Submitted By',    value: submitterName },
+          { label: 'Disbursed By',    value: disbursedByName },
+          { label: 'Payment Date',    value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+        ];
         void notifyMgmtOfCostEvent(
-          isFullPayment ? `Cost Submission Paid — ${paidRef}` : `Partial Payment — ${paidRef}`,
-          `${isFullPayment ? 'Cost submission' : 'Partial payment of ' + oc.currency + ' ' + paidNowAmount + ' on submission'} "${paidRef}" by ${submitterName} has been disbursed by ${(currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance'}.${isFullPayment ? '' : ` Remaining: ${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}.`}`,
+          isFullPayment ? `Cost Submission Paid — ${paidRef}` : `Partial Payment Disbursed — ${paidRef}`,
+          `${isFullPayment ? 'Cost submission' : 'Partial payment of ' + oc.currency + ' ' + paidNowAmount + ' on submission'} "${paidRef}" by ${submitterName} has been disbursed by ${disbursedByName}.${isFullPayment ? '' : ` Remaining: ${oc.currency} ${((oc.amount_cents - newAmountPaidCents) / 100).toLocaleString()}.`}`,
           oc.id,
-          currentUser?.id
+          currentUser?.id,
+          paidEventDetails,
+          isFullPayment ? 'تم صرف مطالبة التكلفة ✅' : 'تم استلام دفعة جزئية 💰',
         );
         markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
         setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
@@ -2902,11 +2935,22 @@ const CostSubmission = () => {
         const batchTotal = subs.slice(0, successCount).reduce((s, sub) => s + sub.amount_cents / 100, 0);
         const batchCurrency = subs[0]?.currency || 'SDG';
         const disbursedBy = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
+        const batchRefs = subs.slice(0, successCount).map(s => s.reference_number || s.id.slice(0, 8).toUpperCase()).join(', ');
+        const batchDetails: Array<{ label: string; value: string }> = [
+          { label: 'Request Type',         value: 'Cost Submission — Batch Payment' },
+          { label: 'Submissions Paid',      value: String(successCount) },
+          { label: 'Total Amount Disbursed', value: `${batchCurrency} ${batchTotal.toLocaleString()}` },
+          { label: 'Reference Numbers',     value: batchRefs },
+          { label: 'Disbursed By',          value: disbursedBy },
+          { label: 'Payment Date',          value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+        ];
         void notifyMgmtOfCostEvent(
           `Batch Payment Disbursed — ${successCount} Submission${successCount > 1 ? 's' : ''}`,
           `${successCount} cost submission${successCount > 1 ? 's' : ''} totalling ${batchCurrency} ${batchTotal.toLocaleString()} have been batch-paid by ${disbursedBy}.`,
           subs[0]?.id || '',
-          currentUser?.id
+          currentUser?.id,
+          batchDetails,
+          `تم الدفع الجماعي — ${successCount} مطالبة`,
         );
       }
 
@@ -3590,11 +3634,25 @@ const CostSubmission = () => {
       } else {
         toast({ title: 'Deletion Requested', description: 'Your request has been sent to the admin for review.' });
         // Notify all Admin/SuperAdmin/FinancialAdmin
+        const delTitle = (submission as any).request_title || submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '').trim() || 'Untitled';
+        const delRef = submission.reference_number || submission.id.slice(0, 8).toUpperCase();
+        const delCatLabel = COST_CATEGORY_LABELS[(submission as any).expense_category] || (submission as any).expense_category || '';
         void notifyMgmtOfCostEvent(
-          '🗑 Deletion Request',
-          `${currentUser?.name || 'A user'} requested deletion of: ${submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'} — Reason: ${reason.trim()}`,
+          'Deletion Request — Cost Submission',
+          `${currentUser?.name || 'A user'} requested deletion of cost submission "${delRef}". Reason: ${reason.trim()}`,
           submission.id,
           currentUser?.id,
+          [
+            { label: 'Request Type',      value: 'Cost Submission — Deletion Request' },
+            { label: 'Reference No.',     value: delRef },
+            ...(delTitle ? [{ label: 'Title / Description', value: delTitle }] : []),
+            ...(delCatLabel ? [{ label: 'Category',         value: delCatLabel }] : []),
+            ...((submission as any).amount_cents ? [{ label: 'Amount',          value: `${(submission as any).currency || 'SDG'} ${((submission as any).amount_cents / 100).toLocaleString()}` }] : []),
+            { label: 'Requested By',      value: currentUser?.name || 'Unknown' },
+            { label: 'Deletion Reason',   value: reason.trim() },
+            { label: 'Request Date',      value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
+          ],
+          'طلب حذف مطالبة تكلفة',
         );
         fetchOperationalCosts();
         setDeleteRequestDialog({ open: false, submission: null, reason: '' });

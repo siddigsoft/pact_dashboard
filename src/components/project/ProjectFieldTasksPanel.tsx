@@ -8,6 +8,7 @@ import {
   TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
   Square, Users, Paperclip, Upload, Download, FileText, Image, FileSpreadsheet,
+  Package, Truck, Wrench, PersonStanding,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -41,6 +42,8 @@ import {
   type FieldTaskStatus,
   type FieldTaskPriority,
   type CreateFieldTask,
+  type ResourceLine,
+  type ResourceType,
 } from '@/hooks/useProjectTasks';
 import {
   useTaskDependencies,
@@ -468,6 +471,10 @@ interface TaskFormProps {
   completedStageIds?: Set<string>;
   /** Pre-selected stage when opening the form from a stage group */
   defaultStageId?: string;
+  currentUserId?: string;
+  currentUserName?: string;
+  projectId?: string;
+  projectName?: string;
 }
 
 function getReachableViaDeps(
@@ -531,7 +538,7 @@ function getDepRelations(
 
 const EMPTY_TYPED_DEPS: TaskDependency[] = [];
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId }: TaskFormProps) {
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId, currentUserId, currentUserName, projectId = '', projectName = '' }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -551,6 +558,33 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
+  const [resources,     setResources]     = useState<ResourceLine[]>(initial?.resources ?? []);
+
+  // Attachments — only functional when editing an existing task (initial.id present).
+  // For new tasks the hook returns empty state and upload is gated behind a prompt.
+  const formFileInputRef = useRef<HTMLInputElement>(null);
+  const attachNotifyCtx = initial ? {
+    projectId, projectName,
+    taskTitle: initial.title,
+    createdBy: initial.createdBy,
+    assignedTo: initial.assignedTo,
+    coAssigneeIds: initial.coAssigneeIds,
+  } : null;
+  const {
+    attachments: formAttachments,
+    loading:     formAttachmentsLoading,
+    uploading:   formAttachmentUploading,
+    deletingId:  formAttachmentDeletingId,
+    uploadFile:  formUploadFile,
+    deleteAttachment: formDeleteAttachment,
+  } = useFieldTaskAttachments(initial?.id ?? null, projectId, attachNotifyCtx);
+
+  const handleFormFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    for (const file of files) await formUploadFile(file, currentUserId, currentUserName);
+    if (formFileInputRef.current) formFileInputRef.current.value = '';
+  };
 
   // Only reset the form when the dialog actually transitions from closed to
   // open (or switches to editing a different task) — NOT on every re-render
@@ -655,6 +689,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       actualCost:     actCost  ? parseFloat(actCost)   : null,
       dependencies:   deps,
       coAssigneeIds:  coAssigneeIds.filter(id => id !== assignedTo),
+      resources:      resources,
     }, typedDeps);
   };
 
@@ -669,15 +704,31 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
         </DialogHeader>
 
         <Tabs defaultValue="basic" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-4 w-full flex-shrink-0">
-            <TabsTrigger value="basic">Basic</TabsTrigger>
-            <TabsTrigger value="timesheet">Timesheet</TabsTrigger>
-            <TabsTrigger value="costs">Costs</TabsTrigger>
-            <TabsTrigger value="dependencies" className="flex items-center gap-1.5">
-              Dependencies
+          <TabsList className="grid grid-cols-6 w-full flex-shrink-0">
+            <TabsTrigger value="basic" className="text-xs">Basic</TabsTrigger>
+            <TabsTrigger value="timesheet" className="text-xs">Time</TabsTrigger>
+            <TabsTrigger value="costs" className="text-xs">Costs</TabsTrigger>
+            <TabsTrigger value="dependencies" className="text-xs flex items-center gap-1">
+              Deps
               {deps.length > 0 && (
-                <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-[#1D3461] text-white text-[9px] font-bold">
+                <span className="inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded-full bg-[#1D3461] text-white text-[9px] font-bold">
                   {deps.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="resources" className="text-xs flex items-center gap-1">
+              Res
+              {resources.length > 0 && (
+                <span className="inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-bold">
+                  {resources.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="form-files" className="text-xs flex items-center gap-1">
+              Files
+              {formAttachments.length > 0 && (
+                <span className="inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold">
+                  {formAttachments.length}
                 </span>
               )}
             </TabsTrigger>
@@ -1064,6 +1115,247 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* ── RESOURCES TAB ── */}
+            <TabsContent value="resources" className="space-y-3 mt-0">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/40 border border-dashed">
+                <Package className="h-3.5 w-3.5 text-[#1D3461] mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  List the <span className="font-medium text-foreground">physical and human resources</span> needed to complete this task — vehicles, equipment, materials, extra personnel, etc.
+                </p>
+              </div>
+
+              {resources.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed rounded-lg gap-2">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Package className="h-5 w-5 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No resources added yet</p>
+                  <p className="text-xs text-muted-foreground/70 text-center max-w-[220px]">
+                    Add vehicles, equipment, materials or extra personnel needed for this task.
+                  </p>
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="mt-1 h-8 text-xs"
+                    onClick={() => setResources(prev => [...prev, {
+                      id: crypto.randomUUID(), resourceType: 'vehicle', name: '', quantity: 1, unit: 'unit',
+                    }])}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Resource
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-[110px_1fr_64px_72px_28px] gap-2 px-1">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Type</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Name / Description</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Qty</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Unit</span>
+                    <span />
+                  </div>
+
+                  {resources.map((res, idx) => {
+                    const TypeIcon =
+                      res.resourceType === 'vehicle'   ? Truck :
+                      res.resourceType === 'equipment' ? Wrench :
+                      res.resourceType === 'material'  ? Package :
+                      res.resourceType === 'people'    ? PersonStanding :
+                      Layers;
+                    return (
+                      <div key={res.id} className="grid grid-cols-[110px_1fr_64px_72px_28px] gap-2 items-center">
+                        {/* Type */}
+                        <Select
+                          value={res.resourceType}
+                          onValueChange={v => setResources(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, resourceType: v as ResourceType } : r
+                          ))}
+                        >
+                          <SelectTrigger className="h-8 text-xs" data-testid={`resource-type-${idx}`}>
+                            <span className="flex items-center gap-1.5">
+                              <TypeIcon className="h-3 w-3 flex-shrink-0" />
+                              <SelectValue />
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="vehicle"><span className="flex items-center gap-1.5"><Truck className="h-3 w-3" />Vehicle</span></SelectItem>
+                            <SelectItem value="equipment"><span className="flex items-center gap-1.5"><Wrench className="h-3 w-3" />Equipment</span></SelectItem>
+                            <SelectItem value="material"><span className="flex items-center gap-1.5"><Package className="h-3 w-3" />Material</span></SelectItem>
+                            <SelectItem value="people"><span className="flex items-center gap-1.5"><PersonStanding className="h-3 w-3" />People</span></SelectItem>
+                            <SelectItem value="other"><span className="flex items-center gap-1.5"><Layers className="h-3 w-3" />Other</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {/* Name */}
+                        <Input
+                          className="h-8 text-xs"
+                          placeholder="e.g. Toyota Land Cruiser"
+                          value={res.name}
+                          onChange={e => setResources(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, name: e.target.value } : r
+                          ))}
+                          data-testid={`resource-name-${idx}`}
+                        />
+                        {/* Qty */}
+                        <Input
+                          type="number" min="1" step="1"
+                          className="h-8 text-xs"
+                          value={res.quantity}
+                          onChange={e => setResources(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, quantity: Math.max(1, parseInt(e.target.value) || 1) } : r
+                          ))}
+                          data-testid={`resource-qty-${idx}`}
+                        />
+                        {/* Unit */}
+                        <Input
+                          className="h-8 text-xs"
+                          placeholder="unit"
+                          value={res.unit}
+                          onChange={e => setResources(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, unit: e.target.value } : r
+                          ))}
+                          data-testid={`resource-unit-${idx}`}
+                        />
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => setResources(prev => prev.filter((_, i) => i !== idx))}
+                          className="flex items-center justify-center h-8 w-7 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          data-testid={`resource-remove-${idx}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="h-8 text-xs w-full mt-1 border-dashed"
+                    onClick={() => setResources(prev => [...prev, {
+                      id: crypto.randomUUID(), resourceType: 'vehicle', name: '', quantity: 1, unit: 'unit',
+                    }])}
+                    data-testid="button-add-resource"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Another Resource
+                  </Button>
+
+                  {/* Summary strip */}
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 px-3 py-2 flex flex-wrap gap-2 mt-1">
+                    {(['vehicle','equipment','material','people','other'] as ResourceType[]).map(type => {
+                      const count = resources.filter(r => r.resourceType === type).length;
+                      if (count === 0) return null;
+                      const Icon = type === 'vehicle' ? Truck : type === 'equipment' ? Wrench : type === 'material' ? Package : type === 'people' ? PersonStanding : Layers;
+                      return (
+                        <span key={type} className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                          <Icon className="h-3 w-3" />
+                          {count} {type}{count > 1 ? (type === 'people' ? '' : 's') : ''}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── FILES TAB ── */}
+            <TabsContent value="form-files" className="space-y-3 mt-0">
+              {!initial?.id ? (
+                /* New task — no ID yet, uploads require an existing row */
+                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed rounded-lg gap-2 text-muted-foreground">
+                  <Paperclip className="h-8 w-8 opacity-30" />
+                  <p className="text-sm font-medium">Save the task first</p>
+                  <p className="text-xs text-center max-w-[240px]">
+                    Create the task, then reopen it to attach files, photos, or documents.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Attachments
+                      {formAttachments.length > 0 && (
+                        <span className="inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold min-w-[18px] h-[18px] px-1 ml-1">
+                          {formAttachments.length}
+                        </span>
+                      )}
+                    </p>
+                    <>
+                      <input
+                        ref={formFileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept="*/*"
+                        onChange={handleFormFileUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2"
+                        disabled={formAttachmentUploading || !currentUserId}
+                        onClick={() => formFileInputRef.current?.click()}
+                        data-testid="btn-form-upload-file"
+                      >
+                        {formAttachmentUploading
+                          ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          : <Upload className="h-3 w-3 mr-1" />}
+                        {formAttachmentUploading ? 'Uploading…' : 'Upload'}
+                      </Button>
+                    </>
+                  </div>
+
+                  {formAttachmentsLoading ? (
+                    <div className="flex items-center justify-center py-8 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+                    </div>
+                  ) : formAttachments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 border-2 border-dashed rounded-lg text-muted-foreground">
+                      <Paperclip className="h-7 w-7 opacity-30" />
+                      <p className="text-sm">No files yet.</p>
+                      <p className="text-[10px]">Upload documents, photos, or reports (max 20 MB each).</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {formAttachments.map(att => (
+                        <div key={att.id} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 group">
+                          <AttachmentIcon type={att.fileType} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{att.fileName}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatBytes(att.fileSize)}
+                              {att.uploadedByName && ` · ${att.uploadedByName}`}
+                              {` · ${format(new Date(att.createdAt), 'dd MMM yyyy')}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">
+                              <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Download className="h-3 w-3" />
+                              </Button>
+                            </a>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                              disabled={formAttachmentDeletingId === att.id}
+                              onClick={() => formDeleteAttachment(att.id)}
+                              data-testid={`btn-form-delete-file-${att.id}`}
+                            >
+                              {formAttachmentDeletingId === att.id
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <Trash2 className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </>
@@ -1810,6 +2102,53 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
               Blocking: {blockingCount}
             </span>
           )}
+          {task.resources.length > 0 && (() => {
+            // Sum quantities per type; order matters for display
+            const TYPE_ORDER: ResourceType[] = ['vehicle', 'equipment', 'material', 'people', 'other'];
+            const TYPE_META: Record<ResourceType, { Icon: typeof Truck; label: string; plural: string; chipCls: string }> = {
+              vehicle:   { Icon: Truck,          label: 'vehicle',   plural: 'vehicles',  chipCls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+              equipment: { Icon: Wrench,         label: 'equipment', plural: 'equipment', chipCls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' },
+              material:  { Icon: Package,        label: 'material',  plural: 'materials', chipCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+              people:    { Icon: PersonStanding, label: 'person',    plural: 'people',    chipCls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' },
+              other:     { Icon: Layers,         label: 'other',     plural: 'others',    chipCls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+            };
+            const groups = TYPE_ORDER
+              .map(type => ({
+                type,
+                qty: task.resources.filter(r => r.resourceType === type).reduce((s, r) => s + (r.quantity || 1), 0),
+              }))
+              .filter(g => g.qty > 0);
+            const tooltip = task.resources.map(r => r.name).filter(Boolean).join(', ');
+
+            if (groups.length === 1) {
+              // Single type — show labelled chip
+              const g = groups[0];
+              const { Icon, label, plural, chipCls } = TYPE_META[g.type];
+              return (
+                <span title={tooltip}
+                  className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${chipCls}`}>
+                  <Icon className="h-2.5 w-2.5" />
+                  {g.qty} {g.qty === 1 ? label : plural}
+                </span>
+              );
+            }
+            // Multiple types — compact icon+count segments inside one pill
+            return (
+              <span title={tooltip}
+                className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {groups.map((g, i) => {
+                  const { Icon } = TYPE_META[g.type];
+                  return (
+                    <span key={g.type} className="flex items-center gap-0.5">
+                      {i > 0 && <span className="opacity-40">·</span>}
+                      <Icon className="h-2.5 w-2.5" />
+                      {g.qty}
+                    </span>
+                  );
+                })}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Meta row */}
@@ -2458,6 +2797,54 @@ function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStr
 function MiniTaskRow({ task, onOpen }: { task: FieldTask; onOpen: (t: FieldTask) => void }) {
   const sCfg = STATUS_CFG[task.status];
   const pCfg = PRIORITY_CFG[task.priority];
+
+  // Resource type chip — same logic as TaskCard
+  const resourceChip = (() => {
+    if (!task.resources.length) return null;
+    const TYPE_ORDER: ResourceType[] = ['vehicle', 'equipment', 'material', 'people', 'other'];
+    const TYPE_META: Record<ResourceType, { Icon: typeof Truck; label: string; plural: string; chipCls: string }> = {
+      vehicle:   { Icon: Truck,          label: 'vehicle',   plural: 'vehicles',  chipCls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+      equipment: { Icon: Wrench,         label: 'equipment', plural: 'equipment', chipCls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' },
+      material:  { Icon: Package,        label: 'material',  plural: 'materials', chipCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+      people:    { Icon: PersonStanding, label: 'person',    plural: 'people',    chipCls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' },
+      other:     { Icon: Layers,         label: 'other',     plural: 'others',    chipCls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+    };
+    const groups = TYPE_ORDER
+      .map(type => ({
+        type,
+        qty: task.resources.filter(r => r.resourceType === type).reduce((s, r) => s + (r.quantity || 1), 0),
+      }))
+      .filter(g => g.qty > 0);
+    const tooltip = task.resources.map(r => r.name).filter(Boolean).join(', ');
+
+    if (groups.length === 1) {
+      const g = groups[0];
+      const { Icon, label, plural, chipCls } = TYPE_META[g.type];
+      return (
+        <span title={tooltip}
+          className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${chipCls}`}>
+          <Icon className="h-2.5 w-2.5" />
+          {g.qty} {g.qty === 1 ? label : plural}
+        </span>
+      );
+    }
+    return (
+      <span title={tooltip}
+        className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+        {groups.map((g, i) => {
+          const { Icon } = TYPE_META[g.type];
+          return (
+            <span key={g.type} className="flex items-center gap-0.5">
+              {i > 0 && <span className="opacity-40">·</span>}
+              <Icon className="h-2.5 w-2.5" />
+              {g.qty}
+            </span>
+          );
+        })}
+      </span>
+    );
+  })();
+
   return (
     <div
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
@@ -2471,6 +2858,7 @@ function MiniTaskRow({ task, onOpen }: { task: FieldTask; onOpen: (t: FieldTask)
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {resourceChip}
         {task.dueDate && (
           <span className="text-[10px] text-muted-foreground hidden sm:inline">
             {format(parseISO(task.dueDate), 'MMM d')}
@@ -2861,12 +3249,11 @@ export function ProjectFieldTasksPanel({
     doc.setFontSize(9);
     doc.setTextColor(100);
     doc.text(`Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`, 14, 20);
-    autoTable(doc, {
-      startY: 25,
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [29, 52, 97] },
-      head: [['Title','Status','Priority','Assignee','Start','Due','Location','Est h','Act h','Est $','Act $']],
-      body: filtered.map(t => [
+
+    // Build body rows — task row followed by an optional resource sub-row
+    const pdfBody: any[] = [];
+    for (const t of filtered) {
+      pdfBody.push([
         t.title,
         STATUS_CFG[t.status].label,
         PRIORITY_CFG[t.priority].label,
@@ -2878,10 +3265,90 @@ export function ProjectFieldTasksPanel({
         t.actualHours    != null ? String(t.actualHours)    : '',
         t.estimatedCost  != null ? `$${t.estimatedCost}`   : '',
         t.actualCost     != null ? `$${t.actualCost}`       : '',
-      ]),
+      ]);
+      if (t.resources.length > 0) {
+        const resSummary = t.resources
+          .map(r => `${r.name || r.resourceType} ×${r.quantity}${r.unit ? ' ' + r.unit : ''}`)
+          .join(', ');
+        pdfBody.push([{
+          content: `  ↳ Resources: ${resSummary}`,
+          colSpan: 11,
+          styles: {
+            fontStyle: 'italic' as const,
+            fontSize: 6,
+            textColor: [80, 80, 100] as [number, number, number],
+            fillColor: [245, 247, 252] as [number, number, number],
+            cellPadding: { top: 1, bottom: 1, left: 10, right: 2 },
+          },
+        }]);
+      }
+    }
+
+    autoTable(doc, {
+      startY: 25,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [29, 52, 97] },
+      head: [['Title','Status','Priority','Assignee','Start','Due','Location','Est h','Act h','Est $','Act $']],
+      body: pdfBody,
     });
     doc.save(`${projectName.replace(/\s+/g, '_')}_field_tasks.pdf`);
     toast({ title: 'PDF exported' });
+  };
+
+  const exportExcel = async () => {
+    const { exportStandardExcel } = await import('@/utils/standardExcelExport');
+    const taskRows = filtered.map(t => [
+      t.title,
+      STATUS_CFG[t.status].label,
+      PRIORITY_CFG[t.priority].label,
+      t.assignedToName ?? '',
+      t.startDate ?? '',
+      t.dueDate ?? '',
+      t.stateName ?? '',
+      t.localityName ?? '',
+      t.estimatedHours ?? '',
+      t.actualHours ?? '',
+      t.estimatedCost ?? '',
+      t.actualCost ?? '',
+      (t.notes ?? '').replace(/\n/g, ' '),
+    ]);
+
+    // Collect resource rows for all tasks that have resources
+    const resourceRows: (string | number | null | undefined)[][] = [];
+    for (const t of filtered) {
+      for (const r of t.resources) {
+        resourceRows.push([
+          t.title,
+          r.resourceType.charAt(0).toUpperCase() + r.resourceType.slice(1),
+          r.name,
+          r.quantity,
+          r.unit,
+          r.notes ?? '',
+        ]);
+      }
+    }
+
+    await exportStandardExcel({
+      reportTitle: `Field Tasks — ${projectName}`,
+      subtitleLine: `Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`,
+      filenamePrefix: `${projectName.replace(/\s+/g, '_')}_field_tasks`,
+      mainSheet: {
+        sheetName: 'Tasks',
+        headers: ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'],
+        rows: taskRows,
+        colWidths: { 0: 35, 12: 30 },
+      },
+      ...(resourceRows.length > 0 && {
+        breakdownSheets: [{
+          title: 'Task Resources',
+          sheetName: 'Resources',
+          headers: ['Task Title','Resource Type','Name','Quantity','Unit','Notes'],
+          rows: resourceRows,
+          colWidths: [35, 15, 20, 10, 12, 25],
+        }],
+      }),
+    });
+    toast({ title: 'Excel exported' });
   };
 
   const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!filterMemberId || !!search.trim();
@@ -2965,6 +3432,9 @@ export function ProjectFieldTasksPanel({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={exportPDF}>
                   Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportExcel}>
+                  Export as Excel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3175,6 +3645,10 @@ export function ProjectFieldTasksPanel({
         allTypedDeps={typedDepsAll}
         completedStageIds={completedStageIds}
         defaultStageId={defaultStageId}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        projectId={projectId}
+        projectName={projectName}
       />
       <TaskFormDialog
         open={!!editTask}
@@ -3188,6 +3662,10 @@ export function ProjectFieldTasksPanel({
         existingTypedDeps={editTask ? predecessorsOf(editTask.id) : []}
         allTypedDeps={typedDepsAll}
         completedStageIds={completedStageIds}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        projectId={projectId}
+        projectName={projectName}
       />
       <TaskDetailDialog
         task={detailTask}

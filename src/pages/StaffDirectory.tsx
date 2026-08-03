@@ -19,7 +19,7 @@ import {
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
   FileText, FileDown, GitBranch, Landmark, UserX,
-  Banknote, TrendingDown, ChevronDown,
+  Banknote, TrendingDown, ChevronDown, History, ChevronUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState, hubs as sudanHubs } from "@/data/sudanStates";
@@ -229,6 +229,24 @@ function ProfileDetail({
   const av       = avBadge(profile.presence);
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
+
+  /* ── Bank Account History ── */
+  const [bankHistory,     setBankHistory]     = useState<any[]>([]);
+  const [bankHistoryOpen, setBankHistoryOpen] = useState(false);
+  const [bankHistoryLoaded, setBankHistoryLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('bank_account_history')
+      .select('id,changed_at,old_data,new_data,changed_by,profiles!bank_account_history_changed_by_fkey(full_name)')
+      .eq('profile_id', profile.id)
+      .order('changed_at', { ascending: false })
+      .limit(30)
+      .then(({ data }) => {
+        setBankHistory(data ?? []);
+        setBankHistoryLoaded(true);
+      });
+  }, [profile.id]);
 
   /* ── Financial Activity ── */
   const [finRequested, setFinRequested] = useState(false);
@@ -466,6 +484,82 @@ function ProfileDetail({
                       <p className="text-sm font-medium text-red-800 dark:text-red-300">No bank account registered</p>
                       <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for this staff member.</p>
                     </div>
+                  </div>
+                )}
+
+                {/* ── Bank Account Change History ── */}
+                {bankHistoryLoaded && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setBankHistoryOpen(o => !o)}
+                      className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors w-full"
+                    >
+                      <History className="h-3 w-3 shrink-0" />
+                      Account Details History
+                      {bankHistory.length > 0 && (
+                        <span className="ml-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0 text-[9px] font-bold">
+                          {bankHistory.length}
+                        </span>
+                      )}
+                      {bankHistoryOpen
+                        ? <ChevronUp className="h-3 w-3 ml-auto" />
+                        : <ChevronDown className="h-3 w-3 ml-auto" />}
+                    </button>
+
+                    {bankHistoryOpen && (
+                      <div className="mt-2 space-y-2">
+                        {bankHistory.length === 0 ? (
+                          <p className="text-xs text-muted-foreground pl-1">No changes recorded yet.</p>
+                        ) : bankHistory.map((row, i) => {
+                          const nd  = row.new_data  as Record<string, any> | null;
+                          const od  = row.old_data  as Record<string, any> | null;
+                          const who = (row.profiles as any)?.full_name ?? 'Unknown';
+                          const when = (() => { try { return format(new Date(row.changed_at), 'dd MMM yyyy, HH:mm'); } catch { return row.changed_at; } })();
+                          const isFirst = !od && nd;
+                          const isDelete = od && !nd;
+                          return (
+                            <div key={row.id ?? i} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 text-xs space-y-1.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold
+                                  ${isFirst  ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                                  : isDelete ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'}`}>
+                                  {isFirst ? 'Added' : isDelete ? 'Removed' : 'Updated'}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">{when} · by {who}</span>
+                              </div>
+                              {nd && (
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                                  {[['Account Name', nd.accountName ?? nd.account_name],
+                                    ['Account Number', nd.accountNumber ?? nd.account_number],
+                                    ['Bank', nd.bankName ?? nd.bank_name],
+                                    ['Branch', nd.branch]].map(([lbl, val]) => val ? (
+                                    <div key={lbl as string}>
+                                      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">{lbl}</span>
+                                      <p className="font-medium truncate">{val as string}</p>
+                                    </div>
+                                  ) : null)}
+                                </div>
+                              )}
+                              {od && !isFirst && (
+                                <details className="text-[10px] text-muted-foreground cursor-pointer">
+                                  <summary className="select-none hover:text-foreground">Previous values</summary>
+                                  <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 pl-1">
+                                    {[['Account Name', od.accountName ?? od.account_name],
+                                      ['Account Number', od.accountNumber ?? od.account_number],
+                                      ['Bank', od.bankName ?? od.bank_name],
+                                      ['Branch', od.branch]].map(([lbl, val]) => val ? (
+                                      <div key={lbl as string}><span className="opacity-60">{lbl}:</span> {val as string}</div>
+                                    ) : null)}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

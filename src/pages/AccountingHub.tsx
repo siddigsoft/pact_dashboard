@@ -68,6 +68,15 @@ const PaymentTermsPanel         = lazy(() => import('./AccountingPaymentTerms'))
 const FollowUpLevelsPanel       = lazy(() => import('./AccountingFollowUpLevels'));
 const ProjectLinksPanel         = lazy(() => import('./AccountingProjectLinks'));
 
+// ── 2026-08-03 new panels ─────────────────────────────────────────────────────
+const GLBridgeSettingsPanel   = lazy(() => import('./AccountingGLBridgeSettings'));
+const OpeningBalancesPanel    = lazy(() => import('./AccountingOpeningBalances'));
+const GLBridgePreFundingPanel = lazy(() => import('./AccountingGLBridgePreFunding'));
+const GLBridgePayrollPanel    = lazy(() => import('./AccountingGLBridgePayroll'));
+const AnnualBudgetPanel       = lazy(() => import('./AccountingAnnualBudget'));
+const BankStmtImportPanel     = lazy(() => import('./AccountingBankStatementImport'));
+const UnifiedAssetsPanel      = lazy(() => import('./UnifiedAssetMaster'));
+
 // ── Phase 2 panels (2026-07-12 AR / Expenses / Cash expansion) ───────────────
 const CustomerInvoicesPanel     = lazy(() => import('./AccountingCustomerInvoices'));
 const CustomerPaymentsPanel     = lazy(() => import('./AccountingCustomerPayments'));
@@ -104,7 +113,10 @@ type AcctTab =
   | 'recurring-journals' | 'journal-templates'
   | 'withholding-tax' | 'tax-return'
   | 'pl-by-department' | 'budget-utilization' | 'kpi-ratios' | 'donor-statement' | 'bs-comparison'
-  | 'asset-revaluation';
+  | 'asset-revaluation'
+  | 'opening-balances' | 'annual-budget' | 'bank-statement-import'
+  | 'gl-bridge-prefunding' | 'gl-bridge-payroll' | 'unified-assets'
+  | 'gl-bridge-settings';
 
 interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -162,6 +174,10 @@ const SECTIONS: SectionDef[] = [
         id: 'journal-templates', label: 'Journal Templates', icon: LayoutTemplate,
         description: 'Save common multi-line journal entry patterns as reusable templates to speed up posting and reduce errors on routine transactions.',
       },
+      {
+        id: 'opening-balances', label: 'Opening Balances', icon: Scale,
+        description: 'Post starting account balances at the beginning of a fiscal year — enter debit/credit per account, validate that totals balance, and create the opening journal entry.',
+      },
     ],
   },
   {
@@ -191,6 +207,30 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
         description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
+      },
+      {
+        id: 'gl-bridge-settings', label: 'GL Bridge Settings', icon: Settings2,
+        description: 'Map each GL bridge event (pre-fund disbursement, payroll run, EOSB accrual, etc.) to the correct debit and credit accounts from your Chart of Accounts — no SQL editing required.',
+      },
+      {
+        id: 'gl-bridge-prefunding', label: 'Pre-Funding → GL', icon: Zap,
+        description: 'Post pre-fund disbursement transactions to the General Ledger — review pending transactions and trigger the bridge to create double-entry journal entries automatically.',
+      },
+      {
+        id: 'gl-bridge-payroll', label: 'Payroll → GL', icon: Zap,
+        description: 'Post completed payroll runs and EOSB accruals to the General Ledger — review pending runs, trigger bridge functions, and inspect the bridge log for errors.',
+      },
+      {
+        id: 'annual-budget', label: 'Annual Budget', icon: PiggyBank,
+        description: 'Organisation-wide annual budget by fiscal year — broken down by hub, donor, fund, and budget category. Supports draft → approved → active workflow with version snapshots.',
+      },
+      {
+        id: 'bank-statement-import', label: 'Bank Statement Import', icon: Landmark,
+        description: 'Upload bank statement CSV files, preview parsed transactions, and match them against journal entries for reconciliation.',
+      },
+      {
+        id: 'unified-assets', label: 'Unified Asset Register', icon: Package,
+        description: 'Single register for all HR assets, field equipment, and fixed assets — with assignment history, depreciation tracking, and disposal workflow.',
       },
       {
         id: 'loans', label: 'Loans', icon: PiggyBank,
@@ -554,6 +594,14 @@ export default function AccountingHub() {
         {tab === 'donor-statement'      && <Suspense fallback={<PanelLoader />}><DonorStatementPanel /></Suspense>}
         {tab === 'bs-comparison'        && <Suspense fallback={<PanelLoader />}><BSComparisonPanel /></Suspense>}
         {tab === 'ar-aging'             && <Suspense fallback={<PanelLoader />}><ARAgingPanel /></Suspense>}
+        {/* 2026-08-03 new panels */}
+        {tab === 'gl-bridge-settings'   && <Suspense fallback={<PanelLoader />}><GLBridgeSettingsPanel /></Suspense>}
+        {tab === 'opening-balances'     && <Suspense fallback={<PanelLoader />}><OpeningBalancesPanel /></Suspense>}
+        {tab === 'gl-bridge-prefunding' && <Suspense fallback={<PanelLoader />}><GLBridgePreFundingPanel /></Suspense>}
+        {tab === 'gl-bridge-payroll'    && <Suspense fallback={<PanelLoader />}><GLBridgePayrollPanel /></Suspense>}
+        {tab === 'annual-budget'        && <Suspense fallback={<PanelLoader />}><AnnualBudgetPanel /></Suspense>}
+        {tab === 'bank-statement-import'&& <Suspense fallback={<PanelLoader />}><BankStmtImportPanel /></Suspense>}
+        {tab === 'unified-assets'       && <Suspense fallback={<PanelLoader />}><UnifiedAssetsPanel /></Suspense>}
       </div>
     </HubLayout>
   );

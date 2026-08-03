@@ -760,31 +760,47 @@ export default function PreFundingReconciliation() {
       const loaded: PreFundSummary[] = (data as any) ?? [];
       setFunds(loaded);
 
-      // Compute accurate available balance per fund in the background (same DP-validation
-      // logic used by loadTxns) so the fund picker shows the correct figure, not the stale
-      // available_balance DB column.
+      // Compute accurate available balance per fund using 3 global batched queries
+      // (was N per-fund queries — one transaction fetch + two DP validation queries per fund).
       const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
       const avMap = new Map<string, number>();
-      await Promise.all(loaded.map(async fund => {
-        try {
-          const rawTxns: any[] = await fetchAll(() =>
-            supabase.from('pre_fund_transactions')
-              .select('id,transaction_type,amount,source_table,source_id')
-              .eq('pre_fund_request_id', fund.id)
-              .eq('transaction_type', 'payment'),
-          );
+      if (loaded.length > 0) {
+        const fundIds = loaded.map(f => f.id);
+
+        // ONE batched transaction query for all funds
+        const allTxns: any[] = await fetchAllIn(
+          (chunk) => supabase.from('pre_fund_transactions')
+            .select('id,transaction_type,amount,source_table,source_id,pre_fund_request_id')
+            .in('pre_fund_request_id', chunk)
+            .eq('transaction_type', 'payment'),
+          fundIds,
+        );
+
+        // Group by fund
+        const txnsByFund = new Map<string, any[]>();
+        for (const t of allTxns) {
+          const bucket = txnsByFund.get(t.pre_fund_request_id);
+          if (bucket) bucket.push(t);
+          else txnsByFund.set(t.pre_fund_request_id, [t]);
+        }
+
+        // Two global DP validation queries (was 2N)
+        const allDpIds  = [...new Set(allTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
+        const allTxnIds = allTxns.map((t: any) => t.id as string).filter(Boolean);
+        const [validDpData, backLinked] = await Promise.all([
+          allDpIds.length  ? fetchAllIn((chunk) => supabase.from('down_payment_requests').select('id,status,metadata').in('id', chunk), allDpIds)                                                               : Promise.resolve([] as any[]),
+          allTxnIds.length ? fetchAllIn((chunk) => supabase.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), allTxnIds) : Promise.resolve([] as any[]),
+        ]);
+
+        const paidDpSet      = new Set<string>((validDpData as any[]).filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
+        const nonPaidBackIds = new Set<string>((backLinked as any[]).filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true).map((d: any) => d.pre_fund_transaction_id as string));
+
+        for (const fund of loaded) {
+          const rawTxns = txnsByFund.get(fund.id) ?? [];
           if (rawTxns.length === 0) {
             avMap.set(fund.id, fund.amount - Number(fund.paid_amount ?? 0));
-            return;
+            continue;
           }
-          const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
-          const txnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
-          const [validDpData, backLinked] = await Promise.all([
-            fetchAll(() => supabase.from('down_payment_requests').select('id,status,metadata').in('id', dpIds.length ? dpIds : ['_none'])),
-            fetchAll(() => supabase.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', txnIds.length ? txnIds : ['_none'])),
-          ]);
-          const paidDpSet = new Set<string>((validDpData as any[]).filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
-          const nonPaidBackIds = new Set<string>((backLinked as any[]).filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true).map((d: any) => d.pre_fund_transaction_id as string));
           let paid = 0;
           for (const t of rawTxns) {
             if (t.source_table === 'down_payment_requests') {
@@ -796,10 +812,8 @@ export default function PreFundingReconciliation() {
             }
           }
           avMap.set(fund.id, Math.max(0, fund.amount - paid));
-        } catch {
-          avMap.set(fund.id, Math.max(0, fund.amount - Number(fund.paid_amount ?? 0)));
         }
-      }));
+      }
       setFundsComputedAvail(new Map(avMap));
     } catch (e: any) { toast({ title: 'Load failed', description: e.message, variant: 'destructive' }); }
     finally { setLoading(false); }

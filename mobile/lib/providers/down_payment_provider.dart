@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/down_payment_request.dart';
 import '../../repositories/wallet_repository.dart';
+import '../services/advance_request_service.dart';
 
 /// Provider for wallet repository
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
@@ -70,6 +71,23 @@ class DownPaymentNotifier extends StateNotifier<DownPaymentState> {
   }) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      // Pre-flight duplicate guard — throws StateError if site already has an active advance.
+      final duplicate = await AdvanceRequestService.checkForActiveDuplicate(
+        siteId: mmpSiteEntryId.isNotEmpty ? mmpSiteEntryId : null,
+        siteName: siteName,
+        hubId: hubId,
+      );
+      if (duplicate != null) {
+        final status =
+            (duplicate['status'] as String? ?? 'unknown').replaceAll('_', ' ');
+        final amount =
+            (duplicate['requested_amount'] as num?)?.toStringAsFixed(0) ?? '?';
+        throw StateError(
+          'An active advance request ($amount SDG — $status) already exists for '
+          'this site. Cancel or resolve it before submitting a new one.',
+        );
+      }
+
       final newRequest = await _repository.createDownPaymentRequest(
         userId: _userId,
         siteVisitId: siteVisitId,

@@ -25,7 +25,50 @@ class AdvanceRequestService {
     }
   }
 
-  /// Create a new advance request
+  /// Check for an existing ACTIVE advance for this site (any collector, not just the caller).
+  /// Returns the duplicate row if found, null if the site is clear to submit.
+  static Future<Map<String, dynamic>?> checkForActiveDuplicate({
+    required String? siteId,
+    required String siteName,
+    String? hubId,
+  }) async {
+    try {
+      const cancelledStatuses = ['cancelled', 'rejected', 'deleted'];
+
+      // Path A — precise check by mmp_site_entry_id (preferred)
+      if (siteId != null && siteId.isNotEmpty) {
+        final byEntryId = await Supabase.instance.client
+            .from('down_payment_requests')
+            .select('id, status, requested_amount, requested_by')
+            .eq('mmp_site_entry_id', siteId)
+            .not('status', 'in', '(${cancelledStatuses.map((s) => '"$s"').join(',')})')
+            .limit(1)
+            .maybeSingle();
+        if (byEntryId != null) return byEntryId;
+      }
+
+      // Path B — fallback by site_name + hub_id (catches legacy / cross-path duplicates)
+      if (siteName.isNotEmpty && hubId != null && hubId.isNotEmpty) {
+        final byName = await Supabase.instance.client
+            .from('down_payment_requests')
+            .select('id, status, requested_amount, requested_by')
+            .eq('site_name', siteName.trim())
+            .eq('hub_id', hubId)
+            .not('status', 'in', '(${cancelledStatuses.map((s) => '"$s"').join(',')})')
+            .limit(1)
+            .maybeSingle();
+        if (byName != null) return byName;
+      }
+
+      return null;
+    } catch (e) {
+      developer.log('Error checking for duplicate advance: $e');
+      return null; // Non-fatal — let the insert attempt proceed and rely on DB constraints
+    }
+  }
+
+  /// Create a new advance request.
+  /// Throws a [StateError] if an active advance already exists for the site.
   static Future<Map<String, dynamic>> createRequest({
     required String userId,
     required String? siteId,
@@ -51,6 +94,26 @@ class AdvanceRequestService {
         hubId = hubId ?? profile?['hub_id'] as String?;
         requesterRole = requesterRole ?? profile?['role'] as String?;
       }
+
+      // ── Duplicate guard ────────────────────────────────────────────────────
+      // The web app has an equivalent check in DownPaymentContext. The mobile
+      // app previously had NO pre-flight check, meaning it could insert a second
+      // active advance for a site that had already been claimed by another
+      // collector — particularly after a reclaim-and-redispatch cycle.
+      final duplicate = await checkForActiveDuplicate(
+        siteId: siteId,
+        siteName: siteName,
+        hubId: hubId,
+      );
+      if (duplicate != null) {
+        final status = (duplicate['status'] as String? ?? 'unknown').replaceAll('_', ' ');
+        final amount = (duplicate['requested_amount'] as num?)?.toStringAsFixed(0) ?? '?';
+        throw StateError(
+          'An active advance request ($amount SDG — $status) already exists for '
+          'this site. Cancel or resolve it before submitting a new one.',
+        );
+      }
+      // ──────────────────────────────────────────────────────────────────────
 
       // Determine requester role (dataCollector or coordinator)
       final role = (requesterRole ?? '').toLowerCase();

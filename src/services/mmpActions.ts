@@ -504,6 +504,147 @@ export async function reclaimFromCoordinator(opts: {
       }
     });
     await Promise.all(resetPromises);
+
+    // ── FIX: Cancel any open (pending) advance requests for the reclaimed entries ──
+    // When a site is reclaimed the collector who held it is no longer responsible.
+    // Leaving their advance open would (a) block any new collector from submitting
+    // an advance and (b) allow double-payment if the old request is later approved.
+    // We cancel only truly-open statuses — paid/partially-paid rows need human review.
+    try {
+      const CANCELLABLE = ['pending_supervisor', 'pending_admin'];
+      const { data: openAdvances, error: advFetchErr } = await supabase
+        .from('down_payment_requests')
+        .select('id, status, requested_by, site_name, requested_amount')
+        .in('mmp_site_entry_id', forwardedEntryIds)
+        .in('status', CANCELLABLE);
+
+      if (advFetchErr) {
+        console.warn('[MMP Reclaim] Could not fetch open advances to cancel:', advFetchErr.message);
+      } else if (openAdvances && openAdvances.length > 0) {
+        const advanceIds = openAdvances.map((a: any) => a.id);
+
+        // Cancel each advance individually so we can safely merge the metadata note
+        // without overwriting existing fields (a bulk .update() would replace the whole jsonb).
+        await Promise.all(
+          (openAdvances as any[]).map(async (adv: any) => {
+            const mergedMeta = {
+              ...(adv.metadata ?? {}),
+              auto_cancelled_reason: `Auto-cancelled: site reclaimed on ${now}. Reason: ${reasonCategory} — ${reason}`,
+              reclaimed_by: currentUserId,
+            };
+            const { error: cancelErr } = await supabase
+              .from('down_payment_requests')
+              .update({ status: 'cancelled', updated_at: now, metadata: mergedMeta })
+              .eq('id', adv.id);
+            if (cancelErr) {
+              console.warn(`[MMP Reclaim] Failed to cancel advance ${adv.id}:`, cancelErr.message);
+            }
+          })
+        );
+
+        console.log(
+          `[MMP Reclaim] Auto-cancelled ${advanceIds.length} open advance(s) for reclaimed sites:`,
+          openAdvances.map((a: any) => a.site_name).join(', '),
+        );
+
+        // ── Notify finance / admin / supervisors about the auto-cancelled advances ──
+        try {
+          // Build a human-readable list of voided advances
+          const advanceLines = (openAdvances as any[]).map((a: any) => {
+            const amount = a.requested_amount
+              ? `SDG ${Number(a.requested_amount).toLocaleString()}`
+              : '';
+            return a.site_name ? `${a.site_name}${amount ? ` (${amount})` : ''}` : a.id;
+          });
+          const advanceListText = advanceLines.join(', ');
+          const mmpName = mmpData?.name || mmpId;
+
+          const notifTitle = `Advance Requests Auto-Cancelled — ${mmpName}`;
+          const notifTitleAr = `طلبات السلف ألغيت تلقائياً — ${mmpName}`;
+          const notifMessage =
+            `${advanceIds.length} advance request(s) were automatically cancelled when sites were reclaimed from coordinator. ` +
+            `Reason: ${reasonCategory} — ${reason}. Affected sites: ${advanceListText}.`;
+          const notifMessageAr =
+            `تم إلغاء ${advanceIds.length} طلب(ات) سلفة تلقائياً عند استعادة المواقع من المنسق. ` +
+            `السبب: ${reasonCategory} — ${reason}. المواقع المتأثرة: ${advanceListText}.`;
+          const actionUrl = `/advance-requests?mmp=${mmpId}`;
+
+          // Fetch finance and admin users to notify
+          const { data: financeAdminUsers } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .in('role', [
+              'financial_admin', 'finance',
+              'admin', 'Admin',
+              'superAdmin', 'super_admin', 'SuperAdmin',
+            ])
+            .eq('status', 'approved');
+
+          // Also fetch hub supervisors if we know the hub
+          let supervisorUsers: any[] = [];
+          if (mmpData) {
+            const { data: mmpHubData } = await supabase
+              .from('mmp_files')
+              .select('hub_id')
+              .eq('id', mmpId)
+              .single();
+            if (mmpHubData?.hub_id) {
+              const { data: supervisors } = await supabase
+                .from('profiles')
+                .select('id, role')
+                .eq('role', 'supervisor')
+                .eq('hub_id', mmpHubData.hub_id)
+                .eq('status', 'approved');
+              supervisorUsers = supervisors || [];
+            }
+          }
+
+          // Combine recipients (deduplicated), always include the reclaimer
+          const recipientSet = new Set<string>();
+          (financeAdminUsers || []).forEach((u: any) => recipientSet.add(u.id));
+          supervisorUsers.forEach((u: any) => recipientSet.add(u.id));
+          recipientSet.add(currentUserId); // always notify the person who performed the reclaim
+
+          const notifRows = Array.from(recipientSet).map((uid) => ({
+            recipient_id: uid,
+            user_id: uid,
+            title_en: notifTitle,
+            title_ar: notifTitleAr,
+            message_en: notifMessage,
+            message_ar: notifMessageAr,
+            event_type: 'financial',
+            entity_id: mmpId,
+            entity_type: 'mmpFile',
+            action_url: actionUrl,
+            priority: 'high',
+            status: 'pending',
+            // Legacy columns
+            title: notifTitle,
+            message: notifMessage,
+            link: actionUrl,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+            type: 'warning',
+            is_read: false,
+          }));
+
+          if (notifRows.length > 0) {
+            await insertNotificationsToDb(notifRows);
+            console.log(
+              `[MMP Reclaim] Sent advance-cancellation notifications to ${notifRows.length} recipient(s).`,
+            );
+          }
+        } catch (notifErr) {
+          // Non-fatal — never let notification errors block the reclaim
+          console.warn('[MMP Reclaim] Failed to send advance-cancellation notifications:', notifErr);
+        }
+        // ────────────────────────────────────────────────────────────────────────
+      }
+    } catch (advErr) {
+      // Non-fatal — log but don't abort the reclaim
+      console.warn('[MMP Reclaim] Advance cancellation block failed:', advErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
   }
 
   // Log MMP-level audit

@@ -71,6 +71,8 @@ interface TriggerNotificationOptions {
   sendEmail?: boolean;
   emailActionUrl?: string;
   emailActionLabel?: string;
+  /** Structured detail rows shown as a table inside the email body */
+  emailDetails?: Array<{ label: string; value: string }>;
 }
 
 interface QuietHoursSettings {
@@ -337,7 +339,8 @@ export const NotificationTriggerService = {
             messageAr: messageAr || message,
             type,
             actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
-            actionLabel: emailActionLabel || 'View Details'
+            actionLabel: emailActionLabel || 'View Details',
+            details: options.emailDetails,
           });
           console.log(`[NOTIFICATION] Email result:`, emailResult);
           

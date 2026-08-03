@@ -197,73 +197,77 @@ export default function PreFundingDistribute() {
 
       let payments: any[] = [];
 
+      // Fetch OCS and DP enrichment data in parallel (was sequential — 2 round-trips → 1)
+      const [{ data: ocsData }, { data: dpData }] = await Promise.all([
+        ocsIds.length > 0
+          ? (supabase as any)
+              .from('operational_cost_submissions')
+              .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
+              .in('id', ocsIds)
+          : Promise.resolve({ data: [] }),
+        dpIds.length > 0
+          ? (supabase as any)
+              .from('down_payment_requests')
+              .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
+              .in('id', dpIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
       // Enrich OCS-linked transactions. Track which source_ids were matched so
       // unresolved ones are added as fallback manual entries (not silently dropped).
       const matchedOcsIds = new Set<string>();
-      if (ocsIds.length > 0) {
-        const { data: ocsData } = await (supabase as any)
-          .from('operational_cost_submissions')
-          .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-          .in('id', ocsIds);
-        (ocsData ?? []).forEach((o: any) => {
-          matchedOcsIds.add(o.id);
-          const txn = ocsTxns.find((t: any) => t.source_id === o.id);
-          // Use the transaction amount as the authoritative amount (it is recorded in
-          // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
-          // the transaction row itself has no amount.
-          const txnAmt = Number(txn?.amount ?? 0);
+      (ocsData ?? []).forEach((o: any) => {
+        matchedOcsIds.add(o.id);
+        const txn = ocsTxns.find((t: any) => t.source_id === o.id);
+        // Use the transaction amount as the authoritative amount (it is recorded in
+        // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
+        // the transaction row itself has no amount.
+        const txnAmt = Number(txn?.amount ?? 0);
+        payments.push({
+          ...o,
+          _type: 'ocs',
+          _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
+          _txn_date: txn?.transaction_date,
+        });
+      });
+      // Unresolved OCS transactions → fallback manual entries so they aren't dropped
+      ocsTxns
+        .filter((t: any) => !matchedOcsIds.has(t.source_id))
+        .forEach((t: any) => {
           payments.push({
-            ...o,
-            _type: 'ocs',
-            _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
-            _txn_date: txn?.transaction_date,
+            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+            description: t.description || 'Cost submission (details unavailable)',
+            status: 'paid',
           });
         });
-        // Unresolved OCS transactions → fallback manual entries so they aren't dropped
-        ocsTxns
-          .filter((t: any) => !matchedOcsIds.has(t.source_id))
-          .forEach((t: any) => {
-            payments.push({
-              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-              description: t.description || 'Cost submission (details unavailable)',
-              status: 'paid',
-            });
-          });
-      }
 
       // Enrich DP-linked transactions with same fallback pattern
       const matchedDpIds = new Set<string>();
-      if (dpIds.length > 0) {
-        const { data: dpData } = await (supabase as any)
-          .from('down_payment_requests')
-          .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
-          .in('id', dpIds);
-        (dpData ?? []).forEach((dp: any) => {
-          matchedDpIds.add(dp.id);
-          const txn = dpTxns.find((t: any) => t.source_id === dp.id);
-          // Prefer the recorded transaction amount over the DP requested amount
-          const txnAmt = Number(txn?.amount ?? 0);
+      (dpData ?? []).forEach((dp: any) => {
+        matchedDpIds.add(dp.id);
+        const txn = dpTxns.find((t: any) => t.source_id === dp.id);
+        // Prefer the recorded transaction amount over the DP requested amount
+        const txnAmt = Number(txn?.amount ?? 0);
+        payments.push({
+          ...dp,
+          _type: 'dp',
+          _txn_amount: txnAmt || Number(dp.amount) || 0,
+          _txn_date: txn?.transaction_date,
+          amount: txnAmt || Number(dp.amount) || 0,
+        });
+      });
+      // Unresolved DP transactions → fallback manual entries
+      dpTxns
+        .filter((t: any) => !matchedDpIds.has(t.source_id))
+        .forEach((t: any) => {
           payments.push({
-            ...dp,
-            _type: 'dp',
-            _txn_amount: txnAmt || Number(dp.amount) || 0,
-            _txn_date: txn?.transaction_date,
-            amount: txnAmt || Number(dp.amount) || 0,
+            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
+            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
+            description: t.description || 'Down payment (details unavailable)',
+            status: 'paid',
           });
         });
-        // Unresolved DP transactions → fallback manual entries
-        dpTxns
-          .filter((t: any) => !matchedDpIds.has(t.source_id))
-          .forEach((t: any) => {
-            payments.push({
-              ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-              _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-              description: t.description || 'Down payment (details unavailable)',
-              status: 'paid',
-            });
-          });
-      }
 
       // Manual / other transactions — always included
       otherTxns.forEach((t: any) => {
@@ -441,32 +445,35 @@ export default function PreFundingDistribute() {
     if (!currentUser?.id) return;
     setLoading(true);
     try {
-      // Load funds held by this user (or all funds for finance admin in overview mode)
-      let q = (supabase as any)
+      // Build funds query first (needs runtime filter applied before awaiting)
+      let fundsQ = (supabase as any)
         .from('pre_fund_requests')
         .select('id,name,source,amount,currency,available_balance,paid_amount,status')
         .order('created_at', { ascending: false });
-      if (!isFinanceAdmin) q = q.eq('holder_user_id', currentUser.id);
-      else q = q.not('holder_user_id', 'is', null);
-      const { data: fundsData, error: fErr } = await q;
+      if (!isFinanceAdmin) fundsQ = fundsQ.eq('holder_user_id', currentUser.id);
+      else fundsQ = fundsQ.not('holder_user_id', 'is', null);
+
+      // Run all three independent queries in parallel — was sequential (3 round-trips → 1)
+      const [
+        { data: fundsData, error: fErr },
+        { data: profiles },
+        { data: myAllocs },
+      ] = await Promise.all([
+        fundsQ,
+        supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
+        (supabase as any)
+          .from('pre_fund_allocations')
+          .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: false }),
+      ]);
+
       if (fErr && !fErr.message.includes('does not exist')) throw fErr;
       setFunds((fundsData as HeldFund[]) ?? []);
-
-      // Load staff profiles for the user picker
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id,full_name,email,role')
-        .order('full_name');
       setStaff((profiles as any) ?? []);
 
-      // Load this user's OWN allocations (so staff can see what they received + request more)
-      const { data: myAllocs } = await (supabase as any)
-        .from('pre_fund_allocations')
-        .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
       if (myAllocs && myAllocs.length > 0) {
-        // Enrich with fund name/source/status/holder
+        // Fund details depends on myAllocs result — one extra query only when user has allocations
         const fundIds: string[] = [...new Set(myAllocs.map((a: any) => a.pre_fund_request_id as string))];
         const { data: fundDetails } = await (supabase as any)
           .from('pre_fund_requests')
@@ -492,6 +499,16 @@ export default function PreFundingDistribute() {
   }, [currentUser?.id, isFinanceAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Eagerly load payment details for every fund where the current user has a
+  // personal allocation so the Paid-Out Breakdown is available without requiring
+  // the user to manually expand anything.
+  useEffect(() => {
+    if (!currentUser?.id || myAllocations.length === 0) return;
+    myAllocations.forEach(alloc => {
+      loadAllocPayments(alloc.id, currentUser.id, alloc.pre_fund_request_id);
+    });
+  }, [myAllocations, currentUser?.id, loadAllocPayments]);
 
   const loadAllocations = useCallback(async (fundId: string) => {
     setAllocLoading(prev => new Set(prev).add(fundId));
@@ -933,6 +950,25 @@ export default function PreFundingDistribute() {
           const usagePct       = fund.amount > 0 ? Math.min(100, Math.round((totalAllocated / fund.amount) * 100)) : 0;
           const isAllocLoading = allocLoading.has(fund.id);
 
+          // ── Current-user allocation scoping ────────────────────────────────
+          // When the viewer has a personal allocation on this fund, show THEIR
+          // figures instead of the all-staff fund totals. This applies even for
+          // admins — the Distribute tab represents each person's allocated piece
+          // of the fund, not a fund-management view (that belongs in Reconciliation).
+          const myAlloc        = myAllocations.find(a => a.pre_fund_request_id === fund.id);
+          const myAllocPays    = myAlloc ? (allocPayments.get(myAlloc.id) ?? []) : [];
+          const myPaysLoading  = myAlloc ? allocPaymentsLoading.has(myAlloc.id) : false;
+
+          const displayAlloc   = myAlloc ? myAlloc.allocated_amount : fund.amount;
+          const displaySpent   = myAlloc ? myAlloc.spent_amount     : totalSpent;
+          const displayRem     = myAlloc
+            ? myAlloc.allocated_amount - myAlloc.spent_amount
+            : remaining;
+          const displayPct     = displayAlloc > 0
+            ? Math.min(100, Math.round((displaySpent / displayAlloc) * 100))
+            : 0;
+          // ───────────────────────────────────────────────────────────────────
+
           return (
             <Card key={fund.id} className="overflow-hidden">
               {/* Fund summary row */}
@@ -968,14 +1004,19 @@ export default function PreFundingDistribute() {
                   </div>
                 </div>
 
-                {/* KPI mini-row */}
+                {/* KPI mini-row — scoped to current user's allocation when available */}
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
-                  {[
-                    { label: 'Fund Total',   value: formatNumber(fund.amount, 0),           icon: Wallet,       cls: 'text-sky-600' },
-                    { label: 'Allocated',    value: formatNumber(totalAllocated, 0),         icon: Users,        cls: 'text-violet-600' },
-                    { label: 'Spent',        value: formatNumber(totalSpent, 0),             icon: TrendingDown, cls: totalSpent > totalAllocated ? 'text-rose-600' : 'text-emerald-600' },
-                    { label: 'Unallocated',  value: formatNumber(Math.max(0, remaining), 0), icon: Check,        cls: remaining < 0 ? 'text-rose-600' : 'text-teal-600' },
-                  ].map(k => (
+                  {(myAlloc ? [
+                    { label: 'My Allocation', value: formatNumber(myAlloc.allocated_amount, 0), icon: Wallet,       cls: 'text-sky-600' },
+                    { label: 'Paid Out',       value: formatNumber(displaySpent, 0),              icon: TrendingDown, cls: displaySpent > myAlloc.allocated_amount ? 'text-rose-600' : 'text-emerald-600' },
+                    { label: 'Remaining',      value: formatNumber(Math.max(0, displayRem), 0),   icon: Check,        cls: displayRem < 0 ? 'text-rose-600' : 'text-teal-600' },
+                    { label: 'Fund Total',     value: formatNumber(fund.amount, 0),               icon: Layers,       cls: 'text-muted-foreground' },
+                  ] : [
+                    { label: 'Fund Total',   value: formatNumber(fund.amount, 0),            icon: Wallet,       cls: 'text-sky-600' },
+                    { label: 'Allocated',    value: formatNumber(totalAllocated, 0),          icon: Users,        cls: 'text-violet-600' },
+                    { label: 'Spent',        value: formatNumber(totalSpent, 0),              icon: TrendingDown, cls: totalSpent > totalAllocated ? 'text-rose-600' : 'text-emerald-600' },
+                    { label: 'Unallocated',  value: formatNumber(Math.max(0, remaining), 0),  icon: Check,        cls: remaining < 0 ? 'text-rose-600' : 'text-teal-600' },
+                  ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
                       <span className={cn('text-sm font-bold tabular-nums', k.cls)}>{fund.currency} {k.value}</span>
@@ -983,17 +1024,92 @@ export default function PreFundingDistribute() {
                   ))}
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress bar — scoped to current user when they have an allocation */}
                 <div className="mt-3">
                   <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                    <span>Allocated {usagePct}%</span>
-                    <span>{formatNumber(remaining, 0)} {fund.currency} still available to allocate</span>
+                    {myAlloc ? (
+                      <>
+                        <span>Spent {displayPct}% of my allocation</span>
+                        <span>{formatNumber(Math.max(0, displayRem), 0)} {fund.currency} remaining</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Allocated {usagePct}%</span>
+                        <span>{formatNumber(remaining, 0)} {fund.currency} still available to allocate</span>
+                      </>
+                    )}
                   </div>
                   <Progress
-                    value={usagePct}
-                    className={cn('h-1.5', usagePct >= 100 ? '[&>div]:bg-rose-500' : usagePct >= 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-sky-500')}
+                    value={myAlloc ? displayPct : usagePct}
+                    className={cn('h-1.5',
+                      (myAlloc ? displayPct : usagePct) >= 100 ? '[&>div]:bg-rose-500' :
+                      (myAlloc ? displayPct : usagePct) >= 80  ? '[&>div]:bg-amber-500' :
+                      myAlloc ? '[&>div]:bg-violet-500' : '[&>div]:bg-sky-500'
+                    )}
                   />
                 </div>
+
+                {/* Paid-Out Breakdown — shown when the current user has a personal allocation.
+                    Mirrors the Reconciliation tab's breakdown but scoped to this user's
+                    transactions (Down Payments vs Cost Submissions). */}
+                {myAlloc && (() => {
+                  if (myPaysLoading) {
+                    return (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Paid-Out Breakdown</p>
+                        <div className="flex gap-4">
+                          <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                          <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (myAllocPays.length === 0) return null;
+
+                  // Filter payments to those attributable to the current user and sum by type
+                  const uid = currentUser?.id;
+                  const mine = myAllocPays.filter((p: any) =>
+                    p.requested_by === uid ||   // DP (down payment)
+                    p.submitted_by === uid ||    // OCS (cost submission)
+                    p.user_id === uid ||          // transaction user_id
+                    p.created_by === uid          // transaction created_by fallback
+                  );
+
+                  // If no user-attributed entries, fall back to all (fund is holder-only, single user)
+                  const payPool = mine.length > 0 ? mine : myAllocPays;
+                  const dpTotal  = payPool.filter((p: any) => p._type === 'dp').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const ocsTotal = payPool.filter((p: any) => p._type === 'ocs').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const otherTotal = payPool.filter((p: any) => p._type === 'manual').reduce((s: number, p: any) => s + (p._txn_amount ?? 0), 0);
+                  const grandTotal = dpTotal + ocsTotal + otherTotal;
+                  if (grandTotal === 0) return null;
+
+                  const breakdown = [
+                    { label: 'Down Payments',     value: dpTotal,    cls: 'text-sky-600' },
+                    { label: 'Cost Submissions',  value: ocsTotal,   cls: 'text-violet-600' },
+                    ...(otherTotal > 0 ? [{ label: 'Other', value: otherTotal, cls: 'text-muted-foreground' }] : []),
+                  ].filter(b => b.value > 0);
+
+                  return (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                        Paid-Out Breakdown
+                      </p>
+                      <div className="flex flex-wrap gap-x-6 gap-y-1">
+                        {breakdown.map(b => (
+                          <div key={b.label} className="flex flex-col">
+                            <span className="text-[10px] text-muted-foreground">{b.label}</span>
+                            <span className={cn('font-mono text-[12px] font-semibold', b.cls)}>
+                              {fund.currency} {formatNumber(b.value, 0)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {grandTotal > 0 ? Math.round(b.value / grandTotal * 100) : 0}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Expanded allocations list */}
                 {isOpen && (
@@ -1622,7 +1738,7 @@ export default function PreFundingDistribute() {
 
       {/* Top-Up / Add Funds Dialog */}
       <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); } }}>
-        <DialogContent className="max-w-lg w-full">
+        <DialogContent className="max-w-lg w-full flex flex-col max-h-[90vh]">
           {topUpDialog.alloc && (() => {
             const alloc = topUpDialog.alloc;
             const balance = alloc.allocated_amount - alloc.spent_amount;
@@ -1639,7 +1755,7 @@ export default function PreFundingDistribute() {
                       Confirm Fund Transfer
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-3 py-1">
+                  <div className="space-y-3 py-1 overflow-y-auto flex-1 min-h-0">
                     <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
                       <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-sm">
                         {alloc.user_name}
@@ -1701,7 +1817,7 @@ export default function PreFundingDistribute() {
                     Add Funds — {alloc.user_name}
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-1">
+                <div className="space-y-4 py-1 overflow-y-auto flex-1 min-h-0">
 
                   {/* ── Fund pool balance ── */}
                   {fundDialogData && (
