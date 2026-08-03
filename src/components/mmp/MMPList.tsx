@@ -57,7 +57,7 @@ interface MMPListProps {
 
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
-  const { deleteMMPFile, verifyMMP, refreshMMPFiles, archiveMMP, restoreMMP, mmpFiles: allMMPFiles } = useMMP();
+  const { deleteMMPFile, unlinkAndDeleteMMPFile, getMMPLinkedCounts, verifyMMP, refreshMMPFiles, archiveMMP, restoreMMP, mmpFiles: allMMPFiles } = useMMP();
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const { currentUser, effectiveCurrentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
@@ -79,9 +79,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [isSavingRename, setIsSavingRename] = useState(false);
   const [fullReportOpen, setFullReportOpen] = useState(false);
   const [selectedMmpForReport, setSelectedMmpForReport] = useState<{ id: string; name: string } | null>(null);
-  // Staged delete dialog: stage 0 = closed, 1 = first warning, 2 = type-to-confirm
-  const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0);
+  // Staged delete dialog: stage 0=closed, 1=choose action, 2=hard-delete confirm, 3=unlink confirm
+  const [deleteStage, setDeleteStage] = useState<0 | 1 | 2 | 3>(0);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [linkedCounts, setLinkedCounts] = useState<{ downPayments: number; costSubmissions: number } | null>(null);
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   // Archived view state
   const [showArchived, setShowArchived] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -108,6 +110,14 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // Delete is restricted to Super Admins only — it is a destructive, irreversible operation.
   const canDeleteMMP = isSuperAdmin;
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+
+  // Fetch linked submission counts whenever Stage 1 dialog opens
+  useEffect(() => {
+    if (confirmId && deleteStage === 1) {
+      setLinkedCounts(null);
+      getMMPLinkedCounts(confirmId).then(setLinkedCounts);
+    }
+  }, [confirmId, deleteStage]);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
   // Full Report is visible to management/oversight roles only
   const canViewFullReport = canSeePage('mmp-full-report', effectiveCurrentUser?.role);
@@ -856,6 +866,41 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                 </Button>
               </div>
             </div>
+
+            {/* Unlink & Delete option — shown only when linked submissions exist */}
+            {linkedCounts && (linkedCounts.downPayments > 0 || linkedCounts.costSubmissions > 0) && (
+              <div className="rounded-lg border-2 border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900">
+                    <svg className="h-4 w-4 text-orange-700 dark:text-orange-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-orange-800 dark:text-orange-200">Unlink Submissions & Delete</p>
+                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                      Detaches{' '}
+                      {linkedCounts.downPayments > 0 && <span className="font-medium text-orange-700 dark:text-orange-300">{linkedCounts.downPayments} advance request{linkedCounts.downPayments !== 1 ? 's' : ''}</span>}
+                      {linkedCounts.downPayments > 0 && linkedCounts.costSubmissions > 0 && ' and '}
+                      {linkedCounts.costSubmissions > 0 && <span className="font-medium text-orange-700 dark:text-orange-300">{linkedCounts.costSubmissions} cost submission{linkedCounts.costSubmissions !== 1 ? 's' : ''}</span>}
+                      {' '}from this MMP, then permanently deletes it. Submissions are <span className="font-medium">preserved</span> — they lose their MMP link only.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    className="bg-orange-600 hover:bg-orange-700 text-white min-w-[140px]"
+                    onClick={() => setDeleteStage(3)}
+                  >
+                    Unlink &amp; Delete →
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Loading state for counts */}
+            {!linkedCounts && (
+              <div className="text-xs text-muted-foreground text-center py-1 animate-pulse">Checking linked submissions…</div>
+            )}
           </div>
 
           <DialogFooter className="pt-1">
@@ -909,6 +954,91 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
               }}
             >
               {deletingId === confirmId ? 'Deleting…' : 'Delete permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stage 3: Unlink & Delete confirmation */}
+      <Dialog
+        open={confirmId !== null && deleteStage === 3}
+        onOpenChange={open => {
+          if (!open) { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); setLinkedCounts(null); }
+        }}
+      >
+        <DialogContent className="max-w-lg w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+              <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+              Unlink Submissions &amp; Delete MMP
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              This will detach all linked field submissions from this MMP, then permanently delete the MMP and its site entries.
+            </DialogDescription>
+          </DialogHeader>
+
+          {linkedCounts && (
+            <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
+              <p className="font-medium">What will happen:</p>
+              <ul className="space-y-1.5 text-muted-foreground">
+                {linkedCounts.downPayments > 0 && (
+                  <li className="flex items-start gap-2">
+                    <span className="text-orange-500 mt-0.5">•</span>
+                    <span><strong>{linkedCounts.downPayments}</strong> advance request{linkedCounts.downPayments !== 1 ? 's' : ''} will lose their MMP link (submissions remain in the system)</span>
+                  </li>
+                )}
+                {linkedCounts.costSubmissions > 0 && (
+                  <li className="flex items-start gap-2">
+                    <span className="text-orange-500 mt-0.5">•</span>
+                    <span><strong>{linkedCounts.costSubmissions}</strong> cost submission{linkedCounts.costSubmissions !== 1 ? 's' : ''} will lose their MMP reference</span>
+                  </li>
+                )}
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5">•</span>
+                  <span>The MMP file and all its site entries will be <strong>permanently deleted</strong></span>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          <div className="py-1">
+            <p className="text-sm text-muted-foreground mb-2">Type <strong>UNLINK</strong> to confirm:</p>
+            <Input
+              autoFocus
+              placeholder="Type UNLINK to confirm"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              className="font-mono"
+            />
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => { setDeleteStage(1); setDeleteConfirmText(''); }}>
+              ← Back
+            </Button>
+            <Button
+              type="button"
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              disabled={deleteConfirmText !== 'UNLINK' || unlinkingId === confirmId}
+              onClick={async () => {
+                if (confirmId) {
+                  setUnlinkingId(confirmId);
+                  const result = await unlinkAndDeleteMMPFile(confirmId);
+                  setUnlinkingId(null);
+                  if (result.deleted) {
+                    const parts: string[] = [];
+                    if (result.unlinked.downPayments > 0) parts.push(`${result.unlinked.downPayments} advance request${result.unlinked.downPayments !== 1 ? 's' : ''} unlinked`);
+                    if (result.unlinked.costSubmissions > 0) parts.push(`${result.unlinked.costSubmissions} cost submission${result.unlinked.costSubmissions !== 1 ? 's' : ''} unlinked`);
+                    toast({ title: 'MMP deleted', description: parts.length ? parts.join(', ') + '. MMP removed.' : 'MMP permanently deleted.' });
+                  }
+                  setConfirmId(null);
+                  setDeleteStage(0);
+                  setDeleteConfirmText('');
+                  setLinkedCounts(null);
+                }
+              }}
+            >
+              {unlinkingId === confirmId ? 'Unlinking & deleting…' : 'Confirm unlink & delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

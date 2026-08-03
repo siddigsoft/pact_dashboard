@@ -411,6 +411,88 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     }
   };
 
+  // ── Unlink & Delete ────────────────────────────────────────────────────────
+  // Sets mmp_site_entry_id = NULL on all linked down_payment_requests and
+  // mmp_id = NULL on all operational_cost_submissions, then proceeds with the
+  // normal delete.  Submissions survive; only the MMP + site entries are removed.
+  const unlinkAndDeleteMMPFile = async (id: string): Promise<{ unlinked: { downPayments: number; costSubmissions: number }; deleted: boolean }> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast.error(session.error || 'Session expired. Please refresh and try again.');
+      return { unlinked: { downPayments: 0, costSubmissions: 0 }, deleted: false };
+    }
+    try {
+      // 1. Get site entry IDs
+      const { data: entryRows } = await supabase
+        .from('mmp_site_entries')
+        .select('id')
+        .eq('mmp_file_id', id);
+      const entryIds = (entryRows || []).map((r: any) => r.id as string);
+
+      // 2. Unlink down_payment_requests
+      let downPaymentCount = 0;
+      if (entryIds.length > 0) {
+        const { data: dpRows } = await supabase
+          .from('down_payment_requests')
+          .select('id')
+          .in('mmp_site_entry_id', entryIds);
+        downPaymentCount = dpRows?.length ?? 0;
+        if (downPaymentCount > 0) {
+          await supabase
+            .from('down_payment_requests')
+            .update({ mmp_site_entry_id: null } as any)
+            .in('mmp_site_entry_id', entryIds);
+        }
+      }
+
+      // 3. Unlink operational_cost_submissions
+      const { data: costRows } = await supabase
+        .from('operational_cost_submissions')
+        .select('id')
+        .eq('mmp_id', id);
+      const costCount = costRows?.length ?? 0;
+      if (costCount > 0) {
+        await supabase
+          .from('operational_cost_submissions')
+          .update({ mmp_id: null } as any)
+          .eq('mmp_id', id);
+      }
+
+      // 4. Now proceed with normal delete (guard will pass since links are cleared)
+      const deleted = await deleteMMPFile(id);
+      return { unlinked: { downPayments: downPaymentCount, costSubmissions: costCount }, deleted };
+    } catch (err) {
+      console.error('[MMP UnlinkAndDelete] Error:', err);
+      toast.error('Failed to unlink and delete MMP. Please try again.');
+      return { unlinked: { downPayments: 0, costSubmissions: 0 }, deleted: false };
+    }
+  };
+
+  // ── Count linked submissions (for UI preview) ───────────────────────────────
+  const getMMPLinkedCounts = async (id: string): Promise<{ downPayments: number; costSubmissions: number }> => {
+    try {
+      const { data: entryRows } = await supabase
+        .from('mmp_site_entries').select('id').eq('mmp_file_id', id);
+      const entryIds = (entryRows || []).map((r: any) => r.id as string);
+
+      let dpCount = 0;
+      if (entryIds.length > 0) {
+        const { count } = await supabase
+          .from('down_payment_requests')
+          .select('id', { count: 'exact', head: true })
+          .in('mmp_site_entry_id', entryIds);
+        dpCount = count ?? 0;
+      }
+      const { count: costCount } = await supabase
+        .from('operational_cost_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('mmp_id', id);
+      return { downPayments: dpCount, costSubmissions: costCount ?? 0 };
+    } catch {
+      return { downPayments: 0, costSubmissions: 0 };
+    }
+  };
+
   return {
     currentMMP,
     setCurrentMMP,
@@ -418,5 +500,7 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     addMMPFile,
     updateMMPFile,
     deleteMMPFile,
+    unlinkAndDeleteMMPFile,
+    getMMPLinkedCounts,
   };
 };
