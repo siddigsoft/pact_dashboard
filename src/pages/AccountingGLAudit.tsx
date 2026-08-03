@@ -322,6 +322,9 @@ export default function AccountingGLAudit() {
         return;
       }
 
+      // Optimistically remove the reversed entry from the list immediately so the
+      // button cannot be clicked again before loadIntegrity() returns.
+      setImbalanced(prev => prev.filter(e => e.id !== originalEntryId));
       // Close dialog before any further awaits so the button cannot be clicked again
       setReversalEntry(null);
       toast({ title: 'Reversal posted', description: 'The reversal journal entry has been created and posted.' });
@@ -816,16 +819,22 @@ export default function AccountingGLAudit() {
                               )}
                             </td>
                             <td className="px-4 py-2.5 text-center">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-[11px] border-amber-400 text-amber-700 hover:bg-amber-50"
-                                onClick={() => void openReversal(entry)}
-                                data-testid={`btn-create-reversal-${entry.id}`}
-                              >
-                                Create Reversal
-                              </Button>
+                              {entry.status === 'reversed' || entry.reversed_by_entry_id ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Reversed
+                                </span>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[11px] border-amber-400 text-amber-700 hover:bg-amber-50"
+                                  onClick={() => void openReversal(entry)}
+                                  data-testid={`btn-create-reversal-${entry.id}`}
+                                >
+                                  Create Reversal
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
