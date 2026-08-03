@@ -442,6 +442,7 @@ AS
     je.source_type,
     je.source_id,
     je.status,
+    je.reversed_by_entry_id,
     COALESCE(SUM(CASE WHEN jl.debit_credit = 'DR' THEN jl.functional_amount ELSE 0 END), 0) AS sum_dr,
     COALESCE(SUM(CASE WHEN jl.debit_credit = 'CR' THEN jl.functional_amount ELSE 0 END), 0) AS sum_cr,
     ABS(
@@ -453,7 +454,7 @@ AS
   WHERE je.status = 'posted'
   GROUP BY
     je.id, je.idempotency_key, je.posting_date, je.description_en,
-    je.source_type, je.source_id, je.status
+    je.source_type, je.source_id, je.status, je.reversed_by_entry_id
   HAVING
     ABS(
       COALESCE(SUM(CASE WHEN jl.debit_credit = 'DR' THEN jl.functional_amount ELSE 0 END), 0) -

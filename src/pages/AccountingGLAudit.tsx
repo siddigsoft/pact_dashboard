@@ -29,6 +29,7 @@ interface ImbalancedEntry {
   source_type: string | null;
   source_id: string | null;
   status: string;
+  reversed_by_entry_id: string | null;
   sum_dr: number;
   sum_cr: number;
   imbalance: number;
@@ -233,7 +234,7 @@ export default function AccountingGLAudit() {
     setIntegrityLoading(true);
     const { data, error } = await supabase
       .from('vw_imbalanced_journal_entries' as any)
-      .select('id, idempotency_key, posting_date, description_en, source_type, source_id, status, sum_dr, sum_cr, imbalance')
+      .select('id, idempotency_key, posting_date, description_en, source_type, source_id, status, reversed_by_entry_id, sum_dr, sum_cr, imbalance')
       .order('posting_date', { ascending: false });
     setIntegrityLoading(false);
     setIntegrityLoaded(true);
@@ -361,13 +362,14 @@ export default function AccountingGLAudit() {
 
   const exportIntegrity = () => {
     const rows = imbalanced.map(e => ({
-      'Posting Date':  e.posting_date ? format(parseISO(e.posting_date), 'yyyy-MM-dd') : '',
-      'Description':   e.description_en ?? '',
-      'Source Type':   e.source_type ?? '',
-      'DR Total':      Number(e.sum_dr),
-      'CR Total':      Number(e.sum_cr),
-      'Difference':    Number(e.imbalance),
-      'Entry ID':      e.id,
+      'Posting Date':      e.posting_date ? format(parseISO(e.posting_date), 'yyyy-MM-dd') : '',
+      'Description':       e.description_en ?? '',
+      'Source Type':       e.source_type ?? '',
+      'DR Total':          Number(e.sum_dr),
+      'CR Total':          Number(e.sum_cr),
+      'Difference':        Number(e.imbalance),
+      'Entry ID':          e.id,
+      'Reversed by Entry': e.reversed_by_entry_id ?? '',
     }));
     exportToExcel(rows, 'Balance Integrity', `Balance_Integrity_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
@@ -768,6 +770,7 @@ export default function AccountingGLAudit() {
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground">DR Total</th>
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground">CR Total</th>
                           <th className="text-right px-4 py-2 font-medium text-muted-foreground">Difference</th>
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground">Reversed by</th>
                           <th className="text-center px-4 py-2 font-medium text-muted-foreground">Action</th>
                         </tr>
                       </thead>
@@ -798,6 +801,19 @@ export default function AccountingGLAudit() {
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums font-mono text-rose-600 font-semibold">
                               {Number(entry.imbalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {entry.reversed_by_entry_id ? (
+                                <span
+                                  className="font-mono text-[11px] text-indigo-700 cursor-pointer hover:underline"
+                                  title={entry.reversed_by_entry_id}
+                                  onClick={() => navigator.clipboard.writeText(entry.reversed_by_entry_id!)}
+                                >
+                                  {entry.reversed_by_entry_id.slice(0, 8)}…
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-center">
                               <Button
