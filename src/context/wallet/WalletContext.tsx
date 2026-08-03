@@ -1192,7 +1192,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     userId: string,
     amountCents: number,
     currency: string,
-    period: string
+    period: string,
+    baseCurrency?: string,
+    fxRate?: number
   ) => {
     try {
       // credit_retainer_wallet is a SECURITY DEFINER RPC that wraps the
@@ -1201,14 +1203,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // client-side writes would leave the transaction recorded but the balance
       // not updated.  The DB partial unique index on (user_id, period) filtered
       // to metadata->>'type' = 'retainer' still acts as the idempotency gate.
+      // When baseCurrency/fxRate are provided (FX conversion case) they are
+      // written into the transaction metadata for audit trail.
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
         'credit_retainer_wallet',
         {
-          p_user_id:      userId,
-          p_amount_cents: amountCents,
-          p_currency:     currency,
-          p_period:       period,
-          p_created_by:   currentUser?.id ?? null,
+          p_user_id:       userId,
+          p_amount_cents:  amountCents,
+          p_currency:      currency,
+          p_period:        period,
+          p_created_by:    currentUser?.id ?? null,
+          p_base_currency: baseCurrency ?? null,
+          p_fx_rate:       fxRate ?? null,
         }
       );
 
@@ -1310,11 +1316,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             continue;
           }
 
+          // FX conversion: when a payout currency is configured and differs
+          // from the base currency, look up the latest rate and convert.
+          let payoutAmountCents = user.retainer_amount_cents;
+          let payoutCurrency    = user.retainer_currency;
+          let appliedFxRate: number | undefined;
+
+          const needsFx = user.retainer_payout_currency &&
+                          user.retainer_payout_currency !== user.retainer_currency;
+
+          if (needsFx) {
+            const { data: rateRow } = await supabase
+              .from('acct_exchange_rates')
+              .select('rate')
+              .eq('from_currency', user.retainer_currency)
+              .eq('to_currency', user.retainer_payout_currency)
+              .lte('effective_date', currentPeriod + '-28') // last reliable day in any month
+              .order('effective_date', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!rateRow) {
+              console.warn(
+                `[Retainers] No exchange rate found for ${user.retainer_currency}→${user.retainer_payout_currency}` +
+                ` on or before ${currentPeriod}-28. Falling back to base currency for user ${user.user_id}.`
+              );
+              // Fall back: pay in base currency so nobody is skipped silently
+            } else {
+              appliedFxRate   = Number(rateRow.rate);
+              payoutAmountCents = Math.round(user.retainer_amount_cents * appliedFxRate);
+              payoutCurrency    = user.retainer_payout_currency;
+            }
+          }
+
           await addRetainerToWallet(
             user.user_id,
-            user.retainer_amount_cents,
-            user.retainer_currency,
-            currentPeriod
+            payoutAmountCents,
+            payoutCurrency,
+            currentPeriod,
+            needsFx ? user.retainer_currency : undefined,
+            appliedFxRate
           );
 
           processed++;

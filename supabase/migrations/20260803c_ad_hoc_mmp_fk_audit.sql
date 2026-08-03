@@ -11,11 +11,9 @@
 --   to hard-delete an ad_hoc_mmp_files row that still has site entries pointing
 --   to a deleted user, would be blocked.
 --
--- Strategy (mirrors 20260803b_mmp_full_fk_audit.sql):
---   • NOT NULL FK columns  → ON DELETE CASCADE   (child rows deleted with parent)
---   • nullable FK columns  → ON DELETE SET NULL  (row survives, FK becomes NULL)
---
--- Safe to re-run: every DROP CONSTRAINT uses IF EXISTS.
+-- Safe to re-run: all ALTER TABLE blocks are wrapped in IF EXISTS guards so
+--   this migration is a no-op on databases where the ad-hoc MMP tables have
+--   not yet been created.
 -- Run in Supabase Dashboard → SQL Editor → New Query → Run.
 
 BEGIN;
@@ -24,17 +22,27 @@ BEGIN;
 -- PART 1 — Constraints on ad_hoc_mmp_files
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- 1a. ad_hoc_mmp_files.user_id → auth.users
---     NOT NULL ownership FK: CASCADE so the file record is removed when the
---     user account is deleted.
-ALTER TABLE public.ad_hoc_mmp_files
-  DROP CONSTRAINT IF EXISTS ad_hoc_mmp_files_user_id_fkey;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public'
+       AND table_name   = 'ad_hoc_mmp_files'
+  ) THEN
+    -- 1a. ad_hoc_mmp_files.user_id → auth.users
+    --     NOT NULL ownership FK: CASCADE so the file record is removed when the
+    --     user account is deleted.
+    ALTER TABLE public.ad_hoc_mmp_files
+      DROP CONSTRAINT IF EXISTS ad_hoc_mmp_files_user_id_fkey;
 
-ALTER TABLE public.ad_hoc_mmp_files
-  ADD CONSTRAINT ad_hoc_mmp_files_user_id_fkey
-  FOREIGN KEY (user_id)
-  REFERENCES auth.users(id)
-  ON DELETE CASCADE;
+    ALTER TABLE public.ad_hoc_mmp_files
+      ADD CONSTRAINT ad_hoc_mmp_files_user_id_fkey
+      FOREIGN KEY (user_id)
+      REFERENCES auth.users(id)
+      ON DELETE CASCADE
+      NOT VALID;
+  END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PART 2 — Constraints on ad_hoc_mmp_site_entries
@@ -43,49 +51,54 @@ ALTER TABLE public.ad_hoc_mmp_files
 -- NOTE: ad_hoc_mmp_site_entries.mmp_file_id was already defined as
 --   ON DELETE CASCADE in the original migration — no action needed there.
 
--- 2a. ad_hoc_mmp_site_entries.user_id → auth.users
---     NOT NULL ownership FK: CASCADE so entries are removed when the user is
---     deleted.
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_user_id_fkey;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public'
+       AND table_name   = 'ad_hoc_mmp_site_entries'
+  ) THEN
+    -- 2a. ad_hoc_mmp_site_entries.user_id → auth.users
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_user_id_fkey;
 
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  ADD CONSTRAINT ad_hoc_mmp_site_entries_user_id_fkey
-  FOREIGN KEY (user_id)
-  REFERENCES auth.users(id)
-  ON DELETE CASCADE;
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      ADD CONSTRAINT ad_hoc_mmp_site_entries_user_id_fkey
+      FOREIGN KEY (user_id)
+      REFERENCES auth.users(id)
+      ON DELETE CASCADE
+      NOT VALID;
 
--- 2b. ad_hoc_mmp_site_entries.assign_to → auth.users
---     Nullable assignment column: SET NULL so the entry survives when the
---     assigned user is removed (it just becomes unassigned).
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_assign_to_fkey;
+    -- 2b. ad_hoc_mmp_site_entries.assign_to → auth.users
+    --     Nullable: SET NULL so the entry survives when the assigned user is removed.
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_assign_to_fkey;
 
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  ADD CONSTRAINT ad_hoc_mmp_site_entries_assign_to_fkey
-  FOREIGN KEY (assign_to)
-  REFERENCES auth.users(id)
-  ON DELETE SET NULL;
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      ADD CONSTRAINT ad_hoc_mmp_site_entries_assign_to_fkey
+      FOREIGN KEY (assign_to)
+      REFERENCES auth.users(id)
+      ON DELETE SET NULL
+      NOT VALID;
 
--- 2c. ad_hoc_mmp_site_entries.verified_by → auth.users
---     Nullable audit column: SET NULL so verification history survives even if
---     the verifying user account is deleted.
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_verified_by_fkey;
+    -- 2c. ad_hoc_mmp_site_entries.verified_by → auth.users
+    --     Nullable audit column: SET NULL so history survives if the user is deleted.
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      DROP CONSTRAINT IF EXISTS ad_hoc_mmp_site_entries_verified_by_fkey;
 
-ALTER TABLE public.ad_hoc_mmp_site_entries
-  ADD CONSTRAINT ad_hoc_mmp_site_entries_verified_by_fkey
-  FOREIGN KEY (verified_by)
-  REFERENCES auth.users(id)
-  ON DELETE SET NULL;
+    ALTER TABLE public.ad_hoc_mmp_site_entries
+      ADD CONSTRAINT ad_hoc_mmp_site_entries_verified_by_fkey
+      FOREIGN KEY (verified_by)
+      REFERENCES auth.users(id)
+      ON DELETE SET NULL
+      NOT VALID;
+  END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PART 3 — Catch-all: fix any remaining NO ACTION constraints dynamically
 -- ─────────────────────────────────────────────────────────────────────────────
--- Queries information_schema to find any FK still using NO ACTION / RESTRICT
--- that points TO ad_hoc_mmp_files or ad_hoc_mmp_site_entries (i.e. child
--- tables added after this migration was written), and converts them using the
--- same nullable/NOT NULL heuristic.
+-- Queries information_schema — safe even when tables don't exist (returns 0 rows).
 
 DO $$
 DECLARE
@@ -128,7 +141,7 @@ BEGIN
       rec.table_schema, rec.table_name, rec.constraint_name
     );
     add_sql := format(
-      'ALTER TABLE %I.%I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I.%I(id) ON DELETE %s',
+      'ALTER TABLE %I.%I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I.%I(id) ON DELETE %s NOT VALID',
       rec.table_schema, rec.table_name, rec.constraint_name,
       rec.column_name,
       rec.table_schema, rec.foreign_table,

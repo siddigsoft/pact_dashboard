@@ -57,6 +57,11 @@ export interface ClassificationFormData {
   hasRetainer: boolean;
   retainerAmountCents: number;
   retainerCurrency: string;
+  /** Currency that is actually credited to the wallet. When set to a different
+   *  value than retainerCurrency the system looks up the exchange rate in
+   *  acct_exchange_rates at processing time and converts. Null / same value
+   *  means no conversion (pay in the base currency as before). */
+  retainerPayoutCurrency: string;
   retainerFrequency: RetainerFrequency;
   changeReason?: string;
   notes?: string;
@@ -83,6 +88,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
     hasRetainer: currentClassification?.hasRetainer || false,
     retainerAmountCents: currentClassification?.retainerAmountCents || 0,
     retainerCurrency: currentClassification?.retainerCurrency || 'SDG',
+    retainerPayoutCurrency: currentClassification?.retainerPayoutCurrency || currentClassification?.retainerCurrency || 'SDG',
     retainerFrequency: currentClassification?.retainerFrequency || 'monthly',
     changeReason: '',
     notes: '',
@@ -105,6 +111,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
         hasRetainer: currentClassification.hasRetainer,
         retainerAmountCents: currentClassification.retainerAmountCents,
         retainerCurrency: currentClassification.retainerCurrency,
+        retainerPayoutCurrency: currentClassification.retainerPayoutCurrency || currentClassification.retainerCurrency,
         retainerFrequency: currentClassification.retainerFrequency,
         changeReason: '',
         notes: '',
@@ -126,6 +133,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
         hasRetainer: false,
         retainerAmountCents: 0,
         retainerCurrency: 'SDG',
+        retainerPayoutCurrency: 'SDG',
         retainerFrequency: 'monthly',
         changeReason: '',
         notes: '',
@@ -347,10 +355,18 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="retainer-currency">Currency</Label>
+                    <Label htmlFor="retainer-currency">Base Currency</Label>
                     <Select
                       value={formData.retainerCurrency}
-                      onValueChange={(value) => setFormData({ ...formData, retainerCurrency: value })}
+                      onValueChange={(value) => {
+                        // If payout was tracking base, keep them in sync
+                        const payoutFollowsBase = formData.retainerPayoutCurrency === formData.retainerCurrency;
+                        setFormData({
+                          ...formData,
+                          retainerCurrency: value,
+                          retainerPayoutCurrency: payoutFollowsBase ? value : formData.retainerPayoutCurrency,
+                        });
+                      }}
                     >
                       <SelectTrigger id="retainer-currency" className="min-h-[44px]" data-testid="select-retainer-currency">
                         <SelectValue />
@@ -363,6 +379,36 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+
+                {/* Payout currency — can differ from base for FX conversion */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="retainer-payout-currency">
+                      Payout Currency
+                      <span className="ml-1 text-xs text-muted-foreground font-normal">(wallet credit currency)</span>
+                    </Label>
+                    <Select
+                      value={formData.retainerPayoutCurrency}
+                      onValueChange={(value) => setFormData({ ...formData, retainerPayoutCurrency: value })}
+                    >
+                      <SelectTrigger id="retainer-payout-currency" className="min-h-[44px]" data-testid="select-retainer-payout-currency">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['SDG','USD','EUR','GBP','SAR','AED','QAR','UGX','RWF','KES','SSP'].map((currency) => (
+                          <SelectItem key={currency} value={currency} data-testid={`option-payout-currency-${currency}`}>
+                            {currency}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formData.retainerPayoutCurrency !== formData.retainerCurrency && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Amount is in {formData.retainerCurrency}. At processing time the system will look up the {formData.retainerCurrency} → {formData.retainerPayoutCurrency} rate in Exchange Rates and convert automatically.
+                      </p>
+                    )}
                   </div>
                 </div>
 

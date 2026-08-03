@@ -12,6 +12,9 @@
 --   • NOT NULL FK columns  → ON DELETE CASCADE   (child rows deleted with parent)
 --
 -- Safe to re-run: every DROP CONSTRAINT uses IF EXISTS.
+-- All ADD CONSTRAINTs use NOT VALID to skip the full historical row scan;
+-- the FK is enforced immediately for all new inserts/updates.
+-- Run VALIDATE CONSTRAINT manually later if you want to verify historical rows.
 -- Run in Supabase Dashboard → SQL Editor → New Query → Run.
 
 BEGIN;
@@ -30,7 +33,8 @@ ALTER TABLE public.mmp_site_entries
   ADD CONSTRAINT mmp_site_entries_mmp_file_id_fkey
   FOREIGN KEY (mmp_file_id)
   REFERENCES public.mmp_files(id)
-  ON DELETE CASCADE;
+  ON DELETE CASCADE
+  NOT VALID;
 
 -- 1b. site_visit_photos.mmp_id → mmp_files
 --     Nullable audit/link column: SET NULL so photos survive independently.
@@ -51,7 +55,8 @@ BEGIN
       ADD CONSTRAINT site_visit_photos_mmp_id_fkey
       FOREIGN KEY (mmp_id)
       REFERENCES public.mmp_files(id)
-      ON DELETE SET NULL;
+      ON DELETE SET NULL
+      NOT VALID;
   END IF;
 END $$;
 
@@ -76,7 +81,8 @@ BEGIN
       ADD CONSTRAINT document_index_mmp_id_fkey
       FOREIGN KEY (mmp_id)
       REFERENCES public.mmp_files(id)
-      ON DELETE SET NULL;
+      ON DELETE SET NULL
+      NOT VALID;
   END IF;
 END $$;
 
@@ -97,7 +103,8 @@ ALTER TABLE public.wallet_transactions
   ADD CONSTRAINT wallet_transactions_related_site_visit_id_fkey
   FOREIGN KEY (related_site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE SET NULL;
+  ON DELETE SET NULL
+  NOT VALID;
 
 -- 2b. wallet_transactions.site_visit_id → mmp_site_entries
 --     Already SET NULL in create_wallet_tables.sql — re-apply idempotently.
@@ -108,7 +115,8 @@ ALTER TABLE public.wallet_transactions
   ADD CONSTRAINT wallet_transactions_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE SET NULL;
+  ON DELETE SET NULL
+  NOT VALID;
 
 -- 2c. location_logs.site_visit_id → mmp_site_entries
 --     Set by 20250125_drop_site_visits_table.sql as CASCADE; re-apply safely.
@@ -119,7 +127,8 @@ ALTER TABLE public.location_logs
   ADD CONSTRAINT location_logs_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE CASCADE
+  NOT VALID;
 
 -- 2d. location_logs.visit_id → mmp_site_entries
 ALTER TABLE public.location_logs
@@ -129,26 +138,27 @@ ALTER TABLE public.location_logs
   ADD CONSTRAINT location_logs_visit_id_fkey
   FOREIGN KEY (visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE CASCADE
+  NOT VALID;
 
 -- 2e. reports.site_visit_id → mmp_site_entries
---     Null out any orphaned references before adding the constraint,
---     so existing rows with stale site_visit_id values don't block the ALTER.
+--     Drop the constraint FIRST so the cleanup UPDATE has no FK overhead,
+--     then use NOT IN (more reliable than NOT EXISTS across implicit casts),
+--     then re-add with NOT VALID to avoid a full historical row scan.
+ALTER TABLE public.reports
+  DROP CONSTRAINT IF EXISTS reports_site_visit_id_fkey;
+
 UPDATE public.reports
    SET site_visit_id = NULL
  WHERE site_visit_id IS NOT NULL
-   AND NOT EXISTS (
-     SELECT 1 FROM public.mmp_site_entries e WHERE e.id = reports.site_visit_id
-   );
-
-ALTER TABLE public.reports
-  DROP CONSTRAINT IF EXISTS reports_site_visit_id_fkey;
+   AND site_visit_id NOT IN (SELECT id FROM public.mmp_site_entries);
 
 ALTER TABLE public.reports
   ADD CONSTRAINT reports_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE SET NULL
+  NOT VALID;
 
 -- 2f. safety_checklists.site_visit_id → mmp_site_entries
 ALTER TABLE public.safety_checklists
@@ -158,7 +168,8 @@ ALTER TABLE public.safety_checklists
   ADD CONSTRAINT safety_checklists_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE SET NULL
+  NOT VALID;
 
 -- 2g. visit_status.site_visit_id → mmp_site_entries
 ALTER TABLE public.visit_status
@@ -168,7 +179,8 @@ ALTER TABLE public.visit_status
   ADD CONSTRAINT visit_status_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE SET NULL
+  NOT VALID;
 
 -- 2h. site_visit_costs.site_visit_id → mmp_site_entries
 --     NOT NULL: CASCADE so costs auto-delete when the entry is removed.
@@ -179,7 +191,8 @@ ALTER TABLE public.site_visit_costs
   ADD CONSTRAINT site_visit_costs_site_visit_id_fkey
   FOREIGN KEY (site_visit_id)
   REFERENCES public.mmp_site_entries(id)
-  ON DELETE CASCADE;
+  ON DELETE CASCADE
+  NOT VALID;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PART 3 — Catch-all: fix any remaining NO ACTION constraints dynamically
@@ -232,7 +245,7 @@ BEGIN
       rec.table_schema, rec.table_name, rec.constraint_name
     );
     add_sql := format(
-      'ALTER TABLE %I.%I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I.%I(id) ON DELETE %s',
+      'ALTER TABLE %I.%I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I.%I(id) ON DELETE %s NOT VALID',
       rec.table_schema, rec.table_name, rec.constraint_name,
       rec.column_name,
       rec.table_schema, rec.foreign_table,
