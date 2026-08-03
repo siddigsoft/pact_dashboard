@@ -32,7 +32,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function AccountingGLBridgePayroll() {
-  const { hasAnyRole, isAuthenticated } = useAuth();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'hr_admin']);
 
   const [logs, setLogs] = useState<BridgeLog[]>([]);

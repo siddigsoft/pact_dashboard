@@ -69,6 +69,7 @@ const FollowUpLevelsPanel       = lazy(() => import('./AccountingFollowUpLevels'
 const ProjectLinksPanel         = lazy(() => import('./AccountingProjectLinks'));
 
 // ── 2026-08-03 new panels ─────────────────────────────────────────────────────
+const GLBridgeSettingsPanel   = lazy(() => import('./AccountingGLBridgeSettings'));
 const OpeningBalancesPanel    = lazy(() => import('./AccountingOpeningBalances'));
 const GLBridgePreFundingPanel = lazy(() => import('./AccountingGLBridgePreFunding'));
 const GLBridgePayrollPanel    = lazy(() => import('./AccountingGLBridgePayroll'));
@@ -114,7 +115,8 @@ type AcctTab =
   | 'pl-by-department' | 'budget-utilization' | 'kpi-ratios' | 'donor-statement' | 'bs-comparison'
   | 'asset-revaluation'
   | 'opening-balances' | 'annual-budget' | 'bank-statement-import'
-  | 'gl-bridge-prefunding' | 'gl-bridge-payroll' | 'unified-assets';
+  | 'gl-bridge-prefunding' | 'gl-bridge-payroll' | 'unified-assets'
+  | 'gl-bridge-settings';
 
 interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: AcctSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -205,6 +207,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'gl-bridge', label: 'GL Bridge Engine', icon: Zap,
         description: 'Automatically generate and post journal entries from operational modules (payroll, advances, P2P) into the General Ledger without manual re-entry.',
+      },
+      {
+        id: 'gl-bridge-settings', label: 'GL Bridge Settings', icon: Settings2,
+        description: 'Map each GL bridge event (pre-fund disbursement, payroll run, EOSB accrual, etc.) to the correct debit and credit accounts from your Chart of Accounts — no SQL editing required.',
       },
       {
         id: 'gl-bridge-prefunding', label: 'Pre-Funding → GL', icon: Zap,
@@ -589,6 +595,7 @@ export default function AccountingHub() {
         {tab === 'bs-comparison'        && <Suspense fallback={<PanelLoader />}><BSComparisonPanel /></Suspense>}
         {tab === 'ar-aging'             && <Suspense fallback={<PanelLoader />}><ARAgingPanel /></Suspense>}
         {/* 2026-08-03 new panels */}
+        {tab === 'gl-bridge-settings'   && <Suspense fallback={<PanelLoader />}><GLBridgeSettingsPanel /></Suspense>}
         {tab === 'opening-balances'     && <Suspense fallback={<PanelLoader />}><OpeningBalancesPanel /></Suspense>}
         {tab === 'gl-bridge-prefunding' && <Suspense fallback={<PanelLoader />}><GLBridgePreFundingPanel /></Suspense>}
         {tab === 'gl-bridge-payroll'    && <Suspense fallback={<PanelLoader />}><GLBridgePayrollPanel /></Suspense>}
