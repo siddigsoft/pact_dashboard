@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Download, RefreshCw, Scale, FileDown, Search } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Scale, FileDown, Search, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -60,6 +60,7 @@ export default function AccountingTrialBalance() {
   const [bootstrap, setBootstrap] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [imbalancedCount, setImbalancedCount] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -86,6 +87,14 @@ export default function AccountingTrialBalance() {
       setBootstrap(false);
     })();
     return () => { cancel = true; };
+  }, []);
+
+  // Fetch imbalanced-entry count once on mount so the banner can appear immediately
+  useEffect(() => {
+    supabase
+      .from('vw_imbalanced_journal_entries' as any)
+      .select('id', { count: 'exact', head: true })
+      .then(({ count }) => { if (count !== null) setImbalancedCount(count); });
   }, []);
 
   const runTb = async () => {
@@ -305,6 +314,25 @@ export default function AccountingTrialBalance() {
           </div>
         </CardContent></Card>
       </div>
+
+      {imbalancedCount > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+             data-testid="banner-imbalanced-warning">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">Trial balance may be distorted</span>
+            {' — '}
+            {imbalancedCount} imbalanced {imbalancedCount === 1 ? 'entry' : 'entries'} detected.{' '}
+            <Link
+              to="/accounting?tab=gl-audit#integrity"
+              className="underline font-medium hover:text-amber-900"
+              data-testid="link-integrity-tab"
+            >
+              Fix {imbalancedCount === 1 ? 'it' : 'them'} in GL Audit → Balance Integrity.
+            </Link>
+          </p>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Trial Balance Detail</CardTitle></CardHeader>
