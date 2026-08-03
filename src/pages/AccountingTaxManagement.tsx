@@ -93,7 +93,7 @@ export default function AccountingTaxManagement() {
 
     const [{ data: aData }, { data: sumData }, { data: cData }] = await Promise.all([
       supabase.from('acct_accounts').select('id, code, name_en').order('code'),
-      supabase.rpc('acct_tax_summary').catch(() => ({ data: [] })),
+      supabase.rpc('acct_tax_summary').then((res: any) => res, () => ({ data: [] })),
       supabase.from('countries').select('id, name_en, flag_emoji').eq('is_active', true).order('name_en'),
     ]);
     setAccounts((aData ?? []) as Account[]);

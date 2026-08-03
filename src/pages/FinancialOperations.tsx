@@ -408,12 +408,13 @@ const FinancialOperations = () => {
         });
 
         const { data: rateData } = await supabase
-          .from('exchange_rates')
-          .select('updated_at, created_at')
-          .order('updated_at', { ascending: false })
+          .from('acct_exchange_rates')
+          .select('effective_date, created_at')
+          .eq('from_currency', 'USD').eq('to_currency', 'SDG')
+          .order('effective_date', { ascending: false })
           .limit(1);
         if (rateData && rateData.length > 0) {
-          const lastUpdate = parseISO(rateData[0].updated_at || rateData[0].created_at);
+          const lastUpdate = parseISO((rateData[0].effective_date as string) + 'T12:00:00');
           const hoursStale = differenceInHours(new Date(), lastUpdate);
           if (hoursStale > 72) {
             alerts.push({
@@ -422,7 +423,7 @@ const FinancialOperations = () => {
               category: 'Exchange Rate',
               title: 'Exchange rates critically stale',
               description: `Last updated ${hoursStale} hours ago. Rates may be inaccurate.`,
-              timestamp: rateData[0].updated_at || rateData[0].created_at,
+              timestamp: rateData[0].created_at,
               actionLabel: 'Update Rates',
               actionPath: '/exchange-rates',
             });

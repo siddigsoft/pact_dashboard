@@ -139,12 +139,12 @@ export default function AccountingGrants() {
     });
 
     const [spendRes, pfTxnRes, pfFundRes] = await Promise.all([
-      supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).catch(() => ({ data: null })),
+      supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).then((res: any) => res, () => ({ data: null })),
       // Pre-fund transactions to calculate per-grant period coverage
       // Schema uses transaction_date (not payment_date)
-      (supabase as any).from('pre_fund_transactions').select('amount, currency, transaction_date').limit(50000).catch(() => ({ data: null })),
+      (supabase as any).from('pre_fund_transactions').select('amount, currency, transaction_date').limit(50000).then((res: any) => res, () => ({ data: null })),
       // Active pre-fund requests for pipeline total
-      (supabase as any).from('pre_fund_requests').select('available_balance, currency').eq('status', 'active').limit(500).catch(() => ({ data: null })),
+      (supabase as any).from('pre_fund_requests').select('available_balance, currency').eq('status', 'active').limit(500).then((res: any) => res, () => ({ data: null })),
     ]);
 
     // Build spend map per grant
@@ -186,8 +186,8 @@ export default function AccountingGrants() {
     setDetailLoading(true);
     setExpenseGlLog({});
     const [exRes, msRes] = await Promise.all([
-      supabase.from('acct_grant_expenses' as any).select('*').eq('grant_id', g.id).order('expense_date', { ascending: false }).limit(500).catch(() => ({ data: [] })),
-      supabase.from('acct_grant_milestones' as any).select('*').eq('grant_id', g.id).order('due_date').limit(200).catch(() => ({ data: [] })),
+      supabase.from('acct_grant_expenses' as any).select('*').eq('grant_id', g.id).order('expense_date', { ascending: false }).limit(500).then((res: any) => res, () => ({ data: [] })),
+      supabase.from('acct_grant_milestones' as any).select('*').eq('grant_id', g.id).order('due_date').limit(200).then((res: any) => res, () => ({ data: [] })),
     ]);
     const loadedExpenses = ((exRes as any).data ?? []) as GrantExpense[];
     setExpenses(loadedExpenses);

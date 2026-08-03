@@ -2,11 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface ExchangeRate {
   id: string;
-  source_bank: string;
-  rate_type: string;
-  usd_to_sdg: number;
-  fetched_at: string;
-  is_active: boolean;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  effective_date: string;
+  source: string;
+  created_at: string;
 }
 
 let cachedRate: { rate: number; fetchedAt: string; timestamp: number } | null = null;
@@ -20,24 +21,27 @@ export async function getLatestExchangeRate(): Promise<{ rate: number; fetchedAt
 
   try {
     const { data, error } = await supabase
-      .from('exchange_rates')
-      .select('usd_to_sdg, fetched_at')
-      .eq('is_active', true)
-      .order('fetched_at', { ascending: false })
+      .from('acct_exchange_rates')
+      .select('rate, effective_date, created_at')
+      .eq('from_currency', 'USD')
+      .eq('to_currency', 'SDG')
+      .order('effective_date', { ascending: false })
       .limit(1);
 
     if (error || !data || data.length === 0) return null;
 
-    const record = data[0];
-    const hoursSinceFetch = (Date.now() - new Date(record.fetched_at).getTime()) / (1000 * 60 * 60);
+    const record = data[0] as ExchangeRate;
+    // Use effective_date as a local noon timestamp to avoid timezone drift
+    const fetchedAt = record.effective_date + 'T12:00:00';
+    const hoursSinceFetch = (Date.now() - new Date(fetchedAt).getTime()) / (1000 * 60 * 60);
 
     cachedRate = {
-      rate: record.usd_to_sdg,
-      fetchedAt: record.fetched_at,
+      rate: Number(record.rate),
+      fetchedAt,
       timestamp: Date.now(),
     };
 
-    return { rate: record.usd_to_sdg, fetchedAt: record.fetched_at, stale: hoursSinceFetch > 24 };
+    return { rate: Number(record.rate), fetchedAt, stale: hoursSinceFetch > 24 };
   } catch {
     return null;
   }

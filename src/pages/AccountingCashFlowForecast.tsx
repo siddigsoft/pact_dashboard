@@ -71,7 +71,7 @@ export default function AccountingCashFlowForecast() {
           .select('from_currency, to_currency, rate')
           .order('effective_date', { ascending: false })
           .limit(500)
-          .catch(() => ({ data: [] })),
+          .then((res: any) => res, () => ({ data: [] })),
       ]);
 
       if (bankRes.error?.code === '42P01') missing.push('acct_bank_accounts');

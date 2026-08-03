@@ -33,11 +33,11 @@ import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface ExchangeRateRecord {
   id: string;
-  source_bank: string;
-  rate_type: string;
-  usd_to_sdg: number;
-  fetched_at: string;
-  is_active: boolean;
+  from_currency: string;
+  to_currency: string;
+  rate: number;           // SDG per 1 USD
+  effective_date: string; // date string YYYY-MM-DD
+  source: string;         // bank code e.g. bank_of_khartoum
   created_at: string;
 }
 
@@ -63,8 +63,7 @@ export default function ExchangeRates() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   
   const [newRate, setNewRate] = useState({
-    source_bank: 'bank_of_khartoum',
-    rate_type: 'mid',
+    source: 'bank_of_khartoum',
     usd_to_sdg: '',
     rate_date: format(new Date(), 'yyyy-MM-dd'),
   });
@@ -75,7 +74,7 @@ export default function ExchangeRates() {
       const { data, error } = await supabase
         .from('acct_exchange_rates')
         .select('*')
-        .order('fetched_at', { ascending: false })
+        .order('effective_date', { ascending: false })
         .limit(100);
 
       if (error) throw error;
@@ -100,46 +99,24 @@ export default function ExchangeRates() {
 
     try {
       setSaving(true);
-      
-      const rateDate = new Date(newRate.rate_date);
-      rateDate.setHours(12, 0, 0, 0);
+      const effectiveDate = newRate.rate_date; // YYYY-MM-DD
 
-      const { data: existing } = await supabase
+      // Upsert: one rate per currency pair per date — update if exists, insert if not
+      const { error } = await supabase
         .from('acct_exchange_rates')
-        .select('id')
-        .eq('source_bank', newRate.source_bank)
-        .eq('rate_type', newRate.rate_type)
-        .gte('fetched_at', startOfDay(rateDate).toISOString())
-        .lt('fetched_at', new Date(rateDate.getTime() + 24 * 60 * 60 * 1000).toISOString())
-        .single();
+        .upsert(
+          {
+            from_currency: 'USD',
+            to_currency: 'SDG',
+            rate: parseFloat(newRate.usd_to_sdg),
+            effective_date: effectiveDate,
+            source: newRate.source,
+          },
+          { onConflict: 'from_currency,to_currency,effective_date' }
+        );
 
-      if (existing) {
-        const { error: updateError } = await supabase
-          .from('acct_exchange_rates')
-          .update({
-            usd_to_sdg: parseFloat(newRate.usd_to_sdg),
-            fetched_at: rateDate.toISOString(),
-            is_active: true,
-          })
-          .eq('id', existing.id);
-
-        if (updateError) throw updateError;
-        toast.success('Exchange rate updated');
-      } else {
-        const { error: insertError } = await supabase
-          .from('acct_exchange_rates')
-          .insert({
-            source_bank: newRate.source_bank,
-            rate_type: newRate.rate_type,
-            usd_to_sdg: parseFloat(newRate.usd_to_sdg),
-            fetched_at: rateDate.toISOString(),
-            is_active: true,
-          });
-
-        if (insertError) throw insertError;
-        toast.success('Exchange rate added');
-      }
-
+      if (error) throw error;
+      toast.success('Exchange rate saved');
       setNewRate(prev => ({ ...prev, usd_to_sdg: '' }));
       fetchRates();
     } catch (err: any) {
@@ -160,7 +137,7 @@ export default function ExchangeRates() {
       setSaving(true);
       const { error } = await supabase
         .from('acct_exchange_rates')
-        .update({ usd_to_sdg: editValue })
+        .update({ rate: editValue })
         .eq('id', id);
 
       if (error) throw error;
@@ -189,52 +166,30 @@ export default function ExchangeRates() {
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('acct_exchange_rates')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success(currentStatus ? 'Rate deactivated' : 'Rate activated');
-      fetchRates();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update status');
-    }
+  // is_active is not a column in acct_exchange_rates — most-recent rate per source is implicitly "active"
+  const handleToggleActive = (_id: string, _currentStatus: boolean) => {
+    toast.error('Active/inactive toggling is not supported. Delete old rates to remove them.');
   };
 
   const getTodaysRate = () => {
-    const todayRates = rates.filter(r => 
-      r.is_active && 
-      isToday(parseISO(r.fetched_at)) &&
-      r.source_bank === 'bank_of_khartoum'
-    );
-    if (todayRates.length > 0) {
-      const midRate = todayRates.find(r => r.rate_type === 'mid');
-      return midRate?.usd_to_sdg || todayRates[0].usd_to_sdg;
-    }
-    const activeRates = rates.filter(r => r.is_active && r.source_bank === 'bank_of_khartoum');
-    if (activeRates.length > 0) {
-      const midRate = activeRates.find(r => r.rate_type === 'mid');
-      return midRate?.usd_to_sdg || activeRates[0].usd_to_sdg;
-    }
-    return null;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todayRate = rates.find(r => r.effective_date === todayStr && r.source === 'bank_of_khartoum');
+    if (todayRate) return todayRate.rate;
+    // Fall back to most recent Bank of Khartoum rate
+    const bokRate = rates.find(r => r.source === 'bank_of_khartoum');
+    if (bokRate) return bokRate.rate;
+    // Fall back to any rate
+    return rates[0]?.rate ?? null;
   };
 
   const getActiveRatesByBank = () => {
-    const grouped: Record<string, { buy?: number; sell?: number; mid?: number; date?: string }> = {};
-    
-    rates.filter(r => r.is_active).forEach(rate => {
-      if (!grouped[rate.source_bank]) {
-        grouped[rate.source_bank] = {};
-      }
-      grouped[rate.source_bank][rate.rate_type as 'buy' | 'sell' | 'mid'] = rate.usd_to_sdg;
-      if (!grouped[rate.source_bank].date || new Date(rate.fetched_at) > new Date(grouped[rate.source_bank].date!)) {
-        grouped[rate.source_bank].date = rate.fetched_at;
+    // Show most-recent rate per source (grouped by source bank)
+    const grouped: Record<string, { mid?: number; date?: string }> = {};
+    rates.forEach(rate => {
+      if (!grouped[rate.source]) {
+        grouped[rate.source] = { mid: rate.rate, date: rate.effective_date };
       }
     });
-
     return grouped;
   };
 
@@ -253,15 +208,15 @@ export default function ExchangeRates() {
   const activeRatesByBank = getActiveRatesByBank();
 
   const stalenessInfo = useMemo(() => {
-    const activeRates = rates.filter(r => r.is_active);
-    if (activeRates.length === 0) {
+    if (rates.length === 0) {
       return { status: 'none' as const, hoursAgo: 0, message: '' };
     }
-    const mostRecent = activeRates.reduce((latest, rate) => {
-      return new Date(rate.fetched_at) > new Date(latest.fetched_at) ? rate : latest;
+    const mostRecent = rates.reduce((latest, rate) => {
+      return rate.effective_date > latest.effective_date ? rate : latest;
     });
     const now = new Date();
-    const fetchedDate = parseISO(mostRecent.fetched_at);
+    // effective_date is a date string (YYYY-MM-DD) — parse as local noon to avoid timezone issues
+    const fetchedDate = parseISO(mostRecent.effective_date + 'T12:00:00');
     const hoursAgo = differenceInHours(now, fetchedDate);
     const daysAgo = differenceInDays(now, fetchedDate);
 
@@ -442,8 +397,8 @@ export default function ExchangeRates() {
                 <div className="space-y-2">
                   <Label htmlFor="source_bank">Bank / Source</Label>
                   <Select
-                    value={newRate.source_bank}
-                    onValueChange={(value) => setNewRate(prev => ({ ...prev, source_bank: value }))}
+                    value={newRate.source}
+                    onValueChange={(value) => setNewRate(prev => ({ ...prev, source: value }))}
                   >
                     <SelectTrigger id="source_bank" data-testid="select-source-bank">
                       <SelectValue placeholder="Select bank" />
@@ -452,25 +407,6 @@ export default function ExchangeRates() {
                       {BANK_OPTIONS.map(bank => (
                         <SelectItem key={bank.value} value={bank.value}>
                           {bank.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="rate_type">Rate Type</Label>
-                  <Select
-                    value={newRate.rate_type}
-                    onValueChange={(value) => setNewRate(prev => ({ ...prev, rate_type: value }))}
-                  >
-                    <SelectTrigger id="rate_type" data-testid="select-rate-type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RATE_TYPE_OPTIONS.map(type => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -557,12 +493,10 @@ export default function ExchangeRates() {
                       {rates.map((rate) => (
                         <TableRow key={rate.id}>
                           <TableCell className="font-medium">
-                            {getBankLabel(rate.source_bank)}
+                            {getBankLabel(rate.source)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              {RATE_TYPE_OPTIONS.find(t => t.value === rate.rate_type)?.label || rate.rate_type}
-                            </Badge>
+                            <Badge variant="outline">USD → SDG</Badge>
                           </TableCell>
                           <TableCell>
                             {editingId === rate.id ? (
@@ -594,26 +528,17 @@ export default function ExchangeRates() {
                                 </Button>
                               </div>
                             ) : (
-                              <span className="font-mono">{rate.usd_to_sdg.toLocaleString()}</span>
+                              <span className="font-mono">{Number(rate.rate).toLocaleString()}</span>
                             )}
                           </TableCell>
                           <TableCell>
                             <span className="text-sm">
-                              {formatDate(rate.fetched_at)}
+                              {formatDate(rate.effective_date + 'T12:00:00')}
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Badge 
-                              variant={rate.is_active ? 'default' : 'secondary'}
-                              className="cursor-pointer"
-                              onClick={() => handleToggleActive(rate.id, rate.is_active)}
-                              data-testid={`badge-status-${rate.id}`}
-                            >
-                              {rate.is_active ? (
-                                <><CheckCircle className="h-3 w-3 mr-1" /> Active</>
-                              ) : (
-                                <><AlertCircle className="h-3 w-3 mr-1" /> Inactive</>
-                              )}
+                            <Badge variant="default" data-testid={`badge-status-${rate.id}`}>
+                              <CheckCircle className="h-3 w-3 mr-1" /> Active
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -623,7 +548,7 @@ export default function ExchangeRates() {
                                 variant="ghost"
                                 onClick={() => {
                                   setEditingId(rate.id);
-                                  setEditValue(rate.usd_to_sdg);
+                                  setEditValue(Number(rate.rate));
                                 }}
                                 disabled={editingId !== null}
                                 data-testid={`button-edit-rate-${rate.id}`}

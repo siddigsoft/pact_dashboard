@@ -504,14 +504,15 @@ export default function AccountingFinanceDashboard() {
     try {
       const [{ data, error }, { data: fxData }] = await Promise.all([
         supabase.from('pre_fund_requests').select('status, available_balance, currency'),
-        supabase.from('exchange_rates').select('usd_to_sdg').eq('is_active', true)
-          .order('fetched_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('acct_exchange_rates').select('rate')
+          .eq('from_currency', 'USD').eq('to_currency', 'SDG')
+          .order('effective_date', { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (error?.code === '42P01') { setPreFundKPI({ data: null, loading: false, error: 'table_missing' }); return; }
       if (error) throw error;
       const rows = (data ?? []) as any[];
       const active = rows.filter((r: any) => ['active', 'low_balance'].includes(r.status));
-      const usdToSdg = Number((fxData as any)?.usd_to_sdg ?? 1) || 1;
+      const usdToSdg = Number((fxData as any)?.rate ?? 1) || 1;
       const toUSD = (amount: number, currency: string) => {
         if (currency === 'USD') return amount;
         if (currency === 'SDG') return usdToSdg > 0 ? amount / usdToSdg : 0;

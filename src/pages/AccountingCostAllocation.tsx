@@ -122,7 +122,7 @@ export default function AccountingCostAllocation() {
     // Load targets (may not exist yet if migration not run)
     const tgtsRes = await supabase.from('acct_cost_allocation_targets' as any)
       .select('id, rule_id, target_account_id, weight_pct, acct_accounts!target_account_id(code, name_en)')
-      .limit(2000).catch(() => ({ data: [] }));
+      .limit(2000).then((res: any) => res, () => ({ data: [] }));
     const mappedTargets: AllocationTarget[] = ((tgtsRes as any).data ?? []).map((t: any) => ({
       id: t.id, rule_id: t.rule_id, target_account_id: t.target_account_id,
       account_code: t.acct_accounts?.code ?? '',

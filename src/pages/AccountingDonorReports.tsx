@@ -61,10 +61,10 @@ export default function AccountingDonorReports() {
     const [{ data: fData }, { data: jlData }, { data: pData }, pfRes] = await Promise.all([
       supabase.from('acct_funds').select('id, code, name_en, name_ar, restriction_type, donor_partner_id, start_date, end_date, is_active').order('code'),
       supabase.from('acct_journal_lines').select('fund_id, debit_credit, functional_amount'),
-      supabase.from('crm_partners').select('id, name').limit(500).catch(() => ({ data: [] })),
+      supabase.from('crm_partners').select('id, name').limit(500).then((res: any) => res, () => ({ data: [] })),
       // Pre-fund requests to show donor-linked pipeline spend
       // Canonical statuses: pending_approval, awaiting_receipt, active, low_balance, closed, expired, cancelled
-      (supabase as any).from('pre_fund_requests').select('id, name, currency, amount, available_balance, paid_amount, status, start_date, end_date, matching_scope').in('status', ['active', 'low_balance', 'awaiting_receipt']).order('start_date', { ascending: false }).limit(200).catch(() => ({ data: [] })),
+      (supabase as any).from('pre_fund_requests').select('id, name, currency, amount, available_balance, paid_amount, status, start_date, end_date, matching_scope').in('status', ['active', 'low_balance', 'awaiting_receipt']).order('start_date', { ascending: false }).limit(200).then((res: any) => res, () => ({ data: [] })),
     ]);
     setFunds((fData ?? []) as Fund[]);
     setPartners(((pData as any)?.data ?? pData ?? []) as Partner[]);

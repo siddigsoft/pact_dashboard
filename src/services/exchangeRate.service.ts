@@ -1,4 +1,16 @@
 import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+
+// acct_exchange_rates schema: id, from_currency, to_currency, rate, effective_date (date), source, created_at
+interface AcRateRow {
+  id?: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  effective_date: string;
+  source?: string;
+  created_at?: string;
+}
 
 export interface ExchangeRate {
   id?: string;
@@ -47,10 +59,12 @@ export class ExchangeRateService {
 
     try {
       const { data, error } = await supabase
-        .from('exchange_rates')
-        .select('*')
-        .eq('is_active', true)
-        .order('fetched_at', { ascending: false });
+        .from('acct_exchange_rates')
+        .select('rate, effective_date, source, created_at')
+        .eq('from_currency', 'USD')
+        .eq('to_currency', 'SDG')
+        .order('effective_date', { ascending: false })
+        .limit(50);
 
       if (error) {
         console.error('Error fetching exchange rates:', error);
@@ -61,7 +75,7 @@ export class ExchangeRateService {
         return this.getDefaultRates();
       }
 
-      const summary = this.buildSummary(data as ExchangeRate[]);
+      const summary = this.buildSummary(data as AcRateRow[]);
       this.cachedRates = summary;
       this.cacheTimestamp = now;
       return summary;
@@ -71,50 +85,47 @@ export class ExchangeRateService {
     }
   }
 
-  private static buildSummary(rates: ExchangeRate[]): ExchangeRateSummary {
+  private static buildSummary(rows: AcRateRow[]): ExchangeRateSummary {
     const summary: ExchangeRateSummary = {
       weighted_average: 0,
       last_updated: new Date().toISOString(),
       sources_available: 0
     };
 
-    const bankRates: Record<string, Record<string, number>> = {};
-    
-    for (const rate of rates) {
-      if (!bankRates[rate.source_bank]) {
-        bankRates[rate.source_bank] = {};
-      }
-      bankRates[rate.source_bank][rate.rate_type] = rate.usd_to_sdg;
-      
-      if (new Date(rate.fetched_at) > new Date(summary.last_updated)) {
-        summary.last_updated = rate.fetched_at;
+    // Group by source bank — most-recent row per source wins
+    const byBank: Record<string, number> = {};
+    for (const row of rows) {
+      const bank = (row.source ?? 'bank_of_khartoum') as string;
+      if (!(bank in byBank)) {
+        byBank[bank] = Number(row.rate);
+        // Track most-recent effective_date
+        const ts = row.effective_date + 'T12:00:00';
+        if (!summary.last_updated || ts > summary.last_updated) {
+          summary.last_updated = ts;
+        }
       }
     }
 
-    if (bankRates['bank_of_sudan']) {
-      summary.bank_of_sudan = bankRates['bank_of_sudan'] as any;
-      summary.sources_available++;
-    }
-    if (bankRates['bank_of_khartoum']) {
-      summary.bank_of_khartoum = bankRates['bank_of_khartoum'] as any;
-      summary.sources_available++;
-    }
-    if (bankRates['faisal_islamic']) {
-      summary.faisal_islamic = bankRates['faisal_islamic'] as any;
-      summary.sources_available++;
-    }
-
+    const banks = ['bank_of_sudan', 'bank_of_khartoum', 'faisal_islamic'] as const;
     const midRates: number[] = [];
-    if (summary.bank_of_sudan?.mid) midRates.push(summary.bank_of_sudan.mid);
-    if (summary.bank_of_khartoum?.mid) midRates.push(summary.bank_of_khartoum.mid);
-    if (summary.faisal_islamic?.mid) midRates.push(summary.faisal_islamic.mid);
 
-    if (midRates.length === 0) {
-      const allRates = Object.values(bankRates).flatMap(b => Object.values(b));
-      if (allRates.length > 0) {
-        summary.weighted_average = allRates.reduce((a, b) => a + b, 0) / allRates.length;
+    for (const bank of banks) {
+      if (bank in byBank) {
+        const rate = byBank[bank];
+        (summary as any)[bank] = { mid: rate };
+        midRates.push(rate);
+        summary.sources_available++;
       }
-    } else {
+    }
+
+    // Include any other source-bank values not in the three above
+    for (const [bank, rate] of Object.entries(byBank)) {
+      if (!banks.includes(bank as any)) {
+        midRates.push(rate);
+      }
+    }
+
+    if (midRates.length > 0) {
       summary.weighted_average = midRates.reduce((a, b) => a + b, 0) / midRates.length;
     }
 
@@ -135,13 +146,19 @@ export class ExchangeRateService {
   static async saveRate(rate: Omit<ExchangeRate, 'id'>): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase
-        .from('exchange_rates')
-        .insert([rate]);
+        .from('acct_exchange_rates')
+        .upsert(
+          {
+            from_currency: 'USD',
+            to_currency: 'SDG',
+            rate: rate.usd_to_sdg,
+            effective_date: format(new Date(rate.fetched_at), 'yyyy-MM-dd'),
+            source: rate.source_bank,
+          },
+          { onConflict: 'from_currency,to_currency,effective_date' }
+        );
 
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
+      if (error) return { success: false, error: error.message };
       this.cachedRates = null;
       return { success: true };
     } catch (err: any) {
@@ -150,65 +167,35 @@ export class ExchangeRateService {
   }
 
   static async updateRatesFromSources(): Promise<{ success: boolean; updated: number; error?: string; isDefault?: boolean }> {
-    const now = new Date().toISOString();
+    // Upsert today's default rates into acct_exchange_rates (one row per source per day)
+    const today = format(new Date(), 'yyyy-MM-dd');
 
-    const newRates: { source_bank: string; rate_type: string; usd_to_sdg: number }[] = [
-      { source_bank: 'bank_of_sudan', rate_type: 'buy', usd_to_sdg: 3420.00 },
-      { source_bank: 'bank_of_sudan', rate_type: 'sell', usd_to_sdg: 3520.00 },
-      { source_bank: 'bank_of_sudan', rate_type: 'mid', usd_to_sdg: 3470.00 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'buy', usd_to_sdg: 3450.00 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'sell', usd_to_sdg: 3550.00 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'mid', usd_to_sdg: 3500.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'buy', usd_to_sdg: 3400.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'sell', usd_to_sdg: 3500.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'mid', usd_to_sdg: 3450.00 },
+    const defaults = [
+      { source: 'bank_of_sudan', rate: 3470.00 },
+      { source: 'bank_of_khartoum', rate: 3500.00 },
+      { source: 'faisal_islamic', rate: 3450.00 },
     ];
 
     let updatedCount = 0;
     let hasErrors = false;
 
-    for (const rate of newRates) {
-      const { data: existing } = await supabase
-        .from('exchange_rates')
-        .select('id')
-        .eq('source_bank', rate.source_bank)
-        .eq('rate_type', rate.rate_type)
-        .eq('is_active', true)
-        .single();
-
-      if (existing) {
-        const { error } = await supabase
-          .from('exchange_rates')
-          .update({ 
-            usd_to_sdg: rate.usd_to_sdg, 
-            fetched_at: now 
-          })
-          .eq('id', existing.id);
-        
-        if (!error) updatedCount++;
-        else hasErrors = true;
-      } else {
-        const { error } = await supabase
-          .from('exchange_rates')
-          .insert([{
-            source_bank: rate.source_bank as any,
-            rate_type: rate.rate_type as any,
-            usd_to_sdg: rate.usd_to_sdg,
-            fetched_at: now,
-            is_active: true
-          }]);
-        
-        if (!error) updatedCount++;
-        else hasErrors = true;
-      }
+    for (const d of defaults) {
+      const { error } = await supabase
+        .from('acct_exchange_rates')
+        .upsert(
+          { from_currency: 'USD', to_currency: 'SDG', rate: d.rate, effective_date: today, source: d.source },
+          { onConflict: 'from_currency,to_currency,effective_date' }
+        );
+      if (!error) updatedCount++;
+      else hasErrors = true;
     }
 
     this.cachedRates = null;
-    
+
     if (hasErrors && updatedCount === 0) {
       return { success: false, updated: 0, error: 'Failed to update any rates', isDefault: true };
     }
-    
+
     return { success: true, updated: updatedCount, isDefault: true };
   }
 
@@ -271,7 +258,7 @@ export class ExchangeRateService {
         const costs = stateCosts.map(c => c.actual_cost).sort((a, b) => a - b);
         const mid = Math.floor(costs.length / 2);
         const stateMedian = costs.length % 2 !== 0 ? costs[mid] : (costs[mid - 1] + costs[mid]) / 2;
-        
+
         options.push({
           id: 'locality_median',
           label: 'State Median',
