@@ -101,6 +101,8 @@ export const useMMPProvider = () => {
     addMMPFile,
     updateMMPFile,
     deleteMMPFile,
+    unlinkAndDeleteMMPFile,
+    getMMPLinkedCounts,
   } = useMMPOperations(mmpFiles, setMMPFiles);
 
   const { verifyMMP, archiveMMP, restoreArchivedMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
