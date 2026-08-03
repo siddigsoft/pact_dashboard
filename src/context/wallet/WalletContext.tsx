@@ -1248,10 +1248,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Returns true when a retainer with the given frequency should be paid in the
+   * given calendar month (1–12).
+   *
+   * - monthly (default / null): every month
+   * - quarterly: months 3, 6, 9, 12  (Q1–Q4 end months)
+   * - annual: month 12 (December)
+   */
+  const isRetainerDueThisMonth = (frequency: string | null | undefined, calendarMonth: number): boolean => {
+    const freq = (frequency ?? 'monthly').toLowerCase();
+    if (freq === 'quarterly') return [3, 6, 9, 12].includes(calendarMonth);
+    if (freq === 'annual' || freq === 'yearly') return calendarMonth === 12;
+    return true; // monthly / anything else
+  };
+
   const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number }> => {
     try {
       const now = new Date();
-      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const currentMonth = now.getMonth() + 1; // 1-based
+      const currentPeriod = `${now.getFullYear()}-${String(currentMonth).padStart(2, '0')}`;
 
       const { data: eligibleUsers, error: fetchError } = await supabase
         .from('current_user_classifications')
@@ -1265,10 +1281,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { processed: 0, failed: 0, total: 0 };
       }
 
+      // Only process users whose retainer frequency falls due this month
+      const dueUsers = eligibleUsers.filter(u => isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
+
       let processed = 0;
       let failed = 0;
 
-      for (const user of eligibleUsers) {
+      for (const user of dueUsers) {
         try {
           // Transactions are inserted with type='adjustment' + metadata.type='retainer'.
           // Previously the check used type='retainer' which never matched — meaning
@@ -1305,12 +1324,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // total reported = only the users actually due this month
+      const skippedCount = eligibleUsers.length - dueUsers.length;
+      if (skippedCount > 0) {
+        console.log(`[Retainers] Skipped ${skippedCount} user(s) whose frequency is not due this month (${currentPeriod}).`);
+      }
+
       toast({
         title: 'Retainer Processing Complete',
-        description: `Processed ${processed} of ${eligibleUsers.length} retainers. ${failed} failed.`,
+        description: `Processed ${processed} of ${dueUsers.length} retainers due this month. ${failed} failed.`,
       });
 
-      return { processed, failed, total: eligibleUsers.length };
+      return { processed, failed, total: dueUsers.length };
     } catch (error: any) {
       console.error('Failed to process monthly retainers:', error);
       toast({

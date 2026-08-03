@@ -123,6 +123,41 @@ const getLevelBadgeClass = (level: string) => {
   }
 };
 
+/**
+ * Returns true when a retainer with the given frequency is due in the given
+ * calendar month (1–12).
+ *
+ * - monthly (default / null): every month
+ * - quarterly: months 3, 6, 9, 12  (Q1–Q4 end months)
+ * - annual / yearly: month 12 (December)
+ */
+const isRetainerDueThisMonth = (frequency: string | null | undefined, calendarMonth: number): boolean => {
+  const freq = (frequency ?? 'monthly').toLowerCase();
+  if (freq === 'quarterly') return [3, 6, 9, 12].includes(calendarMonth);
+  if (freq === 'annual' || freq === 'yearly') return calendarMonth === 12;
+  return true;
+};
+
+const getFrequencyLabel = (frequency: string | null | undefined): string => {
+  const freq = (frequency ?? 'monthly').toLowerCase();
+  if (freq === 'quarterly') return 'Quarterly';
+  if (freq === 'annual' || freq === 'yearly') return 'Annual';
+  return 'Monthly';
+};
+
+const getNextDueMonths = (frequency: string | null | undefined, currentMonth: number): string => {
+  const freq = (frequency ?? 'monthly').toLowerCase();
+  if (freq === 'quarterly') {
+    const quarterMonths = [3, 6, 9, 12];
+    const next = quarterMonths.find(m => m > currentMonth) ?? quarterMonths[0];
+    return `Next: month ${next}`;
+  }
+  if (freq === 'annual' || freq === 'yearly') {
+    return currentMonth === 12 ? 'Due this month' : 'Next: December';
+  }
+  return 'Every month';
+};
+
 const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -1099,6 +1134,8 @@ const RetainerManagement = () => {
                         </TableHeader>
                         <TableBody>
                           {filteredEligible.map(user => {
+                            const currentMonth  = new Date().getMonth() + 1;
+                            const dueThisMonth  = isRetainerDueThisMonth(user.retainer_frequency, currentMonth);
                             const paidThisMonth = transactions.some(
                               t => t.user_id === user.user_id && t.metadata?.period === getCurrentPeriod()
                             );
@@ -1119,11 +1156,22 @@ const RetainerManagement = () => {
                                 <TableCell className="text-right font-medium text-sm">
                                   {formatCurrency(user.retainer_amount_cents / 100, user.retainer_currency || 'SDG')}
                                 </TableCell>
-                                <TableCell className="text-sm capitalize">{user.retainer_frequency || 'monthly'}</TableCell>
+                                <TableCell>
+                                  <div>
+                                    <span className="text-sm">{getFrequencyLabel(user.retainer_frequency)}</span>
+                                    <span className="block text-xs text-muted-foreground">
+                                      {getNextDueMonths(user.retainer_frequency, currentMonth)}
+                                    </span>
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   {paidThisMonth ? (
                                     <Badge className="text-xs border-0 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
                                       <CheckCircle2 className="h-3 w-3 mr-1" />Paid
+                                    </Badge>
+                                  ) : !dueThisMonth ? (
+                                    <Badge className="text-xs border-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                      <XCircle className="h-3 w-3 mr-1" />Not due
                                     </Badge>
                                   ) : (
                                     <Badge className="text-xs border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
@@ -1252,11 +1300,15 @@ const RetainerManagement = () => {
 
                   {(() => {
                     const currentPeriod = getCurrentPeriod();
-                    const pendingUsers  = eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
-                    const paidUsers     = eligibleUsers.filter(u =>  transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
+                    const currentMonth  = new Date().getMonth() + 1;
+                    // Split into due-this-month vs not-due (frequency not scheduled this month)
+                    const dueUsers      = eligibleUsers.filter(u => isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
+                    const notDueUsers   = eligibleUsers.filter(u => !isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
+                    const pendingUsers  = dueUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
+                    const paidUsers     = dueUsers.filter(u =>  transactions.some(t => t.user_id === u.user_id && t.metadata?.period === currentPeriod));
                     const pendingTotal  = pendingUsers.reduce((s, u) => s + u.retainer_amount_cents / 100, 0);
-                    // Pending users first, already-paid second
-                    const sortedUsers   = [...pendingUsers, ...paidUsers];
+                    // Due-pending first, due-paid second, not-due last
+                    const sortedUsers   = [...pendingUsers, ...paidUsers, ...notDueUsers];
 
                     return (
                       <>
@@ -1270,6 +1322,12 @@ const RetainerManagement = () => {
                             <span className="h-2 w-2 rounded-full bg-green-500" />
                             {paidUsers.length} already paid
                           </span>
+                          {notDueUsers.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <span className="h-2 w-2 rounded-full bg-slate-400" />
+                              {notDueUsers.length} not due this month
+                            </span>
+                          )}
                           <span className="ml-auto font-semibold">
                             Total to process: {formatCurrency(pendingTotal)}
                           </span>
@@ -1294,25 +1352,38 @@ const RetainerManagement = () => {
                                   <TableRow>
                                     <TableHead>User</TableHead>
                                     <TableHead>Level</TableHead>
-                                    <TableHead className="text-right">Monthly Amount</TableHead>
+                                    <TableHead>Frequency</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
                                     <TableHead>{currentPeriod} Status</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {/* Section divider between pending and paid */}
                                   {sortedUsers.map((user, idx) => {
-                                    const alreadyPaid = paidUsers.some(p => p.user_id === user.user_id);
-                                    const showDivider = idx === pendingUsers.length && paidUsers.length > 0 && pendingUsers.length > 0;
+                                    const isDue       = isRetainerDueThisMonth(user.retainer_frequency, currentMonth);
+                                    const alreadyPaid = isDue && paidUsers.some(p => p.user_id === user.user_id);
+                                    const showPaidDivider   = idx === pendingUsers.length && paidUsers.length > 0 && pendingUsers.length > 0;
+                                    const showNotDueDivider = idx === pendingUsers.length + paidUsers.length && notDueUsers.length > 0;
                                     return (
                                       <>
-                                        {showDivider && (
-                                          <TableRow key="divider">
-                                            <TableCell colSpan={4} className="py-1.5 px-3 bg-muted/30 text-[10px] uppercase font-semibold tracking-wide text-muted-foreground border-y">
+                                        {showPaidDivider && (
+                                          <TableRow key="divider-paid">
+                                            <TableCell colSpan={5} className="py-1.5 px-3 bg-muted/30 text-[10px] uppercase font-semibold tracking-wide text-muted-foreground border-y">
                                               Already paid this month
                                             </TableCell>
                                           </TableRow>
                                         )}
-                                        <TableRow key={user.id} className={alreadyPaid ? 'opacity-50' : ''} data-testid={`process-row-${user.user_id}`}>
+                                        {showNotDueDivider && (
+                                          <TableRow key="divider-not-due">
+                                            <TableCell colSpan={5} className="py-1.5 px-3 bg-muted/30 text-[10px] uppercase font-semibold tracking-wide text-muted-foreground border-y">
+                                              Not due this month — will be skipped
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                        <TableRow
+                                          key={user.id}
+                                          className={alreadyPaid || !isDue ? 'opacity-50' : ''}
+                                          data-testid={`process-row-${user.user_id}`}
+                                        >
                                           <TableCell>
                                             <div>
                                               <span className="font-medium text-sm">{user.full_name || 'Unknown'}</span>
@@ -1324,11 +1395,20 @@ const RetainerManagement = () => {
                                               {user.classification_level}
                                             </Badge>
                                           </TableCell>
+                                          <TableCell>
+                                            <span className="text-xs text-muted-foreground">
+                                              {getFrequencyLabel(user.retainer_frequency)}
+                                            </span>
+                                          </TableCell>
                                           <TableCell className="text-right font-medium text-sm">
                                             {formatCurrency(user.retainer_amount_cents / 100, user.retainer_currency || 'SDG')}
                                           </TableCell>
                                           <TableCell>
-                                            {alreadyPaid ? (
+                                            {!isDue ? (
+                                              <Badge className="text-xs border-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                                <XCircle className="h-3 w-3 mr-1" />Not due
+                                              </Badge>
+                                            ) : alreadyPaid ? (
                                               <Badge className="text-xs border-0 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
                                                 <CheckCircle2 className="h-3 w-3 mr-1" />Paid
                                               </Badge>
@@ -1353,10 +1433,15 @@ const RetainerManagement = () => {
                             <p className="text-sm font-medium">
                               {pendingUsers.length > 0
                                 ? `${pendingUsers.length} member${pendingUsers.length !== 1 ? 's' : ''} will receive payment`
-                                : 'All members have been paid for this month'}
+                                : 'All due members have been paid for this month'}
                             </p>
                             {pendingUsers.length > 0 && (
                               <p className="text-xs text-muted-foreground">Total: {formatCurrency(pendingTotal)}</p>
+                            )}
+                            {notDueUsers.length > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                {notDueUsers.length} quarterly/annual member{notDueUsers.length !== 1 ? 's' : ''} not scheduled this month
+                              </p>
                             )}
                           </div>
                           <Button
@@ -1367,7 +1452,7 @@ const RetainerManagement = () => {
                             {processing ? (
                               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
                             ) : pendingUsers.length === 0 ? (
-                              <><CheckCircle2 className="h-4 w-4 mr-2" />All Paid</>
+                              <><CheckCircle2 className="h-4 w-4 mr-2" />All Due Members Paid</>
                             ) : (
                               <><Banknote className="h-4 w-4 mr-2" />Process {pendingUsers.length} Retainer{pendingUsers.length !== 1 ? 's' : ''}</>
                             )}
@@ -1395,9 +1480,12 @@ const RetainerManagement = () => {
             </DialogDescription>
           </DialogHeader>
           {(() => {
-            const cp = getCurrentPeriod();
-            const pendingInDialog  = eligibleUsers.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === cp));
-            const alreadyPaidCount = eligibleUsers.length - pendingInDialog.length;
+            const cp           = getCurrentPeriod();
+            const currentMonth = new Date().getMonth() + 1;
+            const dueInDialog     = eligibleUsers.filter(u =>  isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
+            const notDueInDialog  = eligibleUsers.filter(u => !isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
+            const pendingInDialog = dueInDialog.filter(u => !transactions.some(t => t.user_id === u.user_id && t.metadata?.period === cp));
+            const alreadyPaidCount = dueInDialog.length - pendingInDialog.length;
             const pendingTotalAmt  = pendingInDialog.reduce((s, u) => s + u.retainer_amount_cents / 100, 0);
             return (
               <div className="space-y-3 py-2">
@@ -1406,6 +1494,12 @@ const RetainerManagement = () => {
                     <span>Total eligible users:</span>
                     <span className="font-medium">{eligibleUsers.length}</span>
                   </div>
+                  {notDueInDialog.length > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Not due this month (quarterly/annual):</span>
+                      <span className="font-medium">{notDueInDialog.length} — will be skipped</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Already paid this month:</span>
                     <span className="font-medium">{alreadyPaidCount} — will be skipped</span>
@@ -1421,7 +1515,7 @@ const RetainerManagement = () => {
                 </div>
                 <Alert>
                   <AlertDescription className="text-sm">
-                    Retainer amounts will be added to each pending member's wallet. Already-paid members are automatically skipped — no duplicates.
+                    Retainer amounts will be added to each due member's wallet. Already-paid and not-yet-due members are automatically skipped — no duplicates.
                   </AlertDescription>
                 </Alert>
               </div>
