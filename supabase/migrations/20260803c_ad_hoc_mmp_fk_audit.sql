@@ -105,7 +105,7 @@ DECLARE
   rec RECORD;
   drop_sql  text;
   add_sql   text;
-  is_nullable boolean;
+  v_is_nullable boolean;
 BEGIN
   FOR rec IN
     SELECT
@@ -129,12 +129,12 @@ BEGIN
       AND ccu.table_name     IN ('ad_hoc_mmp_files', 'ad_hoc_mmp_site_entries')
       AND rc.delete_rule     IN ('NO ACTION', 'RESTRICT')
   LOOP
-    SELECT (is_nullable = 'YES')
-    INTO   is_nullable
-    FROM   information_schema.columns
-    WHERE  table_schema = rec.table_schema
-      AND  table_name   = rec.table_name
-      AND  column_name  = rec.column_name;
+    SELECT col.is_nullable = 'YES'
+    INTO   v_is_nullable
+    FROM   information_schema.columns col
+    WHERE  col.table_schema = rec.table_schema
+      AND  col.table_name   = rec.table_name
+      AND  col.column_name  = rec.column_name;
 
     drop_sql := format(
       'ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I',
@@ -145,13 +145,13 @@ BEGIN
       rec.table_schema, rec.table_name, rec.constraint_name,
       rec.column_name,
       rec.table_schema, rec.foreign_table,
-      CASE WHEN is_nullable THEN 'SET NULL' ELSE 'CASCADE' END
+      CASE WHEN v_is_nullable THEN 'SET NULL' ELSE 'CASCADE' END
     );
 
     RAISE NOTICE 'Fixing FK on %.% (→ %): % → %',
       rec.table_name, rec.column_name, rec.foreign_table,
       rec.delete_rule,
-      CASE WHEN is_nullable THEN 'SET NULL' ELSE 'CASCADE' END;
+      CASE WHEN v_is_nullable THEN 'SET NULL' ELSE 'CASCADE' END;
 
     EXECUTE drop_sql;
     EXECUTE add_sql;
