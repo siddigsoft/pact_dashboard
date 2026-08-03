@@ -89,12 +89,29 @@ export default function AccountingTrialBalance() {
     return () => { cancel = true; };
   }, []);
 
-  // Fetch imbalanced-entry count once on mount so the banner can appear immediately
+  // Fetch imbalanced-entry count and keep it live via realtime.
+  // When acct_post_reversal changes an entry's status to 'reversed', the UPDATE
+  // event fires here and we re-count — the banner auto-dismisses with no manual refresh.
   useEffect(() => {
-    supabase
-      .from('vw_imbalanced_journal_entries' as any)
-      .select('id', { count: 'exact', head: true })
-      .then(({ count }) => { if (count !== null) setImbalancedCount(count); });
+    const fetchCount = () => {
+      supabase
+        .from('vw_imbalanced_journal_entries' as any)
+        .select('id', { count: 'exact', head: true })
+        .then(({ count }) => { if (count !== null) setImbalancedCount(count); });
+    };
+
+    fetchCount(); // initial load
+
+    const channel = supabase
+      .channel('tb_imbalance_watch')
+      .on(
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'acct_journal_entries' },
+        () => fetchCount(),
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const runTb = async () => {
