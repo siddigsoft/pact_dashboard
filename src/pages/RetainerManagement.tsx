@@ -459,9 +459,10 @@ const RetainerManagement = () => {
   };
 
   const exportPaymentHistory = () => {
-    const headers = ['Date', 'Period', 'User', 'Email', 'Amount', 'Currency', 'Balance Before', 'Balance After', 'Description'];
+    const headers = ['Date', 'Period', 'User', 'Email', 'Amount', 'Currency', 'Fallback', 'Balance Before', 'Balance After', 'Description'];
     const rows = filteredTransactions.map(t => {
       const user = userNameMap[t.user_id];
+      const isFallback = !!(t.metadata?.base_currency && !t.metadata?.fx_rate);
       return [
         format(new Date(t.created_at), 'yyyy-MM-dd HH:mm'),
         t.metadata?.period || '',
@@ -469,6 +470,7 @@ const RetainerManagement = () => {
         user?.email || '',
         t.amount.toString(),
         t.currency || 'SDG',
+        isFallback ? 'Yes' : 'No',
         t.balance_before?.toString() || '0',
         t.balance_after?.toString() || '0',
         t.description,
@@ -489,6 +491,7 @@ const RetainerManagement = () => {
   const exportPaymentHistoryExcel = () => {
     const rows = filteredTransactions.map(t => {
       const user = userNameMap[t.user_id];
+      const isFallback = !!(t.metadata?.base_currency && !t.metadata?.fx_rate);
       return {
         'Date': format(new Date(t.created_at), 'yyyy-MM-dd HH:mm'),
         'Period': t.metadata?.period || '',
@@ -496,6 +499,7 @@ const RetainerManagement = () => {
         'Email': user?.email || '',
         'Amount': t.amount,
         'Currency': t.currency || 'SDG',
+        'Fallback': isFallback ? 'Yes' : 'No',
         'Balance Before': t.balance_before || 0,
         'Balance After': t.balance_after || 0,
         'Description': t.description,
@@ -1106,8 +1110,13 @@ const RetainerManagement = () => {
                         <TableBody>
                           {filteredTransactions.map(tx => {
                             const user = userNameMap[tx.user_id];
+                            const isFallback = !!(tx.metadata?.base_currency && !tx.metadata?.fx_rate);
                             return (
-                              <TableRow key={tx.id} data-testid={`row-tx-${tx.id}`}>
+                              <TableRow
+                                key={tx.id}
+                                data-testid={`row-tx-${tx.id}`}
+                                className={isFallback ? 'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50' : undefined}
+                              >
                                 <TableCell className="text-sm">
                                   {format(new Date(tx.created_at), 'MMM d, yyyy')}
                                   <span className="block text-xs text-muted-foreground">
@@ -1123,8 +1132,20 @@ const RetainerManagement = () => {
                                     <span className="block text-xs text-muted-foreground">{user?.email || ''}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right font-medium text-sm text-green-600 dark:text-green-400">
-                                  +{formatCurrency(tx.amount, tx.currency || 'SDG')}
+                                <TableCell className="text-right font-medium text-sm">
+                                  <span className="text-green-600 dark:text-green-400">
+                                    +{formatCurrency(tx.amount, tx.currency || 'SDG')}
+                                  </span>
+                                  {isFallback && (
+                                    <span
+                                      className="ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                                      title={`Paid in base currency (${tx.metadata?.base_currency}) — FX rate was unavailable at processing time`}
+                                      data-testid={`badge-fallback-${tx.id}`}
+                                    >
+                                      <AlertTriangle className="h-2.5 w-2.5" />
+                                      Fallback
+                                    </span>
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right text-sm text-muted-foreground">
                                   {formatCurrency(tx.balance_after, tx.currency || 'SDG')}
