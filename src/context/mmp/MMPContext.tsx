@@ -648,7 +648,7 @@ export const useMMPProvider = () => {
 
     if (currentMmpState?.status === 'archived') {
       // Delegate to the archive-aware restore that reads pre_archive_status from workflow
-      return restoreArchivedMMP(id);
+      return restoreArchivedMMP(id, currentUser?.id || 'unknown');
     }
 
     // Default path: restore from deleted status back to pending

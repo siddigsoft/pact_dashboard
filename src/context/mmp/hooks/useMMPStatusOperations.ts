@@ -256,7 +256,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
   );
 
   const restoreArchivedMMP = useCallback(
-    async (id: string) => {
+    async (id: string, restoredBy: string) => {
       const session = await ensureValidSession();
       if (!session.success) {
         toast.error(session.error || 'Session expired. Please refresh and try again.');
@@ -281,11 +281,26 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
         // Restore to the status it had before archiving, defaulting to 'pending'
         const restoreToStatus = existingWorkflow.pre_archive_status || 'pending';
 
-        // Strip archive-specific fields from workflow
+        // Preserve the completed archive+restore cycle in a history array before stripping
         const { pre_archive_status, archived_by, archived_at, ...cleanedWorkflow } = existingWorkflow;
+        const archiveCycleEntry = archived_by
+          ? {
+              archived_by,
+              archived_at: archived_at || null,
+              pre_archive_status: pre_archive_status || null,
+              restored_by: restoredBy,
+              restored_at: timestamp,
+            }
+          : null;
+
         const updatedWorkflow = {
           ...cleanedWorkflow,
+          restored_by: restoredBy,
           restored_at: timestamp,
+          archive_history: [
+            ...(existingWorkflow.archive_history || []),
+            ...(archiveCycleEntry ? [archiveCycleEntry] : []),
+          ],
         };
 
         const { error } = await withTimeout(

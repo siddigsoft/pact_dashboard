@@ -7,6 +7,7 @@ import {
   Download, FileSpreadsheet, Loader2, MapPin, Users,
   CheckCircle2, Clock, AlertCircle, BarChart3, X,
   ShieldAlert, TrendingUp, Activity, FileText, DollarSign, History, Banknote,
+  Archive, RotateCcw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -151,7 +152,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         const [{ data: mmpData }, allEntries] = await Promise.all([
           supabase
             .from('mmp_files')
-            .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, project:projects(name)')
+            .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, workflow, archivedby, archivedat, project:projects(name)')
             .eq('id', mmpId)
             .single(),
           (async () => {
@@ -1352,14 +1353,126 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
               </TabsContent>
 
               {/* ── Tab: Activity ── */}
-              <TabsContent value="activity" className="flex-1 overflow-auto px-5 py-3 mt-0">
+              <TabsContent value="activity" className="flex-1 overflow-auto px-5 py-3 mt-0 space-y-4">
+                {/* ── Lifecycle Events (archive / restore cycles from workflow JSONB) ── */}
+                {(() => {
+                  const wf = (mmp?.workflow as any) || {};
+                  const history: any[] = wf.archive_history || [];
+
+                  // Use DB columns as ground truth for the current archive state.
+                  // workflow.restored_by/restored_at persist across multiple cycles so
+                  // they must NOT be used to infer the current cycle — only archive_history
+                  // (completed cycles) and the live DB archivedby column are authoritative.
+                  const isCurrentlyArchived = !!mmp?.archivedby || mmp?.status === 'archived';
+                  const archivedBy = mmp?.archivedby || wf.archived_by;
+                  const archivedAt = mmp?.archivedat || wf.archived_at;
+
+                  // Completed cycles come from archive_history (source of truth).
+                  const cycles: any[] = [...history];
+
+                  // Open archive cycle: MMP is currently archived and this cycle isn't
+                  // in archive_history yet (archive_history only gets an entry on restore).
+                  if (isCurrentlyArchived && archivedBy) {
+                    cycles.push({
+                      archived_by: archivedBy,
+                      archived_at: archivedAt || null,
+                      pre_archive_status: wf.pre_archive_status || null,
+                      restored_by: null,   // not restored yet
+                      restored_at: null,
+                    });
+                  }
+
+                  // Legacy backward-compat: pre-archive_history restores stored only
+                  // top-level restored_by/restored_at and have no archive_history entry.
+                  // Only surface these when the MMP is NOT currently archived (preventing
+                  // phantom restore rows in archive→restore→archive sequences).
+                  if (
+                    !isCurrentlyArchived &&
+                    wf.restored_by &&
+                    wf.restored_at &&
+                    !history.some((h: any) => h.restored_at === wf.restored_at)
+                  ) {
+                    cycles.push({
+                      archived_by: wf.archived_by || null,
+                      archived_at: wf.archived_at || null,
+                      pre_archive_status: wf.pre_archive_status || null,
+                      restored_by: wf.restored_by,
+                      restored_at: wf.restored_at,
+                    });
+                  }
+
+                  if (cycles.length === 0) return null;
+
+                  return (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2 text-foreground">
+                        <Archive className="h-4 w-4 text-orange-500" />
+                        Archive / Restore History
+                      </h3>
+                      <div className="rounded-xl border border-orange-200 overflow-hidden shadow-sm bg-white">
+                        <table className="w-full text-sm border-separate border-spacing-0">
+                          <thead className="sticky top-0 bg-orange-50 z-10">
+                            <tr>
+                              <TH>Event</TH>
+                              <TH>By (User ID)</TH>
+                              <TH>At</TH>
+                              <TH>Previous Status</TH>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cycles.flatMap((cycle: any, ci: number) => {
+                              const rows = [];
+                              if (cycle.archived_by || cycle.archived_at) {
+                                rows.push(
+                                  <TR key={`arch-${ci}`} i={ci * 2}>
+                                    <td className="px-3 py-2">
+                                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-700 bg-orange-100 border border-orange-200 rounded-full px-2.5 py-0.5">
+                                        <Archive className="h-3 w-3" />Archived
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{cycle.archived_by || '—'}</td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                                      {cycle.archived_at ? format(new Date(cycle.archived_at), 'dd MMM yyyy · HH:mm') : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground capitalize">
+                                      {cycle.pre_archive_status ? cycle.pre_archive_status.replace(/_/g, ' ') : '—'}
+                                    </td>
+                                  </TR>
+                                );
+                              }
+                              if (cycle.restored_by || cycle.restored_at) {
+                                rows.push(
+                                  <TR key={`rest-${ci}`} i={ci * 2 + 1}>
+                                    <td className="px-3 py-2">
+                                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 bg-teal-100 border border-teal-200 rounded-full px-2.5 py-0.5">
+                                        <RotateCcw className="h-3 w-3" />Restored
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{cycle.restored_by || '—'}</td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                                      {cycle.restored_at ? format(new Date(cycle.restored_at), 'dd MMM yyyy · HH:mm') : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground">—</td>
+                                  </TR>
+                                );
+                              }
+                              return rows;
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Audit-log timeline ── */}
                 {financeLoading ? (
                   <div className="flex items-center justify-center py-10">
                     <Loader2 className="h-5 w-5 animate-spin text-teal-600 mr-2" />
                     <span className="text-sm text-muted-foreground">Loading activity…</span>
                   </div>
                 ) : activityLogs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
                     <History className="h-8 w-8 opacity-40" />
                     <p className="text-sm">No activity logs found for this MMP.</p>
                   </div>
