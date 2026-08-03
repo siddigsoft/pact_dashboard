@@ -3200,12 +3200,11 @@ export function ProjectFieldTasksPanel({
     doc.setFontSize(9);
     doc.setTextColor(100);
     doc.text(`Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`, 14, 20);
-    autoTable(doc, {
-      startY: 25,
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [29, 52, 97] },
-      head: [['Title','Status','Priority','Assignee','Start','Due','Location','Est h','Act h','Est $','Act $']],
-      body: filtered.map(t => [
+
+    // Build body rows — task row followed by an optional resource sub-row
+    const pdfBody: any[] = [];
+    for (const t of filtered) {
+      pdfBody.push([
         t.title,
         STATUS_CFG[t.status].label,
         PRIORITY_CFG[t.priority].label,
@@ -3217,10 +3216,90 @@ export function ProjectFieldTasksPanel({
         t.actualHours    != null ? String(t.actualHours)    : '',
         t.estimatedCost  != null ? `$${t.estimatedCost}`   : '',
         t.actualCost     != null ? `$${t.actualCost}`       : '',
-      ]),
+      ]);
+      if (t.resources.length > 0) {
+        const resSummary = t.resources
+          .map(r => `${r.name || r.resourceType} ×${r.quantity}${r.unit ? ' ' + r.unit : ''}`)
+          .join(', ');
+        pdfBody.push([{
+          content: `  ↳ Resources: ${resSummary}`,
+          colSpan: 11,
+          styles: {
+            fontStyle: 'italic' as const,
+            fontSize: 6,
+            textColor: [80, 80, 100] as [number, number, number],
+            fillColor: [245, 247, 252] as [number, number, number],
+            cellPadding: { top: 1, bottom: 1, left: 10, right: 2 },
+          },
+        }]);
+      }
+    }
+
+    autoTable(doc, {
+      startY: 25,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [29, 52, 97] },
+      head: [['Title','Status','Priority','Assignee','Start','Due','Location','Est h','Act h','Est $','Act $']],
+      body: pdfBody,
     });
     doc.save(`${projectName.replace(/\s+/g, '_')}_field_tasks.pdf`);
     toast({ title: 'PDF exported' });
+  };
+
+  const exportExcel = async () => {
+    const { exportStandardExcel } = await import('@/utils/standardExcelExport');
+    const taskRows = filtered.map(t => [
+      t.title,
+      STATUS_CFG[t.status].label,
+      PRIORITY_CFG[t.priority].label,
+      t.assignedToName ?? '',
+      t.startDate ?? '',
+      t.dueDate ?? '',
+      t.stateName ?? '',
+      t.localityName ?? '',
+      t.estimatedHours ?? '',
+      t.actualHours ?? '',
+      t.estimatedCost ?? '',
+      t.actualCost ?? '',
+      (t.notes ?? '').replace(/\n/g, ' '),
+    ]);
+
+    // Collect resource rows for all tasks that have resources
+    const resourceRows: (string | number | null | undefined)[][] = [];
+    for (const t of filtered) {
+      for (const r of t.resources) {
+        resourceRows.push([
+          t.title,
+          r.resourceType.charAt(0).toUpperCase() + r.resourceType.slice(1),
+          r.name,
+          r.quantity,
+          r.unit,
+          r.notes ?? '',
+        ]);
+      }
+    }
+
+    await exportStandardExcel({
+      reportTitle: `Field Tasks — ${projectName}`,
+      subtitleLine: `Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`,
+      filenamePrefix: `${projectName.replace(/\s+/g, '_')}_field_tasks`,
+      mainSheet: {
+        sheetName: 'Tasks',
+        headers: ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'],
+        rows: taskRows,
+        colWidths: { 0: 35, 12: 30 },
+      },
+      ...(resourceRows.length > 0 && {
+        breakdownSheets: [{
+          title: 'Task Resources',
+          sheetName: 'Resources',
+          headers: ['Task Title','Resource Type','Name','Quantity','Unit','Notes'],
+          rows: resourceRows,
+          colWidths: [35, 15, 20, 10, 12, 25],
+        }],
+      }),
+    });
+    toast({ title: 'Excel exported' });
   };
 
   const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!filterMemberId || !!search.trim();
@@ -3304,6 +3383,9 @@ export function ProjectFieldTasksPanel({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={exportPDF}>
                   Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportExcel}>
+                  Export as Excel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
