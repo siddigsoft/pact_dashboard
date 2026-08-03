@@ -1246,18 +1246,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const newBalance = Number((currentBalance + Number(amount)).toFixed(2));
       const newBalances = { ...targetWallet.balances, [currency]: newBalance };
 
-      const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
-      const { error: updateError } = await supabase
-        .from('wallets')
-        .update({
-          balances: newBalances,
-          total_earned: currentTotalEarned + amount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', targetWallet.id);
-
-      if (updateError) throw updateError;
-
+      // Insert the transaction FIRST so the DB unique index (user_id, metadata->>'period')
+      // acts as an atomic gate. If two concurrent calls race here, only one wins;
+      // the loser gets 23505 and returns before ever touching the wallet balance.
+      // This prevents a double-credit where two calls both update the balance but
+      // only one transaction record is created.
       const { data: txData, error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: targetWallet.id,
         user_id: userId,
@@ -1272,7 +1265,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         metadata: { type: 'retainer', period },
       }).select('id').single();
 
-      if (transactionError) throw transactionError;
+      // 23505 = unique_violation: the DB partial unique index fired, meaning
+      // another concurrent call already inserted this retainer. Treat it as
+      // "already processed" and return without error instead of double-crediting.
+      if (transactionError) {
+        if (transactionError.code === '23505') {
+          console.log(`[Wallet] Retainer for user ${userId} period ${period} already exists (concurrent insert blocked by DB constraint).`);
+          return;
+        }
+        throw transactionError;
+      }
+
+      // Transaction insert succeeded — now safely update the wallet balance.
+      const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({
+          balances: newBalances,
+          total_earned: currentTotalEarned + amount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetWallet.id);
+
+      if (updateError) throw updateError;
 
       try {
         await NotificationTriggerService.walletCredited(
