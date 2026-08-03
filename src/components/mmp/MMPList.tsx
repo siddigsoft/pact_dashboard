@@ -780,62 +780,87 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           if (!open) { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              Remove MMP — Choose an action
+        <DialogContent className="max-w-lg w-full">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Remove MMP
             </DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-3 pt-1">
-                <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900 p-3">
-                  <p className="text-sm font-semibold text-green-800 dark:text-green-300 mb-1">✓ Recommended: Archive</p>
-                  <p className="text-sm text-green-700 dark:text-green-400">
+            <DialogDescription className="text-sm text-muted-foreground">
+              Choose how you want to remove this MMP.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Option cards */}
+          <div className="space-y-3 py-2">
+            {/* Archive option */}
+            <div className="rounded-lg border-2 border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+                  <svg className="h-4 w-4 text-green-700 dark:text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-green-800 dark:text-green-200">Recommended: Archive</p>
+                  <p className="mt-1 text-sm text-green-700 dark:text-green-400 leading-relaxed">
                     Hides the MMP from active lists while keeping all site entries, submissions, payments, and audit history fully intact. Recoverable at any time.
                   </p>
                 </div>
-                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-3">
-                  <p className="text-sm font-semibold text-destructive mb-1">⚠ Permanent Delete — blocked if submissions exist</p>
-                  <p className="text-sm text-muted-foreground">
-                    Permanently removes the MMP and all site entries. Will be blocked automatically if any field submissions are linked. Cannot be undone.
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
+                  disabled={archivingId === confirmId}
+                  onClick={async () => {
+                    if (confirmId && authUser?.id) {
+                      setArchivingId(confirmId);
+                      try {
+                        await archiveMMP(confirmId, authUser.id);
+                        toast({ title: 'MMP archived', description: 'The MMP is hidden from active lists. All data is preserved.' });
+                      } catch {
+                        toast({ title: 'Archive failed', description: 'Could not archive the MMP. Try again.', variant: 'destructive' });
+                      } finally {
+                        setArchivingId(null);
+                        setConfirmId(null);
+                        setDeleteStage(0);
+                      }
+                    }
+                  }}
+                >
+                  {archivingId === confirmId ? 'Archiving…' : '✓ Archive MMP'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Delete option */}
+            <div className="rounded-lg border-2 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
+                  <svg className="h-4 w-4 text-red-700 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-red-700 dark:text-red-300">Permanent Delete</p>
+                  <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                    Permanently removes the MMP and all site entries. Automatically blocked if any field submissions are linked. <span className="font-medium text-red-600 dark:text-red-400">Cannot be undone.</span>
                   </p>
                 </div>
               </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button type="button" variant="outline" onClick={() => { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }}>
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="min-w-[140px]"
+                  onClick={() => setDeleteStage(2)}
+                >
+                  Delete permanently →
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }}>
               Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              className="bg-amber-600 hover:bg-amber-700 text-white"
-              disabled={archivingId === confirmId}
-              onClick={async () => {
-                if (confirmId && authUser?.id) {
-                  setArchivingId(confirmId);
-                  try {
-                    await archiveMMP(confirmId, authUser.id);
-                    toast({ title: 'MMP archived', description: 'The MMP is hidden from active lists. All data is preserved.' });
-                  } catch {
-                    toast({ title: 'Archive failed', description: 'Could not archive the MMP. Try again.', variant: 'destructive' });
-                  } finally {
-                    setArchivingId(null);
-                    setConfirmId(null);
-                    setDeleteStage(0);
-                  }
-                }
-              }}
-            >
-              {archivingId === confirmId ? 'Archiving…' : 'Archive MMP'}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setDeleteStage(2)}
-            >
-              Delete permanently →
             </Button>
           </DialogFooter>
         </DialogContent>
