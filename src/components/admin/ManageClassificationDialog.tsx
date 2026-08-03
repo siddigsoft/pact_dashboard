@@ -26,6 +26,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { CalendarIcon, AlertCircle, History, DollarSign } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
   ClassificationLevel,
@@ -79,6 +80,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [fxRateExists, setFxRateExists] = useState<boolean | null>(null);
   
   const [formData, setFormData] = useState<ClassificationFormData>({
     classificationLevel: currentClassification?.classificationLevel || 'C',
@@ -142,6 +144,37 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
       setEffectiveUntilDate(undefined);
     }
   }, [currentClassification, open, userId]);
+
+  // Check whether an exchange rate exists whenever payout currency differs from base
+  useEffect(() => {
+    const fromCurrency = formData.retainerCurrency;
+    const toCurrency = formData.retainerPayoutCurrency;
+
+    if (!formData.hasRetainer || fromCurrency === toCurrency) {
+      setFxRateExists(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('acct_exchange_rates')
+        .select('id')
+        .eq('from_currency', fromCurrency)
+        .eq('to_currency', toCurrency)
+        .limit(1);
+
+      if (cancelled) return;
+      if (error) {
+        console.error('[ClassificationDialog] Exchange rate lookup error:', error);
+        setFxRateExists(null);
+        return;
+      }
+      setFxRateExists(data && data.length > 0);
+    })();
+
+    return () => { cancelled = true; };
+  }, [formData.hasRetainer, formData.retainerCurrency, formData.retainerPayoutCurrency]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,7 +437,15 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                         ))}
                       </SelectContent>
                     </Select>
-                    {formData.retainerPayoutCurrency !== formData.retainerCurrency && (
+                    {formData.retainerPayoutCurrency !== formData.retainerCurrency && fxRateExists === false && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          No exchange rate found for {formData.retainerCurrency} → {formData.retainerPayoutCurrency}. Add one in Exchange Rates before saving, or retainers will fall back to base currency.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {formData.retainerPayoutCurrency !== formData.retainerCurrency && fxRateExists === true && (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
                         Amount is in {formData.retainerCurrency}. At processing time the system will look up the {formData.retainerCurrency} → {formData.retainerPayoutCurrency} rate in Exchange Rates and convert automatically.
                       </p>
