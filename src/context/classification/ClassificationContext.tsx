@@ -142,7 +142,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         has_retainer: data.hasRetainer || false,
         retainer_amount_cents: data.retainerAmountCents || 0,
         retainer_currency: data.retainerCurrency || 'SDG',
-        retainer_payout_currency: (data as any).retainerPayoutCurrency || null,
+        retainer_payout_currency: data.retainerPayoutCurrency || null,
         retainer_frequency: data.retainerFrequency || 'monthly',
         assigned_by: currentUser?.id,
         change_reason: data.changeReason,
@@ -190,7 +190,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       if (data.hasRetainer !== undefined) updateData.has_retainer = data.hasRetainer;
       if (data.retainerAmountCents !== undefined) updateData.retainer_amount_cents = data.retainerAmountCents;
       if (data.retainerCurrency !== undefined) updateData.retainer_currency = data.retainerCurrency;
-      if ((data as any).retainerPayoutCurrency !== undefined) updateData.retainer_payout_currency = (data as any).retainerPayoutCurrency || null;
+      if (data.retainerPayoutCurrency !== undefined) updateData.retainer_payout_currency = data.retainerPayoutCurrency || null;
       if (data.retainerFrequency !== undefined) updateData.retainer_frequency = data.retainerFrequency;
       if (data.changeReason !== undefined) updateData.change_reason = data.changeReason;
       if (data.notes !== undefined) updateData.notes = data.notes;
@@ -303,7 +303,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         has_retainer: data.hasRetainer ?? false,
         retainer_amount_cents: data.retainerAmountCents ?? 0,
         retainer_currency: data.retainerCurrency ?? 'SDG',
-        retainer_payout_currency: (data as any).retainerPayoutCurrency || null,
+        retainer_payout_currency: data.retainerPayoutCurrency || null,
         retainer_frequency: data.retainerFrequency ?? 'monthly',
         assigned_by: currentUser?.id,
         change_reason: data.changeReason,

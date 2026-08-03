@@ -54,7 +54,7 @@ interface WalletContextType {
   updateSiteVisitCost: (costId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, complexityMultiplier?: number) => Promise<void>;
   calculateClassificationFee: (userId: string, complexityMultiplier?: number) => Promise<number>;
-  processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number }>;
+  processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number; fallbackCount: number }>;
   addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
@@ -1269,7 +1269,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true; // monthly / anything else
   };
 
-  const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number }> => {
+  const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number; fallbackCount: number }> => {
     try {
       const now = new Date();
       const currentMonth = now.getMonth() + 1; // 1-based
@@ -1284,7 +1284,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (fetchError) throw fetchError;
 
       if (!eligibleUsers || eligibleUsers.length === 0) {
-        return { processed: 0, failed: 0, total: 0 };
+        return { processed: 0, failed: 0, total: 0, fallbackCount: 0 };
       }
 
       // Only process users whose retainer frequency falls due this month
@@ -1292,6 +1292,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       let processed = 0;
       let failed = 0;
+      let fallbackCount = 0;
 
       for (const user of dueUsers) {
         try {
@@ -1326,22 +1327,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                           user.retainer_payout_currency !== user.retainer_currency;
 
           if (needsFx) {
-            const { data: rateRow } = await supabase
+            // Use the actual processing date so rates entered on 29/30/31 are not missed
+            const todayIso = now.toISOString().slice(0, 10); // YYYY-MM-DD
+            const { data: rateRow, error: rateError } = await supabase
               .from('acct_exchange_rates')
               .select('rate')
               .eq('from_currency', user.retainer_currency)
               .eq('to_currency', user.retainer_payout_currency)
-              .lte('effective_date', currentPeriod + '-28') // last reliable day in any month
+              .lte('effective_date', todayIso)
               .order('effective_date', { ascending: false })
               .limit(1)
               .maybeSingle();
 
+            if (rateError) {
+              // A query failure is a hard error — do not silently fall back
+              throw new Error(
+                `Exchange rate lookup failed for ${user.retainer_currency}→${user.retainer_payout_currency}: ${rateError.message}`
+              );
+            }
+
             if (!rateRow) {
               console.warn(
                 `[Retainers] No exchange rate found for ${user.retainer_currency}→${user.retainer_payout_currency}` +
-                ` on or before ${currentPeriod}-28. Falling back to base currency for user ${user.user_id}.`
+                ` on or before ${todayIso}. Falling back to base currency for user ${user.user_id}.`
               );
               // Fall back: pay in base currency so nobody is skipped silently
+              fallbackCount++;
             } else {
               appliedFxRate   = Number(rateRow.rate);
               payoutAmountCents = Math.round(user.retainer_amount_cents * appliedFxRate);
@@ -1376,7 +1387,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: `Processed ${processed} of ${dueUsers.length} retainers due this month. ${failed} failed.`,
       });
 
-      return { processed, failed, total: dueUsers.length };
+      if (fallbackCount > 0) {
+        toast({
+          title: 'Exchange Rate Warning',
+          description: `${fallbackCount} retainer(s) paid in base currency — no exchange rate found for their payout currency. Please add the rate in Exchange Rates and reprocess.`,
+          variant: 'destructive',
+        });
+      }
+
+      return { processed, failed, total: dueUsers.length, fallbackCount };
     } catch (error: any) {
       console.error('Failed to process monthly retainers:', error);
       toast({

@@ -90,6 +90,7 @@ export interface CurrentUserClassificationRow {
   has_retainer: boolean;
   retainer_amount_cents: number | null;
   retainer_currency: string | null;
+  retainer_payout_currency: string | null;
   retainer_frequency: string | null;
   is_active: boolean;
   effective_from: string | null;
@@ -106,6 +107,7 @@ export interface UserClassificationRow {
   has_retainer: boolean;
   retainer_amount_cents: number | null;
   retainer_currency: string | null;
+  retainer_payout_currency: string | null;
   retainer_frequency: string | null;
   is_active: boolean;
   effective_from: string;

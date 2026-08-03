@@ -174,7 +174,7 @@ const RetainerManagement = () => {
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [showProcessDialog, setShowProcessDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number } | null>(null);
+  const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number; fallbackCount: number } | null>(null);
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
 
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
@@ -366,7 +366,8 @@ const RetainerManagement = () => {
       await fetchData();
       toast({
         title: 'Processing Complete',
-        description: `Processed ${result.processed} of ${result.total} retainers${result.failed > 0 ? ` (${result.failed} failed)` : ''}`,
+        description: `Processed ${result.processed} of ${result.total} retainers${result.failed > 0 ? ` (${result.failed} failed)` : ''}${result.fallbackCount > 0 ? ` — ${result.fallbackCount} paid in base currency (no FX rate found)` : ''}`,
+        variant: result.fallbackCount > 0 ? 'destructive' : 'default',
       });
     } catch (error) {
       console.error('Retainer processing failed:', error);
@@ -1294,6 +1295,15 @@ const RetainerManagement = () => {
                         <span className="font-medium">Processing Complete: </span>
                         Successfully processed {processResult.processed} of {processResult.total} retainers
                         {processResult.failed > 0 && <span className="text-destructive"> ({processResult.failed} failed)</span>}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {processResult && processResult.fallbackCount > 0 && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        <span className="font-medium">{processResult.fallbackCount} retainer(s) paid in base currency</span> — no exchange rate was found for their configured payout currency. Please add the missing rate in Exchange Rates and reprocess to correct these payments.
                       </AlertDescription>
                     </Alert>
                   )}

@@ -22,6 +22,7 @@ function transformUserClassificationFromDB(data: any): UserClassification {
     hasRetainer: data.has_retainer,
     retainerAmountCents: parseInt(data.retainer_amount_cents || 0),
     retainerCurrency: data.retainer_currency,
+    retainerPayoutCurrency: data.retainer_payout_currency ?? undefined,
     retainerFrequency: data.retainer_frequency,
     assignedBy: data.assigned_by,
     changeReason: data.change_reason,

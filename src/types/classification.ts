@@ -20,6 +20,7 @@ export interface UserClassification {
   hasRetainer: boolean;
   retainerAmountCents: number;
   retainerCurrency: string;
+  retainerPayoutCurrency?: string;
   retainerFrequency: RetainerFrequency;
   assignedBy?: string;
   changeReason?: string;
@@ -67,6 +68,7 @@ export interface CreateClassificationRequest {
   hasRetainer?: boolean;
   retainerAmountCents?: number;
   retainerCurrency?: string;
+  retainerPayoutCurrency?: string;
   retainerFrequency?: RetainerFrequency;
   changeReason?: string;
   notes?: string;
@@ -80,6 +82,7 @@ export interface UpdateClassificationRequest {
   hasRetainer?: boolean;
   retainerAmountCents?: number;
   retainerCurrency?: string;
+  retainerPayoutCurrency?: string;
   retainerFrequency?: RetainerFrequency;
   changeReason?: string;
   notes?: string;
