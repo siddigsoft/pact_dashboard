@@ -126,7 +126,7 @@ const Navbar = () => {
 
         return (
                 <div className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
-                        <div className="grid h-16 grid-cols-[auto,1fr,auto] items-center px-4 lg:px-6 gap-4">
+                        <div className="grid h-12 grid-cols-[auto,1fr,auto] items-center px-3 lg:px-4 gap-3">
                                 {/* Brand */}
                                 <div className="flex items-center shrink-0">
                                         <NavBrand />

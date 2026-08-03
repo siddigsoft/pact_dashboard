@@ -79,18 +79,18 @@ export function PageInfoBanner({ title, description, descriptionAr, workflowStep
   const hasArabic = !!descriptionAr;
 
   return (
-    <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 mb-4" data-testid="page-info-banner">
+    <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 mb-2" data-testid="page-info-banner">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <button 
-            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-100/50 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-blue-100/50 dark:hover:bg-blue-900/30 rounded-md transition-colors"
             data-testid="button-toggle-page-info"
           >
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex-1">
+            <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-300 flex-1">
               What does this page do? {hasArabic && <span className="text-blue-500 dark:text-blue-400">/ ماذا تفعل هذه الصفحة؟</span>}
             </span>
-            <ChevronDown className={`h-3.5 w-3.5 text-blue-600 dark:text-blue-400 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+            <ChevronDown className={`h-3 w-3 text-blue-600 dark:text-blue-400 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>

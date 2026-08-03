@@ -145,7 +145,7 @@ const ProjectsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-3 md:p-4 space-y-3">
+    <div className="min-h-screen bg-background p-2.5 md:p-3 space-y-2.5">
       <PageInfoBanner
         title="Projects"
         description="Browse, create, and manage every project in the organization. Each project has its own lifecycle (10 stage flows depending on type), team, budget, milestones, and tasks. Click a project to open its details, advance its stage, edit its team, or archive it. Use the filters to focus on a specific status, type, or hub."
@@ -153,13 +153,13 @@ const ProjectsPage = () => {
       />
       {/* Compact Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
-            <FolderKanban className="h-5 w-5 text-white" />
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
+            <FolderKanban className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold leading-tight">Projects</h1>
-            <p className="text-xs text-muted-foreground">
+            <h1 className="text-base font-semibold leading-tight">Projects</h1>
+            <p className="text-[11px] text-muted-foreground">
               Manage project planning and activities
             </p>
           </div>
@@ -191,7 +191,7 @@ const ProjectsPage = () => {
       <ConnectedPagesBar exclude="projects" include={['analytics', 'portfolio']} />
 
       {/* Condensed Statistics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <GradientStatCard
           title="Total"
           value={projectStats.total}
@@ -233,36 +233,36 @@ const ProjectsPage = () => {
       {/* View toggle + filter bar */}
       <div className="bg-card rounded-md border">
         {/* View toggle row */}
-        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60">
-          <div className="flex items-center gap-1 rounded-md bg-muted p-0.5">
+        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-border/60">
+          <div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
             <Button
               variant={viewMode === 'list' ? 'default' : 'ghost'}
               size="sm"
-              className="h-7 px-2.5 text-xs gap-1.5"
+              className="h-6 px-2 text-xs gap-1"
               onClick={() => handleViewMode('list')}
               data-testid="button-view-list"
             >
-              <LayoutList className="h-3.5 w-3.5" />
+              <LayoutList className="h-3 w-3" />
               List
             </Button>
             <Button
               variant={viewMode === 'board' ? 'default' : 'ghost'}
               size="sm"
-              className="h-7 px-2.5 text-xs gap-1.5"
+              className="h-6 px-2 text-xs gap-1"
               onClick={() => handleViewMode('board')}
               data-testid="button-view-board"
             >
-              <Kanban className="h-3.5 w-3.5" />
+              <Kanban className="h-3 w-3" />
               Board
             </Button>
             <Button
               variant={viewMode === 'timeline' ? 'default' : 'ghost'}
               size="sm"
-              className="h-7 px-2.5 text-xs gap-1.5"
+              className="h-6 px-2 text-xs gap-1"
               onClick={() => handleViewMode('timeline')}
               data-testid="button-view-timeline"
             >
-              <GanttChartSquare className="h-3.5 w-3.5" />
+              <GanttChartSquare className="h-3 w-3" />
               Timeline
             </Button>
           </div>
@@ -329,7 +329,7 @@ const ProjectsPage = () => {
         )}
 
         {/* View content */}
-        <div className="p-3">
+        <div className="p-2.5">
           {viewMode === 'list' && (
             <ProjectList
               projects={projects}

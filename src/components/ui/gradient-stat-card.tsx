@@ -74,22 +74,22 @@ export function GradientStatCard({
       onClick={onClick}
       data-testid={testId}
     >
-      <CardContent className={isSmall ? 'p-3' : 'p-4'}>
-        <div className="flex items-start justify-between gap-3">
+      <CardContent className={isSmall ? 'p-2.5' : 'p-3.5'}>
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <p className={`font-medium text-gray-500 dark:text-gray-400 truncate ${isSmall ? 'text-xs' : 'text-sm'}`}>
+            <p className={`font-medium text-gray-500 dark:text-gray-400 truncate ${isSmall ? 'text-[11px]' : 'text-sm'}`}>
               {title}
             </p>
-            <p className={`font-bold text-gray-900 dark:text-white mt-1 ${isSmall ? 'text-xl' : 'text-2xl'}`}>
+            <p className={`font-bold text-gray-900 dark:text-white mt-0.5 ${isSmall ? 'text-lg' : 'text-2xl'}`}>
               {value}
             </p>
             {subtitle && (
-              <p className={`text-gray-500 dark:text-gray-400 mt-1 ${isSmall ? 'text-[10px]' : 'text-xs'}`}>
+              <p className={`text-gray-500 dark:text-gray-400 mt-0.5 ${isSmall ? 'text-[10px]' : 'text-xs'}`}>
                 {subtitle}
               </p>
             )}
           </div>
-          <div className={`rounded-lg shrink-0 ${iconContainerClass} ${isSmall ? 'p-1.5' : 'p-2'}`}>
+          <div className={`rounded-md shrink-0 ${iconContainerClass} ${isSmall ? 'p-1' : 'p-2'}`}>
             {renderedIcon}
           </div>
         </div>
