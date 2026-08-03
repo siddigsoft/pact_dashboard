@@ -70,7 +70,7 @@ interface RetainerTransaction {
   amount: number;
   currency: string;
   description: string;
-  metadata: { type: string; period: string } | null;
+  metadata: { type: string; period: string; base_currency?: string | null; fx_rate?: number | null } | null;
   balance_before: number;
   balance_after: number;
   created_at: string;
@@ -105,7 +105,7 @@ interface PaymentGridEntry {
   level: string;
   retainerAmount: number;
   currency: string;
-  months: Record<string, { paid: boolean; amount: number; date: string }>;
+  months: Record<string, { paid: boolean; amount: number; date: string; fallback: boolean }>;
 }
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
@@ -187,6 +187,7 @@ const RetainerManagement = () => {
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
   const [fxWarnings, setFxWarnings] = useState<FxWarning[]>([]);
   const [fxCheckLoading, setFxCheckLoading] = useState(false);
+  const [reprocessTargetUserIds, setReprocessTargetUserIds] = useState<string[]>([]);
 
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
   const isAdmin = hasAnyRole(['admin', 'Admin']);
@@ -316,23 +317,39 @@ const RetainerManagement = () => {
         level: eu.classification_level,
         retainerAmount: eu.retainer_amount_cents / 100,
         currency: eu.retainer_currency || 'SDG',
-        months: Object.fromEntries(months.map(m => [m, { paid: false, amount: 0, date: '' }])),
+        months: Object.fromEntries(months.map(m => [m, { paid: false, amount: 0, date: '', fallback: false }])),
       };
     });
 
     transactions.forEach(tx => {
       const period = tx.metadata?.period;
       if (period && grid[tx.user_id] && grid[tx.user_id].months[period] !== undefined) {
+        const isFallback = !!(tx.metadata?.base_currency && !tx.metadata?.fx_rate);
         grid[tx.user_id].months[period] = {
           paid: true,
           amount: tx.amount,
           date: tx.created_at,
+          fallback: isFallback,
         };
       }
     });
 
     return Object.values(grid);
   }, [eligibleUsers, transactions, userNameMap]);
+
+  // Detect fallback-paid members for the current period from already-fetched transactions.
+  // Fallback signature: metadata.base_currency is set AND metadata.fx_rate is absent/null.
+  const persistentFallback = useMemo(() => {
+    const currentPeriod = getCurrentPeriod();
+    const fallbackTxs = transactions.filter(
+      t =>
+        t.metadata?.period === currentPeriod &&
+        t.metadata?.base_currency &&
+        !t.metadata?.fx_rate,
+    );
+    const userIds = [...new Set(fallbackTxs.map(t => t.user_id))];
+    return { count: userIds.length, userIds };
+  }, [transactions]);
 
   const kpis = useMemo(() => {
     const currentPeriod = getCurrentPeriod();
@@ -393,11 +410,11 @@ const RetainerManagement = () => {
   };
 
   const handleReprocess = async () => {
-    if (!processResult || processResult.fallbackUserIds.length === 0) return;
+    if (reprocessTargetUserIds.length === 0) return;
     const period = getCurrentPeriod();
     setReprocessing(true);
     try {
-      const result = await reprocessFallbackRetainers(processResult.fallbackUserIds, period);
+      const result = await reprocessFallbackRetainers(reprocessTargetUserIds, period);
       await fetchData();
       // Use explicit failedUserIds to keep only users that genuinely still need correction
       setProcessResult(prev =>
@@ -832,6 +849,11 @@ const RetainerManagement = () => {
                     {kpis.unpaidThisMonth}
                   </span>
                 )}
+                {persistentFallback.count > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1" title="Wrong-currency payments need correction">
+                    {persistentFallback.count}⚠
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="eligible" className="text-xs sm:text-sm" data-testid="tab-eligible">
                 <Users className="h-4 w-4 mr-1" />Eligible Users
@@ -848,6 +870,29 @@ const RetainerManagement = () => {
             </TabsList>
 
             <TabsContent value="overview" className="mt-4 space-y-4" data-testid="content-overview">
+              {persistentFallback.count > 0 && (
+                <Alert variant="destructive" data-testid="alert-overview-fallback">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span>
+                      <span className="font-medium">{persistentFallback.count} member{persistentFallback.count !== 1 ? 's' : ''} were paid in base currency</span> for {getCurrentPeriod()} — their configured payout currency had no exchange rate at processing time.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => {
+                        setReprocessTargetUserIds(persistentFallback.userIds);
+                        setActiveTab('process');
+                        setShowReprocessDialog(true);
+                      }}
+                      data-testid="button-overview-reprocess"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1.5" />Go to Reprocess
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="pb-3">
@@ -1086,7 +1131,14 @@ const RetainerManagement = () => {
                         Payment Tracking Grid
                         <Badge variant="secondary">{paymentGrid.length} users</Badge>
                       </CardTitle>
-                      <CardDescription>Month-by-month view of retainer payment status per user</CardDescription>
+                      <CardDescription>
+                        Month-by-month view of retainer payment status per user
+                        <span className="ml-3 inline-flex items-center gap-2 text-xs">
+                          <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" />Paid</span>
+                          <span className="inline-flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-amber-500" />Wrong currency</span>
+                          <span className="inline-flex items-center gap-1"><XCircle className="h-3 w-3 text-red-300" />Not paid</span>
+                        </span>
+                      </CardDescription>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={exportTrackingGrid} data-testid="button-export-grid-csv">
@@ -1140,10 +1192,21 @@ const RetainerManagement = () => {
                                   return (
                                     <TableCell key={m} className="text-center">
                                       {status?.paid ? (
-                                        <div className="flex flex-col items-center gap-0.5" data-testid={`grid-cell-paid-${entry.userId}-${m}`}>
-                                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                          <span className="text-[10px] text-muted-foreground">{status.amount.toFixed(0)}</span>
-                                        </div>
+                                        status.fallback ? (
+                                          <div
+                                            className="flex flex-col items-center gap-0.5"
+                                            title="Paid in base currency (FX rate was unavailable)"
+                                            data-testid={`grid-cell-fallback-${entry.userId}-${m}`}
+                                          >
+                                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{status.amount.toFixed(0)}</span>
+                                          </div>
+                                        ) : (
+                                          <div className="flex flex-col items-center gap-0.5" data-testid={`grid-cell-paid-${entry.userId}-${m}`}>
+                                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                            <span className="text-[10px] text-muted-foreground">{status.amount.toFixed(0)}</span>
+                                          </div>
+                                        )
                                       ) : (
                                         <div className="flex justify-center" data-testid={`grid-cell-unpaid-${entry.userId}-${m}`}>
                                           <XCircle className="h-5 w-5 text-red-300 dark:text-red-800" />
@@ -1398,28 +1461,47 @@ const RetainerManagement = () => {
                     </Alert>
                   )}
 
-                  {processResult && processResult.fallbackCount > 0 && (
-                    <Alert variant="destructive">
+                  {/* Persistent fallback alert — shown whenever fallback payments are detected
+                      for the current period, even if the admin navigated away and came back. */}
+                  {persistentFallback.count > 0 && (
+                    <Alert variant="destructive" data-testid="alert-persistent-fallback">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div>
-                            <span className="font-medium">{processResult.fallbackCount} retainer(s) paid in base currency</span> — no exchange rate was found for their configured payout currency. Add the missing rate in Exchange Rates, then click "Reprocess" to correct only these payments.
+                            <span className="font-medium">{persistentFallback.count} retainer{persistentFallback.count !== 1 ? 's' : ''} paid in base currency</span> — no exchange rate was found for their configured payout currency at the time of processing. Add the missing rate in Exchange Rates, then click "Reprocess" to correct only these payments.
                           </div>
                           <Button
                             size="sm"
                             variant="outline"
                             className="shrink-0 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                            onClick={() => setShowReprocessDialog(true)}
+                            onClick={() => {
+                              setReprocessTargetUserIds(persistentFallback.userIds);
+                              setShowReprocessDialog(true);
+                            }}
                             disabled={reprocessing}
                             data-testid="button-reprocess-fallback"
                           >
                             {reprocessing ? (
                               <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" />Reprocessing...</>
                             ) : (
-                              <><RefreshCw className="h-3 w-3 mr-1.5" />Reprocess {processResult.fallbackCount} Payment{processResult.fallbackCount !== 1 ? 's' : ''}</>
+                              <><RefreshCw className="h-3 w-3 mr-1.5" />Reprocess {persistentFallback.count} Payment{persistentFallback.count !== 1 ? 's' : ''}</>
                             )}
                           </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Session-scoped fallback alert (only when processResult has a different count) */}
+                  {processResult && processResult.fallbackCount > 0 && processResult.fallbackCount !== persistentFallback.count && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="font-medium">{processResult.fallbackCount} retainer(s) just paid in base currency</span> — refresh the page or wait a moment for the persistent warning above to update.
+                          </div>
                         </div>
                       </AlertDescription>
                     </Alert>
@@ -1633,14 +1715,14 @@ const RetainerManagement = () => {
               Reprocess Fallback Payments
             </DialogTitle>
             <DialogDescription>
-              This will reverse the base-currency payments and re-issue them in the correct payout currency for {processResult?.fallbackCount ?? 0} member{(processResult?.fallbackCount ?? 0) !== 1 ? 's' : ''}.
+              This will reverse the base-currency payments and re-issue them in the correct payout currency for {reprocessTargetUserIds.length} member{reprocessTargetUserIds.length !== 1 ? 's' : ''}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="border rounded-lg p-3 bg-muted/30 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Members to correct:</span>
-                <span className="font-medium">{processResult?.fallbackCount ?? 0}</span>
+                <span className="font-medium">{reprocessTargetUserIds.length}</span>
               </div>
               <div className="flex justify-between">
                 <span>Period:</span>
