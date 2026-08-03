@@ -56,7 +56,7 @@ interface WalletContextType {
   calculateClassificationFee: (userId: string, complexityMultiplier?: number) => Promise<number>;
   processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number; fallbackCount: number; fallbackUserIds: string[] }>;
   reprocessFallbackRetainers: (userIds: string[], period: string) => Promise<{ reprocessed: number; failed: number; reprocessedUserIds: string[]; failedUserIds: string[] }>;
-  addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
+  addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<'ok' | 'already_processed'>;
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
   adminListWithdrawalRequests: () => Promise<AdminWithdrawalRequest[]>;
@@ -1196,7 +1196,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     period: string,
     baseCurrency?: string,
     fxRate?: number
-  ) => {
+  ): Promise<'ok' | 'already_processed'> => {
     try {
       // credit_retainer_wallet is a SECURITY DEFINER RPC that wraps the
       // transaction insert + wallet balance update in a single DB transaction.
@@ -1224,14 +1224,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         // with message 'already_processed'; surface it the same way.
         if (rpcError.message?.includes('already_processed')) {
           console.log(`[Wallet] Retainer for user ${userId} period ${period} already processed (RPC).`);
-          return;
+          return 'already_processed';
         }
         throw rpcError;
       }
 
       if (rpcResult === 'already_processed') {
         console.log(`[Wallet] Retainer for user ${userId} period ${period} already processed (idempotent).`);
-        return;
+        return 'already_processed';
       }
 
       // 'ok' — credit landed; send notification (best-effort) and refresh cache.
@@ -1249,6 +1249,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await invalidate.invalidateWallet(userId);
         await invalidate.invalidateTransactions(userId);
       }
+
+      return 'ok';
     } catch (error: any) {
       console.error('Failed to add retainer to wallet:', error);
       throw error;
@@ -1292,33 +1294,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const dueUsers = eligibleUsers.filter(u => isRetainerDueThisMonth(u.retainer_frequency, currentMonth));
 
       let processed = 0;
+      let alreadyProcessed = 0;
       let failed = 0;
       let fallbackCount = 0;
       const fallbackUserIds: string[] = [];
 
       for (const user of dueUsers) {
         try {
-          // Transactions are inserted with type='adjustment' + metadata.type='retainer'.
-          // Previously the check used type='retainer' which never matched — meaning
-          // every call to processMonthlyRetainers would re-pay ALL retainers.
-          const { data: existingRetainer, error: checkError } = await supabase
-            .from('wallet_transactions')
-            .select('id')
-            .eq('user_id', user.user_id)
-            .eq('type', 'adjustment')
-            .ilike('description', `%Monthly retainer%`)
-            .ilike('description', `%${currentPeriod}%`)
-            .maybeSingle();
-
-          if (checkError && checkError.code !== 'PGRST116') {
-            throw checkError;
-          }
-
-          if (existingRetainer) {
-            console.log(`Retainer already processed for user ${user.user_id} in ${currentPeriod}`);
-            continue;
-          }
-
           // FX conversion: when a payout currency is configured and differs
           // from the base currency, look up the latest rate and convert.
           let payoutAmountCents = user.retainer_amount_cents;
@@ -1363,7 +1345,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          await addRetainerToWallet(
+          const result = await addRetainerToWallet(
             user.user_id,
             payoutAmountCents,
             payoutCurrency,
@@ -1372,7 +1354,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             appliedFxRate
           );
 
-          processed++;
+          if (result === 'already_processed') {
+            // DB unique index blocked a duplicate — another concurrent run
+            // already paid this user for this period.
+            alreadyProcessed++;
+            console.log(`[Retainers] Skipped duplicate for user ${user.user_id} in ${currentPeriod} (concurrent run already paid).`);
+          } else {
+            processed++;
+          }
         } catch (error: any) {
           console.error(`Failed to process retainer for user ${user.user_id}:`, error);
           failed++;
@@ -1385,9 +1374,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.log(`[Retainers] Skipped ${skippedCount} user(s) whose frequency is not due this month (${currentPeriod}).`);
       }
 
+      const alreadyNote = alreadyProcessed > 0 ? ` ${alreadyProcessed} already paid (concurrent run).` : '';
       toast({
         title: 'Retainer Processing Complete',
-        description: `Processed ${processed} of ${dueUsers.length} retainers due this month. ${failed} failed.`,
+        description: `Processed ${processed} of ${dueUsers.length} retainers due this month. ${failed} failed.${alreadyNote}`,
       });
 
       if (fallbackCount > 0) {
