@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public.asset_depreciation_runs (
 CREATE INDEX IF NOT EXISTS idx_adr_period ON public.asset_depreciation_runs(fiscal_period_id);
 
 ALTER TABLE public.asset_depreciation_runs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Finance can manage depreciation runs" ON public.asset_depreciation_runs;
 CREATE POLICY "Finance can manage depreciation runs"
   ON public.asset_depreciation_runs FOR ALL
   USING (EXISTS (
