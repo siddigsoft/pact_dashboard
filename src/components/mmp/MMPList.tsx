@@ -44,7 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
-import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3 } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle, Pencil, BarChart3, Archive, ArchiveRestore } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
 import MmpFullReportDialog from './MmpFullReportDialog';
 import MMPProgressDialog from './MMPProgressDialog';
@@ -57,7 +57,7 @@ interface MMPListProps {
 
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
-  const { deleteMMPFile, verifyMMP, refreshMMPFiles, archiveMMP } = useMMP();
+  const { deleteMMPFile, verifyMMP, refreshMMPFiles, archiveMMP, restoreMMP, mmpFiles: allMMPFiles } = useMMP();
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const { currentUser, effectiveCurrentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
@@ -82,6 +82,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // Staged delete dialog: stage 0 = closed, 1 = first warning, 2 = type-to-confirm
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  // Archived view state
+  const [showArchived, setShowArchived] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -245,7 +248,23 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     return isVerifiable && !alreadyVerified && isForwarded && (isAdminRole || isFomAssigned);
   };
 
-  if (!mmpFiles.length) {
+  // Archived MMPs are filtered from the parent's mmpFiles prop; read from full context list
+  const archivedMMPs = (allMMPFiles || []).filter((m) => m.status === 'archived');
+
+  const handleRestore = async (mmp: MMPFile) => {
+    if (restoringId) return;
+    setRestoringId(mmp.id);
+    try {
+      await restoreMMP(mmp.id);
+      await refreshMMPFiles();
+    } catch {
+      toast({ title: 'Error', description: 'Failed to restore MMP. Please try again.', variant: 'destructive' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  if (!mmpFiles.length && !archivedMMPs.length) {
     return (
       <Card>
         <CardContent className="p-6 text-center text-muted-foreground">
@@ -257,6 +276,82 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
 
   return (
     <>
+      {/* Archived toggle — Super Admin only, only shown when there are archived MMPs */}
+      {isSuperAdmin && archivedMMPs.length > 0 && (
+        <div className="flex items-center justify-end mb-2">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border transition-colors ${
+              showArchived
+                ? 'border-slate-500 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                : 'border-slate-300 dark:border-slate-600 bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+            }`}
+            data-testid="button-toggle-archived-mmps"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            {showArchived ? 'Hide Archived' : `Show Archived (${archivedMMPs.length})`}
+          </button>
+        </div>
+      )}
+
+      {/* Archived MMPs list */}
+      {showArchived && isSuperAdmin && (
+        <div className="grid gap-3 mb-4">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide px-1">
+            Archived MMPs — {archivedMMPs.length} total
+          </p>
+          {archivedMMPs.map((mmp) => (
+            <Card key={mmp.id} className="border-dashed border-slate-300 dark:border-slate-600 opacity-80">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold truncate">{mmp.name}</h3>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        <Archive className="h-3 w-3" />
+                        Archived
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <span className="font-mono text-blue-700">{mmp.mmpId}</span>
+                      {mmp.hub && <span> • Hub: {mmp.hub}</span>}
+                      {mmp.month && <span> • {mmp.month.includes('-') ? format(new Date(mmp.month + '-01'), 'MMMM yyyy') : new Date(2024, parseInt(mmp.month, 10) - 1).toLocaleDateString('en-US', { month: 'long' })}</span>}
+                    </p>
+                    {(mmp as any).archivedAt && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Archived {format(new Date((mmp as any).archivedAt), 'MMM d, yyyy \'at\' h:mm a')}
+                        {(mmp as any).archivedBy && <span> by {(mmp as any).archivedBy}</span>}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={restoringId === mmp.id}
+                    onClick={() => handleRestore(mmp)}
+                    className="flex items-center gap-1.5 text-xs border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex-shrink-0"
+                    data-testid={`button-restore-mmp-${mmp.id}`}
+                  >
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    {restoringId === mmp.id ? 'Restoring…' : 'Restore'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!mmpFiles.length && !showArchived && (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            No active MMP files.
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4">
         {mmpFiles.map((mmp) => {
           const isForwarded = forwardedMMPs.has(mmp.id);

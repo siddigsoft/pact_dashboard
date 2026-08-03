@@ -197,6 +197,22 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
       try {
         const timestamp = new Date().toISOString();
 
+        // Fetch current MMP to preserve pre-archive status in workflow JSONB
+        const { data: currentMmp } = await supabase
+          .from('mmp_files')
+          .select('status, workflow')
+          .eq('id', id)
+          .single();
+
+        const preArchiveStatus = currentMmp?.status || 'pending';
+        const existingWorkflow = (currentMmp?.workflow as any) || {};
+        const updatedWorkflow = {
+          ...existingWorkflow,
+          pre_archive_status: preArchiveStatus,
+          archived_by: archivedBy,
+          archived_at: timestamp,
+        };
+
         const { error } = await withTimeout(
           (async () => {
             return await supabase
@@ -206,6 +222,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
                 archivedby: archivedBy,
                 archivedat: timestamp,
                 updated_at: timestamp,
+                workflow: updatedWorkflow,
               })
               .eq('id', id);
           })(),
@@ -232,6 +249,81 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
       } catch (error) {
         console.error('Error archiving MMP file:', error);
         toast.error('Failed to archive MMP file');
+        throw error;
+      }
+    },
+    [setMMPFiles]
+  );
+
+  const restoreArchivedMMP = useCallback(
+    async (id: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) {
+        toast.error(session.error || 'Session expired. Please refresh and try again.');
+        throw new Error(session.error || 'Session expired');
+      }
+
+      try {
+        const timestamp = new Date().toISOString();
+
+        // Fetch current MMP to read the pre-archive status from workflow JSONB
+        const { data: currentMmp, error: fetchError } = await supabase
+          .from('mmp_files')
+          .select('workflow, status')
+          .eq('id', id)
+          .single();
+
+        if (fetchError) {
+          console.error('Error fetching MMP for restore:', fetchError);
+        }
+
+        const existingWorkflow = (currentMmp?.workflow as any) || {};
+        // Restore to the status it had before archiving, defaulting to 'pending'
+        const restoreToStatus = existingWorkflow.pre_archive_status || 'pending';
+
+        // Strip archive-specific fields from workflow
+        const { pre_archive_status, archived_by, archived_at, ...cleanedWorkflow } = existingWorkflow;
+        const updatedWorkflow = {
+          ...cleanedWorkflow,
+          restored_at: timestamp,
+        };
+
+        const { error } = await withTimeout(
+          (async () => {
+            return await supabase
+              .from('mmp_files')
+              .update({
+                status: restoreToStatus,
+                archivedby: null,
+                archivedat: null,
+                updated_at: timestamp,
+                workflow: updatedWorkflow,
+              })
+              .eq('id', id);
+          })(),
+          15000,
+          'Restore MMP timed out'
+        );
+
+        if (error) {
+          console.error('Supabase restore MMP error:', error);
+          toast.error('Database update failed');
+          throw error;
+        }
+
+        // Update local state after successful DB write
+        setMMPFiles((prev: MMPFile[]) =>
+          (prev || []).map((mmp) =>
+            mmp.id === id
+              ? { ...mmp, status: restoreToStatus as MMPFile['status'], archivedBy: undefined, archivedAt: undefined }
+              : mmp
+          )
+        );
+
+        toast.success(`MMP restored to ${restoreToStatus} status`);
+      } catch (error) {
+        console.error('Error restoring MMP file:', error);
+        toast.error('Failed to restore MMP file');
         throw error;
       }
     },
@@ -349,6 +441,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
   return {
     verifyMMP,
     archiveMMP,
+    restoreArchivedMMP,
     approveMMP,
     rejectMMP,
   };

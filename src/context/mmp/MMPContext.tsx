@@ -101,7 +101,7 @@ export const useMMPProvider = () => {
     deleteMMPFile,
   } = useMMPOperations(mmpFiles, setMMPFiles);
 
-  const { verifyMMP, archiveMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
+  const { verifyMMP, archiveMMP, restoreArchivedMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
   const { updateMMPVersion } = useMMPVersioning(setMMPFiles);
   const { uploadMMP } = useMMPUpload(addMMPFile);
 
@@ -643,6 +643,15 @@ export const useMMPProvider = () => {
       throw new Error(session.error || 'Session expired. Please refresh and try again.');
     }
 
+    // Find the MMP to determine which restore path to use
+    const currentMmpState = (mmpFiles || []).find((m) => m.id === id);
+
+    if (currentMmpState?.status === 'archived') {
+      // Delegate to the archive-aware restore that reads pre_archive_status from workflow
+      return restoreArchivedMMP(id);
+    }
+
+    // Default path: restore from deleted status back to pending
     setMMPFiles((prev: MMPFile[]) =>
       prev.map((mmp) => (mmp.id === id && mmp.status === 'deleted' ? { ...mmp, status: 'pending', deletedAt: undefined, deletedBy: undefined } : mmp))
     );
