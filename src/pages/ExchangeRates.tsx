@@ -73,7 +73,7 @@ export default function ExchangeRates() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('exchange_rates')
+        .from('acct_exchange_rates')
         .select('*')
         .order('fetched_at', { ascending: false })
         .limit(100);
@@ -105,7 +105,7 @@ export default function ExchangeRates() {
       rateDate.setHours(12, 0, 0, 0);
 
       const { data: existing } = await supabase
-        .from('exchange_rates')
+        .from('acct_exchange_rates')
         .select('id')
         .eq('source_bank', newRate.source_bank)
         .eq('rate_type', newRate.rate_type)
@@ -115,7 +115,7 @@ export default function ExchangeRates() {
 
       if (existing) {
         const { error: updateError } = await supabase
-          .from('exchange_rates')
+          .from('acct_exchange_rates')
           .update({
             usd_to_sdg: parseFloat(newRate.usd_to_sdg),
             fetched_at: rateDate.toISOString(),
@@ -127,7 +127,7 @@ export default function ExchangeRates() {
         toast.success('Exchange rate updated');
       } else {
         const { error: insertError } = await supabase
-          .from('exchange_rates')
+          .from('acct_exchange_rates')
           .insert({
             source_bank: newRate.source_bank,
             rate_type: newRate.rate_type,
@@ -159,7 +159,7 @@ export default function ExchangeRates() {
     try {
       setSaving(true);
       const { error } = await supabase
-        .from('exchange_rates')
+        .from('acct_exchange_rates')
         .update({ usd_to_sdg: editValue })
         .eq('id', id);
 
@@ -177,7 +177,7 @@ export default function ExchangeRates() {
   const handleDeleteRate = async (id: string) => {
     try {
       const { error } = await supabase
-        .from('exchange_rates')
+        .from('acct_exchange_rates')
         .delete()
         .eq('id', id);
 
@@ -192,7 +192,7 @@ export default function ExchangeRates() {
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
-        .from('exchange_rates')
+        .from('acct_exchange_rates')
         .update({ is_active: !currentStatus })
         .eq('id', id);
 
