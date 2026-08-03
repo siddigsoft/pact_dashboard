@@ -6,6 +6,7 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { Loader2, DollarSign, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 export function RetainerProcessingCard() {
   const { processMonthlyRetainers } = useWallet();
@@ -13,6 +14,7 @@ export function RetainerProcessingCard() {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ processed: number; failed: number; total: number } | null>(null);
   const [eligibleCount, setEligibleCount] = useState<number | null>(null);
+  const [alreadyPaidCount, setAlreadyPaidCount] = useState<number | null>(null);
   const [loadingEligible, setLoadingEligible] = useState(false);
 
   const getCurrentPeriod = () => {
@@ -23,9 +25,25 @@ export function RetainerProcessingCard() {
   const loadEligibleUsers = async () => {
     setLoadingEligible(true);
     try {
-      const users = await getCurrentUserClassifications();
+      const currentPeriod = getCurrentPeriod();
+
+      // Fetch eligible classifications and already-paid transactions in parallel
+      const [users, { data: paidRows }] = await Promise.all([
+        getCurrentUserClassifications(),
+        supabase
+          .from('wallet_transactions')
+          .select('user_id')
+          .eq('type', 'adjustment')
+          .ilike('description', `%Monthly retainer%`)
+          .ilike('description', `%${currentPeriod}%`),
+      ]);
+
       const eligible = users.filter(u => u.hasRetainer && u.isActive);
+      const paidUserIds = new Set((paidRows ?? []).map((r: any) => r.user_id));
+      const alreadyPaid = eligible.filter(u => paidUserIds.has(u.userId)).length;
+
       setEligibleCount(eligible.length);
+      setAlreadyPaidCount(alreadyPaid);
     } catch (error) {
       console.error('Failed to load eligible users:', error);
     } finally {
@@ -46,6 +64,11 @@ export function RetainerProcessingCard() {
       setProcessing(false);
     }
   };
+
+  const pendingCount = eligibleCount !== null && alreadyPaidCount !== null
+    ? eligibleCount - alreadyPaidCount
+    : null;
+  const allPaid = pendingCount !== null && pendingCount <= 0;
 
   return (
     <Card data-testid="card-retainer-processing">
@@ -68,10 +91,29 @@ export function RetainerProcessingCard() {
 
       <CardContent className="space-y-4">
         {eligibleCount !== null && (
-          <Alert>
+          <Alert variant={allPaid ? 'default' : 'default'}>
             <Users className="h-4 w-4" />
             <AlertDescription>
-              {eligibleCount} team members are currently eligible for monthly retainers
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="font-medium">{eligibleCount} eligible</span>
+                {alreadyPaidCount !== null && (
+                  <>
+                    <span className="text-green-600 dark:text-green-400">
+                      ✓ {alreadyPaidCount} already paid this month
+                    </span>
+                    {pendingCount !== null && pendingCount > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+                        {pendingCount} pending payment
+                      </span>
+                    )}
+                    {allPaid && (
+                      <span className="text-muted-foreground">
+                        — all retainers processed for {getCurrentPeriod()}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -112,6 +154,7 @@ export function RetainerProcessingCard() {
 
       <CardFooter className="flex gap-2">
         <Button
+          type="button"
           onClick={loadEligibleUsers}
           variant="outline"
           disabled={loadingEligible || processing}
@@ -131,14 +174,26 @@ export function RetainerProcessingCard() {
         </Button>
 
         <Button
+          type="button"
           onClick={handleProcessRetainers}
-          disabled={processing}
+          disabled={processing || allPaid}
           data-testid="button-process-retainers"
+          variant={allPaid ? 'outline' : 'default'}
         >
           {processing ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Processing...
+            </>
+          ) : allPaid ? (
+            <>
+              <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+              All retainers already paid this month
+            </>
+          ) : pendingCount !== null && pendingCount > 0 ? (
+            <>
+              <DollarSign className="h-4 w-4 mr-2" />
+              Process {pendingCount} Retainer{pendingCount !== 1 ? 's' : ''}
             </>
           ) : (
             <>
