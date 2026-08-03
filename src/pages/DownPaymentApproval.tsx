@@ -453,7 +453,9 @@ export default function DownPaymentApproval() {
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
-  const [duplicateBannerDismissed, setDuplicateBannerDismissed] = useState(false);
+  // Persisted dismissal: keyed by sorted site names so a new duplicate re-shows the banner.
+  const LS_BANNER_KEY = 'dp_dup_banner_dismissed_key';
+  const [dismissedDupKey, setDismissedDupKey] = useState<string>(() => localStorage.getItem(LS_BANNER_KEY) ?? '');
 
   const [searchParams] = useSearchParams();
   const cycleContextMmpName = searchParams.get('mmpName') || undefined;
@@ -493,6 +495,14 @@ export default function DownPaymentApproval() {
       .filter(g => g.count > 1)
       .sort((a, b) => b.count - a.count);
   }, [requests]);
+
+  // Stable fingerprint of the current duplicate set — changes whenever a new site
+  // joins or leaves, which causes the banner to reappear even if it was dismissed.
+  const duplicateKey = useMemo(
+    () => duplicateSites.map(s => s.siteName).sort().join('|'),
+    [duplicateSites],
+  );
+  const duplicateBannerDismissed = duplicateKey !== '' && duplicateKey === dismissedDupKey;
 
   // ── disbursement tracker specific filters ─────────────────────────────────
   const [disbState, setDisbState] = useState('all');
@@ -1002,7 +1012,10 @@ export default function DownPaymentApproval() {
               variant="ghost"
               size="sm"
               className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 shrink-0"
-              onClick={() => setDuplicateBannerDismissed(true)}
+              onClick={() => {
+                localStorage.setItem(LS_BANNER_KEY, duplicateKey);
+                setDismissedDupKey(duplicateKey);
+              }}
               data-testid="button-dismiss-duplicate-banner"
               aria-label="Dismiss"
             >
