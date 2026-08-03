@@ -32,6 +32,8 @@ export interface MMPContextType {
   addMMPFile: (mmp: MMPFile) => void;
   updateMMPFile: (mmp: MMPFile) => void | Promise<void>;
   deleteMMPFile: (id: string) => Promise<boolean>;
+  unlinkAndDeleteMMPFile: (id: string) => Promise<{ unlinked: { downPayments: number; costSubmissions: number }; deleted: boolean }>;
+  getMMPLinkedCounts: (id: string) => Promise<{ downPayments: number; costSubmissions: number }>;
   getMMPById: (id: string) => MMPFile | undefined;
   getMmpById: (id: string) => MMPFile | undefined;
   getPermitsByMmpId: (id: string) => Promise<any | undefined>;
