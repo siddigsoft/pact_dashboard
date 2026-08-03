@@ -780,19 +780,22 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKeyEarly = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    // ── Dedup guard: prevent duplicate notifications for same event+entity within 5 min ──
+    // ── Dedup guard: prevent duplicate notifications for same event+entity+message within 5 min ──
+    // Include message_en so distinct file uploads / comments on the same project are not suppressed.
     if (entity_id && supabaseUrl && serviceRoleKeyEarly && recipient_ids.length > 0) {
       try {
         const sbCheck = createClient(supabaseUrl, serviceRoleKeyEarly)
         const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-        const { data: recent } = await sbCheck
+        let q = sbCheck
           .from('notifications')
           .select('id')
           .eq('event_type', event_type)
           .eq('entity_id', entity_id)
+          .eq('message_en', message_en)
           .in('recipient_id', recipient_ids.slice(0, 10))
           .gte('created_at', fiveMinAgo)
           .limit(1)
+        const { data: recent } = await q
         if (recent?.length) {
           return new Response(
             JSON.stringify({ success: true, deduped: true, count: 0, reason: 'Duplicate suppressed within 5-minute window' }),
