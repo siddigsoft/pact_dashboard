@@ -87,8 +87,15 @@ interface EligibleUser {
   has_retainer: boolean;
   retainer_amount_cents: number;
   retainer_currency: string;
+  retainer_payout_currency?: string;
   retainer_frequency: string;
   is_active: boolean;
+}
+
+interface FxWarning {
+  fromCurrency: string;
+  toCurrency: string;
+  affectedUsers: Array<{ name: string; email: string }>;
 }
 
 interface PaymentGridEntry {
@@ -178,6 +185,8 @@ const RetainerManagement = () => {
   const [showReprocessDialog, setShowReprocessDialog] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
+  const [fxWarnings, setFxWarnings] = useState<FxWarning[]>([]);
+  const [fxCheckLoading, setFxCheckLoading] = useState(false);
 
   const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
   const isAdmin = hasAnyRole(['admin', 'Admin']);
@@ -584,6 +593,64 @@ const RetainerManagement = () => {
     exportToExcel(rows, 'Monthly Retainer Summary', `retainer-monthly-summary-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     toast({ title: 'Export Complete', description: 'Monthly summary has been exported to Excel' });
   };
+
+  // Pre-flight: check that every FX pair needed by active retainer users has a
+  // rate configured in acct_exchange_rates.  Runs whenever the "process" tab is
+  // active so the admin sees the warning before they click the button.
+  const checkExchangeRates = useCallback(async () => {
+    const fxUsers = eligibleUsers.filter(
+      u => u.retainer_payout_currency && u.retainer_payout_currency !== u.retainer_currency,
+    );
+    if (fxUsers.length === 0) {
+      setFxWarnings([]);
+      return;
+    }
+
+    setFxCheckLoading(true);
+    try {
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      // Group users by their from→to pair
+      const pairMap = new Map<string, EligibleUser[]>();
+      fxUsers.forEach(u => {
+        const key = `${u.retainer_currency}|${u.retainer_payout_currency}`;
+        if (!pairMap.has(key)) pairMap.set(key, []);
+        pairMap.get(key)!.push(u);
+      });
+
+      const warnings: FxWarning[] = [];
+      for (const [pairKey, users] of pairMap.entries()) {
+        const [fromCurrency, toCurrency] = pairKey.split('|');
+        const { data: rateRow } = await supabase
+          .from('acct_exchange_rates')
+          .select('rate')
+          .eq('from_currency', fromCurrency)
+          .eq('to_currency', toCurrency)
+          .lte('effective_date', todayIso)
+          .order('effective_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!rateRow) {
+          warnings.push({
+            fromCurrency,
+            toCurrency,
+            affectedUsers: users.map(u => ({ name: u.full_name || u.email, email: u.email })),
+          });
+        }
+      }
+      setFxWarnings(warnings);
+    } catch (err) {
+      console.error('[RetainerManagement] FX pre-flight check failed:', err);
+    } finally {
+      setFxCheckLoading(false);
+    }
+  }, [eligibleUsers]);
+
+  useEffect(() => {
+    if (activeTab === 'process' && eligibleUsers.length > 0) {
+      checkExchangeRates();
+    }
+  }, [activeTab, eligibleUsers, checkExchangeRates]);
 
   if (!canManage) {
     return (
@@ -1488,6 +1555,36 @@ const RetainerManagement = () => {
                           )}
                         </div>
 
+                        {/* FX pre-flight warning — shown whenever one or more pairs lack a rate */}
+                        {fxCheckLoading && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="fx-check-loading">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Checking exchange rates…
+                          </div>
+                        )}
+                        {!fxCheckLoading && fxWarnings.length > 0 && (
+                          <Alert variant="destructive" data-testid="alert-fx-missing">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>
+                              <p className="font-medium mb-1">
+                                Missing exchange rate{fxWarnings.length !== 1 ? 's' : ''} — {fxWarnings.reduce((s, w) => s + w.affectedUsers.length, 0)} member{fxWarnings.reduce((s, w) => s + w.affectedUsers.length, 0) !== 1 ? 's' : ''} will fall back to base currency if you proceed
+                              </p>
+                              <ul className="space-y-1.5 mt-2">
+                                {fxWarnings.map(w => (
+                                  <li key={`${w.fromCurrency}-${w.toCurrency}`} className="text-sm">
+                                    <span className="font-semibold">{w.fromCurrency} → {w.toCurrency}</span>
+                                    {' — '}
+                                    {w.affectedUsers.map(u => u.name).join(', ')}
+                                  </li>
+                                ))}
+                              </ul>
+                              <p className="text-xs mt-2 opacity-80">
+                                Add the missing rate in Exchange Rates, then refresh this page before processing — or proceed and use "Reprocess" afterwards.
+                              </p>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
                         <div className="border-t pt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">
@@ -1620,6 +1717,23 @@ const RetainerManagement = () => {
                     <span className="font-bold text-green-700 dark:text-green-400">{formatCurrency(pendingTotalAmt)}</span>
                   </div>
                 </div>
+                {fxWarnings.length > 0 && (
+                  <Alert variant="destructive" data-testid="dialog-alert-fx-missing">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      <p className="font-medium mb-1">Exchange rate missing for {fxWarnings.length} pair{fxWarnings.length !== 1 ? 's' : ''}:</p>
+                      <ul className="space-y-0.5">
+                        {fxWarnings.map(w => (
+                          <li key={`${w.fromCurrency}-${w.toCurrency}`}>
+                            <span className="font-semibold">{w.fromCurrency} → {w.toCurrency}</span>
+                            {' — '}
+                            {w.affectedUsers.map(u => u.name).join(', ')} will be paid in base currency
+                          </li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <Alert>
                   <AlertDescription className="text-sm">
                     Retainer amounts will be added to each due member's wallet. Already-paid and not-yet-due members are automatically skipped — no duplicates.
