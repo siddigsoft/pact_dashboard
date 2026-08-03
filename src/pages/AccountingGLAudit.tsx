@@ -352,6 +352,19 @@ export default function AccountingGLAudit() {
       || (e.error_message ?? '').toLowerCase().includes(q);
   });
 
+  const exportIntegrity = () => {
+    const rows = imbalanced.map(e => ({
+      'Posting Date':  e.posting_date ? format(parseISO(e.posting_date), 'yyyy-MM-dd') : '',
+      'Description':   e.description_en ?? '',
+      'Source Type':   e.source_type ?? '',
+      'DR Total':      Number(e.sum_dr),
+      'CR Total':      Number(e.sum_cr),
+      'Difference':    Number(e.imbalance),
+      'Entry ID':      e.id,
+    }));
+    exportToExcel(rows, 'Balance Integrity', `Balance_Integrity_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const exportLog = () => {
     const rows = filteredLog.map(e => ({
       'Source Module':   TABLE_LABELS[e.source_table] ?? e.source_table,
@@ -700,10 +713,17 @@ export default function AccountingGLAudit() {
                 Posted journal entries where DR ≠ CR (pre-constraint data). Fix each one by posting a reversal entry.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={loadIntegrity} disabled={integrityLoading} data-testid="button-refresh-integrity">
-              {integrityLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-              Refresh
-            </Button>
+            <div className="flex gap-2">
+              {imbalanced.length > 0 && (
+                <Button variant="outline" size="sm" onClick={exportIntegrity} data-testid="button-export-integrity">
+                  <Download className="w-4 h-4 mr-1" /> Export
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={loadIntegrity} disabled={integrityLoading} data-testid="button-refresh-integrity">
+                {integrityLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {integrityLoading && !integrityLoaded ? (
