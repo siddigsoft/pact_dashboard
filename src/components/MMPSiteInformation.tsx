@@ -60,7 +60,11 @@ export const MMPSiteInformation: React.FC<MMPSiteInformationProps> = ({
           </div>
           <div>
             <p className="text-sm font-medium">Status</p>
-            <p className="text-sm text-muted-foreground">{mmpFile?.status || 'N/A'}</p>
+            <p className="text-sm text-muted-foreground capitalize">
+              {mmpFile?.status
+                ? mmpFile.status.replace(/_/g, ' ').replace(/\s*\d+$/, '').trim()
+                : 'N/A'}
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium">Total Sites</p>
