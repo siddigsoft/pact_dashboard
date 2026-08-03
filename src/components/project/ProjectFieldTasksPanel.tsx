@@ -2102,6 +2102,19 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
               Blocking: {blockingCount}
             </span>
           )}
+          {task.resources.length > 0 && (
+            <span
+              title={(() => {
+                const names = task.resources.map(r => r.name).filter(Boolean);
+                if (names.length <= 3) return names.join(', ');
+                return names.slice(0, 3).join(', ') + ` +${names.length - 3} more`;
+              })()}
+              className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+            >
+              <Package className="h-2.5 w-2.5" />
+              {task.resources.length} resource{task.resources.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
         {/* Meta row */}
