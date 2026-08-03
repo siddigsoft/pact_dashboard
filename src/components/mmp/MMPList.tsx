@@ -57,7 +57,8 @@ interface MMPListProps {
 
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
-  const { deleteMMPFile, verifyMMP, refreshMMPFiles } = useMMP();
+  const { deleteMMPFile, verifyMMP, refreshMMPFiles, archiveMMP } = useMMP();
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const { currentUser, effectiveCurrentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
   const { mmpBudgets } = useBudget();
@@ -572,7 +573,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
       </Dialog>
 
       {/* Staged Delete Confirmation Dialog — Super Admin only */}
-      {/* Stage 1: Impact warning */}
+      {/* Stage 1: Archive-first warning */}
       <Dialog
         open={confirmId !== null && deleteStage === 1}
         onOpenChange={open => {
@@ -581,37 +582,60 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              Permanently Delete MMP?
+            <DialogTitle className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Remove MMP — Choose an action
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-3 pt-1">
-                <p className="text-sm text-muted-foreground">
-                  This is a <strong>Super Admin</strong> action that <strong>cannot be undone</strong>. The following data will be permanently removed:
-                </p>
-                <ul className="text-sm space-y-1 pl-4 list-disc text-muted-foreground">
-                  <li>The MMP file record and all metadata</li>
-                  <li>All site entries linked to this MMP</li>
-                  <li>All attached documents and stored files</li>
-                  <li>All site visit records linked to this MMP</li>
-                  <li>All site visit costs linked to this MMP's entries</li>
-                  <li>Audit history for this MMP</li>
-                </ul>
-                <p className="text-sm font-medium text-destructive">Down payment requests will have their MMP reference cleared but will not be deleted.</p>
+                <div className="rounded-md border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900 p-3">
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-300 mb-1">✓ Recommended: Archive</p>
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    Hides the MMP from active lists while keeping all site entries, submissions, payments, and audit history fully intact. Recoverable at any time.
+                  </p>
+                </div>
+                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-3">
+                  <p className="text-sm font-semibold text-destructive mb-1">⚠ Permanent Delete — blocked if submissions exist</p>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently removes the MMP and all site entries. Will be blocked automatically if any field submissions are linked. Cannot be undone.
+                  </p>
+                </div>
               </div>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={() => { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }}>
               Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={archivingId === confirmId}
+              onClick={async () => {
+                if (confirmId && authUser?.id) {
+                  setArchivingId(confirmId);
+                  try {
+                    await archiveMMP(confirmId, authUser.id);
+                    toast({ title: 'MMP archived', description: 'The MMP is hidden from active lists. All data is preserved.' });
+                  } catch {
+                    toast({ title: 'Archive failed', description: 'Could not archive the MMP. Try again.', variant: 'destructive' });
+                  } finally {
+                    setArchivingId(null);
+                    setConfirmId(null);
+                    setDeleteStage(0);
+                  }
+                }
+              }}
+            >
+              {archivingId === confirmId ? 'Archiving…' : 'Archive MMP'}
             </Button>
             <Button
               type="button"
               variant="destructive"
               onClick={() => setDeleteStage(2)}
             >
-              I understand — proceed to confirm →
+              Delete permanently →
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -113,6 +113,53 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     try {
       return await withTimeout(
         (async () => {
+          // ── SAFETY GUARD ────────────────────────────────────────────────────
+          // Block permanent delete when ANY field submissions are linked to this
+          // MMP. Permanently deleting an MMP with active submissions destroys the
+          // audit trail and orphans all requests (exactly the July 2026 incident).
+          // Admins must use "Archive MMP" instead — it hides the MMP while keeping
+          // all linked data intact and recoverable.
+          try {
+            // 1a. Check via site entries → down_payment_requests
+            const { data: entryIds } = await supabase
+              .from('mmp_site_entries')
+              .select('id')
+              .eq('mmp_file_id', id);
+            if (entryIds && entryIds.length > 0) {
+              const ids = entryIds.map((e: any) => e.id as string);
+              const { data: linkedDPs } = await supabase
+                .from('down_payment_requests')
+                .select('id')
+                .in('mmp_site_entry_id', ids)
+                .limit(1);
+              if (linkedDPs && linkedDPs.length > 0) {
+                toast.error(
+                  'This MMP has linked field submissions and cannot be permanently deleted. ' +
+                  'Use "Archive MMP" instead to preserve the full submission history.'
+                );
+                return false;
+              }
+            }
+            // 1b. Check operational_cost_submissions directly
+            const { data: linkedCosts } = await supabase
+              .from('operational_cost_submissions')
+              .select('id')
+              .eq('mmp_id', id)
+              .limit(1);
+            if (linkedCosts && linkedCosts.length > 0) {
+              toast.error(
+                'This MMP has linked cost submissions and cannot be permanently deleted. ' +
+                'Use "Archive MMP" instead to preserve the full submission history.'
+              );
+              return false;
+            }
+          } catch (guardErr) {
+            console.warn('[MMP Delete] Safety guard check failed — blocking delete as a precaution:', guardErr);
+            toast.error('Could not verify submission links. Delete blocked for safety. Use Archive instead.');
+            return false;
+          }
+          // ── END SAFETY GUARD ────────────────────────────────────────────────
+
           // Get MMP details before deletion for audit logging
           const mmpToDelete = mmpFiles.find(m => m.id === id);
           const mmpName = mmpToDelete?.name || mmpToDelete?.mmpId || 'Unknown MMP';

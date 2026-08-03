@@ -329,6 +329,33 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
         setProgressStage('Removing existing sites for selected area...');
         setProgress(10);
 
+        // Guard: refuse to delete site entries that have linked down-payment requests.
+        // This prevents partial-update "delete by state/hub" from orphaning active submissions.
+        for (const st of selectedStates) {
+          let scopeQuery = supabase
+            .from('mmp_site_entries')
+            .select('id')
+            .eq('mmp_file_id', mmpId)
+            .eq('state', st);
+          if (selectedHub) scopeQuery = scopeQuery.eq('hub_office', selectedHub);
+          if (selectedLocality) scopeQuery = scopeQuery.eq('locality', selectedLocality);
+          const { data: scopedEntries } = await scopeQuery;
+          if (scopedEntries && scopedEntries.length > 0) {
+            const scopedIds = scopedEntries.map((e: any) => e.id as string);
+            const { data: linked } = await supabase
+              .from('down_payment_requests')
+              .select('id')
+              .in('mmp_site_entry_id', scopedIds)
+              .limit(1);
+            if (linked && linked.length > 0) {
+              throw new Error(
+                `Cannot remove site entries for "${st}" — they have linked down-payment submissions. ` +
+                'Remove or reassign those submissions first.'
+              );
+            }
+          }
+        }
+
         for (const st of selectedStates) {
           let deleteQuery = supabase
             .from('mmp_site_entries')
