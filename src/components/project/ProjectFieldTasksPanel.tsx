@@ -2102,19 +2102,53 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
               Blocking: {blockingCount}
             </span>
           )}
-          {task.resources.length > 0 && (
-            <span
-              title={(() => {
-                const names = task.resources.map(r => r.name).filter(Boolean);
-                if (names.length <= 3) return names.join(', ');
-                return names.slice(0, 3).join(', ') + ` +${names.length - 3} more`;
-              })()}
-              className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-            >
-              <Package className="h-2.5 w-2.5" />
-              {task.resources.length} resource{task.resources.length !== 1 ? 's' : ''}
-            </span>
-          )}
+          {task.resources.length > 0 && (() => {
+            // Sum quantities per type; order matters for display
+            const TYPE_ORDER: ResourceType[] = ['vehicle', 'equipment', 'material', 'people', 'other'];
+            const TYPE_META: Record<ResourceType, { Icon: typeof Truck; label: string; plural: string; chipCls: string }> = {
+              vehicle:   { Icon: Truck,          label: 'vehicle',   plural: 'vehicles',  chipCls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+              equipment: { Icon: Wrench,         label: 'equipment', plural: 'equipment', chipCls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' },
+              material:  { Icon: Package,        label: 'material',  plural: 'materials', chipCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+              people:    { Icon: PersonStanding, label: 'person',    plural: 'people',    chipCls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' },
+              other:     { Icon: Layers,         label: 'other',     plural: 'others',    chipCls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+            };
+            const groups = TYPE_ORDER
+              .map(type => ({
+                type,
+                qty: task.resources.filter(r => r.resourceType === type).reduce((s, r) => s + (r.quantity || 1), 0),
+              }))
+              .filter(g => g.qty > 0);
+            const tooltip = task.resources.map(r => r.name).filter(Boolean).join(', ');
+
+            if (groups.length === 1) {
+              // Single type — show labelled chip
+              const g = groups[0];
+              const { Icon, label, plural, chipCls } = TYPE_META[g.type];
+              return (
+                <span title={tooltip}
+                  className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${chipCls}`}>
+                  <Icon className="h-2.5 w-2.5" />
+                  {g.qty} {g.qty === 1 ? label : plural}
+                </span>
+              );
+            }
+            // Multiple types — compact icon+count segments inside one pill
+            return (
+              <span title={tooltip}
+                className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {groups.map((g, i) => {
+                  const { Icon } = TYPE_META[g.type];
+                  return (
+                    <span key={g.type} className="flex items-center gap-0.5">
+                      {i > 0 && <span className="opacity-40">·</span>}
+                      <Icon className="h-2.5 w-2.5" />
+                      {g.qty}
+                    </span>
+                  );
+                })}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Meta row */}
