@@ -159,17 +159,17 @@ BEGIN
         CONTINUE;
       END IF;
 
+      -- Insert as DRAFT first, then lines, then UPDATE to posted (required by INSERT guard trigger)
       INSERT INTO public.acct_journal_entries(
         period_id, posting_date, description_en, source_type, source_id,
-        status, posted_at, idempotency_key
+        status, idempotency_key
       ) VALUES(
         v_period.id,
         v_txn.created_at::date,
         'Pre-Fund Disbursement: ' || COALESCE(v_txn.description, v_txn.id::text),
         'prefunding',
         v_txn.id::text,
-        'posted',
-        now(),
+        'draft',
         'pf_' || v_txn.id::text
       )
       RETURNING id INTO v_entry_id;
@@ -182,6 +182,9 @@ BEGIN
          COALESCE(v_txn.currency,'SDG'), 'SDG', 1, 'Pre-fund disbursement'),
         (v_entry_id, 2, v_cash_acct, 'CR', v_txn.amount, v_txn.amount,
          COALESCE(v_txn.currency,'SDG'), 'SDG', 1, 'Pre-fund cash reduction');
+
+      -- Transition to posted — triggers DEFERRED balance check at COMMIT
+      UPDATE public.acct_journal_entries SET status = 'posted', posted_at = now() WHERE id = v_entry_id;
 
       INSERT INTO public.acct_gl_bridge_log(source_table,source_id,event_type,status,journal_entry_id)
       VALUES('pre_fund_transactions', v_txn.id::text, 'disbursement', 'success', v_entry_id);
@@ -258,17 +261,17 @@ BEGIN
         CONTINUE;
       END IF;
 
+      -- Insert as DRAFT first, then lines, then UPDATE to posted
       INSERT INTO public.acct_journal_entries(
         period_id, posting_date, description_en, source_type, source_id,
-        status, posted_at, idempotency_key
+        status, idempotency_key
       ) VALUES(
         v_period.id,
         COALESCE(v_run.processed_at, v_run.created_at)::date,
         'Payroll Run: ' || COALESCE(v_run.period_label, v_run.id::text),
         'payroll',
         v_run.id::text,
-        'posted',
-        now(),
+        'draft',
         'pr_' || v_run.id::text
       )
       RETURNING id INTO v_entry_id;
@@ -283,6 +286,8 @@ BEGIN
         (v_entry_id, 2, v_pay_acct, 'CR', v_run.total_amount, v_run.total_amount,
          COALESCE(v_run.currency,'SDG'), 'SDG', 1,
          'Net pay accrual — ' || COALESCE(v_run.period_label,''));
+
+      UPDATE public.acct_journal_entries SET status = 'posted', posted_at = now() WHERE id = v_entry_id;
 
       INSERT INTO public.acct_gl_bridge_log(source_table,source_id,event_type,status,journal_entry_id)
       VALUES('payroll_runs', v_run.id::text, 'payroll_cost', 'success', v_entry_id);
@@ -351,13 +356,14 @@ BEGIN
         CONTINUE;
       END IF;
 
+      -- Insert as DRAFT first, then lines, then UPDATE to posted
       INSERT INTO public.acct_journal_entries(
         period_id, posting_date, description_en, source_type, source_id,
-        status, posted_at, idempotency_key
+        status, idempotency_key
       ) VALUES(
         v_period.id, now()::date,
         'EOSB Accrual: ' || v_row.period,
-        'eosb_accrual', v_row.id::text, 'posted', now(),
+        'eosb_accrual', v_row.id::text, 'draft',
         'eosb_' || v_row.id::text
       )
       RETURNING id INTO v_entry_id;
@@ -370,6 +376,8 @@ BEGIN
          COALESCE(v_row.currency,'SDG'), 'SDG', 1, 'EOSB accrual expense'),
         (v_entry_id, 2, v_prov_acct, 'CR', v_row.accrued_amount, v_row.accrued_amount,
          COALESCE(v_row.currency,'SDG'), 'SDG', 1, 'EOSB provision increase');
+
+      UPDATE public.acct_journal_entries SET status = 'posted', posted_at = now() WHERE id = v_entry_id;
 
       INSERT INTO public.acct_gl_bridge_log(source_table,source_id,event_type,status,journal_entry_id)
       VALUES('eosb_accrual', v_row.id::text, 'accrual', 'success', v_entry_id);

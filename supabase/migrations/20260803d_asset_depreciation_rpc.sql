@@ -206,18 +206,17 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- ── Post journal entry ────────────────────────────────────────────────
+      -- ── Post journal entry (draft-then-post for INSERT guard compatibility) ──
       INSERT INTO public.acct_journal_entries(
         period_id, posting_date, description_en, source_type, source_id,
-        status, posted_at, idempotency_key
+        status, idempotency_key
       ) VALUES(
         v_period.id,
         v_period.end_date,   -- post on last day of period
         'Depreciation: ' || v_asset.name || ' (' || v_period.period_label || ')',
         'asset_depreciation',
         v_asset.id::text,
-        'posted',
-        now(),
+        'draft',
         v_idem_key
       )
       RETURNING id INTO v_entry_id;
@@ -232,6 +231,11 @@ BEGIN
         (v_entry_id, 2, v_acc_acct, 'CR', v_period_charge, v_period_charge,
          v_asset.currency, 'SDG', 1,
          'Accumulated depreciation — ' || v_asset.name);
+
+      -- Transition to posted — triggers DEFERRED balance check at COMMIT
+      UPDATE public.acct_journal_entries
+         SET status = 'posted', posted_at = now()
+       WHERE id = v_entry_id;
 
       -- ── Update accumulated depreciation on the asset ──────────────────────
       UPDATE public.unified_assets
