@@ -75,6 +75,13 @@ function resolveTeamMemberRoleLabel(team: Project['team'] | undefined | null, us
   return 'Team Member';
 }
 
+/** Resolve a display name for a user within a project's team object. */
+function resolveTeamMemberName(team: Project['team'] | undefined | null, userId: string): string {
+  const composition = Array.isArray((team as any)?.teamComposition) ? (team as any).teamComposition : [];
+  const match = composition.find((m: any) => m?.userId === userId);
+  return match?.name ?? userId;
+}
+
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -254,8 +261,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     projectId: string,
     projectName: string,
     affectedCount: number,
+    memberNames: string[],
   ) => {
     if (!currentUser?.id || affectedCount <= 0) return;
+    const uniqueNames = Array.from(new Set(memberNames.filter(Boolean)));
+    const memberList = uniqueNames.length > 0 ? uniqueNames.slice(0, 3).join(', ') : 'team member(s)';
+    const hasMore = uniqueNames.length > 3 ? ` (+${uniqueNames.length - 3} more)` : '';
     const titleEn = action === 'added'
       ? `Team update saved: ${projectName}`
       : `Team removal saved: ${projectName}`;
@@ -263,8 +274,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ? `تم حفظ تحديث الفريق: ${projectName}`
       : `تم حفظ إزالة من الفريق: ${projectName}`;
     const messageEn = action === 'added'
-      ? `You added ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} to project "${projectName}".`
-      : `You removed ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} from project "${projectName}".`;
+      ? `You added ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} (${memberList}${hasMore}) to project "${projectName}".`
+      : `You removed ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} (${memberList}${hasMore}) from project "${projectName}".`;
     const messageAr = action === 'added'
       ? `قمت بإضافة ${affectedCount} ${affectedCount !== 1 ? 'أعضاء' : 'عضو'} إلى فريق مشروع "${projectName}".`
       : `قمت بإزالة ${affectedCount} ${affectedCount !== 1 ? 'أعضاء' : 'عضو'} من فريق مشروع "${projectName}".`;
@@ -452,7 +463,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             metadata: { project_name: projectName, role: roleLabel },
           }).catch(() => {});
         });
-        notifyActorTeamChange('added', updatedProject.id, projectName, newMemberIds.length);
+        notifyActorTeamChange(
+          'added',
+          updatedProject.id,
+          projectName,
+          newMemberIds.length,
+          newMemberIds.map(id => resolveTeamMemberName(updatedProject.team, id)),
+        );
       }
 
       const removedMemberIds = Array.from(previousMemberIds).filter(
@@ -474,7 +491,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           triggeredByName: currentUser?.fullName ?? undefined,
           metadata: { project_name: projectName },
         }).catch(() => {});
-        notifyActorTeamChange('removed', updatedProject.id, projectName, removedMemberIds.length);
+        notifyActorTeamChange(
+          'removed',
+          updatedProject.id,
+          projectName,
+          removedMemberIds.length,
+          removedMemberIds.map(id => resolveTeamMemberName(existingProject?.team, id)),
+        );
       }
     } catch (err) {
       console.error("Error updating project:", err);
@@ -536,7 +559,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             metadata: { project_name: projectName, role: roleLabel },
           }).catch(() => {});
         });
-        notifyActorTeamChange('added', projectId, projectName, newMemberIds.length);
+        notifyActorTeamChange(
+          'added',
+          projectId,
+          projectName,
+          newMemberIds.length,
+          newMemberIds.map(id => resolveTeamMemberName(team, id)),
+        );
       }
 
       // ── Notify removed team members (in-app + email) ───────────────────────
@@ -560,7 +589,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           triggeredByName: currentUser?.fullName ?? undefined,
           metadata: { project_name: projectName },
         }).catch(() => {});
-        notifyActorTeamChange('removed', projectId, projectName, removedMemberIds.length);
+        notifyActorTeamChange(
+          'removed',
+          projectId,
+          projectName,
+          removedMemberIds.length,
+          removedMemberIds.map(id => resolveTeamMemberName(existingProject?.team, id)),
+        );
       }
 
       // ── Notify members whose role changed (in-app + email) ─────────────────
