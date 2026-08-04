@@ -65,6 +65,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useActivityDeadlines } from '@/services/projectDeadlines';
 
 interface ProjectData {
   id: string;
@@ -156,7 +157,7 @@ export const ProjectManagerZone: React.FC = () => {
       try {
         let query = supabase
           .from('projects')
-          .select('*')
+          .select('id, name, project_code, status, start_date, end_date, budget, team, created_at')
           .order('created_at', { ascending: false });
 
         if (!isAdminOrSuperUser && userProjectIds.length > 0) {
@@ -227,7 +228,7 @@ export const ProjectManagerZone: React.FC = () => {
           });
         }
 
-        const pendingMMPs = mmpFiles?.filter(m => m.status === 'pending' || m.status === 'submitted') || [];
+        const pendingMMPs = mmpFiles?.filter(m => m.status === 'pending') || [];
         pendingMMPs.forEach(mmp => {
           approvals.push({
             id: mmp.id,
@@ -236,7 +237,7 @@ export const ProjectManagerZone: React.FC = () => {
             description: `Project: ${mmp.projectName || 'Not assigned'}`,
             projectId: mmp.projectId,
             projectName: mmp.projectName,
-            requestedAt: mmp.createdAt || new Date().toISOString(),
+            requestedAt: mmp.uploadedAt || new Date().toISOString(),
             priority: 'medium',
             status: 'pending'
           });
@@ -297,9 +298,19 @@ export const ProjectManagerZone: React.FC = () => {
     return { totalBudget, totalSpent, remaining, utilizationRate, count: filtered.length };
   }, [projectBudgets, selectedProject]);
 
+  const deadlineProjectIds = useMemo(
+    () => projects.map((p) => p.id).filter(Boolean),
+    [projects]
+  );
+  const { data: activityDeadlineRows = [] } = useActivityDeadlines(
+    deadlineProjectIds,
+    deadlineProjectIds.length > 0
+  );
+
   const deadlines = useMemo((): DeadlineItem[] => {
     const items: DeadlineItem[] = [];
     const now = new Date();
+    const nameById = new Map(projects.map((p) => [p.id, p.name]));
 
     projects.forEach(project => {
       if (project.end_date) {
@@ -319,33 +330,30 @@ export const ProjectManagerZone: React.FC = () => {
           status
         });
       }
+    });
 
-      if (Array.isArray(project.activities)) {
-        project.activities.forEach((activity: any) => {
-          if (activity.endDate) {
-            const endDate = new Date(activity.endDate);
-            const daysUntil = differenceInDays(endDate, now);
-            let status: DeadlineItem['status'] = 'upcoming';
-            if (daysUntil < 0) status = 'overdue';
-            else if (daysUntil <= 7) status = 'due_soon';
-            else if (activity.status === 'completed') status = 'completed';
+    activityDeadlineRows.forEach((activity) => {
+      if (!activity.end_date) return;
+      const endDate = new Date(activity.end_date);
+      const daysUntil = differenceInDays(endDate, now);
+      let status: DeadlineItem['status'] = 'upcoming';
+      if (daysUntil < 0) status = 'overdue';
+      else if (daysUntil <= 7) status = 'due_soon';
+      else if (activity.status === 'completed') status = 'completed';
 
-            items.push({
-              id: activity.id,
-              title: activity.name,
-              dueDate: activity.endDate,
-              projectName: project.name,
-              type: 'activity',
-              status
-            });
-          }
-        });
-      }
+      items.push({
+        id: activity.id,
+        title: activity.title || 'Activity',
+        dueDate: activity.end_date,
+        projectName: nameById.get(activity.project_id) || 'Project',
+        type: 'activity',
+        status,
+      });
     });
 
     items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     return items;
-  }, [projects]);
+  }, [projects, activityDeadlineRows]);
 
   const overdueCount = deadlines.filter(d => d.status === 'overdue').length;
   const dueSoonCount = deadlines.filter(d => d.status === 'due_soon').length;

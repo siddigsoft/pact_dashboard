@@ -91,6 +91,12 @@ export const queryKeys = {
     lists: () => [...queryKeys.signatures.all, 'list'] as const,
     pending: () => [...queryKeys.signatures.all, 'pending'] as const,
   },
+
+  projects: {
+    all: ['projects'] as const,
+    deadlines: (projectIds: string[]) =>
+      [...queryKeys.projects.all, 'deadlines', projectIds] as const,
+  },
 } as const;
 
 export type QueryKeyFactory = typeof queryKeys;

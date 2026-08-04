@@ -17,6 +17,7 @@ export const mmpQueryKeys = {
   siteEntryCounts: () => [...mmpQueryKeys.all, 'siteEntryCounts'] as const,
   coordinatorSiteEntries: (userId: string | null) => [...mmpQueryKeys.all, 'coordinatorSiteEntries', userId] as const,
   supervisorSiteEntries: () => [...mmpQueryKeys.all, 'supervisorSiteEntries'] as const,
+  siteEntriesForMmp: (mmpId: string) => [...mmpQueryKeys.all, 'siteEntries', mmpId] as const,
 };
 
 export const defaultSiteEntryCounts: SiteEntryCounts = {

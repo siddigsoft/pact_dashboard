@@ -56,7 +56,7 @@ const MMPDetailView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, archiveMMP, deleteMMPFile, approveMMP, rejectMMP } = useAppContext();
-  const { resetMMP, getMmpById, updateMMP, loading: mmpContextLoading } = useMMP();
+  const { resetMMP, getMmpById, updateMMP, loading: mmpContextLoading, fetchSiteEntriesForMMP } = useMMP();
   const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -202,18 +202,11 @@ const MMPDetailView = () => {
         setSiteEntriesDB([]);
         return;
       }
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('*')
-        .eq('mmp_file_id', id);
-      if (error) {
-        console.error('Failed to load mmp_site_entries:', error);
-        return;
-      }
-      setSiteEntriesDB(data || []);
+      const entries = await fetchSiteEntriesForMMP(id);
+      setSiteEntriesDB(entries || []);
     };
     loadSiteEntries();
-  }, [id, mmpFile?.siteEntries?.length]);
+  }, [id, mmpFile?.siteEntries?.length, fetchSiteEntriesForMMP]);
 
   // EARLY RETURNS - After all hooks
   if (!canRead) {
