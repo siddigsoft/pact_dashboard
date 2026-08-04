@@ -1,7 +1,8 @@
 import { createContext, useContext, useRef, useEffect, ReactNode, useMemo } from 'react';
+import { useUser } from '@/context/user/UserContext';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useUser } from '@/context/user/UserContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
@@ -64,19 +65,23 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
   const invalidate = useInvalidateBudgetQueries();
+  const budgetScopeActive = useIsDataScopeActive('budget');
+  const budgetsEnabled = !!currentUser && budgetScopeActive;
 
-  const projectBudgetsQuery = useProjectBudgetsQuery(!!currentUser);
-  const mmpBudgetsQuery = useMMPBudgetsQuery(!!currentUser);
-  const transactionsQuery = useBudgetTransactionsQuery(!!currentUser);
-  const alertsQuery = useBudgetAlertsQuery(!!currentUser);
+  const projectBudgetsQuery = useProjectBudgetsQuery(budgetsEnabled);
+  const mmpBudgetsQuery = useMMPBudgetsQuery(budgetsEnabled);
+  const transactionsQuery = useBudgetTransactionsQuery(budgetsEnabled);
+  const alertsQuery = useBudgetAlertsQuery(budgetsEnabled);
 
   const projectBudgets = projectBudgetsQuery.data ?? [];
   const mmpBudgets = mmpBudgetsQuery.data ?? [];
   const budgetTransactions = transactionsQuery.data ?? [];
   const budgetAlerts = alertsQuery.data ?? [];
 
-  const loading = projectBudgetsQuery.isLoading || mmpBudgetsQuery.isLoading ||
-    transactionsQuery.isLoading || alertsQuery.isLoading;
+  const loading = budgetsEnabled && (
+    projectBudgetsQuery.isLoading || mmpBudgetsQuery.isLoading ||
+    transactionsQuery.isLoading || alertsQuery.isLoading
+  );
 
   const stats: BudgetStats | null = useMemo(() => {
     const totalBudget = projectBudgets.reduce((sum, b) => sum + b.totalBudgetCents, 0);
@@ -598,7 +603,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !budgetScopeActive) return;
 
     const channel = supabase
       .channel('budget_changes')
@@ -642,7 +647,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser]);
+  }, [currentUser, budgetScopeActive]);
 
   const value: BudgetContextType = {
     projectBudgets,

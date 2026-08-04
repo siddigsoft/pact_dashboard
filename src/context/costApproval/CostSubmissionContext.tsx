@@ -9,6 +9,7 @@ import React, { createContext, useContext, ReactNode, useEffect, useRef } from '
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
 import {
@@ -118,6 +119,7 @@ interface CostSubmissionProviderProps {
 export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ children }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const costsScopeActive = useIsDataScopeActive('costs');
 
   const invalidateDebounceRef = useRef<number | null>(null);
   const scheduleCostInvalidations = () => {
@@ -133,6 +135,8 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   };
 
   useEffect(() => {
+    if (!costsScopeActive) return;
+
     const channel = supabase
       .channel('cost_flow_changes')
       .on(
@@ -164,7 +168,7 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
         invalidateDebounceRef.current = null;
       }
     };
-  }, []);
+  }, [costsScopeActive]);
 
   // Query hook: All submissions
   const useAllSubmissions = (enabled: boolean = true) => {

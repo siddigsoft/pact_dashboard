@@ -56,7 +56,7 @@ export interface SupportingDocument {
 
 export interface ApprovalAuditEntry {
   id: string;
-  action: 'created' | 'supervisor_approved' | 'supervisor_rejected' | 'admin_approved' | 'admin_rejected' | 'payment_processed' | 'amount_modified' | 'cancelled' | 'restored' | 'receipt_confirmed' | 'request_edited';
+  action: 'created' | 'supervisor_approved' | 'supervisor_rejected' | 'admin_approved' | 'admin_rejected' | 'payment_processed' | 'amount_modified' | 'cancelled' | 'restored' | 'receipt_confirmed' | 'receipt_not_received' | 'notification_resent' | 'request_edited';
   performedBy: string;
   performedByName?: string;
   performedByRole?: string;
