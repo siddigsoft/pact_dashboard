@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MMPFile } from '@/types';
+import { exportMMPPaymentReport } from '@/utils/mmpPaymentReportExport';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -859,68 +860,32 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                 </div>
               </div>
 
-              {/* Finance Payment Report — shown when linked payments exist */}
+              {/* Blocked notice when linked payments exist */}
               {paymentDetails.length > 0 && (
-                <div className="rounded-md border border-red-300 bg-white dark:bg-red-950/30 overflow-hidden">
-                  <div className="bg-red-100 dark:bg-red-900/40 px-3 py-2 flex items-center gap-2">
-                    <svg className="h-4 w-4 text-red-700 dark:text-red-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zm0-10.5A9.75 9.75 0 1 1 2.25 12 9.75 9.75 0 0 1 12 2.25z"/></svg>
-                    <p className="text-xs font-semibold text-red-800 dark:text-red-200">
-                      Blocked — {paymentDetails.length} linked payment{paymentDetails.length !== 1 ? 's' : ''} must be cleared by Finance first
-                    </p>
-                  </div>
-                  <div className="p-2">
-                    <p className="text-xs text-muted-foreground mb-2 px-1">
-                      Share this report with Finance. Once all payments below are handled, return here and the system will re-check.
-                    </p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-red-100 dark:border-red-800">
-                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Type</th>
-                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Reference</th>
-                            <th className="text-right py-1 px-2 font-medium text-muted-foreground">Amount</th>
-                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Status</th>
-                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paymentDetails.map((p: any) => {
-                            const isPaid = ['paid', 'approved'].includes(p.status?.toLowerCase());
-                            const statusColor = isPaid
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                              : p.status === 'rejected'
-                              ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
-                            return (
-                              <tr key={p.id} className="border-b border-red-50 dark:border-red-900/50 last:border-0">
-                                <td className="py-1.5 px-2 text-muted-foreground">
-                                  {p.type === 'advance' ? '💰 Advance' : '📋 Cost'}
-                                </td>
-                                <td className="py-1.5 px-2 font-medium max-w-[120px] truncate" title={p.reference}>
-                                  {p.reference || '—'}
-                                </td>
-                                <td className="py-1.5 px-2 text-right font-mono">
-                                  {p.amount > 0 ? `${Number(p.amount).toLocaleString()} ${p.currency}` : '—'}
-                                </td>
-                                <td className="py-1.5 px-2">
-                                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColor}`}>
-                                    {p.status || 'pending'}
-                                  </span>
-                                </td>
-                                <td className="py-1.5 px-2 text-muted-foreground">
-                                  {p.date ? new Date(p.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                <div className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 px-3 py-2.5">
+                  <svg className="mt-0.5 h-4 w-4 text-red-600 dark:text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zm0-10.5A9.75 9.75 0 1 1 2.25 12 9.75 9.75 0 0 1 12 2.25z"/></svg>
+                  <p className="text-xs text-red-800 dark:text-red-200 leading-relaxed">
+                    <span className="font-semibold">Blocked — {paymentDetails.length} linked payment{paymentDetails.length !== 1 ? 's' : ''}</span> must be cleared by Finance.
+                    Export the report, share it with Finance, and return once all payments are handled.
+                  </p>
                 </div>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-2">
+                {paymentDetails.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/40"
+                    onClick={() => {
+                      const mmp = allMMPFiles.find(m => m.id === confirmId);
+                      exportMMPPaymentReport(mmp?.name ?? mmp?.id ?? 'MMP', paymentDetails);
+                    }}
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                    Export Report
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="destructive"
