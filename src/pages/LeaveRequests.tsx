@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   format, parseISO, isValid, differenceInCalendarDays,
@@ -29,23 +29,16 @@ import { useRestrictedAction } from '@/hooks/useRestrictedAction';
 import { PageAccessDenied } from '@/components/access/PageAccessDenied';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { cn } from '@/lib/utils';
+import {
+  DEFAULT_LEAVE_ENTITLEMENT,
+  useInvalidateLeaveQueries,
+  useLeaveEntitlementQuery,
+  useLeaveRequestsQuery,
+  type LeaveEntitlement,
+  type LeaveRequestRow,
+} from '@/hooks/useLeaveRequests';
 
-interface LeaveRequest {
-  id: string;
-  user_id: string;
-  leave_type: string;
-  start_date: string;
-  end_date: string;
-  days_count: number;
-  reason: string | null;
-  status: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  reviewer_notes: string | null;
-  created_at: string;
-  user_name?: string;
-  reviewer_name?: string;
-}
+type LeaveRequest = LeaveRequestRow;
 
 const LEAVE_TYPES = [
   { value: 'annual',    label: 'Annual Leave',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40' },
@@ -79,15 +72,7 @@ interface EmployeeReviewProfile {
 }
 interface ReviewBalance { [type: string]: { used: number; total: number; remaining: number } }
 
-interface LeaveEntitlement {
-  annual_days: number;
-  sick_days: number;
-  emergency_days: number;
-  maternity_days: number;
-  paternity_days: number;
-  unpaid_days: number;
-}
-const DEFAULT_ENTITLEMENT: LeaveEntitlement = { annual_days: 21, sick_days: 14, emergency_days: 5, maternity_days: 90, paternity_days: 5, unpaid_days: 30 };
+const DEFAULT_ENTITLEMENT = DEFAULT_LEAVE_ENTITLEMENT;
 
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 0;
@@ -106,11 +91,49 @@ export default function LeaveRequests() {
   const { hasAnyRole } = useAuthorization();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
   const { check: checkLeaveWrite, perms: leavePerms } = useRestrictedAction('leave');
+  const invalidateLeave = useInvalidateLeaveQueries();
 
-  const [requests, setRequests] = useState<LeaveRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [entitlement, setEntitlement] = useState<LeaveEntitlement>(DEFAULT_ENTITLEMENT);
-  const [entitlementLoading, setEntitlementLoading] = useState(false);
+  const leaveQuery = useLeaveRequestsQuery(currentUser?.id, isAdmin, !!currentUser?.id);
+  const entitlementQuery = useLeaveEntitlementQuery(currentUser?.id, !!currentUser?.id);
+
+  const requests = leaveQuery.data?.requests ?? [];
+  const loading = leaveQuery.isLoading;
+  const entitlement = entitlementQuery.data ?? DEFAULT_ENTITLEMENT;
+  const entitlementLoading = entitlementQuery.isLoading;
+  const glLogMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const src = leaveQuery.data?.glLogBySourceId ?? {};
+    Object.entries(src).forEach(([k, v]) => map.set(k, v));
+    return map;
+  }, [leaveQuery.data?.glLogBySourceId]);
+
+  const load = useCallback(async () => {
+    await invalidateLeave();
+  }, [invalidateLeave]);
+
+  // Debounced realtime invalidation — avoids refetch storms on bulk leave updates.
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const channel = supabase
+      .channel(`leave-requests-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leave_requests' },
+        () => {
+          if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+          realtimeDebounceRef.current = setTimeout(() => {
+            void invalidateLeave();
+          }, 1500);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    };
+  }, [currentUser?.id, invalidateLeave]);
+
   const [showBalance, setShowBalance] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -125,78 +148,6 @@ export default function LeaveRequests() {
   const [reviewProfileLoading, setReviewProfileLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
-  const [glLogMap, setGlLogMap] = useState<Map<string, string>>(new Map());
-
-  const load = async () => {
-    setLoading(true);
-    const query = isAdmin
-      ? supabase.from('leave_requests').select('*').order('created_at', { ascending: false })
-      : supabase.from('leave_requests').select('*').eq('user_id', currentUser?.id).order('created_at', { ascending: false });
-
-    const { data: reqs } = await query;
-    const userIds = [...new Set((reqs || []).map((r: any) => r.user_id).concat((reqs || []).map((r: any) => r.reviewed_by).filter(Boolean)))];
-
-    let profileMap: Record<string, string> = {};
-    if (userIds.length > 0) {
-      const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds);
-      (profiles || []).forEach((p: any) => { profileMap[p.id] = p.full_name; });
-    }
-
-    const mappedReqs = (reqs || []).map((r: any) => ({
-      ...r,
-      user_name: profileMap[r.user_id] || 'Unknown',
-      reviewer_name: r.reviewed_by ? profileMap[r.reviewed_by] || null : null,
-    }));
-    setRequests(mappedReqs);
-
-    if (isAdmin && mappedReqs.length > 0) {
-      const approvedIds = mappedReqs.filter((r: any) => r.status === 'approved').map((r: any) => r.id);
-      if (approvedIds.length > 0) {
-        const { data: logData } = await supabase
-          .from('acct_gl_bridge_log' as any)
-          .select('source_id, status')
-          .eq('source_table', 'leave_requests')
-          .in('source_id', approvedIds)
-          .order('created_at', { ascending: false });
-        const map = new Map<string, string>();
-        for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
-          if (!map.has(row.source_id)) map.set(row.source_id, row.status);
-        }
-        setGlLogMap(map);
-      }
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, [currentUser?.id]);
-
-  // Realtime: refresh approval queue when leave_requests change anywhere.
-  // Lets managers/HR see new pending items appear without manual refresh.
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const channel = supabase
-      .channel(`leave-requests-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leave_requests' },
-        () => { load(); },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, isAdmin]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    setEntitlementLoading(true);
-    const year = getYear(new Date());
-    supabase.from('leave_entitlements').select('*').eq('user_id', currentUser.id).eq('year', year).maybeSingle()
-      .then(({ data }) => {
-        if (data) setEntitlement(data as LeaveEntitlement);
-        else setEntitlement(DEFAULT_ENTITLEMENT);
-        setEntitlementLoading(false);
-      });
-  }, [currentUser?.id]);
 
   const leaveBalance = useMemo(() => {
     const myApproved = requests.filter(r => r.user_id === currentUser?.id && r.status === 'approved');

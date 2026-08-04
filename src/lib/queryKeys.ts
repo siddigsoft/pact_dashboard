@@ -97,6 +97,14 @@ export const queryKeys = {
     deadlines: (projectIds: string[]) =>
       [...queryKeys.projects.all, 'deadlines', projectIds] as const,
   },
+
+  hr: {
+    all: ['hr'] as const,
+    leaveRequests: (filters?: Record<string, unknown>) =>
+      [...queryKeys.hr.all, 'leaveRequests', filters] as const,
+    leaveEntitlement: (userId: string, year: number) =>
+      [...queryKeys.hr.all, 'leaveEntitlement', userId, year] as const,
+  },
 } as const;
 
 export type QueryKeyFactory = typeof queryKeys;
