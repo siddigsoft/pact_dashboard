@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,20 +16,10 @@ import {
 import { format, parseISO } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, Legend } from 'recharts';
-
-interface Fund {
-  id: string; code: string; name_en: string; name_ar: string | null;
-  restriction_type: string; donor_partner_id: string | null;
-  start_date: string | null; end_date: string | null; is_active: boolean;
-}
-interface FundActivity {
-  fund_id: string; total_debit: number; total_credit: number; line_count: number;
-}
-interface Partner { id: string; name: string }
+import { useDonorReportsQuery } from '@/hooks/useAccountingQueries';
 
 const RESTRICTION_CFG: Record<string, { label: string; color: string; short: string }> = {
   without_restriction: { label: 'Unrestricted',      color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30', short: 'UNR' },
@@ -44,46 +33,23 @@ const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#0
 export default function AccountingDonorReports() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const { toast } = useToast();
 
-  const [funds, setFunds]         = useState<Fund[]>([]);
-  const [activity, setActivity]   = useState<FundActivity[]>([]);
-  const [partners, setPartners]   = useState<Partner[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState('');
+  const reportsQuery = useDonorReportsQuery(allowed && isAuthenticated);
+  const funds = reportsQuery.data?.funds ?? [];
+  const activity = reportsQuery.data?.activity ?? [];
+  const partners = reportsQuery.data?.partners ?? [];
+  const preFundRequests = reportsQuery.data?.preFundRequests ?? ([] as NonNullable<
+    typeof reportsQuery.data
+  >['preFundRequests']);
+  const loading = reportsQuery.isLoading;
+
+  const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [tab, setTab]             = useState('funds');
-  // Pre-fund pipeline data for donor fund coverage view
-  const [preFundRequests, setPreFundRequests] = useState<any[]>([]);
+  const [tab, setTab] = useState('funds');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [{ data: fData }, { data: jlData }, { data: pData }, pfRes] = await Promise.all([
-      supabase.from('acct_funds').select('id, code, name_en, name_ar, restriction_type, donor_partner_id, start_date, end_date, is_active').order('code'),
-      supabase.from('acct_journal_lines').select('fund_id, debit_credit, functional_amount'),
-      supabase.from('crm_partners').select('id, name').limit(500).then((res: any) => res, () => ({ data: [] })),
-      // Pre-fund requests to show donor-linked pipeline spend
-      // Canonical statuses: pending_approval, awaiting_receipt, active, low_balance, closed, expired, cancelled
-      (supabase as any).from('pre_fund_requests').select('id, name, currency, amount, available_balance, paid_amount, status, start_date, end_date, matching_scope').in('status', ['active', 'low_balance', 'awaiting_receipt']).order('start_date', { ascending: false }).limit(200).then((res: any) => res, () => ({ data: [] })),
-    ]);
-    setFunds((fData ?? []) as Fund[]);
-    setPartners(((pData as any)?.data ?? pData ?? []) as Partner[]);
-    setPreFundRequests((pfRes?.data ?? []) as any[]);
-
-    const actMap = new Map<string, FundActivity>();
-    for (const l of (jlData ?? []) as any[]) {
-      if (!l.fund_id) continue;
-      const cur = actMap.get(l.fund_id) ?? { fund_id: l.fund_id, total_debit: 0, total_credit: 0, line_count: 0 };
-      if (l.debit_credit === 'DR') cur.total_debit += l.functional_amount;
-      else cur.total_credit += l.functional_amount;
-      cur.line_count++;
-      actMap.set(l.fund_id, cur);
-    }
-    setActivity(Array.from(actMap.values()));
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
+  const load = () => {
+    void reportsQuery.refetch();
+  };
 
   const enriched = useMemo(() => funds.map(f => {
     const act = activity.find(a => a.fund_id === f.id) ?? { total_debit: 0, total_credit: 0, line_count: 0 };

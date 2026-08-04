@@ -614,11 +614,13 @@ export function usePersonalTasks(userId: string | undefined) {
     queryFn: async (): Promise<PersonalTask[]> => {
       if (!userId) return [];
       // Primary query: tasks owned by or assigned to the user
+      // ponytail: hard cap — archive/history can get its own query when needed
       const { data: primary, error } = await supabase
         .from('personal_tasks')
         .select('*')
         .or(`assigned_to.eq.${userId},and(user_id.eq.${userId},assigned_to.is.null)`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
       if (error) throw error;
 
       // Secondary query: tasks where user is a co-assignee
@@ -626,7 +628,8 @@ export function usePersonalTasks(userId: string | undefined) {
         .from('personal_tasks')
         .select('*')
         .filter('co_assignees', 'cs', JSON.stringify([{ id: userId }]))
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(200);
 
       // Merge and deduplicate
       const primaryMapped = (primary ?? []).map(r => mapRow(r as Record<string, unknown>));

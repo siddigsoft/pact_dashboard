@@ -37,6 +37,8 @@ export const queryKeys = {
     byIds: (ids: string[]) => [...queryKeys.profiles.all, 'byIds', ids] as const,
     withLocation: (limit?: number) =>
       [...queryKeys.profiles.all, 'withLocation', limit ?? 200] as const,
+    fieldTeam: (filters?: Record<string, unknown>) =>
+      [...queryKeys.profiles.all, 'fieldTeam', filters] as const,
   },
   
   wallets: {
@@ -88,6 +90,36 @@ export const queryKeys = {
     all: ['signatures'] as const,
     lists: () => [...queryKeys.signatures.all, 'list'] as const,
     pending: () => [...queryKeys.signatures.all, 'pending'] as const,
+  },
+
+  projects: {
+    all: ['projects'] as const,
+    deadlines: (projectIds: string[]) =>
+      [...queryKeys.projects.all, 'deadlines', projectIds] as const,
+  },
+
+  hr: {
+    all: ['hr'] as const,
+    leaveRequests: (filters?: Record<string, unknown>) =>
+      [...queryKeys.hr.all, 'leaveRequests', filters] as const,
+    leaveEntitlement: (userId: string, year: number) =>
+      [...queryKeys.hr.all, 'leaveEntitlement', userId, year] as const,
+    retainerBundle: () => [...queryKeys.hr.all, 'retainerBundle'] as const,
+    retainerWalletTxs: () => [...queryKeys.hr.all, 'retainerWalletTxs'] as const,
+    salaryIncrements: () => [...queryKeys.hr.all, 'salaryIncrements'] as const,
+  },
+
+  accounting: {
+    all: ['accounting'] as const,
+    journalsMeta: () => [...queryKeys.accounting.all, 'journalsMeta'] as const,
+    journalEntries: (filters?: Record<string, unknown>) =>
+      [...queryKeys.accounting.all, 'journalEntries', filters] as const,
+    /** @deprecated use journalsMeta + journalEntries */
+    journalsBundle: () => [...queryKeys.accounting.all, 'journalsMeta'] as const,
+    glBootstrap: () => [...queryKeys.accounting.all, 'glBootstrap'] as const,
+    glLedger: (accountId: string, periodId: string) =>
+      [...queryKeys.accounting.all, 'glLedger', accountId, periodId] as const,
+    donorReports: () => [...queryKeys.accounting.all, 'donorReports'] as const,
   },
 } as const;
 

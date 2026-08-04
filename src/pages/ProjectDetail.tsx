@@ -4,6 +4,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 
 import { useProjectContext } from '@/context/project/ProjectContext';
+import {
+  useProjectActivitiesQuery,
+  useUpdateProjectInCache,
+} from '@/context/project/projectQueries';
 import ProjectDetailComponent from '@/components/project/ProjectDetail';
 import { Project } from '@/types/project';
 import { useToast } from '@/hooks/toast';
@@ -21,6 +25,8 @@ const ProjectDetailPage = () => {
   const [deleting, setDeleting] = useState(false);
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const { currentUser, authReady } = useUser();
+  const { data: activities } = useProjectActivitiesQuery(id);
+  const updateProjectCache = useUpdateProjectInCache();
 
   // Effect to fetch projects once auth + context are ready
   useEffect(() => {
@@ -36,7 +42,13 @@ const ProjectDetailPage = () => {
       return;
     }
     const foundProject = getProjectById(id);
-    setProject(foundProject);
+    if (foundProject && activities) {
+      const withActivities = { ...foundProject, activities };
+      setProject(withActivities);
+      updateProjectCache(withActivities);
+    } else {
+      setProject(foundProject);
+    }
     // Only toast "not found" when we are certain the data is loaded
     if (!foundProject && authReady && !loading && projects.length > 0) {
       toast({
@@ -45,7 +57,7 @@ const ProjectDetailPage = () => {
         variant: "destructive",
       });
     }
-  }, [id, projects, loading, authReady]);
+  }, [id, projects, loading, authReady, activities]);
 
   const handleEdit = () => {
     navigate(`/projects/${id}/edit`);

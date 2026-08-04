@@ -30,6 +30,7 @@ import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext
 import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNotificationOverlay';
 import { SyncStatusProvider } from './sync/SyncStatusContext';
 import { LocationProvider } from './location/LocationContext';
+import { DataScopeProvider } from './DataScopeContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -166,6 +167,7 @@ const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => 
 
 export const AppProviders: FC<{ children: ReactNode }> = ({ children }) => {
   return (
+    <DataScopeProvider>
     <ViewModeProvider>
       <SyncStatusProvider>
         <NotificationProvider>
@@ -220,6 +222,7 @@ export const AppProviders: FC<{ children: ReactNode }> = ({ children }) => {
         </NotificationProvider>
       </SyncStatusProvider>
     </ViewModeProvider>
+    </DataScopeProvider>
   );
 };
 

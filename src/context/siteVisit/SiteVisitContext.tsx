@@ -13,6 +13,7 @@ import { useWallet } from '../wallet/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useSiteVisitsQuery, siteVisitQueryKeys } from './siteVisitQueries';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -24,12 +25,15 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { toast } = useToast();
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
+  const siteVisitScopeActive = useIsDataScopeActive('siteVisit');
 
   // Only run the query after the user is authenticated so RLS doesn't block it.
+  // Also skip on non-field routes until the siteVisit DataScope activates (sticky).
   const isAuthenticated = !!currentUser?.id;
-  const siteVisitsQuery = useSiteVisitsQuery(isAuthenticated);
+  const queriesEnabled = isAuthenticated && siteVisitScopeActive;
+  const siteVisitsQuery = useSiteVisitsQuery(queriesEnabled);
   const appSiteVisits = siteVisitsQuery.data ?? [];
-  const loading = siteVisitsQuery.isLoading;
+  const loading = queriesEnabled && siteVisitsQuery.isLoading;
 
   // Track the previous user id so we can detect the auth-restore moment
   // (null → user id) and force a fresh fetch with the valid session token.
@@ -55,6 +59,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [siteVisitsQuery.isError, siteVisitsQuery.error]);
 
   useEffect(() => {
+    if (!queriesEnabled) return;
+
     const channel = supabase
       .channel('site_visit_changes')
       .on(
@@ -72,7 +78,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, queriesEnabled]);
 
   const createSiteVisit = async (siteVisitData: Partial<SiteVisit>): Promise<string | undefined> => {
     try {

@@ -17,6 +17,7 @@ import {
   defaultSiteEntryCounts,
 } from './mmpQueries';
 import { useUser } from '@/context/user/UserContext';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
@@ -54,13 +55,16 @@ const MMPContext = createContext<MMPContextType>({
 export const useMMPProvider = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const mmpScopeActive = useIsDataScopeActive('mmp');
 
   // Gate queries on authentication so they never run unauthenticated.
   // RLS would silently return 0 rows for unauthenticated requests and
   // that empty result would be cached, showing stale zeros after login.
+  // Also skip on non-field routes until the mmp DataScope activates (sticky).
   const isAuthenticated = !!currentUser?.id;
-  const filesQuery = useMMPFilesQuery(isAuthenticated);
-  const countsQuery = useMMPSiteEntryCountsQuery(isAuthenticated);
+  const queriesEnabled = isAuthenticated && mmpScopeActive;
+  const filesQuery = useMMPFilesQuery(queriesEnabled);
+  const countsQuery = useMMPSiteEntryCountsQuery(queriesEnabled);
 
   // When the user's session is first restored (null → id), invalidate
   // MMP caches so they re-fetch with valid credentials.
@@ -82,7 +86,7 @@ export const useMMPProvider = () => {
   // pages like MMPCycleClose that chain mmpFiles through multiple hooks.
   const emptyMmpFiles = useRef<MMPFile[]>([]);
   const mmpFiles = filesQuery.data ?? emptyMmpFiles.current;
-  const loading = filesQuery.isLoading;
+  const loading = queriesEnabled && filesQuery.isLoading;
   const error = filesQuery.error ? 'Failed to load MMP files' : null;
   const siteEntryCounts = countsQuery.data ?? defaultSiteEntryCounts;
 
@@ -736,68 +740,81 @@ export const useMMPProvider = () => {
     }
   };
 
-  // Fetch site entries for a specific MMP on-demand (lazy loading)
+  // Fetch site entries for a specific MMP on-demand (lazy loading).
+  // Batched .range() pages avoid a single unbounded PostgREST response.
   const fetchSiteEntriesForMMP = useCallback(async (mmpId: string): Promise<any[]> => {
+    const PAGE = 200;
+    const HARD_CAP = 4000;
     try {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select(
-          'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, status, additional_data, enumerator_fee, transport_fee, created_at, updated_at, accepted_by, accepted_at, dispatched_by, dispatched_at, verified_by, verified_at, visit_completed_at, forwarded_to_user_id'
-        )
-        .eq('mmp_file_id', mmpId)
-        .order('created_at', { ascending: true });
+      const all: any[] = [];
+      let offset = 0;
 
-      if (error) {
-        console.error('Error fetching site entries for MMP:', error);
-        return [];
+      while (offset < HARD_CAP) {
+        const to = offset + PAGE - 1;
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select(
+            'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, status, additional_data, enumerator_fee, transport_fee, created_at, updated_at, accepted_by, accepted_at, dispatched_by, dispatched_at, verified_by, verified_at, visit_completed_at, forwarded_to_user_id'
+          )
+          .eq('mmp_file_id', mmpId)
+          .order('created_at', { ascending: true })
+          .range(offset, to);
+
+        if (error) {
+          console.error('Error fetching site entries for MMP:', error);
+          break;
+        }
+
+        const batch = data || [];
+        for (const entry of batch) {
+          const migrated = migrateAdditionalDataToColumns(entry);
+          all.push({
+            id: migrated.id,
+            siteCode: migrated.site_code,
+            hubOffice: migrated.hub_office,
+            state: migrated.state,
+            locality: migrated.locality,
+            siteName: migrated.site_name,
+            cpName: migrated.cp_name,
+            visitType: migrated.visit_type,
+            visitDate: migrated.visit_date,
+            mainActivity: migrated.main_activity,
+            siteActivity: migrated.activity_at_site,
+            monitoringBy: migrated.monitoring_by,
+            surveyTool: migrated.survey_tool,
+            useMarketDiversion: migrated.use_market_diversion,
+            useWarehouseMonitoring: migrated.use_warehouse_monitoring,
+            comments: migrated.comments,
+            cost: migrated.cost,
+            enumerator_fee: migrated.enumerator_fee,
+            transport_fee: migrated.transport_fee,
+            verified_by: migrated.verified_by,
+            verified_at: migrated.verified_at,
+            verification_notes: migrated.verification_notes,
+            dispatched_by: migrated.dispatched_by,
+            dispatched_at: migrated.dispatched_at,
+            accepted_by: migrated.accepted_by,
+            accepted_at: migrated.accepted_at,
+            claimed_by: (migrated.additional_data || {})?.claimed_by || null,
+            claimed_at: (migrated.additional_data || {})?.claimed_at || null,
+            cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
+            additionalData: migrated.additional_data || {},
+            status: migrated.status,
+            forwardedToUserId: migrated.forwarded_to_user_id,
+          });
+        }
+
+        if (batch.length < PAGE) break;
+        offset += PAGE;
       }
 
-      const entries = (data || []).map((entry: any) => {
-        const migrated = migrateAdditionalDataToColumns(entry);
-        return {
-          id: migrated.id,
-          siteCode: migrated.site_code,
-          hubOffice: migrated.hub_office,
-          state: migrated.state,
-          locality: migrated.locality,
-          siteName: migrated.site_name,
-          cpName: migrated.cp_name,
-          visitType: migrated.visit_type,
-          visitDate: migrated.visit_date,
-          mainActivity: migrated.main_activity,
-          siteActivity: migrated.activity_at_site,
-          monitoringBy: migrated.monitoring_by,
-          surveyTool: migrated.survey_tool,
-          useMarketDiversion: migrated.use_market_diversion,
-          useWarehouseMonitoring: migrated.use_warehouse_monitoring,
-          comments: migrated.comments,
-          cost: migrated.cost,
-          enumerator_fee: migrated.enumerator_fee,
-          transport_fee: migrated.transport_fee,
-          verified_by: migrated.verified_by,
-          verified_at: migrated.verified_at,
-          verification_notes: migrated.verification_notes,
-          dispatched_by: migrated.dispatched_by,
-          dispatched_at: migrated.dispatched_at,
-          accepted_by: migrated.accepted_by,
-          accepted_at: migrated.accepted_at,
-          claimed_by: (migrated.additional_data || {})?.claimed_by || null,
-          claimed_at: (migrated.additional_data || {})?.claimed_at || null,
-          cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
-          additionalData: migrated.additional_data || {},
-          status: migrated.status,
-          forwardedToUserId: migrated.forwarded_to_user_id,
-        };
-      });
-
-      // Update the local mmpFiles state with the fetched site entries
       setMMPFiles((prev: MMPFile[]) =>
         prev.map((mmp) =>
-          mmp.id === mmpId ? { ...mmp, siteEntries: entries } : mmp
+          mmp.id === mmpId ? { ...mmp, siteEntries: all } : mmp
         )
       );
 
-      return entries;
+      return all;
     } catch (e) {
       console.error('fetchSiteEntriesForMMP failed:', e);
       return [];

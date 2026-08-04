@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
 import { useUser } from '@/context/user/UserContext';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 // Create the context
 const ArchiveContext = createContext<ArchiveContextType | undefined>(undefined);
@@ -26,7 +27,8 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
   const { toast } = useToast();
   const { currentUser: contextUser } = useUser();
   const currentUser = _currentUserProp ?? contextUser;
-  const [loading, setLoading] = useState(true);
+  const archiveScopeActive = useIsDataScopeActive('archive');
+  const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<ArchiveFilter>({});
   const [currentArchive, setCurrentArchive] = useState<ArchiveMonth>();
   
@@ -49,8 +51,8 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
 
   // Load function extracted for reuse
   const load = useCallback(async () => {
-    // Do not load archive data until a user is logged in.
-    if (!currentUser) {
+    // Do not load archive data until a user is logged in AND archive scope is active.
+    if (!currentUser || !archiveScopeActive) {
       setLoading(false);
       return;
     }
@@ -291,15 +293,15 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, archiveScopeActive]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Only subscribe to realtime updates when a user is logged in.
+  // Only subscribe to realtime updates when archive scope is active.
   useRealtimeTables(['mmp_files', 'mmp_site_entries', 'report_photos'], load, {
-    enabled: !!currentUser,
+    enabled: !!currentUser && archiveScopeActive,
   });
 
   // Select a specific month's archive

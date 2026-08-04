@@ -378,7 +378,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
   const { data: allUsers = [] } = useQuery({
     queryKey: ['dialog-users'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role, email, phone').order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role, email, phone').order('full_name').limit(300);
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
     },
     enabled: open && isExec,
@@ -398,7 +398,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
   const { data: depUsers = [] } = useQuery({
     queryKey: ['dialog-dep-users'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name').limit(300);
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
     },
     enabled: open,
@@ -1554,7 +1554,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, isDeleting, c
   const { data: allUsers = [] } = useQuery({
     queryKey: ['edit-dialog-users'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name').limit(300);
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
     },
     enabled: isOpen && isExec,
@@ -4158,7 +4158,7 @@ function ShareTaskAttachmentsDialog({
   const { data: users = [] } = useQuery({
     queryKey: ['workspace-share-users'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name').limit(300);
       return (data ?? []) as { id: string; full_name: string | null; role: string | null }[];
     },
   });
@@ -4397,7 +4397,7 @@ function InboxTaskDetailExtras({
     queryKey: ['profiles-min'],
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, email');
+      const { data } = await supabase.from('profiles').select('id, full_name, email').order('full_name').limit(300);
       return (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>;
     },
   });

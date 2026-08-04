@@ -11,7 +11,7 @@ import {
 } from '@/types/audit-trail';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
-import { useRealtimeTable } from '@/hooks/useRealtimeResource';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 interface AuditContextType {
   logs: AuditLogEntry[];
@@ -43,8 +43,9 @@ const DEFAULT_DAYS_TO_KEEP = 90;
 
 export function AuditProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
+  const auditScopeActive = useIsDataScopeActive('audit');
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Load logs from Supabase with localStorage fallback
   const loadLogs = useCallback(async () => {
@@ -223,22 +224,27 @@ export function AuditProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!auditScopeActive) {
+      setLoading(false);
+      return;
+    }
     loadLogs();
     // Sync pending logs on mount
     syncToDatabase();
-  }, [loadLogs, syncToDatabase]);
+  }, [auditScopeActive, loadLogs, syncToDatabase]);
 
   // Do NOT use a realtime subscription here — loadLogs fetches up to 10,000 rows
   // and firing it on every insert would hammer the DB. The local state is updated
   // immediately in logAuditEvent, which is sufficient for the current user's session.
 
-  // Periodic sync of pending logs (every 5 minutes)
+  // Periodic sync of pending logs (every 5 minutes) — only when audit UI is in use.
   useEffect(() => {
+    if (!auditScopeActive) return;
     const interval = setInterval(() => {
       syncToDatabase();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [syncToDatabase]);
+  }, [auditScopeActive, syncToDatabase]);
 
   const logAuditEvent = useCallback(async (input: CreateAuditLogInput): Promise<string> => {
     const logId = uuidv4();

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, UserPlus, UserMinus, Clock, DollarSign, Percent, Users, Briefcase,
   Copy, Link2, Trash2, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Globe,
@@ -11,11 +11,16 @@ import {
   calcMemberTotalCost, generateInstallmentSchedule, derivePaymentStatus, totalPaidFromInstallments,
 } from '@/types/project';
 import { User } from '@/types';
-import { useUser } from '@/context/user/UserContext';
+import { useProjectContext } from '@/context/project/ProjectContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeRole, toDisplayLabel } from '@/utils/roleMapping';
 import type { RoleCode } from '@/utils/roleMapping';
+import {
+  flattenDirectoryPagesAsUsers,
+  useProfilesByIds,
+  useUserDirectory,
+} from '@/hooks/useUserDirectory';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -66,6 +71,22 @@ function fmtMoney(amount: number, cur = 'SDG') {
   return `${cur} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function buildTeamPayload(
+  project: Project,
+  composition: ProjectTeamMember[],
+): NonNullable<Project['team']> {
+  const memberIds = composition
+    .filter((m) => m.memberType !== 'external')
+    .map((m) => m.userId)
+    .filter(Boolean);
+  return {
+    ...(project.team || {}),
+    projectManager: project.team?.projectManager,
+    members: memberIds,
+    teamComposition: composition,
+  };
+}
+
 /** Map a system account role onto the closest project-team role for storage. */
 function systemRoleToProjectRole(systemRole: string): ProjectRole {
   const code = normalizeRole(systemRole);
@@ -101,13 +122,15 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   project,
   onTeamChange,
 }) => {
-  const { users } = useUser();
+  const { updateProjectTeam } = useProjectContext();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     project.team?.teamComposition || []
   );
+  const [persisting, setPersisting] = useState(false);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   // Cross-project workload: other active projects each member is on
   const [crossProjectCounts, setCrossProjectCounts] = useState<Record<string, number>>({});
@@ -146,16 +169,63 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   // Copy-link feedback
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  const directoryQuery = useUserDirectory({
+    search: debouncedSearch,
+    limit: 40,
+    enabled: dialogOpen && addMode === 'system',
+  });
+  const directoryUsers = useMemo(
+    () => flattenDirectoryPagesAsUsers(directoryQuery.data?.pages),
+    [directoryQuery.data]
+  );
+
+  const memberIds = useMemo(
+    () => teamMembers.map((m) => m.userId).filter(Boolean),
+    [teamMembers]
+  );
+  const { data: memberProfiles = [] } = useProfilesByIds(memberIds);
+  const memberRoleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of memberProfiles) {
+      if (p.role) map.set(p.id, p.role);
+    }
+    return map;
+  }, [memberProfiles]);
+
+  const persistTeam = async (composition: ProjectTeamMember[]) => {
+    if (!project.id) return false;
+    setPersisting(true);
+    try {
+      await updateProjectTeam(project.id, buildTeamPayload(project, composition));
+      return true;
+    } catch (err) {
+      console.error('Failed to persist project team:', err);
+      toast({
+        title: 'Could not save team',
+        description: 'Team change was not saved. Please try again.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setPersisting(false);
+    }
+  };
+
   const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
   const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
 
   const teamMemberIds = teamMembers.map(m => m.userId).sort().join(',');
-  const userIdList = users.map(u => u.id).sort().join(',');
+  const directoryIdList = directoryUsers.map(u => u.id).sort().join(',');
 
   const fetchUserWorkloads = useCallback(async () => {
     try {
-      const userIds = [...teamMembers.map(m => m.userId), ...users.map(u => u.id)];
-      const uniqueUserIds = [...new Set(userIds)];
+      const userIds = [...teamMembers.map(m => m.userId), ...directoryUsers.map(u => u.id)];
+      const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
       if (uniqueUserIds.length === 0) return;
 
       const [
@@ -209,7 +279,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     } catch (error) {
       console.error('Error calculating workloads:', error);
     }
-  }, [teamMemberIds, userIdList, project.id]);
+  }, [teamMemberIds, directoryIdList, project.id]);
 
   useEffect(() => {
     fetchUserWorkloads();
@@ -217,14 +287,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
   const getWorkload = (userId: string): number => userWorkloads[userId] ?? 0;
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = directoryUsers.filter(user => {
     const isAlreadyTeamMember = teamMembers.some(member => member.userId === user.id);
-    const q = searchTerm.toLowerCase();
-    const matchesSearch = !q ||
-      (user.name || '').toLowerCase().includes(q) ||
-      (user.email || '').toLowerCase().includes(q) ||
-      (user.role || '').toLowerCase().includes(q);
-    return !isAlreadyTeamMember && matchesSearch;
+    return !isAlreadyTeamMember;
   });
 
   const resetFeeFields = () => {
@@ -316,12 +381,13 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     toast({ title: 'Fee updated', description: 'Professional fee and payment schedule saved.', variant: 'success' });
   };
 
-  const handleAddExternalMember = () => {
+  const handleAddExternalMember = async () => {
     if (!extName.trim()) { toast({ title: 'Name required', description: 'Please enter the person\'s name.', variant: 'destructive' }); return; }
     const token = crypto.randomUUID().replace(/-/g, '');
+    const displayName = extName.trim();
     const newMember: ProjectTeamMember = {
       userId:       crypto.randomUUID(),
-      name:         extName.trim(),
+      name:         displayName,
       role:         extRole,
       joinedAt:     new Date().toISOString(),
       memberType:   'external',
@@ -336,27 +402,33 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
       amountPaid:   feeType ? 0 : undefined,
     };
     const updatedTeam = [...teamMembers, newMember];
+    const saved = await persistTeam(updatedTeam);
+    if (!saved) return;
+
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     setDialogOpen(false);
     setAddMode('system');
     setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields();
+    await copyExternalLink(token, displayName, false);
     toast({
       title: 'External member added',
-      description: `${extName} added. Share their portal link so they can view tasks.`,
+      description: `${displayName} saved to the project. Portal link copied — share it with them.`,
       variant: 'success',
     });
   };
 
-  const copyExternalLink = async (token: string, name: string) => {
+  const copyExternalLink = async (token: string, name: string, showToast = true) => {
     const url = `${window.location.origin}/ext/${token}`;
     await navigator.clipboard.writeText(url);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
-    toast({ title: 'Link copied', description: `Portal link for ${name} is in your clipboard.`, variant: 'success' });
+    if (showToast) {
+      toast({ title: 'Link copied', description: `Portal link for ${name} is in your clipboard.`, variant: 'success' });
+    }
   };
 
-  const handleAddTeamMember = (user: User) => {
+  const handleAddTeamMember = async (user: User) => {
     const actualRole = systemRoleToProjectRole(user.role || '');
     const roleLabel = formatRoleLabel(user.role);
     const newMember: ProjectTeamMember = {
@@ -376,6 +448,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     };
 
     const updatedTeam = [...teamMembers, newMember];
+    const saved = await persistTeam(updatedTeam);
+    if (!saved) return;
+
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     setDialogOpen(false);
@@ -391,9 +466,12 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     });
   };
 
-  const handleRemoveTeamMember = (userId: string) => {
+  const handleRemoveTeamMember = async (userId: string) => {
     const removedMember = teamMembers.find(member => member.userId === userId);
     const updatedTeam = teamMembers.filter(member => member.userId !== userId);
+    const saved = await persistTeam(updatedTeam);
+    if (!saved) return;
+
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     toast({
@@ -482,9 +560,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const systemUser = users.find(u => u.id === member.userId);
-                          const label = systemUser
-                            ? formatRoleLabel(systemUser.role)
+                          const systemRole = memberRoleById.get(member.userId);
+                          const label = systemRole
+                            ? formatRoleLabel(systemRole)
                             : formatRoleLabel(member.role);
                           return (
                             <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
@@ -1055,7 +1133,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     })
                   ) : (
                     <div className="py-8 text-center text-sm text-muted-foreground">
-                      No users found matching your search
+                      {debouncedSearch
+                        ? 'No users found matching your search'
+                        : directoryQuery.isLoading
+                          ? 'Searching…'
+                          : 'Type a name or email to find users'}
                     </div>
                   )}
                 </div>
@@ -1158,8 +1240,8 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                   <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setAddMode('system'); setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields(); }}>
                     Cancel
                   </Button>
-                  <Button type="button" onClick={handleAddExternalMember} disabled={!extName.trim()}>
-                    <Globe className="h-4 w-4 mr-1.5" /> Add External Member
+                  <Button type="button" onClick={handleAddExternalMember} disabled={!extName.trim() || persisting}>
+                    <Globe className="h-4 w-4 mr-1.5" /> {persisting ? 'Saving…' : 'Add External Member'}
                   </Button>
                 </DialogFooter>
               </div>

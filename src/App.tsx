@@ -491,7 +491,8 @@ const AuthGuard = ({ children }) => {
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
     !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill')) &&
-    !location.pathname.startsWith('/s/')
+    !location.pathname.startsWith('/s/') &&
+    !location.pathname.startsWith('/ext/')
   ) {
     const target = `${location.pathname}${location.search}${location.hash}`;
     const redirectTo = `/auth?redirect=${encodeURIComponent(target)}`;

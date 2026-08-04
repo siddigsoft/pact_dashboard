@@ -24,6 +24,26 @@ export type SearchUserDirectoryParams = {
   activeOnly?: boolean;
 };
 
+/** Map directory RPC row → User shape used by pickers / team UI. */
+export function directoryRowToUser(row: UserDirectoryRow): import('@/types').User {
+  const name = row.full_name || row.username || row.email || 'Unknown';
+  return {
+    id: row.id,
+    name,
+    fullName: row.full_name || undefined,
+    username: row.username || undefined,
+    email: row.email || '',
+    role: row.role || 'user',
+    avatar: row.avatar_url || undefined,
+    stateId: row.state_id || undefined,
+    hubId: row.hub_id || undefined,
+    availability: (row.availability as 'online' | 'offline' | 'busy') || 'offline',
+    profileStatus: row.status || undefined,
+    isApproved: row.status === 'approved',
+    lastActive: new Date().toISOString(),
+  } as import('@/types').User;
+}
+
 /** Session-scoped cache so Chat/maps don't re-hit the RPC for the same ids. */
 const profileCache = new Map<string, UserDirectoryRow>();
 
@@ -160,3 +180,50 @@ export async function listProfilesWithLocation(
   if (error) throw error;
   return (data ?? []) as ProfileWithLocationRow[];
 }
+
+export type FieldTeamProfileRow = ProfileWithLocationRow & {
+  phone?: string | null;
+  total_count?: number;
+};
+
+/** Map field-team RPC row → User (includes phone + optional GPS). */
+export function fieldTeamRowToUser(row: FieldTeamProfileRow): import('@/types').User {
+  const base = profileWithLocationToUser(row);
+  return {
+    ...base,
+    phone: row.phone || undefined,
+  } as import('@/types').User;
+}
+
+export async function listFieldTeamProfiles(params: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ rows: FieldTeamProfileRow[]; totalCount: number }> {
+  const { search = '', limit = 100, offset = 0 } = params;
+  const { data, error } = await supabase.rpc('list_field_team_profiles', {
+    p_search: search,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as FieldTeamProfileRow[];
+  for (const row of rows) {
+    profileCache.set(row.id, {
+      id: row.id,
+      full_name: row.full_name,
+      username: row.username,
+      email: row.email,
+      role: row.role,
+      status: row.status,
+      availability: row.availability,
+      avatar_url: row.avatar_url,
+      department_id: null,
+      state_id: row.state_id,
+      hub_id: row.hub_id,
+      is_active: row.is_active,
+    });
+  }
+  return { rows, totalCount: Number(rows[0]?.total_count ?? 0) };
+}
+

@@ -2,148 +2,174 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { format, parseISO, isValid, isPast } from 'date-fns';
 import {
-  CheckCircle2, Clock, AlertCircle, Briefcase, User, Calendar,
-  ChevronDown, ChevronUp, Send, FileText, ExternalLink, Lock,
+  CheckCircle2, Clock, AlertCircle, Briefcase, Calendar,
+  ChevronDown, ChevronUp, FileText, Lock,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Project, ProjectActivity, ProjectTeamMember, PaymentInstallment } from '@/types/project';
+import { ProjectTeamMember } from '@/types/project';
 
 type ActivityStatus = 'pending' | 'inProgress' | 'completed' | 'cancelled';
 
+interface PortalActivity {
+  id: string;
+  name: string;
+  description?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  status: string;
+  notes?: string | null;
+}
+
+interface PortalProject {
+  id: string;
+  name: string;
+  projectCode?: string | null;
+  status?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  description?: string | null;
+}
+
 const STATUS_COLORS: Record<string, string> = {
-  pending:    'bg-amber-50 text-amber-700 border-amber-200',
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
   inProgress: 'bg-blue-50 text-blue-700 border-blue-200',
-  completed:  'bg-emerald-50 text-emerald-700 border-emerald-200',
-  cancelled:  'bg-gray-50 text-gray-500 border-gray-200',
+  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  cancelled: 'bg-gray-50 text-gray-500 border-gray-200',
 };
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending', inProgress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled',
+  pending: 'Pending',
+  inProgress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
-function fmtDate(s?: string) {
+function fmtDate(s?: string | null) {
   if (!s) return '—';
-  try { const d = parseISO(s); return isValid(d) ? format(d, 'dd MMM yyyy') : '—'; } catch { return '—'; }
+  try {
+    const d = parseISO(s);
+    return isValid(d) ? format(d, 'dd MMM yyyy') : '—';
+  } catch {
+    return '—';
+  }
+}
+
+function normalizeStatus(status?: string | null): ActivityStatus {
+  if (status === 'in_progress' || status === 'inProgress') return 'inProgress';
+  if (status === 'completed') return 'completed';
+  if (status === 'cancelled' || status === 'canceled') return 'cancelled';
+  return 'pending';
 }
 
 interface ActivityUpdate {
   activityId: string;
   status: ActivityStatus;
-  note: string;
 }
 
 export default function ExternalContributorPage() {
   const { token } = useParams<{ token: string }>();
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [project, setProject]       = useState<Project | null>(null);
-  const [member, setMember]         = useState<ProjectTeamMember | null>(null);
-  const [myActivities, setMyActivities] = useState<ProjectActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [project, setProject] = useState<PortalProject | null>(null);
+  const [member, setMember] = useState<ProjectTeamMember | null>(null);
+  const [myActivities, setMyActivities] = useState<PortalActivity[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [updates, setUpdates]       = useState<Record<string, ActivityUpdate>>({});
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState<string | null>(null);
-  const [noteDialog, setNoteDialog] = useState<{ open: boolean; activityId: string; note: string }>({
-    open: false, activityId: '', note: '',
-  });
+  const [updates, setUpdates] = useState<Record<string, ActivityUpdate>>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) { setError('No access token provided.'); setLoading(false); return; }
-    loadProject();
+    if (!token) {
+      setError('No access token provided.');
+      setLoading(false);
+      return;
+    }
+    void loadProject(token);
   }, [token]);
 
-  const loadProject = async () => {
+  const loadProject = async (accessToken: string) => {
     setLoading(true);
+    setError(null);
     try {
-      // Search for the project by scanning team JSON for the token
-      // We use a text search since Supabase JS client can't filter on nested JSONB arrays by element property
-      const { data, error: fetchErr } = await supabase
-        .from('projects')
-        .select('id, name, projectCode, status, startDate, endDate, team, activities, budget, description')
-        .filter('team::text', 'ilike', `%${token}%`)
-        .limit(5);
+      const { data, error: rpcErr } = await supabase.rpc('get_external_contributor_portal', {
+        p_token: accessToken,
+      });
 
-      if (fetchErr) throw fetchErr;
+      if (rpcErr) throw rpcErr;
 
-      // Find the exact project + member matching the token
-      let foundProject: Project | null = null;
-      let foundMember: ProjectTeamMember | null = null;
+      const payload = data as {
+        ok?: boolean;
+        error?: string;
+        project?: PortalProject;
+        member?: ProjectTeamMember;
+        activities?: PortalActivity[];
+      } | null;
 
-      for (const p of (data || [])) {
-        const comp = (p.team?.teamComposition || []) as ProjectTeamMember[];
-        const m = comp.find(c => c.accessToken === token);
-        if (m) { foundProject = p as unknown as Project; foundMember = m; break; }
-      }
-
-      if (!foundProject || !foundMember) {
+      if (!payload?.ok || !payload.project || !payload.member) {
         setError('This link is invalid or has expired. Please contact the project manager.');
+        setProject(null);
+        setMember(null);
+        setMyActivities([]);
         return;
       }
 
-      setProject(foundProject);
-      setMember(foundMember);
+      const acts = (payload.activities ?? []).map((a) => ({
+        ...a,
+        status: normalizeStatus(a.status),
+      }));
 
-      // Find activities assigned to this member
-      const acts = (foundProject.activities || []).filter(a =>
-        a.assignedTo === foundMember!.userId ||
-        a.assignedTo === foundMember!.name ||
-        (a.assignees || []).includes(foundMember!.userId) ||
-        (a.assignees || []).includes(foundMember!.name)
-      );
+      setProject(payload.project);
+      setMember(payload.member);
       setMyActivities(acts);
 
-      // Initialise local update state
       const init: Record<string, ActivityUpdate> = {};
-      acts.forEach(a => { init[a.id] = { activityId: a.id, status: a.status as ActivityStatus, note: '' }; });
+      acts.forEach((a) => {
+        init[a.id] = { activityId: a.id, status: normalizeStatus(a.status) };
+      });
       setUpdates(init);
-    } catch (e: any) {
-      setError('Failed to load your project. Please try again or contact the project manager.');
+    } catch (e) {
       console.error(e);
+      setError('Failed to load your project. Please try again or contact the project manager.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleStatusChange = (activityId: string, status: ActivityStatus) => {
-    setUpdates(prev => ({ ...prev, [activityId]: { ...prev[activityId], status } }));
+    setUpdates((prev) => ({ ...prev, [activityId]: { ...prev[activityId], status } }));
   };
 
   const handleSaveActivity = async (activityId: string) => {
-    if (!project) return;
+    if (!token) return;
     setSaving(true);
     try {
       const update = updates[activityId];
-      const updatedActivities = (project.activities || []).map(a =>
-        a.id === activityId ? { ...a, status: update.status, progress: update.status === 'completed' ? 100 : a.progress } : a
+      const { data, error: rpcErr } = await supabase.rpc('update_external_contributor_activity', {
+        p_token: token,
+        p_activity_id: activityId,
+        p_status: update.status,
+      });
+      if (rpcErr) throw rpcErr;
+
+      const result = data as { ok?: boolean; error?: string } | null;
+      if (!result?.ok) throw new Error(result?.error || 'Update failed');
+
+      setMyActivities((prev) =>
+        prev.map((a) => (a.id === activityId ? { ...a, status: update.status } : a)),
       );
-      const { error: saveErr } = await supabase
-        .from('projects')
-        .update({ activities: updatedActivities })
-        .eq('id', project.id);
-      if (saveErr) throw saveErr;
-      setProject(prev => prev ? { ...prev, activities: updatedActivities } : prev);
-      setMyActivities(prev => prev.map(a =>
-        a.id === activityId ? { ...a, status: update.status, progress: update.status === 'completed' ? 100 : a.progress } : a
-      ));
       setSaved(activityId);
       setTimeout(() => setSaved(null), 2500);
     } catch (e) {
       console.error(e);
+      setError('Could not save your update. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
@@ -155,7 +181,6 @@ export default function ExternalContributorPage() {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────────────────
   if (error || !project || !member) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-rose-50 p-4">
@@ -175,17 +200,11 @@ export default function ExternalContributorPage() {
     );
   }
 
-  const completedCount = myActivities.filter(a => a.status === 'completed').length;
-  const overallPct     = myActivities.length > 0 ? Math.round((completedCount / myActivities.length) * 100) : 0;
-
-  // Upcoming installments for this member
-  const upcomingInstallments = (member.installments || [])
-    .filter(i => i.status !== 'paid')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const completedCount = myActivities.filter((a) => normalizeStatus(a.status) === 'completed').length;
+  const overallPct = myActivities.length > 0 ? Math.round((completedCount / myActivities.length) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -197,13 +216,13 @@ export default function ExternalContributorPage() {
               <h1 className="font-bold text-base leading-tight">{project.name}</h1>
             </div>
           </div>
-          <Badge variant="outline" className="text-xs hidden sm:flex">{project.projectCode}</Badge>
+          {project.projectCode && (
+            <Badge variant="outline" className="text-xs hidden sm:flex">{project.projectCode}</Badge>
+          )}
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
-
-        {/* ── Welcome card ───────────────────────────────────────────────── */}
         <Card className="border-0 shadow-md bg-gradient-to-r from-primary/5 to-blue-50">
           <CardContent className="p-5">
             <div className="flex items-start gap-4">
@@ -228,7 +247,6 @@ export default function ExternalContributorPage() {
           </CardContent>
         </Card>
 
-        {/* ── My progress ────────────────────────────────────────────────── */}
         {myActivities.length > 0 && (
           <Card>
             <CardContent className="p-4">
@@ -242,7 +260,6 @@ export default function ExternalContributorPage() {
           </Card>
         )}
 
-        {/* ── Activities ─────────────────────────────────────────────────── */}
         <div className="space-y-3">
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide px-1">
             My Assigned Activities ({myActivities.length})
@@ -257,17 +274,16 @@ export default function ExternalContributorPage() {
               </CardContent>
             </Card>
           ) : (
-            myActivities.map(activity => {
+            myActivities.map((activity) => {
               const localUpdate = updates[activity.id];
-              const currentStatus = localUpdate?.status || activity.status as ActivityStatus;
+              const currentStatus = localUpdate?.status || normalizeStatus(activity.status);
               const isExpanded = expandedId === activity.id;
-              const isOverdue = activity.dueDate && isPast(parseISO(activity.dueDate)) && currentStatus !== 'completed';
+              const isOverdue = !!(activity.dueDate && isPast(parseISO(activity.dueDate)) && currentStatus !== 'completed');
               const justSaved = saved === activity.id;
 
               return (
                 <Card key={activity.id} className={`transition-all ${isExpanded ? 'shadow-md' : ''}`}>
                   <CardContent className="p-0">
-                    {/* Header row */}
                     <div
                       className="flex items-start gap-3 p-4 cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg"
                       onClick={() => setExpandedId(isExpanded ? null : activity.id)}
@@ -276,8 +292,8 @@ export default function ExternalContributorPage() {
                         {currentStatus === 'completed'
                           ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                           : currentStatus === 'inProgress'
-                          ? <Clock className="h-5 w-5 text-blue-500" />
-                          : <AlertCircle className="h-5 w-5 text-amber-500" />}
+                            ? <Clock className="h-5 w-5 text-blue-500" />
+                            : <AlertCircle className="h-5 w-5 text-amber-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{activity.name}</p>
@@ -296,74 +312,37 @@ export default function ExternalContributorPage() {
                             </span>
                           )}
                           {justSaved && (
-                            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" /> Saved
-                            </span>
+                            <span className="text-xs text-emerald-600 font-medium">Saved</span>
                           )}
                         </div>
                       </div>
-                      <div className="shrink-0 text-muted-foreground ml-2">
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </div>
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </div>
 
-                    {/* Expanded update panel */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 border-t pt-4 space-y-3">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Update Status</Label>
-                          <div className="flex flex-wrap gap-2">
-                            {(['pending', 'inProgress', 'completed'] as ActivityStatus[]).map(s => (
-                              <button
-                                key={s}
-                                onClick={() => handleStatusChange(activity.id, s)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                  currentStatus === s
-                                    ? `${STATUS_COLORS[s]} ring-2 ring-offset-1 ring-current`
-                                    : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
-                                }`}
-                              >
-                                {STATUS_LABELS[s]}
-                              </button>
-                            ))}
-                          </div>
+                      <div className="px-4 pb-4 pt-1 border-t space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          {(['pending', 'inProgress', 'completed', 'cancelled'] as ActivityStatus[]).map((s) => (
+                            <Button
+                              key={s}
+                              type="button"
+                              size="sm"
+                              variant={currentStatus === s ? 'default' : 'outline'}
+                              className="h-7 text-xs"
+                              onClick={() => handleStatusChange(activity.id, s)}
+                            >
+                              {STATUS_LABELS[s]}
+                            </Button>
+                          ))}
                         </div>
-
-                        {/* Sub-activities */}
-                        {activity.subActivities?.length > 0 && (
-                          <div className="space-y-1">
-                            <Label className="text-xs">Sub-Tasks</Label>
-                            <div className="space-y-1.5 pl-2 border-l-2 border-muted">
-                              {activity.subActivities.map(sub => (
-                                <div key={sub.id} className="flex items-center gap-2 text-xs">
-                                  <div className={`w-2 h-2 rounded-full ${sub.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                                  <span className={sub.status === 'completed' ? 'line-through text-muted-foreground' : ''}>{sub.name}</span>
-                                  {sub.dueDate && <span className="text-muted-foreground ml-auto">{fmtDate(sub.dueDate)}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Progress Note (optional)</Label>
-                          <Textarea
-                            placeholder="Describe what you've done, blockers, next steps…"
-                            value={localUpdate?.note || ''}
-                            onChange={e => setUpdates(prev => ({ ...prev, [activity.id]: { ...prev[activity.id], note: e.target.value } }))}
-                            className="text-sm resize-none"
-                            rows={2}
-                          />
-                        </div>
-
                         <Button
+                          type="button"
                           size="sm"
-                          onClick={() => handleSaveActivity(activity.id)}
+                          className="bg-[#1D3461] hover:bg-[#0F2041]"
                           disabled={saving}
-                          className="w-full"
+                          onClick={() => void handleSaveActivity(activity.id)}
                         >
-                          <Send className="h-3.5 w-3.5 mr-1.5" />
-                          {saving ? 'Saving…' : 'Save Update'}
+                          {saving ? 'Saving…' : 'Save Progress'}
                         </Button>
                       </div>
                     )}
@@ -374,75 +353,9 @@ export default function ExternalContributorPage() {
           )}
         </div>
 
-        {/* ── Payment schedule ───────────────────────────────────────────── */}
-        {member.feeType && (
-          <div className="space-y-3">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide px-1">
-              My Payment Schedule
-            </h2>
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Fee type</span>
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {member.feeType === 'per_hour' ? 'Per Hour' : member.feeType === 'fixed_fee' ? 'Fixed Fee' : '% of Budget'}
-                  </Badge>
-                </div>
-                {member.currency && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Currency</span>
-                    <span className="text-xs font-mono font-medium">{member.currency}</span>
-                  </div>
-                )}
-                {upcomingInstallments.length > 0 ? (
-                  <div className="space-y-2 mt-2">
-                    <p className="text-xs font-medium">Upcoming Payments</p>
-                    {upcomingInstallments.map(inst => {
-                      const overdue = isPast(parseISO(inst.dueDate)) && inst.status !== 'paid';
-                      return (
-                        <div key={inst.id} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs ${
-                          overdue ? 'border-red-200 bg-red-50' : 'border-border bg-muted/20'
-                        }`}>
-                          <div>
-                            <p className="font-medium">{inst.label}</p>
-                            <p className={`${overdue ? 'text-red-500' : 'text-muted-foreground'}`}>
-                              Due {fmtDate(inst.dueDate)}{overdue ? ' — Overdue' : ''}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold">{member.currency} {inst.amount.toLocaleString()}</p>
-                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              inst.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {inst.status === 'overdue' ? 'Overdue' : 'Pending'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : member.installments?.length ? (
-                  <div className="text-center py-3 text-xs text-emerald-600 font-medium flex items-center justify-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4" /> All payments received — thank you!
-                  </div>
-                ) : member.paymentDueDate ? (
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Payment due</span>
-                    <span className={isPast(parseISO(member.paymentDueDate)) ? 'text-red-500 font-medium' : ''}>
-                      {fmtDate(member.paymentDueDate)}
-                    </span>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* ── Footer ─────────────────────────────────────────────────────── */}
-        <div className="text-center text-xs text-muted-foreground pb-8">
-          <p>Secure external contributor portal — PACT Command Center</p>
-          <p className="mt-1 opacity-60">Your data is protected. This link is unique to you.</p>
-        </div>
+        <p className="text-center text-[11px] text-muted-foreground pb-8">
+          Secure external contributor portal — PACT Command Center
+        </p>
       </div>
     </div>
   );

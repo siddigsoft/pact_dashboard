@@ -363,8 +363,11 @@ const STALE_MS = 3 * 60 * 1000;
  * Fetches down payment requests for the current user with role-based filtering.
  * Cached and deduplicated by React Query.
  */
-export function useDownPaymentRequestsQuery(user: UserForDownPayment | null) {
-  const enabled = !!user?.id;
+export function useDownPaymentRequestsQuery(
+  user: UserForDownPayment | null,
+  scopeEnabled = true
+) {
+  const enabled = !!user?.id && scopeEnabled;
 
   return useQuery({
     queryKey: downPaymentQueryKeys.requests(user?.id, user?.hubId, user?.secondaryHubId, user?.role),

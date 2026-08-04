@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useCallback, useRef } from
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUser } from '../user/UserContext';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 import { ensureValidSession } from '@/lib/session-health';
@@ -144,6 +145,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const { currentUser } = useUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const downPaymentScopeActive = useIsDataScopeActive('downPayment');
 
   // Stable refs — prevent stale closures without causing callback re-creation
   const toastRef = useRef(toast);
@@ -154,9 +156,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     ? { id: currentUser.id, hubId: currentUser.hubId, secondaryHubId: currentUser.secondaryHubId, role: currentUser.role }
     : null;
 
-  const requestsQuery = useDownPaymentRequestsQuery(userForQuery);
+  const requestsQuery = useDownPaymentRequestsQuery(userForQuery, downPaymentScopeActive);
   const requests = requestsQuery.data ?? [];
-  const loading = requestsQuery.isLoading;
+  const loading = downPaymentScopeActive && requestsQuery.isLoading;
 
   // Log fetch errors; avoid surfacing invalidation/refetch noise to users.
   useEffect(() => {
@@ -225,7 +227,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   }, [queryClient]);
 
   useRealtimeTable('down_payment_requests', debouncedRefresh, {
-    enabled: !!currentUser,
+    enabled: !!currentUser && downPaymentScopeActive,
   });
 
   const MUTATION_TIMEOUT_MS = 60000;
@@ -1465,6 +1467,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     const adminRows: Record<string, any>[] = [];
     const fullyApprovedUserIds: { userId: string; siteName: string; amount: number }[] = [];
     const pendingAdminUserIds: { userId: string; siteName: string; amount: number }[] = [];
+    let success = 0;
+    let failed = 0;
+    const failureReasons: string[] = [];
 
     for (const requestId of data.requestIds) {
       const request = requests.find(r => r.id === requestId);
@@ -1587,12 +1592,6 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     // The SQL backfill (20260429_wallet_FINAL_drop_bad_trigger.sql) has already
     // created wallets for all existing requesters, so no pre-check is needed here.
 
-    let success = 0;
-    let failed = 0;
-    const failureReasons: string[] = [];
-
-    // Use individual updates (not upsert) — upsert requires INSERT permission
-    // which RLS may not grant; update only needs UPDATE permission
     const allRows = [...supervisorRows, ...adminRows];
 
     if (allRows.length === 0) {
