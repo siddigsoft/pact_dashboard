@@ -555,6 +555,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [actHours,      setActHours]      = useState<string>(initial?.actualHours?.toString() ?? '');
   const [estCost,       setEstCost]       = useState<string>(initial?.estimatedCost?.toString() ?? '');
   const [actCost,       setActCost]       = useState<string>(initial?.actualCost?.toString() ?? '');
+  const [percentComplete, setPercentComplete] = useState<number>(initial?.percentComplete ?? 0);
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
@@ -637,6 +638,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setActHours(initial?.actualHours?.toString() ?? '');
       setEstCost(initial?.estimatedCost?.toString() ?? '');
       setActCost(initial?.actualCost?.toString() ?? '');
+      setPercentComplete(initial?.percentComplete ?? 0);
       // Prefer typed-deps rows when present; fall back to legacy uuid[] (FS, lag 0)
       if (existingTypedDeps.length) {
         setDeps(existingTypedDeps.map(d => d.predecessorId));
@@ -655,6 +657,15 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       }
     }
   }, [open, initial, existingTypedDeps]);
+
+  /** Change % complete and auto-derive status (0→todo, 1-99→inprogress, 100→done). */
+  const handlePercentChange = (val: number) => {
+    const clamped = Math.max(0, Math.min(100, val));
+    setPercentComplete(clamped);
+    if (clamped === 0) setStatus('todo');
+    else if (clamped === 100) setStatus('done');
+    else setStatus('inprogress');
+  };
 
   const isEditing = !!initial;
   const otherTasks = useMemo(() => {
@@ -729,6 +740,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       actualHours:    allocActTotal  ?? (actHours ? parseFloat(actHours) : null),
       estimatedCost:  estCost  ? parseFloat(estCost)   : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
+      percentComplete,
       dependencies:   deps,
       coAssigneeIds:  filteredCoIds,
       resources:      resources,
@@ -910,6 +922,64 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
 
             {/* ── TIMESHEET TAB ── */}
             <TabsContent value="timesheet" className="space-y-3 mt-0">
+              {/* ── % Complete ── */}
+              <div className="rounded-lg border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
+                  <BarChart2 className="h-3.5 w-3.5 text-[#1D3461]" />
+                  <span className="text-xs font-semibold text-[#1D3461] uppercase tracking-wide">% Complete</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">auto-updates status</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={percentComplete}
+                      onChange={e => handlePercentChange(parseInt(e.target.value, 10))}
+                      className="flex-1 accent-[#1D3461] h-2 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={percentComplete}
+                        onChange={e => handlePercentChange(parseInt(e.target.value, 10) || 0)}
+                        className="h-8 w-16 text-sm text-center px-1"
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={percentComplete}
+                    className={cn(
+                      'h-2',
+                      percentComplete === 100 && '[&>div]:bg-emerald-500',
+                      percentComplete > 0 && percentComplete < 100 && '[&>div]:bg-[#1D3461]',
+                    )}
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>
+                      {percentComplete === 0 && 'Not started'}
+                      {percentComplete > 0 && percentComplete < 100 && 'In Progress'}
+                      {percentComplete === 100 && '✓ Complete'}
+                    </span>
+                    {(initial?.estimatedHours || estHours) && percentComplete > 0 && (() => {
+                      const est = initial?.estimatedHours ?? (estHours ? parseFloat(estHours) : null);
+                      if (!est) return null;
+                      const burned = est * (percentComplete / 100);
+                      return (
+                        <span className="font-medium text-[#1D3461]">
+                          ~{burned % 1 === 0 ? burned : burned.toFixed(1)}h burned of {fmtHours(est)}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
               {(() => {
                 const filteredCoIds = coAssigneeIds.filter(id => id !== assignedTo);
                 const allAssigneeIds = [assignedTo, ...filteredCoIds].filter(Boolean) as string[];
@@ -2208,6 +2278,31 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
             </DropdownMenu>
           )}
         </div>
+
+        {/* % complete strip — shown whenever there is meaningful progress */}
+        {task.percentComplete > 0 && (
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+              <span className="flex items-center gap-0.5">
+                <BarChart2 className="h-2.5 w-2.5" />
+                {task.percentComplete}% complete
+              </span>
+              {task.estimatedHours && (
+                <span className="font-medium text-[#1D3461]">
+                  ~{(() => { const b = task.estimatedHours! * (task.percentComplete / 100); return b % 1 === 0 ? b : b.toFixed(1); })()}h burned
+                </span>
+              )}
+            </div>
+            <Progress
+              value={task.percentComplete}
+              className={cn(
+                'h-1.5',
+                task.percentComplete === 100 && '[&>div]:bg-emerald-500',
+                task.percentComplete > 0 && task.percentComplete < 100 && '[&>div]:bg-[#1D3461]',
+              )}
+            />
+          </div>
+        )}
 
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">

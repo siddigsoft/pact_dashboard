@@ -39,6 +39,8 @@ export interface FieldTask {
   actualHours: number | null;
   estimatedCost: number | null;
   actualCost: number | null;
+  /** 0–100 % complete. Auto-drives status: 0=todo, 1–99=inprogress, 100=done. */
+  percentComplete: number;
   dependencies: string[];
   resources: ResourceLine[];
   /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
@@ -66,6 +68,8 @@ export interface CreateFieldTask {
   actualHours?: number | null;
   estimatedCost?: number | null;
   actualCost?: number | null;
+  /** 0–100 % complete. Auto-drives status: 0=todo, 1–99=inprogress, 100=done. */
+  percentComplete?: number;
   dependencies?: string[];
   resources?: ResourceLine[];
   /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
@@ -223,7 +227,7 @@ export function useProjectTasks(projectId: string) {
           id, project_id, title, description, priority, status,
           assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
-          estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies, resources, assignee_hours,
+          estimated_hours, actual_hours, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
           assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
@@ -251,6 +255,7 @@ export function useProjectTasks(projectId: string) {
         actualHours: r.actual_hours ?? null,
         estimatedCost: r.estimated_cost ?? null,
         actualCost: r.actual_cost ?? null,
+        percentComplete: r.percent_complete ?? 0,
         dependencies: r.dependencies ?? [],
         resources: (r.resources ?? []) as ResourceLine[],
         assigneeHours: (r.assignee_hours ?? {}) as Record<string, { allocated: number | null; actual: number | null }>,
@@ -297,6 +302,7 @@ export function useProjectTasks(projectId: string) {
           actual_hours: task.actualHours ?? null,
           estimated_cost: task.estimatedCost ?? null,
           actual_cost: task.actualCost ?? null,
+          percent_complete: task.percentComplete ?? 0,
           dependencies: task.dependencies ?? [],
           resources: task.resources ?? [],
           assignee_hours: task.assigneeHours ?? {},
@@ -360,9 +366,10 @@ export function useProjectTasks(projectId: string) {
       if (patch.actualHours    !== undefined) updates.actual_hours    = patch.actualHours;
       if (patch.estimatedCost  !== undefined) updates.estimated_cost  = patch.estimatedCost;
       if (patch.actualCost     !== undefined) updates.actual_cost     = patch.actualCost;
-      if (patch.dependencies   !== undefined) updates.dependencies    = patch.dependencies;
-      if (patch.resources      !== undefined) updates.resources        = patch.resources ?? [];
-      if (patch.assigneeHours  !== undefined) updates.assignee_hours  = patch.assigneeHours ?? {};
+      if (patch.dependencies    !== undefined) updates.dependencies    = patch.dependencies;
+      if (patch.resources       !== undefined) updates.resources        = patch.resources ?? [];
+      if (patch.assigneeHours   !== undefined) updates.assignee_hours  = patch.assigneeHours ?? {};
+      if (patch.percentComplete !== undefined) updates.percent_complete = Math.max(0, Math.min(100, patch.percentComplete));
 
       const { error } = await supabase
         .from('project_field_tasks')
