@@ -475,6 +475,62 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     }
   };
 
+  // ── Full payment detail report for Finance handoff ──────────────────────────
+  const getMMPPaymentDetails = async (id: string) => {
+    try {
+      const { data: entryRows } = await supabase
+        .from('mmp_site_entries').select('id').eq('mmp_file_id', id);
+      const entryIds = (entryRows || []).map((r: any) => r.id as string);
+
+      const details: any[] = [];
+
+      if (entryIds.length > 0) {
+        const { data: dpRows } = await supabase
+          .from('down_payment_requests')
+          .select('id, site_name, requested_amount, admin_status, supervisor_status, requested_at, hub_name')
+          .in('mmp_site_entry_id', entryIds)
+          .order('requested_at', { ascending: false });
+        (dpRows || []).forEach((r: any) => {
+          // Most meaningful status: admin_status if set, else supervisor_status
+          const status = r.admin_status || r.supervisor_status || 'pending';
+          details.push({
+            type: 'advance',
+            id: r.id,
+            reference: r.site_name || 'Advance Request',
+            amount: r.requested_amount || 0,
+            currency: 'SDG',
+            status,
+            date: r.requested_at,
+            hubName: r.hub_name || '',
+          });
+        });
+      }
+
+      const { data: costRows } = await supabase
+        .from('operational_cost_submissions')
+        .select('id, reference_number, amount_cents, currency, status, tier2_status, created_at, hub_id')
+        .eq('mmp_id', id)
+        .order('created_at', { ascending: false });
+      (costRows || []).forEach((r: any) => {
+        const status = r.status || r.tier2_status || 'pending';
+        details.push({
+          type: 'cost',
+          id: r.id,
+          reference: r.reference_number || 'Cost Submission',
+          amount: (r.amount_cents || 0) / 100,
+          currency: r.currency || 'SDG',
+          status,
+          date: r.created_at,
+          hubName: r.hub_id || '',
+        });
+      });
+
+      return details;
+    } catch {
+      return [];
+    }
+  };
+
   // ── Count linked submissions (for UI preview) ───────────────────────────────
   const getMMPLinkedCounts = async (id: string): Promise<{ downPayments: number; costSubmissions: number }> => {
     try {
@@ -509,5 +565,6 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     deleteMMPFile,
     unlinkAndDeleteMMPFile,
     getMMPLinkedCounts,
+    getMMPPaymentDetails,
   };
 };

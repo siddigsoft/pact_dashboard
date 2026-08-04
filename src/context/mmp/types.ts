@@ -22,6 +22,17 @@ export interface SiteEntryCounts {
   total: number;
 }
 
+export interface MMPPaymentDetail {
+  type: 'advance' | 'cost';
+  id: string;
+  reference: string;   // site_name (advance) or reference_number (cost)
+  amount: number;
+  currency: string;
+  status: string;      // most meaningful status for finance (admin_status / tier2_status / status)
+  date: string;        // requested_at or created_at
+  hubName: string;
+}
+
 export interface MMPContextType {
   mmpFiles: MMPFile[];
   loading: boolean;
@@ -34,6 +45,7 @@ export interface MMPContextType {
   deleteMMPFile: (id: string) => Promise<boolean>;
   unlinkAndDeleteMMPFile: (id: string) => Promise<{ unlinked: { downPayments: number; costSubmissions: number }; deleted: boolean }>;
   getMMPLinkedCounts: (id: string) => Promise<{ downPayments: number; costSubmissions: number }>;
+  getMMPPaymentDetails: (id: string) => Promise<MMPPaymentDetail[]>;
   getMMPById: (id: string) => MMPFile | undefined;
   getMmpById: (id: string) => MMPFile | undefined;
   getPermitsByMmpId: (id: string) => Promise<any | undefined>;

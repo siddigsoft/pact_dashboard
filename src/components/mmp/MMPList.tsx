@@ -57,7 +57,7 @@ interface MMPListProps {
 
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
-  const { deleteMMPFile, unlinkAndDeleteMMPFile, getMMPLinkedCounts, verifyMMP, refreshMMPFiles, archiveMMP, restoreMMP, mmpFiles: allMMPFiles } = useMMP();
+  const { deleteMMPFile, unlinkAndDeleteMMPFile, getMMPLinkedCounts, getMMPPaymentDetails, verifyMMP, refreshMMPFiles, archiveMMP, restoreMMP, mmpFiles: allMMPFiles } = useMMP();
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const { currentUser, effectiveCurrentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
@@ -83,6 +83,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2 | 3>(0);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [linkedCounts, setLinkedCounts] = useState<{ downPayments: number; costSubmissions: number } | null>(null);
+  const [paymentDetails, setPaymentDetails] = useState<any[]>([]);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   // Archived view state
   const [showArchived, setShowArchived] = useState(false);
@@ -111,11 +112,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canDeleteMMP = isSuperAdmin;
   const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
 
-  // Fetch linked submission counts whenever Stage 1 dialog opens
+  // Fetch linked submission counts + payment details whenever Stage 1 dialog opens
   useEffect(() => {
     if (confirmId && deleteStage === 1) {
       setLinkedCounts(null);
+      setPaymentDetails([]);
       getMMPLinkedCounts(confirmId).then(setLinkedCounts);
+      getMMPPaymentDetails(confirmId).then(setPaymentDetails);
     }
   }, [confirmId, deleteStage]);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
@@ -843,7 +846,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
             </div>
 
             {/* Delete option */}
-            <div className="rounded-lg border-2 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-4">
+            <div className="rounded-lg border-2 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
                   <svg className="h-4 w-4 text-red-700 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
@@ -855,11 +858,74 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                   </p>
                 </div>
               </div>
-              <div className="mt-3 flex justify-end">
+
+              {/* Finance Payment Report — shown when linked payments exist */}
+              {paymentDetails.length > 0 && (
+                <div className="rounded-md border border-red-300 bg-white dark:bg-red-950/30 overflow-hidden">
+                  <div className="bg-red-100 dark:bg-red-900/40 px-3 py-2 flex items-center gap-2">
+                    <svg className="h-4 w-4 text-red-700 dark:text-red-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zm0-10.5A9.75 9.75 0 1 1 2.25 12 9.75 9.75 0 0 1 12 2.25z"/></svg>
+                    <p className="text-xs font-semibold text-red-800 dark:text-red-200">
+                      Blocked — {paymentDetails.length} linked payment{paymentDetails.length !== 1 ? 's' : ''} must be cleared by Finance first
+                    </p>
+                  </div>
+                  <div className="p-2">
+                    <p className="text-xs text-muted-foreground mb-2 px-1">
+                      Share this report with Finance. Once all payments below are handled, return here and the system will re-check.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-red-100 dark:border-red-800">
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Type</th>
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Reference</th>
+                            <th className="text-right py-1 px-2 font-medium text-muted-foreground">Amount</th>
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Status</th>
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paymentDetails.map((p: any) => {
+                            const isPaid = ['paid', 'approved'].includes(p.status?.toLowerCase());
+                            const statusColor = isPaid
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                              : p.status === 'rejected'
+                              ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+                            return (
+                              <tr key={p.id} className="border-b border-red-50 dark:border-red-900/50 last:border-0">
+                                <td className="py-1.5 px-2 text-muted-foreground">
+                                  {p.type === 'advance' ? '💰 Advance' : '📋 Cost'}
+                                </td>
+                                <td className="py-1.5 px-2 font-medium max-w-[120px] truncate" title={p.reference}>
+                                  {p.reference || '—'}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono">
+                                  {p.amount > 0 ? `${Number(p.amount).toLocaleString()} ${p.currency}` : '—'}
+                                </td>
+                                <td className="py-1.5 px-2">
+                                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColor}`}>
+                                    {p.status || 'pending'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-2 text-muted-foreground">
+                                  {p.date ? new Date(p.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
                 <Button
                   type="button"
                   variant="destructive"
                   className="min-w-[140px]"
+                  disabled={paymentDetails.length > 0 || !linkedCounts}
                   onClick={() => setDeleteStage(2)}
                 >
                   Delete permanently →

@@ -30,6 +30,7 @@ const MMPContext = createContext<MMPContextType>({
   deleteMMPFile: async () => false,
   unlinkAndDeleteMMPFile: async () => ({ unlinked: { downPayments: 0, costSubmissions: 0 }, deleted: false }),
   getMMPLinkedCounts: async () => ({ downPayments: 0, costSubmissions: 0 }),
+  getMMPPaymentDetails: async () => [],
   getMMPById: () => undefined,
   getMmpById: () => undefined,
   getPermitsByMmpId: async () => undefined,
@@ -103,6 +104,7 @@ export const useMMPProvider = () => {
     deleteMMPFile,
     unlinkAndDeleteMMPFile,
     getMMPLinkedCounts,
+    getMMPPaymentDetails,
   } = useMMPOperations(mmpFiles, setMMPFiles);
 
   const { verifyMMP, archiveMMP, restoreArchivedMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
@@ -837,6 +839,7 @@ export const useMMPProvider = () => {
     deleteMMPFile,
     unlinkAndDeleteMMPFile,
     getMMPLinkedCounts,
+    getMMPPaymentDetails,
     getMmpById,
     getMMPById: getMmpById,
     getPermitsByMmpId,
