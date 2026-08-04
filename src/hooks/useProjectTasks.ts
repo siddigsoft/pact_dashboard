@@ -43,8 +43,8 @@ export interface FieldTask {
   percentComplete: number;
   dependencies: string[];
   resources: ResourceLine[];
-  /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
-  assigneeHours: Record<string, { allocated: number | null; actual: number | null }>;
+  /** Per-assignee hour allocation: { [profileId]: { allocated, actual, ratePerHour } } */
+  assigneeHours: Record<string, { allocated: number | null; actual: number | null; ratePerHour?: number | null }>;
   createdBy: string | null;
   createdByName: string | null;
   createdAt: string;
@@ -72,8 +72,8 @@ export interface CreateFieldTask {
   percentComplete?: number;
   dependencies?: string[];
   resources?: ResourceLine[];
-  /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
-  assigneeHours?: Record<string, { allocated: number | null; actual: number | null }>;
+  /** Per-assignee hour allocation: { [profileId]: { allocated, actual, ratePerHour } } */
+  assigneeHours?: Record<string, { allocated: number | null; actual: number | null; ratePerHour?: number | null }>;
 }
 
 // Simplified type for the My Tasks page

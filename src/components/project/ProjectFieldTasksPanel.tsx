@@ -560,11 +560,11 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
   const [resources,     setResources]     = useState<ResourceLine[]>(initial?.resources ?? []);
-  const [assigneeHours, setAssigneeHours] = useState<Record<string, { allocated: string; actual: string }>>(
+  const [assigneeHours, setAssigneeHours] = useState<Record<string, { allocated: string; actual: string; ratePerHour: string }>>(
     () => Object.fromEntries(
       Object.entries(initial?.assigneeHours ?? {}).map(([id, v]) => [
         id,
-        { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '' },
+        { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '', ratePerHour: v.ratePerHour?.toString() ?? '' },
       ]),
     ),
   );
@@ -620,14 +620,13 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setAssignedTo(initial?.assignedTo ?? null);
       setAssigneeName(initial?.assignedToName ?? '');
       setCoAssigneeIds(initial?.coAssigneeIds ?? []);
-      setAssigneeHours(
-        Object.fromEntries(
-          Object.entries(initial?.assigneeHours ?? {}).map(([id, v]) => [
-            id,
-            { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '' },
-          ]),
-        ),
+      const initAssigneeHours = Object.fromEntries(
+        Object.entries(initial?.assigneeHours ?? {}).map(([id, v]) => [
+          id,
+          { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '', ratePerHour: v.ratePerHour?.toString() ?? '' },
+        ]),
       );
+      setAssigneeHours(initAssigneeHours);
       setDueDate(initial?.dueDate ?? '');
       setStartDate(initial?.startDate ?? '');
       setStateName(initial?.stateName ?? '');
@@ -636,7 +635,12 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setNotes(initial?.notes ?? '');
       setEstHours(initial?.estimatedHours?.toString() ?? '');
       setActHours(initial?.actualHours?.toString() ?? '');
-      setEstCost(initial?.estimatedCost?.toString() ?? '');
+      // Compute labour cost from stored assigneeHours so we can derive non-labour cost
+      const initLabourCost = Object.values(initial?.assigneeHours ?? {}).reduce(
+        (s, v) => s + ((v.allocated ?? 0) * (v.ratePerHour ?? 0)), 0,
+      );
+      const initNonLabour = Math.max(0, (initial?.estimatedCost ?? 0) - initLabourCost);
+      setEstCost(initNonLabour > 0 ? initNonLabour.toString() : (initLabourCost === 0 && initial?.estimatedCost ? initial.estimatedCost.toString() : ''));
       setActCost(initial?.actualCost?.toString() ?? '');
       setPercentComplete(initial?.percentComplete ?? 0);
       // Prefer typed-deps rows when present; fall back to legacy uuid[] (FS, lag 0)
@@ -714,16 +718,27 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       : null;
 
     // Only persist allocations for assignees who have at least one value
-    const assigneeHoursPayload: Record<string, { allocated: number | null; actual: number | null }> = {};
+    const assigneeHoursPayload: Record<string, { allocated: number | null; actual: number | null; ratePerHour?: number | null }> = {};
     for (const id of allAssigneeIds) {
       const entry = assigneeHours[id];
-      if (entry?.allocated || entry?.actual) {
+      if (entry?.allocated || entry?.actual || entry?.ratePerHour) {
         assigneeHoursPayload[id] = {
           allocated: entry.allocated ? parseFloat(entry.allocated) : null,
           actual:    entry.actual    ? parseFloat(entry.actual)    : null,
+          ratePerHour: entry.ratePerHour ? parseFloat(entry.ratePerHour) : null,
         };
       }
     }
+
+    // Labour cost = sum(allocated hours × rate per hour) across all assignees
+    const labourCost = allAssigneeIds.reduce((s, id) => {
+      const entry = assigneeHours[id];
+      const hrs  = parseFloat(entry?.allocated  || '0') || 0;
+      const rate = parseFloat(entry?.ratePerHour || '0') || 0;
+      return s + hrs * rate;
+    }, 0);
+    const nonLabourCost = estCost ? parseFloat(estCost) : 0;
+    const totalEstCost  = labourCost + nonLabourCost;
 
     await onSave({
       title: title.trim(),
@@ -738,7 +753,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       notes: notes.trim() || undefined,
       estimatedHours: allocEstTotal ?? (estHours ? parseFloat(estHours) : null),
       actualHours:    allocActTotal  ?? (actHours ? parseFloat(actHours) : null),
-      estimatedCost:  estCost  ? parseFloat(estCost)   : null,
+      estimatedCost:  totalEstCost > 0 ? totalEstCost : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
       percentComplete,
       dependencies:   deps,
@@ -1007,24 +1022,25 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                         </div>
                         <div className="p-2 space-y-1">
                           {/* Column headers */}
-                          <div className="grid grid-cols-[1fr_88px_88px] gap-2 px-2 pb-1">
+                          <div className="grid grid-cols-[1fr_66px_66px_72px] gap-2 px-2 pb-1">
                             <span className="text-[10px] font-medium text-muted-foreground uppercase">Assignee</span>
                             <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Est. hrs</span>
-                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Actual hrs</span>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Act. hrs</span>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Rate $/hr</span>
                           </div>
                           {/* Rows */}
                           {allAssigneeIds.map((uid, idx) => {
                             const profile = allProfiles.find(p => p.id === uid);
                             const name = profile?.full_name ?? (idx === 0 ? assigneeName : uid.slice(0, 8));
                             const isMain = uid === assignedTo;
-                            const entry = assigneeHours[uid] ?? { allocated: '', actual: '' };
-                            const setEntry = (field: 'allocated' | 'actual', val: string) =>
+                            const entry = assigneeHours[uid] ?? { allocated: '', actual: '', ratePerHour: '' };
+                            const setEntry = (field: 'allocated' | 'actual' | 'ratePerHour', val: string) =>
                               setAssigneeHours(prev => ({
                                 ...prev,
-                                [uid]: { ...(prev[uid] ?? { allocated: '', actual: '' }), [field]: val },
+                                [uid]: { ...(prev[uid] ?? { allocated: '', actual: '', ratePerHour: '' }), [field]: val },
                               }));
                             return (
-                              <div key={uid} className={cn('grid grid-cols-[1fr_88px_88px] gap-2 items-center rounded px-2 py-1.5', isMain ? 'bg-[#1D3461]/5' : 'bg-background')}>
+                              <div key={uid} className={cn('grid grid-cols-[1fr_66px_66px_72px] gap-2 items-center rounded px-2 py-1.5', isMain ? 'bg-[#1D3461]/5' : 'bg-background')}>
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span className={cn('h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 text-white', isMain ? 'bg-[#1D3461]' : 'bg-slate-500')}>
                                     {name.charAt(0).toUpperCase()}
@@ -1046,21 +1062,44 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                                   onChange={e => setEntry('actual', e.target.value)}
                                   className="h-7 text-xs text-center px-1"
                                 />
+                                <Input
+                                  type="number" min="0" step="0.01"
+                                  placeholder="0"
+                                  title="Hourly rate — auto-calculates labour cost in Costs tab"
+                                  value={entry.ratePerHour}
+                                  onChange={e => setEntry('ratePerHour', e.target.value)}
+                                  className="h-7 text-xs text-center px-1"
+                                />
                               </div>
                             );
                           })}
                           {/* Total row */}
-                          {(hasAllocEst || hasAllocAct) && (
-                            <div className="grid grid-cols-[1fr_88px_88px] gap-2 items-center rounded px-2 py-1.5 border-t mt-1 bg-muted/30">
-                              <span className="text-xs font-semibold text-muted-foreground">Total</span>
-                              <span className={cn('text-xs font-bold text-center', hasAllocEst ? 'text-[#1D3461]' : 'text-muted-foreground')}>
-                                {hasAllocEst ? fmtHours(allocEstTotal) : '—'}
-                              </span>
-                              <span className={cn('text-xs font-bold text-center', hasAllocAct ? (hasAllocEst && allocActTotal > allocEstTotal ? 'text-red-600' : 'text-emerald-600') : 'text-muted-foreground')}>
-                                {hasAllocAct ? fmtHours(allocActTotal) : '—'}
-                              </span>
-                            </div>
-                          )}
+                          {(hasAllocEst || hasAllocAct) && (() => {
+                            const labourTotalTime = allAssigneeIds.reduce((s, id) => {
+                              const e = assigneeHours[id];
+                              const hrs  = parseFloat(e?.allocated  || '0') || 0;
+                              const rate = parseFloat(e?.ratePerHour || '0') || 0;
+                              return s + hrs * rate;
+                            }, 0);
+                            return (
+                              <div className="grid grid-cols-[1fr_66px_66px_72px] gap-2 items-center rounded px-2 py-1.5 border-t mt-1 bg-muted/30">
+                                <span className="text-xs font-semibold text-muted-foreground">Total</span>
+                                <span className={cn('text-xs font-bold text-center', hasAllocEst ? 'text-[#1D3461]' : 'text-muted-foreground')}>
+                                  {hasAllocEst ? fmtHours(allocEstTotal) : '—'}
+                                </span>
+                                <span className={cn('text-xs font-bold text-center', hasAllocAct ? (hasAllocEst && allocActTotal > allocEstTotal ? 'text-red-600' : 'text-emerald-600') : 'text-muted-foreground')}>
+                                  {hasAllocAct ? fmtHours(allocActTotal) : '—'}
+                                </span>
+                                {labourTotalTime > 0 ? (
+                                  <span className="text-xs font-bold text-center text-emerald-700 dark:text-emerald-400" title="Labour cost = Σ(Est hrs × Rate)">
+                                    {fmtCost(labourTotalTime)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-center text-muted-foreground">—</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     ) : (
@@ -1124,12 +1163,74 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
 
             {/* ── COSTS TAB ── */}
             <TabsContent value="costs" className="space-y-4 mt-0">
+              {/* Labour cost computed from Time tab allocations */}
+              {(() => {
+                const filteredCoForCosts = coAssigneeIds.filter(id => id !== assignedTo);
+                const allCostAssigneeIds = [assignedTo, ...filteredCoForCosts].filter(Boolean) as string[];
+                const labourCostDisplay = allCostAssigneeIds.reduce((s, id) => {
+                  const e = assigneeHours[id];
+                  const hrs  = parseFloat(e?.allocated  || '0') || 0;
+                  const rate = parseFloat(e?.ratePerHour || '0') || 0;
+                  return s + hrs * rate;
+                }, 0);
+                const nonLabourDisplay = estCost ? parseFloat(estCost) : 0;
+                const totalEstDisplay  = labourCostDisplay + nonLabourDisplay;
+                if (allCostAssigneeIds.length === 0) return null;
+                return (
+                  <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Labour Cost</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">auto-calculated from Time tab</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {allCostAssigneeIds.map(id => {
+                        const profile = allProfiles.find(p => p.id === id);
+                        const name = profile?.full_name ?? id.slice(0, 8);
+                        const e = assigneeHours[id];
+                        const hrs  = parseFloat(e?.allocated  || '0') || 0;
+                        const rate = parseFloat(e?.ratePerHour || '0') || 0;
+                        const cost = hrs * rate;
+                        if (!hrs && !rate) return null;
+                        return (
+                          <div key={id} className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground truncate max-w-[160px]">{name}</span>
+                            <span className="text-muted-foreground tabular-nums">
+                              {fmtHours(hrs)} × {fmtCost(rate)} =&nbsp;
+                              <span className="font-semibold text-foreground">{fmtCost(cost)}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex items-center justify-between text-xs font-semibold border-t pt-1.5">
+                        <span className="text-emerald-700 dark:text-emerald-400">Total Labour</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 tabular-nums">{fmtCost(labourCostDisplay)}</span>
+                      </div>
+                      {nonLabourDisplay > 0 && (
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="text-muted-foreground">+ Other Costs</span>
+                          <span className="text-muted-foreground tabular-nums">{fmtCost(nonLabourDisplay)}</span>
+                        </div>
+                      )}
+                      {totalEstDisplay > 0 && (
+                        <div className="flex items-center justify-between text-xs font-bold border-t pt-1.5">
+                          <span className="text-[#1D3461]">Total Estimated</span>
+                          <span className="text-[#1D3461] tabular-nums">{fmtCost(totalEstDisplay)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {labourCostDisplay === 0 && allCostAssigneeIds.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground">Set hourly rates in the Time tab to auto-calculate labour cost.</p>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
                 <p className="text-xs text-muted-foreground">Track the budget and actual spend for this task (in project currency).</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" /> Estimated Cost
+                      <DollarSign className="h-3 w-3" /> Other Costs
                     </Label>
                     <Input
                       type="number" min="0" step="0.01"
@@ -1138,6 +1239,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                       onChange={e => setEstCost(e.target.value)}
                       className="h-9 text-sm"
                     />
+                    <p className="text-[10px] text-muted-foreground">Non-labour costs (travel, materials, etc.)</p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
