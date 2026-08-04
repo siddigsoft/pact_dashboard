@@ -254,6 +254,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!session.success) return;
     try {
       setError(null);
+      const existingProject = projects.find(p => p.id === updatedProject.id) ?? currentProject ?? undefined;
+      const previousMemberIds = extractTeamMemberIds(existingProject?.team);
 
       const validationResult = validateProject(updatedProject);
       if (!validationResult.success) {
@@ -383,6 +385,54 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       // Background refetch to sync any server-side computed fields
       invalidateProjects();
+
+      // ── Notify team changes when edit flow updates project.team ─────────────
+      const projectName = existingProject?.name ?? updatedProject.name ?? 'a project';
+      const updatedTeamMemberIds = extractTeamMemberIds(updatedProject.team);
+      const newMemberIds = Array.from(updatedTeamMemberIds).filter(
+        id => !previousMemberIds.has(id) && id !== currentUser?.id
+      );
+      if (newMemberIds.length > 0) {
+        newMemberIds.forEach(memberId => {
+          const roleLabel = resolveTeamMemberRoleLabel(updatedProject.team, memberId);
+          dispatchNotification({
+            event: 'project_member_added',
+            recipientIds: [memberId],
+            titleEn: `Added to project: ${projectName}`,
+            titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
+            messageEn: `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
+            messageAr: `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
+            entityType: 'project',
+            entityId: updatedProject.id,
+            actionUrl: `/projects/${updatedProject.id}`,
+            priority: 'normal',
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+            metadata: { project_name: projectName, role: roleLabel },
+          }).catch(() => {});
+        });
+      }
+
+      const removedMemberIds = Array.from(previousMemberIds).filter(
+        id => !updatedTeamMemberIds.has(id) && id !== currentUser?.id
+      );
+      if (removedMemberIds.length > 0) {
+        dispatchNotification({
+          event: 'project_member_removed',
+          recipientIds: removedMemberIds,
+          titleEn: `Removed from project: ${projectName}`,
+          titleAr: `تمت إزالتك من مشروع: ${projectName}`,
+          messageEn: `${currentUser?.fullName ?? 'A team member'} removed you from the team for project "${projectName}".`,
+          messageAr: `أزالك ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} من فريق مشروع "${projectName}".`,
+          entityType: 'project',
+          entityId: updatedProject.id,
+          actionUrl: `/projects/${updatedProject.id}`,
+          priority: 'normal',
+          triggeredBy: currentUser?.id,
+          triggeredByName: currentUser?.fullName ?? undefined,
+          metadata: { project_name: projectName },
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error("Error updating project:", err);
       setError(err instanceof Error ? err.message : 'Failed to update project');
