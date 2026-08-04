@@ -35,7 +35,6 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
     budget: dbProject.budget,
     location: dbProject.location,
     team: dbProject.team,
-    activities: [],
     createdAt: dbProject.created_at,
     updatedAt: dbProject.updated_at,
   };
