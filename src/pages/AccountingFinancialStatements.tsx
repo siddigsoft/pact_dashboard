@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -309,7 +310,7 @@ export default function AccountingFinancialStatements() {
     }
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const StatementSection = ({ rows, type, title, titleAr, totalLabel, totalLabelAr, total, accentClass }: {
@@ -421,7 +422,7 @@ export default function AccountingFinancialStatements() {
       {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : !periodId ? (
         <div className="text-center text-muted-foreground py-16 text-sm">Select a fiscal period to generate financial statements</div>
       ) : (

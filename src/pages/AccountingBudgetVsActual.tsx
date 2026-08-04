@@ -5,6 +5,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -312,7 +313,7 @@ export default function AccountingBudgetVsActual() {
     } finally { setPdfBusy(false); }
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -534,7 +535,7 @@ export default function AccountingBudgetVsActual() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : !periodId ? (
         <div className="text-center text-muted-foreground py-16 text-sm">Select a fiscal period to run the report</div>
       ) : rows.length === 0 ? (

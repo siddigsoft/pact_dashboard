@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -210,7 +211,7 @@ export default function AccountingCashFlowForecast() {
     exportToExcel(rows, 'Cash Flow Forecast', `cash-flow-forecast-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!authReady) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const lowestBalance = forecast.reduce((min, r) => Math.min(min, r.closingBalance), Infinity);
@@ -273,7 +274,7 @@ export default function AccountingCashFlowForecast() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : error ? (
         <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">{error}</div>
       ) : (

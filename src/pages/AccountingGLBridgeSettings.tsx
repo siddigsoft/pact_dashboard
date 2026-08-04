@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Settings2, AlertTriangle, CheckCircle2, RefreshCw, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -289,9 +290,7 @@ export default function AccountingGLBridgeSettings() {
 
       {/* Config table */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoader compact label="Loading bridge settings…" />
       ) : configs.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">

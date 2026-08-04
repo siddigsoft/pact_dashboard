@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -179,7 +180,7 @@ export default function AccountingExpenseReports() {
     toast({ title: 'Report rejected' }); setRejectOpen(false); void load();
   };
 
-  if (!authReady || !isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -237,7 +238,7 @@ export default function AccountingExpenseReports() {
             </Select>
           </div>
 
-          {loading ? <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div>
+          {loading ? <PageLoader compact />
           : filtered.length === 0 ? <div className="text-center py-10 text-muted-foreground text-sm">No expense reports found.</div>
           : (
             <div className="overflow-x-auto">

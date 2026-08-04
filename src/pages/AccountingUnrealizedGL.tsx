@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -150,7 +151,7 @@ export default function AccountingUnrealizedGL() {
       </p>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : revalRows.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border border-dashed rounded-lg">
           <ArrowLeftRight className="h-8 w-8 mx-auto mb-2 opacity-30" />

@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Navigate as Nav } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -78,7 +79,7 @@ export default function AccountingJournalTemplates() {
     if (!error) { toast({ title: 'Duplicated' }); void load(); }
   };
 
-  if (!authReady || !isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Nav to="/" replace />;
 
   const TYPE_COLORS: Record<string, string> = { general: 'bg-blue-50 text-blue-700', bank: 'bg-emerald-50 text-emerald-700', cash: 'bg-amber-50 text-amber-700', sale: 'bg-purple-50 text-purple-700', purchase: 'bg-rose-50 text-rose-700' };
@@ -102,7 +103,7 @@ export default function AccountingJournalTemplates() {
         <CardContent className="space-y-3">
           <div className="relative"><Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" /><Input placeholder="Search templates…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" /></div>
 
-          {loading ? <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div>
+          {loading ? <PageLoader compact />
           : filtered.length === 0 ? <div className="text-center py-10 text-muted-foreground text-sm">No templates yet. Create one to speed up journal posting.</div>
           : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

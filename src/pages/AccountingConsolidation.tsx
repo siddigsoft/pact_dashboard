@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -134,7 +135,7 @@ export default function AccountingConsolidation() {
     exportToExcel(data, 'Consolidation', `consolidation-${yearFilter}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
@@ -182,7 +183,7 @@ export default function AccountingConsolidation() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : lines.length === 0 ? (
         <div className="text-center text-muted-foreground py-16 text-sm">No posted journal entries found for {yearFilter}. Post some journal entries first.</div>
       ) : (

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -344,8 +345,9 @@ export default function AccountingJournals() {
     return { dr, cr, balanced: Math.abs(dr - cr) < 0.005 };
   }, [openLines]);
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
+  if (metaQuery.isLoading && !metaQuery.data) return <PageLoader label="Loading journals…" />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1400px]">
@@ -438,7 +440,7 @@ export default function AccountingJournals() {
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading entries…</div>
+            <PageLoader compact label="Loading entries…" />
           ) : totalMatching === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm" data-testid="text-empty">No journal entries match the current filters.</div>
           ) : (

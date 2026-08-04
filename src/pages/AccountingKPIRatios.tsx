@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, RefreshCw, TrendingUp, TrendingDown, Minus, BarChart2 } from 'lucide-react';
@@ -71,7 +72,7 @@ export default function AccountingKPIRatios() {
 
   useEffect(() => { if (allowed) void run(); }, [allowed, year]);
 
-  if (!authReady || !isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const TrendIcon = ({ t }: { t?: string }) => t === 'up' ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : t === 'down' ? <TrendingDown className="w-4 h-4 text-rose-600" /> : <Minus className="w-4 h-4 text-muted-foreground" />;

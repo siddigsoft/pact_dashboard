@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -152,7 +153,7 @@ export default function AccountingSOD() {
     exportToExcel(rows, 'SOD Violations', `sod-violations-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (authLoading) return <PageLoader label="Checking session…" />;
   if (!allowed)   return <Navigate to="/" replace />;
 
   const isEnforcing = sodFlag?.is_enabled ?? false;
@@ -266,7 +267,7 @@ export default function AccountingSOD() {
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            <PageLoader compact />
           ) : violations.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-emerald-400 opacity-60" />

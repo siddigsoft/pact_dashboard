@@ -5,6 +5,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -542,7 +543,7 @@ export default function AccountingCOA() {
 
   // ── guards ────────────────────────────────────────────────
   if (!authReady || !isAuthenticated) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+    return <PageLoader label="Checking session…" />;
   }
   if (!allowed) return <Navigate to="/" replace />;
 

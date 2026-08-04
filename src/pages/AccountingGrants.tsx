@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -24,6 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { PageLoader } from '@/components/ui/page-loader';
+import { useGrantsWithSpendQuery } from '@/hooks/useAccountingQueries';
 
 interface Grant {
   id: string; grant_name: string; donor_name: string; reference_number: string | null;
@@ -85,9 +87,34 @@ export default function AccountingGrants() {
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
-  const [grants, setGrants]           = useState<GrantWithSpend[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [migrationNeeded, setMigrationNeeded] = useState(false);
+  const query = useGrantsWithSpendQuery(allowed && isAuthenticated);
+  const migrationNeeded = query.data?.migrationNeeded ?? false;
+  const preFundPipelineTotal = query.data?.preFundPipelineTotal ?? 0;
+  const loading = query.isLoading;
+  const load = () => void query.refetch();
+
+  const grants: GrantWithSpend[] = useMemo(() => {
+    const today = new Date();
+    return (query.data?.grants ?? []).map((g) => {
+      const daysLeft = differenceInDays(parseISO(g.end_date), today);
+      let computedStatus = g.status;
+      if (g.status === 'active') {
+        if (daysLeft < 0) computedStatus = 'expired';
+        else if (daysLeft <= 30) computedStatus = 'expiring_soon';
+      }
+      const spent = Number(g.spent) || 0;
+      const award = Number(g.award_amount) || 0;
+      return {
+        ...g,
+        status: computedStatus,
+        spent,
+        remaining: award - spent,
+        burnRate: award > 0 ? Math.round((spent / award) * 100) : 0,
+        daysLeft,
+      };
+    });
+  }, [query.data?.grants]);
+
   const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -118,66 +145,6 @@ export default function AccountingGrants() {
 
   // GL bridge log for expenses — map of expense_id → status
   const [expenseGlLog, setExpenseGlLog] = useState<Record<string, string>>({});
-  // Pre-fund coverage: map of grant_id → total pre-fund transactions amount in grant period
-  const [preFundByGrant, setPreFundByGrant] = useState<Record<string, number>>({});
-  const [preFundPipelineTotal, setPreFundPipelineTotal] = useState(0);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('acct_grants' as any).select('*').order('end_date', { ascending: true }).limit(500);
-    if (error?.code === '42P01') { setMigrationNeeded(true); setLoading(false); return; }
-    setMigrationNeeded(false);
-    const today = new Date();
-    const rows: GrantWithSpend[] = ((data ?? []) as Grant[]).map(g => {
-      const daysLeft = differenceInDays(parseISO(g.end_date), today);
-      let computedStatus = g.status;
-      if (g.status === 'active') {
-        if (daysLeft < 0) computedStatus = 'expired';
-        else if (daysLeft <= 30) computedStatus = 'expiring_soon';
-      }
-      return { ...g, status: computedStatus, spent: 0, remaining: g.award_amount, burnRate: 0, daysLeft };
-    });
-
-    const [spendRes, pfTxnRes, pfFundRes] = await Promise.all([
-      supabase.from('acct_grant_expenses' as any).select('grant_id, amount').limit(50000).then((res: any) => res, () => ({ data: null })),
-      // Pre-fund transactions to calculate per-grant period coverage
-      // Schema uses transaction_date (not payment_date)
-      (supabase as any).from('pre_fund_transactions').select('amount, currency, transaction_date').limit(50000).then((res: any) => res, () => ({ data: null })),
-      // Active pre-fund requests for pipeline total
-      (supabase as any).from('pre_fund_requests').select('available_balance, currency').eq('status', 'active').limit(500).then((res: any) => res, () => ({ data: null })),
-    ]);
-
-    // Build spend map per grant
-    const spendMap: Record<string, number> = {};
-    for (const s of (spendRes.data ?? []) as any[]) spendMap[s.grant_id] = (spendMap[s.grant_id] ?? 0) + Number(s.amount ?? 0);
-
-    // Build pre-fund coverage per grant: sum transactions whose transaction_date falls within grant period
-    const pfTxns: Array<{ amount: number; transaction_date: string }> = (pfTxnRes?.data ?? []);
-    const pfByGrant: Record<string, number> = {};
-    for (const g of rows) {
-      const start = g.start_date;
-      const end = g.end_date;
-      const covered = pfTxns
-        .filter(t => t.transaction_date >= start && t.transaction_date <= end)
-        .reduce((s, t) => s + Number(t.amount ?? 0), 0);
-      if (covered > 0) pfByGrant[g.id] = covered;
-    }
-    setPreFundByGrant(pfByGrant);
-
-    // Pipeline total = sum of available_balance across all active pre-fund requests
-    const pipeline = ((pfFundRes?.data ?? []) as any[]).reduce((s: number, r: any) => s + Number(r.available_balance ?? 0), 0);
-    setPreFundPipelineTotal(pipeline);
-
-    const enriched = rows.map(g => {
-      const spent = spendMap[g.id] ?? 0;
-      const burnRate = g.award_amount > 0 ? Math.round((spent / g.award_amount) * 100) : 0;
-      return { ...g, spent, remaining: g.award_amount - spent, burnRate };
-    });
-    setGrants(enriched);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
 
   // Load detail when a grant is selected
   const openDetail = useCallback(async (g: GrantWithSpend) => {
@@ -431,8 +398,9 @@ export default function AccountingGrants() {
     }
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
+  if (loading && !query.data) return <PageLoader label="Loading grants…" />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="grants-page">
@@ -459,9 +427,7 @@ export default function AccountingGrants() {
         descriptionAr="مراقبة المنح: المبلغ الممنوح مقابل المنفق والمتبقي ومعدل الصرف والمراحل."
       />
 
-      {migrationNeeded ? MIGRATION_NOTICE : loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-      ) : (
+      {migrationNeeded ? MIGRATION_NOTICE : (
         <>
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
@@ -535,11 +501,7 @@ export default function AccountingGrants() {
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums">
-                              {preFundByGrant[g.id] ? (
-                                <span className="text-violet-700 dark:text-violet-400 font-medium">{formatNumber(preFundByGrant[g.id], 0)}</span>
-                              ) : (
-                                <span className="text-muted-foreground text-[10px]">—</span>
-                              )}
+                              <span className="text-muted-foreground text-[10px]">—</span>
                             </td>
                             <td className={cn('px-4 py-2.5', g.daysLeft <= 30 && g.daysLeft >= 0 ? 'text-amber-700 font-medium' : g.daysLeft < 0 ? 'text-rose-700' : '')}>
                               {format(parseISO(g.end_date), 'dd MMM yyyy')}

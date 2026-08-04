@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -269,7 +270,7 @@ export default function AccountingSettings() {
     else { setSeedResult(data as SeedResult); toast({ title: 'Synthetic data seeded' }); }
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (authLoading) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const totalTables = tableHealth.length;
@@ -526,7 +527,7 @@ export default function AccountingSettings() {
             <CardContent className="p-4 space-y-2">
               {error && <div className="p-3 rounded border border-rose-200 bg-rose-50 text-rose-800 text-sm">{error}</div>}
               {loading ? (
-                <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div>
+                <PageLoader compact />
               ) : flags.length === 0 ? (
                 <div className="text-center py-10 space-y-3">
                   <Info className="w-10 h-10 text-muted-foreground mx-auto" />

@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -97,7 +98,7 @@ export default function AccountingFollowUpLevels() {
         {canManage && <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" />New Level</Button>}
       </div>
 
-      {loading ? <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div> :
+      {loading ? <PageLoader compact /> :
       levels.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border border-dashed rounded-lg">
           <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />

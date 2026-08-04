@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
 import { Button } from '@/components/ui/button';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -306,6 +307,10 @@ export default function SalaryIncrements() {
   const latestSalary = myIncrements.length > 0 ? myIncrements[0].new_salary : null;
   const avgPct = myIncrements.filter(r => r.increment_percent != null).reduce((s, r) => s + (r.increment_percent ?? 0), 0) / (myIncrements.filter(r => r.increment_percent != null).length || 1);
 
+  if (loading && !incrementsQuery.data) {
+    return <PageLoader label="Loading salary increments…" />;
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -402,9 +407,7 @@ export default function SalaryIncrements() {
       </div>
 
       {/* Increment list */}
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <TrendingUp className="h-10 w-10 mx-auto mb-2 opacity-20" />
           <p>No salary increment records found.</p>

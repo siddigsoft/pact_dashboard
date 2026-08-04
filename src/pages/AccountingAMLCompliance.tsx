@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -538,7 +539,7 @@ export default function AccountingAMLCompliance() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            <PageLoader compact />
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <ShieldCheck className="h-10 w-10 mx-auto mb-3 text-emerald-400 opacity-70" />
@@ -627,7 +628,7 @@ export default function AccountingAMLCompliance() {
         {/* ── compliance checks tab ── */}
         <TabsContent value="compliance">
           {loading ? (
-            <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            <PageLoader compact />
           ) : (
             <div className="space-y-3">
               {checks.map(c => {

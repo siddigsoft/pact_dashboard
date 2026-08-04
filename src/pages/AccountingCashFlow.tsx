@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -201,7 +202,7 @@ export default function AccountingCashFlow() {
     } finally { setPdfBusy(false); }
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const SectionBlock = ({ sectionKey, sec }: { sectionKey: string; sec: CfSection }) => {
@@ -326,7 +327,7 @@ export default function AccountingCashFlow() {
       </Card>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : !periodId ? (
         <div className="text-center text-muted-foreground py-16 text-sm">Select a fiscal period to generate the Cash Flow Statement</div>
       ) : (

@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -133,7 +134,7 @@ export default function AccountingPettyCash() {
     toast({ title: 'Replenishment fulfilled — top-up transaction recorded' }); void load();
   };
 
-  if (!authReady || !isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -158,7 +159,7 @@ export default function AccountingPettyCash() {
         </div>
       )}
 
-      {loading ? <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div> : (
+      {loading ? <PageLoader compact /> : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {boxes.map(b => (
             <Card key={b.id} className={cn('cursor-pointer transition-all', selectedBox === b.id ? 'ring-2 ring-emerald-500' : 'hover:shadow-md')} onClick={() => setSelectedBox(b.id)}>

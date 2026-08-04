@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -160,7 +161,7 @@ export default function AccountingDepreciationRun() {
     exportToExcel(rows, 'Depreciation Schedule', `depreciation-schedule-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (authLoading) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (
@@ -187,7 +188,7 @@ export default function AccountingDepreciationRun() {
       <PageInfoBanner title="Depreciation Run" description="Uses straight-line depreciation: (Cost − Salvage) ÷ Useful Life Months per asset. Click 'Run Depreciation' to post a batch journal entry for the current period. Fully depreciated assets (elapsed ≥ life) are excluded automatically." descriptionAr="يستخدم طريقة القسط الثابت: (التكلفة − قيمة الإنقاذ) ÷ العمر الإنتاجي بالأشهر. انقر لتشغيل جدولة الاستهلاك." />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
@@ -326,7 +327,7 @@ export default function AccountingDepreciationRun() {
                 </Button>
               </div>
               {unifiedLoading ? (
-                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <PageLoader compact />
               ) : unifiedRuns.length === 0 ? (
                 <div className="text-center text-muted-foreground py-16 text-sm">
                   No unified-asset depreciation runs yet.

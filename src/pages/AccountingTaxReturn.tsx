@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Download, RefreshCw, FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
@@ -72,7 +73,7 @@ export default function AccountingTaxReturn() {
 
   const exportData = [...rows.map(r => ({ ...r, type: 'VAT/Tax' })), ...whtRows.map(r => ({ tax_name: (r.acct_withholding_tax_rates as any)?.name_en, wht_amount: r.wht_amount, gross: r.gross_amount, type: 'WHT' }))];
 
-  if (!authReady || !isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!authReady || !isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -21,18 +21,12 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
+import { useBudgetEncumbranceQuery } from '@/hooks/useAccountingQueries';
 
-interface Encumbrance {
-  id: string; source_type: string; source_id: string;
-  amount: number; currency: string; status: string;
-  fund_id: string | null; country_id: string | null;
-  gl_account_id: string | null; created_at: string;
-  budget_line_id: string | null;
-}
-interface Fund { id: string; code: string; name_en: string }
-interface Account { id: string; code: string; name_en: string }
-interface BudgetLine { id: string; account_id: string; budget_amount: number }
-interface ActualByAccount { account_id: string; actual: number }
+type Encumbrance = NonNullable<
+  ReturnType<typeof useBudgetEncumbranceQuery>['data']
+>['encumbrances'][number];
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
   open:        { label: 'Open',       color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30' },
@@ -55,14 +49,19 @@ export default function AccountingBudgetEncumbrance() {
   const canEdit = roleCanEdit || overrideCanEdit;
   const { toast } = useToast();
 
-  const [encumbrances, setEncumbrances] = useState<Encumbrance[]>([]);
-  const [funds, setFunds]               = useState<Fund[]>([]);
-  const [accounts, setAccounts]         = useState<Account[]>([]);
-  const [budgetLines, setBudgetLines]   = useState<BudgetLine[]>([]);
-  const [actuals, setActuals]           = useState<ActualByAccount[]>([]);
-  const [glLogMap, setGlLogMap]         = useState<Map<string, string>>(new Map());
-  const [loading, setLoading]           = useState(true);
-  const [tableExists, setTableExists]   = useState<boolean | null>(null);
+  const query = useBudgetEncumbranceQuery(allowed && isAuthenticated);
+  const tableExists = query.data?.tableExists ?? null;
+  const encumbrances = query.data?.encumbrances ?? [];
+  const funds = query.data?.funds ?? [];
+  const accounts = query.data?.accounts ?? [];
+  const budgetLines = query.data?.budgetLines ?? [];
+  const actuals = query.data?.actuals ?? [];
+  const glLogMap = useMemo(
+    () => new Map(Object.entries(query.data?.glLogMap ?? {})),
+    [query.data?.glLogMap]
+  );
+  const loading = query.isLoading;
+  const load = () => void query.refetch();
 
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatusFilter] = useState('open');
@@ -70,55 +69,6 @@ export default function AccountingBudgetEncumbrance() {
 
   const [actionDlg, setActionDlg]   = useState<{ enc: Encumbrance; action: 'liquidate' | 'cancel' } | null>(null);
   const [actioning, setActioning]   = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data: enc, error: encErr } = await supabase
-      .from('acct_budget_encumbrances')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (encErr?.code === '42P01') { setTableExists(false); setLoading(false); return; }
-    setTableExists(true);
-    setEncumbrances((enc ?? []) as Encumbrance[]);
-
-    const [{ data: fData }, { data: aData }, { data: blData }] = await Promise.all([
-      supabase.from('acct_funds').select('id, code, name_en').eq('is_active', true),
-      supabase.from('acct_accounts').select('id, code, name_en').order('code'),
-      supabase.from('acct_budget_lines').select('id, account_id, budget_amount'),
-    ]);
-    setFunds((fData ?? []) as Fund[]);
-    setAccounts((aData ?? []) as Account[]);
-    setBudgetLines((blData ?? []) as BudgetLine[]);
-
-    const { data: jlData } = await supabase
-      .from('acct_journal_lines')
-      .select('account_id, functional_amount, debit_credit');
-    const actualMap = new Map<string, number>();
-    for (const l of (jlData ?? []) as any[]) {
-      const cur = actualMap.get(l.account_id) ?? 0;
-      actualMap.set(l.account_id, cur + (l.debit_credit === 'DR' ? l.functional_amount : -l.functional_amount));
-    }
-    setActuals(Array.from(actualMap.entries()).map(([account_id, actual]) => ({ account_id, actual })));
-
-    const fetchedEnc = (enc ?? []) as Encumbrance[];
-    if (fetchedEnc.length > 0) {
-      const { data: logData } = await supabase
-        .from('acct_gl_bridge_log' as any)
-        .select('source_id, status')
-        .eq('source_table', 'acct_budget_encumbrances')
-        .in('source_id', fetchedEnc.map(e => e.id))
-        .order('created_at', { ascending: false });
-      const map = new Map<string, string>();
-      for (const row of (logData ?? []) as { source_id: string; status: string }[]) {
-        if (!map.has(row.source_id)) map.set(row.source_id, row.status);
-      }
-      setGlLogMap(map);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { if (allowed) void load(); }, [allowed]);
-
   const filtered = useMemo(() => encumbrances.filter(e => {
     if (statusFilter !== 'all' && e.status !== statusFilter) return false;
     if (fundFilter !== 'all' && e.fund_id !== fundFilter) return false;
@@ -193,7 +143,9 @@ export default function AccountingBudgetEncumbrance() {
     exportToExcel(rows, 'Budget Encumbrances', `budget-encumbrances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!allowed)   return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
+  if (!allowed) return <Navigate to="/" replace />;
+  if (loading && !query.data) return <PageLoader label="Loading encumbrances…" />;
 
   if (tableExists === false) {
     return (
@@ -329,9 +281,7 @@ export default function AccountingBudgetEncumbrance() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin" /></div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Wallet className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">No encumbrances found.</p>

@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -423,7 +424,7 @@ export default function AccountingFixedAssets() {
     return rows;
   }
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (authLoading) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const DepBar = ({ asset }: { asset: Asset }) => {
@@ -526,7 +527,7 @@ export default function AccountingFixedAssets() {
         {/* Asset list */}
         <div className="lg:col-span-2 space-y-2">
           {loading ? (
-            <div className="flex items-center justify-center h-40"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <PageLoader compact />
           ) : filtered.length === 0 ? (
             <div className="text-center text-muted-foreground py-10 text-sm">
               {assets.length === 0 ? 'No assets found. Run fixed_assets_migration.sql first, then add your first asset.' : 'No assets match the current filters.'}

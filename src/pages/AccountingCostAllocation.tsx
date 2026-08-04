@@ -5,6 +5,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { Card, CardContent } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -362,7 +363,7 @@ export default function AccountingCostAllocation() {
     exportToExcel(rows, 'Cost Allocation Runs', `allocation-runs-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!authReady) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const activeRulesCount = rules.filter(r => r.is_active).length;
@@ -405,7 +406,7 @@ export default function AccountingCostAllocation() {
       />
 
       {migrationNeeded ? MIGRATION_NOTICE : loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : (
         <>
           {/* KPI cards */}

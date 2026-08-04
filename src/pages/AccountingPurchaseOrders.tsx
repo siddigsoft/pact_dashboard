@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,7 +199,7 @@ export default function AccountingPurchaseOrders() {
     downloadCsv(`purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
 
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (authLoading) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
 
   const StatusBadge = ({ status }: { status: string }) => {
@@ -261,7 +262,7 @@ export default function AccountingPurchaseOrders() {
         {/* PO list */}
         <div className="lg:col-span-2 space-y-2">
           {loading ? (
-            <div className="flex items-center justify-center h-40"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <PageLoader compact />
           ) : filtered.length === 0 ? (
             <div className="text-center text-muted-foreground py-14 text-sm">
               {pos.length === 0 ? 'No purchase orders yet. Run purchase_orders_migration.sql then create your first PO.' : 'No POs match the current filters.'}

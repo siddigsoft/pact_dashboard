@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -135,8 +136,9 @@ export default function AccountingDonorReports() {
     exportToExcel(data, 'Donor Fund Report', `donor-fund-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed)   return <Navigate to="/" replace />;
+  if (loading && !reportsQuery.data) return <PageLoader label="Loading donor reports…" />;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-[1100px]">
@@ -205,7 +207,7 @@ export default function AccountingDonorReports() {
           <Card className="border shadow-sm">
             <CardContent className="p-0">
               {loading ? (
-                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                <PageLoader compact />
               ) : filtered.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground">
                   <Heart className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -315,7 +317,7 @@ export default function AccountingDonorReports() {
             </CardHeader>
             <CardContent className="p-4 space-y-4">
               {loading ? (
-                <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin" /></div>
+                <PageLoader compact />
               ) : eliminations.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Scale className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -388,7 +390,7 @@ export default function AccountingDonorReports() {
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
-                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                <PageLoader compact />
               ) : preFundRequests.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground text-sm px-4">
                   No active pre-fund requests. Create pre-fund requests in Finance → Pre-Funding Registry.

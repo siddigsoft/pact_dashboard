@@ -120,6 +120,9 @@ export const queryKeys = {
     glLedger: (accountId: string, periodId: string) =>
       [...queryKeys.accounting.all, 'glLedger', accountId, periodId] as const,
     donorReports: () => [...queryKeys.accounting.all, 'donorReports'] as const,
+    budgetEncumbrance: () => [...queryKeys.accounting.all, 'budgetEncumbrance'] as const,
+    grantsWithSpend: () => [...queryKeys.accounting.all, 'grantsWithSpend'] as const,
+    apAging: () => [...queryKeys.accounting.all, 'apAging'] as const,
   },
 } as const;
 

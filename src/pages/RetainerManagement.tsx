@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -669,6 +670,10 @@ const RetainerManagement = () => {
     );
   }
 
+  if (loading && !retainerQuery.data) {
+    return <PageLoader label="Loading retainers…" />;
+  }
+
   const months12 = getLast12Months();
 
   return (
@@ -718,17 +723,7 @@ const RetainerManagement = () => {
         ]}
       />
 
-      {loading ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Card key={i}><CardContent className="p-6"><Skeleton className="h-4 w-24 mb-2" /><Skeleton className="h-8 w-32" /></CardContent></Card>
-            ))}
-          </div>
-          <Skeleton className="h-96 w-full" />
-        </div>
-      ) : (
-        <>
+      <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card data-testid="card-kpi-eligible">
               <CardContent className="p-5">
@@ -1726,7 +1721,6 @@ const RetainerManagement = () => {
             </TabsContent>
           </Tabs>
         </>
-      )}
 
       <Dialog open={showReprocessDialog} onOpenChange={setShowReprocessDialog}>
         <DialogContent>

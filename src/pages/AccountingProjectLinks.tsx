@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -162,7 +163,7 @@ export default function AccountingProjectLinks() {
         ))}
       </div>
 
-      {loading ? <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div> :
+      {loading ? <PageLoader compact /> :
       grouped.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border border-dashed rounded-lg">
           <Link2 className="h-8 w-8 mx-auto mb-2 opacity-30" /><p>No project-account links</p>

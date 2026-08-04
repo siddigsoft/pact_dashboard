@@ -3,6 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -176,8 +177,9 @@ export default function AccountingGeneralLedger() {
     downloadCsv(`general-ledger-${selectedAccount.code}-${new Date().toISOString().slice(0, 10)}.csv`, [header, opening, ...body, closing]);
   };
 
-  if (!isAuthenticated) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <PageLoader label="Checking session…" />;
   if (!allowed) return <Navigate to="/" replace />;
+  if (bootstrap) return <PageLoader label="Loading general ledger…" />;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="gl-page">
@@ -301,7 +303,7 @@ export default function AccountingGeneralLedger() {
 
       {/* Ledger table */}
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <PageLoader compact />
       ) : !accountId ? (
         <div className="text-center text-muted-foreground py-16 text-sm">Select an account and period, then click Run Ledger</div>
       ) : lines.length === 0 && !loading ? (
