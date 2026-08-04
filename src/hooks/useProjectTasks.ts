@@ -49,6 +49,12 @@ export interface FieldTask {
   createdByName: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Baseline snapshot — captured via "Set Baseline" by a project manager */
+  baselineStart: string | null;
+  baselineDue: string | null;
+  baselineHours: number | null;
+  baselineCost: number | null;
+  baselineSetAt: string | null;
 }
 
 export interface CreateFieldTask {
@@ -228,6 +234,7 @@ export function useProjectTasks(projectId: string) {
           assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
           estimated_hours, actual_hours, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
+          baseline_start, baseline_due, baseline_hours, baseline_cost, baseline_set_at,
           assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
@@ -263,6 +270,11 @@ export function useProjectTasks(projectId: string) {
         createdByName: r.creator?.full_name ?? null,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+        baselineStart: r.baseline_start ?? null,
+        baselineDue: r.baseline_due ?? null,
+        baselineHours: r.baseline_hours ?? null,
+        baselineCost: r.baseline_cost ?? null,
+        baselineSetAt: r.baseline_set_at ?? null,
       }));
     },
     staleTime: 30_000,
@@ -494,6 +506,27 @@ export function useProjectTasks(projectId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 
+  const baselineMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // Copy current planned values into baseline columns
+      const cached = qc.getQueryData<FieldTask[]>(key);
+      const task = cached?.find(t => t.id === id);
+      if (!task) throw new Error('Task not found in cache');
+      const { error } = await supabase
+        .from('project_field_tasks')
+        .update({
+          baseline_start:  task.startDate  ?? null,
+          baseline_due:    task.dueDate    ?? null,
+          baseline_hours:  task.estimatedHours ?? null,
+          baseline_cost:   task.estimatedCost  ?? null,
+          baseline_set_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+  });
+
   return {
     tasks: query.data ?? [],
     isLoading: query.isLoading,
@@ -505,9 +538,11 @@ export function useProjectTasks(projectId: string) {
       meta?: { currentUserId?: string; projectName?: string; currentUserName?: string; prevAssignee?: string | null; prevCoAssigneeIds?: string[] },
     ) => updateMutation.mutateAsync({ id, patch, ...meta }),
     deleteTask: (id: string) => deleteMutation.mutateAsync(id),
+    setBaseline: (id: string) => baselineMutation.mutateAsync(id),
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isSettingBaseline: baselineMutation.isPending,
   };
 }
 

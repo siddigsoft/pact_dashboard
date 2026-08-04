@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Minus, ExternalLink, Layers, Lock,
   FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
   Square, Users, Paperclip, Upload, Download, FileText, Image, FileSpreadsheet,
-  Package, Truck, Wrench, PersonStanding,
+  Package, Truck, Wrench, PersonStanding, Target,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1689,9 +1689,11 @@ interface TaskDetailProps {
   onStatusChange: (s: FieldTaskStatus) => void;
   typedDeps?: TaskDependency[];
   initialTab?: string;
+  onSetBaseline?: () => void;
+  isSettingBaseline?: boolean;
 }
 
-function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [], initialTab = 'overview' }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
+function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, projectId, projectName, typedDeps = [], initialTab = 'overview', onSetBaseline, isSettingBaseline = false }: TaskDetailProps & { currentUserId?: string; currentUserName?: string; projectId: string; projectName: string }) {
   if (!task) return null;
   const { toast } = useToast();
   const overdue = isOverdue(task.dueDate, task.status);
@@ -1849,6 +1851,21 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                   <div>
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Start Date</p>
                     <p className="text-xs">{fmtDate(task.startDate)}</p>
+                    {task.baselineStart && task.baselineStart !== task.startDate && (() => {
+                      const slipDays = differenceInDays(parseISO(task.startDate), parseISO(task.baselineStart));
+                      return (
+                        <p className={cn('text-[10px] flex items-center gap-0.5 mt-0.5', slipDays > 0 ? 'text-amber-600 font-semibold' : 'text-muted-foreground')}>
+                          <Target className="h-2.5 w-2.5" />
+                          Baseline: {fmtDate(task.baselineStart)}
+                          {slipDays !== 0 && <span className="ml-0.5">({slipDays > 0 ? `+${slipDays}d slip` : `${slipDays}d early`})</span>}
+                        </p>
+                      );
+                    })()}
+                    {task.baselineStart && task.baselineStart === task.startDate && (
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-0.5 mt-0.5">
+                        <Target className="h-2.5 w-2.5" /> Baseline: {fmtDate(task.baselineStart)} ✓
+                      </p>
+                    )}
                   </div>
                 )}
                 {task.dueDate && (
@@ -1858,6 +1875,21 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                       {fmtDate(task.dueDate)}
                       {overdue && ` (${differenceInDays(new Date(), parseISO(task.dueDate))}d overdue)`}
                     </p>
+                    {task.baselineDue && task.baselineDue !== task.dueDate && (() => {
+                      const slipDays = differenceInDays(parseISO(task.dueDate), parseISO(task.baselineDue));
+                      return (
+                        <p className={cn('text-[10px] flex items-center gap-0.5 mt-0.5', slipDays > 0 ? 'text-amber-600 font-semibold' : 'text-muted-foreground')}>
+                          <Target className="h-2.5 w-2.5" />
+                          Baseline: {fmtDate(task.baselineDue)}
+                          {slipDays !== 0 && <span className="ml-0.5">({slipDays > 0 ? `+${slipDays}d slip` : `${slipDays}d early`})</span>}
+                        </p>
+                      );
+                    })()}
+                    {task.baselineDue && task.baselineDue === task.dueDate && (
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-0.5 mt-0.5">
+                        <Target className="h-2.5 w-2.5" /> Baseline: {fmtDate(task.baselineDue)} ✓
+                      </p>
+                    )}
                   </div>
                 )}
                 {(task.stateName || task.localityName) && (
@@ -1925,6 +1957,19 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                   <Timer className="h-5 w-5 text-blue-500 mx-auto" />
                   <p className="text-2xl font-bold text-foreground">{fmtHours(task.estimatedHours)}</p>
                   <p className="text-xs text-muted-foreground">Estimated Hours</p>
+                  {task.baselineHours !== null && task.baselineHours !== undefined && (() => {
+                    const est = task.estimatedHours ?? 0;
+                    const base = task.baselineHours!;
+                    const pctSlip = base > 0 ? ((est - base) / base) * 100 : 0;
+                    const isSlipping = pctSlip > 10;
+                    return (
+                      <p className={cn('text-[10px] flex items-center justify-center gap-0.5 mt-1', isSlipping ? 'text-amber-600 font-semibold' : 'text-muted-foreground')}>
+                        <Target className="h-2.5 w-2.5" />
+                        Baseline: {fmtHours(base)}
+                        {Math.abs(pctSlip) > 1 && <span className="ml-0.5">({pctSlip > 0 ? `+${pctSlip.toFixed(0)}%` : `${pctSlip.toFixed(0)}%`})</span>}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="rounded-lg border p-4 text-center space-y-1">
                   <Clock className="h-5 w-5 text-[#1D3461] mx-auto" />
@@ -1963,6 +2008,19 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                   <BarChart2 className="h-5 w-5 text-slate-400 mx-auto" />
                   <p className="text-2xl font-bold text-foreground">{fmtCost(task.estimatedCost)}</p>
                   <p className="text-xs text-muted-foreground">Budget (Estimated)</p>
+                  {task.baselineCost !== null && task.baselineCost !== undefined && (() => {
+                    const est = task.estimatedCost ?? 0;
+                    const base = task.baselineCost!;
+                    const pctSlip = base > 0 ? ((est - base) / base) * 100 : 0;
+                    const isSlipping = pctSlip > 10;
+                    return (
+                      <p className={cn('text-[10px] flex items-center justify-center gap-0.5 mt-1', isSlipping ? 'text-amber-600 font-semibold' : 'text-muted-foreground')}>
+                        <Target className="h-2.5 w-2.5" />
+                        Baseline: {fmtCost(base)}
+                        {Math.abs(pctSlip) > 1 && <span className="ml-0.5">({pctSlip > 0 ? `+${pctSlip.toFixed(0)}%` : `${pctSlip.toFixed(0)}%`})</span>}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="rounded-lg border p-4 text-center space-y-1">
                   <DollarSign className="h-5 w-5 text-emerald-500 mx-auto" />
@@ -2302,6 +2360,21 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
             <Button variant="outline" size="sm" onClick={onDelete} className="text-red-600 hover:text-red-700 mr-auto">
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
             </Button>
+            {onSetBaseline && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onSetBaseline}
+                disabled={isSettingBaseline}
+                title={task?.baselineSetAt ? `Baseline last set ${fmtDate(task.baselineSetAt)}` : 'Capture current planned dates, hours and cost as the baseline'}
+                className="text-amber-700 border-amber-300 hover:bg-amber-50"
+              >
+                {isSettingBaseline
+                  ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Setting…</>
+                  : <><Target className="h-3.5 w-3.5 mr-1.5" />{task?.baselineSetAt ? 'Reset Baseline' : 'Set Baseline'}</>}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
             <Button size="sm" onClick={onEdit} className="bg-[#1D3461] hover:bg-[#0F2041] text-white">
               <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit Task
@@ -2746,6 +2819,7 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
   tasks: FieldTask[];
   typedDeps?: TaskDependency[];
   onOpen: (t: FieldTask) => void;
+  // baseline bars derived from task fields internally
 }) {
   const dated = tasks.filter(t => t.startDate || t.dueDate);
 
@@ -2896,6 +2970,31 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
             {sorted.map((t, i) => {
               const g = taskGeom(t);
               const barColor = GANTT_STATUS_COLORS[t.status];
+
+              // Baseline shadow bar (lighter, behind the current bar)
+              let baselineBar: React.ReactNode = null;
+              if (t.baselineStart || t.baselineDue) {
+                const bStart = t.baselineStart || t.baselineDue!;
+                const bEnd   = t.baselineDue   || t.baselineStart!;
+                const bStartOff = dayOffset(bStart);
+                const bWidthDays = bStart === bEnd
+                  ? 1
+                  : Math.max(1, Math.ceil((new Date(bEnd).getTime() - new Date(bStart).getTime()) / 86400000));
+                baselineBar = (
+                  <div
+                    className="absolute rounded-md pointer-events-none border border-amber-400/60 bg-amber-100/40 dark:bg-amber-900/20"
+                    style={{
+                      left:   bStartOff * DAY_PX,
+                      width:  bWidthDays * DAY_PX,
+                      top:    BAR_PAD_Y + BAR_H - 4,
+                      height: 4,
+                    }}
+                    title={`Baseline: ${bStart} → ${bEnd}`}
+                    data-testid={`gantt-baseline-bar-${t.id}`}
+                  />
+                );
+              }
+
               return (
                 <div
                   key={t.id}
@@ -2903,6 +3002,7 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
                   style={{ height: ROW_H }}
                 >
                   {i % 2 === 1 && <div className="absolute inset-0 bg-muted/15 pointer-events-none" />}
+                  {baselineBar}
                   <div
                     className={cn('absolute rounded-md flex items-center px-2 cursor-pointer hover:opacity-100 opacity-90 shadow-sm', barColor)}
                     style={{
@@ -3002,6 +3102,11 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
             <span className="text-[10px] text-muted-foreground">{dt}</span>
           </div>
         ))}
+        <div className="h-3 w-px bg-border mx-1" />
+        <div className="flex items-center gap-1.5">
+          <div style={{ width: 14, height: 4, background: 'rgb(251 191 36 / 0.5)', borderRadius: 2, border: '1px solid rgb(251 191 36 / 0.6)' }} />
+          <span className="text-[10px] text-muted-foreground">Baseline</span>
+        </div>
         <div className="flex items-center gap-1.5 ml-auto">
           <div className="h-2.5 w-px bg-red-500/60" />
           <span className="text-[10px] text-muted-foreground">Today</span>
@@ -3358,7 +3463,7 @@ export function ProjectFieldTasksPanel({
 }: Props) {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } =
+  const { tasks, isLoading, createTask, updateTask, deleteTask, setBaseline, isCreating, isUpdating, isSettingBaseline } =
     useProjectTasks(projectId);
   const { dependencies: typedDepsAll, upsertDependency, deleteDependency, predecessorsOf } =
     useTaskDependencies(projectId);
@@ -4001,6 +4106,12 @@ export function ProjectFieldTasksPanel({
         onEdit={() => { setEditTask(detailTask); setDetailTask(null); setDetailInitialTab('overview'); }}
         onDelete={() => detailTask && handleDelete(detailTask)}
         onStatusChange={s => detailTask && handleStatusChange(detailTask, s)}
+        onSetBaseline={detailTask ? () => setBaseline(detailTask.id).then(() => {
+          toast({ title: 'Baseline saved', description: `Baseline captured for "${detailTask.title}"` });
+        }).catch((err: any) => {
+          toast({ title: 'Failed to set baseline', description: err?.message, variant: 'destructive' });
+        }) : undefined}
+        isSettingBaseline={isSettingBaseline}
       />
     </div>
   );
