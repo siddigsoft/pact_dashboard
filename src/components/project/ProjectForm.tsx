@@ -3,9 +3,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, Handshake, Loader2 } from 'lucide-react';
+import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, Handshake, Loader2, DollarSign, Wallet, BarChart3, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getProjectFlow } from '@/config/projectFlows';
+import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
 import { useUser } from '@/context/user/UserContext';
@@ -94,8 +95,15 @@ const createFormSchema = (isEditing: boolean) => z.object({
 
 type FormSchema = z.infer<ReturnType<typeof createFormSchema>>;
 
+export interface BudgetFormData {
+  budgetPeriod: 'monthly' | 'quarterly' | 'annual' | 'project_lifetime';
+  fiscalYear: string;
+  categoryAllocations: Record<string, string>;
+  budgetNotes: string;
+}
+
 interface ProjectFormProps {
-  onSubmit: (data: Project) => void | Promise<void>;
+  onSubmit: (data: Project, budgetConfig?: BudgetFormData) => void | Promise<void>;
   initialData?: Partial<Project>;
   isEditing?: boolean;
 }
@@ -174,6 +182,11 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const [relatedSiteVisits, setRelatedSiteVisits] = useState<string[]>(initialData?.relatedSiteVisits ?? []);
   const [crmPartners, setCrmPartners] = useState<{ id: string; name: string; type: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [budgetPeriod, setBudgetPeriod] = useState<BudgetFormData['budgetPeriod']>('annual');
+  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
+  const [categoryValues, setCategoryValues] = useState<Record<string, string>>({});
+  const [budgetNotes, setBudgetNotes] = useState('');
+  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
   useEffect(() => {
     supabase.from('crm_partners').select('id, name, type').eq('status', 'active').order('name')
       .then(({ data }) => { if (data) setCrmPartners(data); });
@@ -189,7 +202,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       status: (initialData?.status as ProjectStatus) || 'draft',
       startDate: initialData?.startDate ? new Date(initialData.startDate) : new Date(),
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      budgetTotal: initialData?.budget?.total || 0,
+      budgetTotal: Math.max(0, initialData?.budget?.total ?? 0),
       budgetCurrency: initialData?.budget?.currency || 'USD',
       budgetExpenseCurrency: initialData?.budget?.expenseCurrency || initialData?.budget?.currency || 'SDG',
       projectManager: initialData?.team?.projectManager || '',
@@ -271,7 +284,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
-      await onSubmit(project);
+      const budgetConfig: BudgetFormData = {
+        budgetPeriod,
+        fiscalYear,
+        categoryAllocations: categoryValues,
+        budgetNotes,
+      };
+      await onSubmit(project, budgetConfig);
 
     } catch (error) {
       console.error('Error submitting project form:', error);
@@ -289,6 +308,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const watchRegion = form.watch('region');
   const watchState = form.watch('state');
   const watchSelectedState = form.watch('selectedState');
+  const watchProjectType = form.watch('projectType');
+  const watchBudgetTotal = form.watch('budgetTotal') ?? 0;
+  const watchBudgetCurrency = form.watch('budgetCurrency') || 'USD';
+
+  // Budget categories react to selected project type
+  const budgetCategories = getProjectTypeConfig(watchProjectType || 'tpm').budgetCategories;
+  const categoryTotal = Object.values(categoryValues).reduce((s, v) => s + (parseFloat(v) || 0), 0);
 
   useEffect(() => {
     if (watchCountry !== selectedCountry) {
@@ -688,83 +714,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                 />
               )}
 
-              <FormField
-                control={form.control}
-                name="budgetTotal"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Budget Total</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="Enter budget amount" 
-                        {...field}
-                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="budgetCurrency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Income / Budget Currency</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-income-currency-form">
-                          <SelectValue placeholder="Select currency" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {SUPPORTED_CURRENCIES.map((c) => (
-                          <SelectItem key={c.code} value={c.code}>
-                            {c.flag} {c.code} – {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="budgetExpenseCurrency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Expense Currency</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-expense-currency-form">
-                          <SelectValue placeholder="Select expense currency" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {SUPPORTED_CURRENCIES.map((c) => (
-                          <SelectItem key={c.code} value={c.code}>
-                            {c.flag} {c.code} – {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Currency used when submitting operational costs and expenses against this project.
-                    </p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Budget fields moved to the dedicated Budget & Finance section below */}
               
               <FormField
                 control={form.control}
@@ -864,6 +814,236 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                 </FormItem>
               )}
             />
+
+            {/* ══════════════════════════════════════════════════════════════
+                 💰  BUDGET & FINANCE
+                 All budget setup in one place — replaces the old scattered
+                 fields + the separate post-creation budget dialog.
+                ══════════════════════════════════════════════════════════════ */}
+            <div className="rounded-xl border-2 border-[#1D3461]/15 bg-gradient-to-br from-[#0F2041]/5 to-transparent dark:from-[#1D3461]/15 p-5 space-y-5">
+
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
+                  <DollarSign className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Budget & Finance</h3>
+                  <p className="text-xs text-muted-foreground">Total budget, currencies, period, and category allocations</p>
+                </div>
+              </div>
+
+              {/* Accounting GL notice */}
+              <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2.5">
+                <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                  <span className="font-semibold">Accounting GL:</span> Approved cost submissions and advance payments for this project are automatically tagged with the project dimension in all journal entries, enabling real-time budget vs actuals reconciliation.
+                </p>
+              </div>
+
+              {/* Budget Total + Income Currency */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="budgetTotal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Wallet className="h-3 w-3 text-[#1D3461]" /> Budget Total
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="e.g. 500,000.00"
+                          {...field}
+                          value={field.value === 0 ? '' : field.value}
+                          onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="budgetCurrency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Income / Budget Currency</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-income-currency-form">
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SUPPORTED_CURRENCIES.map((c) => (
+                            <SelectItem key={c.code} value={c.code}>
+                              {c.flag} {c.code} – {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Expense Currency + Budget Period */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="budgetExpenseCurrency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Expense Currency</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-expense-currency-form">
+                            <SelectValue placeholder="Select expense currency" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SUPPORTED_CURRENCIES.map((c) => (
+                            <SelectItem key={c.code} value={c.code}>
+                              {c.flag} {c.code} – {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">Used when submitting operational costs against this project.</p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none">Budget Period</label>
+                  <Select value={budgetPeriod} onValueChange={(v) => setBudgetPeriod(v as BudgetFormData['budgetPeriod'])}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                      <SelectItem value="project_lifetime">Project Lifetime</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Fiscal Year — shown for annual / quarterly */}
+              {(budgetPeriod === 'annual' || budgetPeriod === 'quarterly') && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Fiscal Year</label>
+                    <Input
+                      type="number"
+                      min="2020"
+                      max="2050"
+                      value={fiscalYear}
+                      onChange={(e) => setFiscalYear(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Category Allocations */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <BarChart3 className="h-3.5 w-3.5 text-[#1D3461]" />
+                    <span className="text-sm font-medium">Category Allocations</span>
+                    <span className="text-xs text-muted-foreground">
+                      — {budgetCategories.length} categories for {getProjectTypeConfig(watchProjectType || 'tpm').shortLabel}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setCategoriesExpanded(v => !v)}
+                  >
+                    {categoriesExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    {categoriesExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                </div>
+
+                {categoriesExpanded && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg bg-muted/30 border p-3">
+                    {budgetCategories.map((cat) => (
+                      <div key={cat.key} className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
+                            {watchBudgetCurrency}
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder={cat.placeholder ?? '0.00'}
+                            value={categoryValues[cat.key] ?? ''}
+                            onChange={(e) => setCategoryValues(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                            className="pl-11 h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Live allocation summary bar */}
+                {watchBudgetTotal > 0 && (
+                  <div className={cn(
+                    'rounded-lg border p-3 space-y-2 transition-colors',
+                    categoryTotal > watchBudgetTotal
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
+                      : 'bg-muted/40 border-border',
+                  )}>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-medium text-muted-foreground">Category Allocation</span>
+                      <span className={cn('font-bold tabular-nums', categoryTotal > watchBudgetTotal ? 'text-red-600' : 'text-[#1D3461] dark:text-blue-300')}>
+                        {watchBudgetCurrency} {categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {' / '}
+                        {watchBudgetTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all duration-300', categoryTotal > watchBudgetTotal ? 'bg-red-500' : 'bg-[#1D3461]')}
+                        style={{ width: `${Math.min(100, watchBudgetTotal > 0 ? (categoryTotal / watchBudgetTotal) * 100 : 0)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        {Math.round((categoryTotal / watchBudgetTotal) * 100)}% allocated
+                      </span>
+                      <span className={cn('font-medium', categoryTotal > watchBudgetTotal ? 'text-red-600' : 'text-emerald-600')}>
+                        {categoryTotal > watchBudgetTotal
+                          ? `⚠ ${watchBudgetCurrency} ${(categoryTotal - watchBudgetTotal).toLocaleString()} over budget`
+                          : `${watchBudgetCurrency} ${(watchBudgetTotal - categoryTotal).toLocaleString()} unallocated`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Budget Notes */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Budget Notes</label>
+                <Textarea
+                  placeholder="Donor constraints, exchange rate assumptions, contingency policy, funding conditions…"
+                  value={budgetNotes}
+                  onChange={(e) => setBudgetNotes(e.target.value)}
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
+            </div>
 
             {isEditing && initialData?.id && (
               <TeamCompositionManager 
