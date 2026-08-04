@@ -131,6 +131,20 @@ function fmtCost(c: number | null) {
   return c.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+/** Stage progress: weighted mean of percentComplete for non-cancelled tasks.
+ *  Falls back to binary done/not-done count when no tasks have non-zero percentComplete. */
+function stagePercent(stageTasks: FieldTask[]): { pct: number; mode: 'weighted' | 'binary' } {
+  const active = stageTasks.filter(t => t.status !== 'cancelled');
+  if (active.length === 0) return { pct: 0, mode: 'binary' };
+  const hasPercent = active.some(t => t.percentComplete > 0);
+  if (hasPercent) {
+    const mean = active.reduce((s, t) => s + t.percentComplete, 0) / active.length;
+    return { pct: Math.round(mean), mode: 'weighted' };
+  }
+  const done = active.filter(t => t.status === 'done').length;
+  return { pct: Math.round((done / active.length) * 100), mode: 'binary' };
+}
+
 // ── Assignee Selector ─────────────────────────────────────────────────────
 
 interface AssigneeSelectorProps {
@@ -2815,11 +2829,12 @@ const GANTT_STATUS_COLORS: Record<FieldTaskStatus, string> = {
  * (passed in as `typedDeps`); legacy uuid[] dependencies are not rendered as
  * edges since they have no type/lag information.
  */
-function GanttView({ tasks, typedDeps = [], onOpen }: {
+function GanttView({ tasks, typedDeps = [], onOpen, allStages, customEntries }: {
   tasks: FieldTask[];
   typedDeps?: TaskDependency[];
   onOpen: (t: FieldTask) => void;
-  // baseline bars derived from task fields internally
+  allStages?: FlowStage[];
+  customEntries?: CustomStageEntry[];
 }) {
   const dated = tasks.filter(t => t.startDate || t.dueDate);
 
@@ -2847,10 +2862,66 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
     const db = b.startDate || b.dueDate || '';
     return da.localeCompare(db);
   });
-  const rowIndex = new Map(sorted.map((t, i) => [t.id, i]));
+
+  // ── Build layout items: stage header bands interspersed with task rows ──
+  type GanttItem =
+    | { kind: 'stage'; stageId: string; label: string; pct: number; y: number }
+    | { kind: 'task'; task: FieldTask; y: number; rowIdx: number };
+
+  const STAGE_H = 20; // px height for stage header bands
+  const items: GanttItem[] = [];
+  let curY = 0;
+  let rowIdx = 0;
+  /** Center Y (px) of each task row, used for SVG dependency connector anchors */
+  const rowYCenter = new Map<string, number>();
+
+  if (allStages && allStages.length > 0) {
+    const tasksByStage = new Map<string | null, FieldTask[]>();
+    for (const t of sorted) {
+      const key = t.stageId ?? null;
+      if (!tasksByStage.has(key)) tasksByStage.set(key, []);
+      tasksByStage.get(key)!.push(t);
+    }
+    for (const stage of allStages) {
+      const stageTasks = tasksByStage.get(stage.id) ?? [];
+      if (stageTasks.length === 0) continue;
+      const entry = customEntries?.find(e => e.id === stage.id);
+      const label = entry?.customLabel || stage.label;
+      const { pct } = stagePercent(stageTasks);
+      items.push({ kind: 'stage', stageId: stage.id, label, pct, y: curY });
+      curY += STAGE_H;
+      for (const t of stageTasks) {
+        items.push({ kind: 'task', task: t, y: curY, rowIdx });
+        rowYCenter.set(t.id, curY + ROW_H / 2);
+        curY += ROW_H;
+        rowIdx++;
+      }
+    }
+    // Tasks not linked to any stage
+    const unlinked = tasksByStage.get(null) ?? [];
+    if (unlinked.length > 0) {
+      const { pct } = stagePercent(unlinked);
+      items.push({ kind: 'stage', stageId: '__unlinked__', label: 'No Stage', pct, y: curY });
+      curY += STAGE_H;
+      for (const t of unlinked) {
+        items.push({ kind: 'task', task: t, y: curY, rowIdx });
+        rowYCenter.set(t.id, curY + ROW_H / 2);
+        curY += ROW_H;
+        rowIdx++;
+      }
+    }
+  } else {
+    // No stage info — flat sorted list (original behaviour)
+    for (const t of sorted) {
+      items.push({ kind: 'task', task: t, y: curY, rowIdx });
+      rowYCenter.set(t.id, curY + ROW_H / 2);
+      curY += ROW_H;
+      rowIdx++;
+    }
+  }
 
   const chartWidth  = totalDays * DAY_PX;
-  const chartHeight = sorted.length * ROW_H;
+  const chartHeight = curY;
 
   const dayOffset = (dateStr: string) =>
     Math.max(0, Math.ceil((new Date(dateStr).getTime() - minDate.getTime()) / 86400000));
@@ -2896,22 +2967,18 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
   };
   const connectors: ConnSeg[] = [];
   for (const dep of typedDeps) {
-    const predIdx = rowIndex.get(dep.predecessorId);
-    const succIdx = rowIndex.get(dep.successorId);
-    if (predIdx === undefined || succIdx === undefined) continue;
-    const pg = taskGeom(sorted[predIdx]);
-    const sg = taskGeom(sorted[succIdx]);
-    // anchor in DAYS from project start:
-    //  FS: pred.end   -> succ.start
-    //  SS: pred.start -> succ.start
-    //  FF: pred.end   -> succ.end
-    //  SF: pred.start -> succ.end
+    if (!rowYCenter.has(dep.predecessorId) || !rowYCenter.has(dep.successorId)) continue;
+    const pred = sorted.find(t => t.id === dep.predecessorId);
+    const succ = sorted.find(t => t.id === dep.successorId);
+    if (!pred || !succ) continue;
+    const pg = taskGeom(pred);
+    const sg = taskGeom(succ);
     const predAnchorDay = (dep.depType === 'SS' || dep.depType === 'SF') ? pg.startOff : pg.endOff;
     const succAnchorDay = (dep.depType === 'FF' || dep.depType === 'SF') ? sg.endOff   : sg.startOff;
     const sx = predAnchorDay * DAY_PX + dep.lagDays * DAY_PX;
-    const sy = predIdx * ROW_H + ROW_H / 2;
+    const sy = rowYCenter.get(dep.predecessorId)!;
     const tx = succAnchorDay * DAY_PX;
-    const ty = succIdx * ROW_H + ROW_H / 2;
+    const ty = rowYCenter.get(dep.successorId)!;
     const label = `${dep.depType}${dep.lagDays !== 0 ? ` ${dep.lagDays > 0 ? '+' : ''}${dep.lagDays}d` : ''}`;
     connectors.push({ id: dep.id, depType: dep.depType, lagDays: dep.lagDays, sx, sy, tx, ty, label });
   }
@@ -2922,11 +2989,25 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
         {/* Label column */}
         <div className="flex-shrink-0 sticky left-0 bg-background z-20" style={{ width: LABEL_W }}>
           <div style={{ height: HEADER_H }} />
-          {sorted.map(t => {
+          {items.map((item) => {
+            if (item.kind === 'stage') {
+              return (
+                <div
+                  key={`glabel-stage-${item.stageId}`}
+                  style={{ height: STAGE_H }}
+                  className="flex items-center gap-1.5 px-2 border-b border-[#1D3461]/20 bg-[#1D3461]/5"
+                >
+                  <Layers className="h-2.5 w-2.5 text-[#1D3461] opacity-70 flex-shrink-0" />
+                  <span className="text-[9px] font-bold text-[#1D3461] dark:text-blue-300 truncate flex-1">{item.label}</span>
+                  <span className="text-[9px] font-semibold text-[#1D3461] dark:text-blue-300 shrink-0">{item.pct}%</span>
+                </div>
+              );
+            }
+            const t = item.task;
             const overdue = isOverdue(t.dueDate, t.status);
             return (
               <div
-                key={t.id}
+                key={`glabel-${t.id}`}
                 style={{ height: ROW_H }}
                 className="pr-2 flex flex-col justify-center cursor-pointer hover:bg-muted/40 rounded-l border-b border-border/40"
                 onClick={() => onOpen(t)}
@@ -2936,7 +3017,7 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
                   {t.title}
                 </p>
                 <p className="text-[9px] text-muted-foreground">
-                  {STATUS_CFG[t.status].label}{overdue ? ' · Overdue' : ''}
+                  {STATUS_CFG[t.status].label}{overdue ? ' · Overdue' : ''}{t.percentComplete > 0 && t.percentComplete < 100 ? ` · ${t.percentComplete}%` : ''}
                 </p>
               </div>
             );
@@ -2967,11 +3048,31 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
 
           {/* Row backgrounds + bars */}
           <div className="absolute" style={{ top: HEADER_H, left: 0, width: chartWidth, height: chartHeight }}>
-            {sorted.map((t, i) => {
+            {items.map((item) => {
+              // Stage header band with progress fill
+              if (item.kind === 'stage') {
+                return (
+                  <div
+                    key={`gchart-stage-${item.stageId}`}
+                    className="absolute left-0 border-b border-[#1D3461]/15 bg-[#1D3461]/5"
+                    style={{ top: item.y, height: STAGE_H, width: chartWidth }}
+                  >
+                    {item.pct > 0 && (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 bg-[#1D3461]/10"
+                        style={{ width: `${item.pct}%` }}
+                      />
+                    )}
+                  </div>
+                );
+              }
+
+              // Task bar row
+              const t = item.task;
               const g = taskGeom(t);
               const barColor = GANTT_STATUS_COLORS[t.status];
 
-              // Baseline shadow bar (lighter, behind the current bar)
+              // Baseline shadow bar (lighter strip below the current bar)
               let baselineBar: React.ReactNode = null;
               if (t.baselineStart || t.baselineDue) {
                 const bStart = t.baselineStart || t.baselineDue!;
@@ -2997,27 +3098,36 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
 
               return (
                 <div
-                  key={t.id}
-                  className="relative border-b border-border/40"
-                  style={{ height: ROW_H }}
+                  key={`gchart-${t.id}`}
+                  className="absolute left-0 right-0 border-b border-border/40"
+                  style={{ top: item.y, height: ROW_H }}
                 >
-                  {i % 2 === 1 && <div className="absolute inset-0 bg-muted/15 pointer-events-none" />}
+                  {item.rowIdx % 2 === 1 && <div className="absolute inset-0 bg-muted/15 pointer-events-none" />}
                   {baselineBar}
+                  {/* Task bar — with % complete fill strip */}
                   <div
-                    className={cn('absolute rounded-md flex items-center px-2 cursor-pointer hover:opacity-100 opacity-90 shadow-sm', barColor)}
+                    className={cn('absolute rounded-md overflow-hidden cursor-pointer hover:opacity-100 opacity-90 shadow-sm', barColor)}
                     style={{
-                      left:  g.startOff * DAY_PX,
-                      width: g.widthDays * DAY_PX,
-                      top:   BAR_PAD_Y,
+                      left:   g.startOff * DAY_PX,
+                      width:  g.widthDays * DAY_PX,
+                      top:    BAR_PAD_Y,
                       height: BAR_H,
                     }}
                     onClick={() => onOpen(t)}
                     data-testid={`gantt-bar-${t.id}`}
-                    title={t.title}
+                    title={`${t.title}${t.percentComplete > 0 ? ` — ${t.percentComplete}% complete` : ''}`}
                   >
+                    {t.percentComplete > 0 && t.percentComplete < 100 && (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 bg-black/25 pointer-events-none"
+                        style={{ width: `${t.percentComplete}%` }}
+                      />
+                    )}
                     {g.widthDays * DAY_PX > 60 && (
-                      <span className="text-[9px] text-white font-medium truncate">
-                        {t.assignedToName || ''}
+                      <span className="absolute inset-0 flex items-center px-2">
+                        <span className="text-[9px] text-white font-medium truncate">
+                          {t.assignedToName || ''}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -3106,6 +3216,13 @@ function GanttView({ tasks, typedDeps = [], onOpen }: {
         <div className="flex items-center gap-1.5">
           <div style={{ width: 14, height: 4, background: 'rgb(251 191 36 / 0.5)', borderRadius: 2, border: '1px solid rgb(251 191 36 / 0.6)' }} />
           <span className="text-[10px] text-muted-foreground">Baseline</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="relative rounded overflow-hidden" style={{ width: 20, height: 8 }}>
+            <div className="absolute inset-0 bg-[#1D3461]" />
+            <div className="absolute left-0 top-0 bottom-0 bg-black/25" style={{ width: '60%' }} />
+          </div>
+          <span className="text-[10px] text-muted-foreground">% done</span>
         </div>
         <div className="flex items-center gap-1.5 ml-auto">
           <div className="h-2.5 w-px bg-red-500/60" />
@@ -3337,6 +3454,7 @@ function StageGroupedView({
         const stageTasks = tasksByStage.get(stage.id) ?? [];
         const isCompleted = completedStageIds.has(stage.id);
         const isCollapsed = collapsed.has(stage.id);
+        const { pct } = stagePercent(stageTasks);
 
         return (
           <div
@@ -3374,6 +3492,18 @@ function StageGroupedView({
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-background border text-muted-foreground flex-shrink-0">
                   {stageTasks.length} task{stageTasks.length !== 1 ? 's' : ''}
                 </span>
+                {stageTasks.length > 0 && (
+                  <span className={cn(
+                    'text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0',
+                    isCompleted || pct === 100
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : pct > 0
+                      ? 'bg-blue-100 text-[#1D3461] dark:bg-blue-900/30 dark:text-blue-300'
+                      : 'bg-muted text-muted-foreground',
+                  )}>
+                    {isCompleted ? 100 : pct}%
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {canEdit && !isCompleted && (
@@ -3395,6 +3525,23 @@ function StageGroupedView({
                   : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
               </div>
             </div>
+
+            {/* Stage progress bar — weighted mean of task percentComplete */}
+            {stageTasks.length > 0 && (
+              <div className="h-1 bg-muted/30">
+                <div
+                  className={cn(
+                    'h-full transition-all duration-500',
+                    isCompleted || pct === 100 ? 'bg-emerald-500'
+                      : pct > 66 ? 'bg-emerald-400'
+                      : pct > 33 ? 'bg-amber-500'
+                      : pct > 0  ? 'bg-[#1D3461]'
+                      : 'bg-transparent',
+                  )}
+                  style={{ width: `${isCompleted ? 100 : pct}%` }}
+                />
+              </div>
+            )}
 
             {/* Task rows */}
             {!isCollapsed && (
@@ -4042,7 +4189,7 @@ export function ProjectFieldTasksPanel({
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
       )}
       {viewMode === 'gantt' && (
-        <GanttView tasks={filtered} typedDeps={typedDepsAll} onOpen={t => setDetailTask(t)} />
+        <GanttView tasks={filtered} typedDeps={typedDepsAll} onOpen={t => setDetailTask(t)} allStages={allStages} customEntries={customEntries} />
       )}
       {viewMode === 'by_stage' && (
         <StageGroupedView
