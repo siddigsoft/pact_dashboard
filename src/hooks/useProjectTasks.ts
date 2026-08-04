@@ -41,6 +41,8 @@ export interface FieldTask {
   actualCost: number | null;
   dependencies: string[];
   resources: ResourceLine[];
+  /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
+  assigneeHours: Record<string, { allocated: number | null; actual: number | null }>;
   createdBy: string | null;
   createdByName: string | null;
   createdAt: string;
@@ -66,6 +68,8 @@ export interface CreateFieldTask {
   actualCost?: number | null;
   dependencies?: string[];
   resources?: ResourceLine[];
+  /** Per-assignee hour allocation: { [profileId]: { allocated, actual } } */
+  assigneeHours?: Record<string, { allocated: number | null; actual: number | null }>;
 }
 
 // Simplified type for the My Tasks page
@@ -219,7 +223,7 @@ export function useProjectTasks(projectId: string) {
           id, project_id, title, description, priority, status,
           assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
-          estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies, resources,
+          estimated_hours, actual_hours, estimated_cost, actual_cost, dependencies, resources, assignee_hours,
           assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
@@ -249,6 +253,7 @@ export function useProjectTasks(projectId: string) {
         actualCost: r.actual_cost ?? null,
         dependencies: r.dependencies ?? [],
         resources: (r.resources ?? []) as ResourceLine[],
+        assigneeHours: (r.assignee_hours ?? {}) as Record<string, { allocated: number | null; actual: number | null }>,
         createdBy: r.created_by,
         createdByName: r.creator?.full_name ?? null,
         createdAt: r.created_at,
@@ -294,6 +299,7 @@ export function useProjectTasks(projectId: string) {
           actual_cost: task.actualCost ?? null,
           dependencies: task.dependencies ?? [],
           resources: task.resources ?? [],
+          assignee_hours: task.assigneeHours ?? {},
           created_by: currentUserId,
         })
         .select()
@@ -355,7 +361,8 @@ export function useProjectTasks(projectId: string) {
       if (patch.estimatedCost  !== undefined) updates.estimated_cost  = patch.estimatedCost;
       if (patch.actualCost     !== undefined) updates.actual_cost     = patch.actualCost;
       if (patch.dependencies   !== undefined) updates.dependencies    = patch.dependencies;
-      if (patch.resources      !== undefined) updates.resources       = patch.resources ?? [];
+      if (patch.resources      !== undefined) updates.resources        = patch.resources ?? [];
+      if (patch.assigneeHours  !== undefined) updates.assignee_hours  = patch.assigneeHours ?? {};
 
       const { error } = await supabase
         .from('project_field_tasks')
