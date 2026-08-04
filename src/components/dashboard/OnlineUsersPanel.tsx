@@ -13,6 +13,8 @@ import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useMemo } from 'react';
+import { useProfilesByIds } from '@/hooks/useUserDirectory';
+import { displayNameFromProfile } from '@/services/userDirectory';
 
 interface OnlineUsersPanelProps {
   isOpen: boolean;
@@ -28,38 +30,28 @@ interface OnlineUserInfo {
 
 export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
   const { onlineUserIds } = useGlobalPresence();
-  const { currentUser, users } = useUser();
+  const { currentUser } = useUser();
   const { initiateCall } = useCall();
   const { createChat, setActiveChat } = useChat();
   const navigate = useNavigate();
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Get online users from context
-  const onlineUsers = useMemo(() => {
-    if (!isOpen || onlineUserIds.length === 0 || !users) return [];
-    
-    // Filter out current user from the list
-    const otherUserIds = onlineUserIds.filter(id => id !== currentUser?.id);
-    
-    if (otherUserIds.length === 0) return [];
-    
-    // Map online user IDs to user info from context
-    return otherUserIds
-      .map(id => {
-        const user = users.find(u => u.id === id);
-        if (!user) return null;
-        return {
-          id: user.id,
-          name: user.fullName || user.name || user.email || 'Unknown User',
-          avatar: user.avatar || user.avatarUrl || undefined,
-          role: user.role || 'user',
-        };
-      })
-      .filter((u): u is OnlineUserInfo => u !== null);
-  }, [isOpen, onlineUserIds, currentUser?.id, users]);
-  
-  const isLoading = false; // No loading needed when using context
+  const otherUserIds = useMemo(
+    () => (isOpen ? onlineUserIds.filter((id) => id !== currentUser?.id) : []),
+    [isOpen, onlineUserIds, currentUser?.id]
+  );
+
+  const { data: profiles = [], isLoading } = useProfilesByIds(otherUserIds, isOpen && otherUserIds.length > 0);
+
+  const onlineUsers = useMemo((): OnlineUserInfo[] => {
+    return profiles.map((p) => ({
+      id: p.id,
+      name: displayNameFromProfile(p),
+      avatar: p.avatar_url || undefined,
+      role: p.role || 'user',
+    }));
+  }, [profiles]);
 
   const filteredUsers = onlineUsers.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
