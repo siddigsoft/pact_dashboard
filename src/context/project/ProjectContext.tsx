@@ -249,6 +249,47 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const notifyActorTeamChange = (
+    action: 'added' | 'removed',
+    projectId: string,
+    projectName: string,
+    affectedCount: number,
+  ) => {
+    if (!currentUser?.id || affectedCount <= 0) return;
+    const titleEn = action === 'added'
+      ? `Team update saved: ${projectName}`
+      : `Team removal saved: ${projectName}`;
+    const titleAr = action === 'added'
+      ? `تم حفظ تحديث الفريق: ${projectName}`
+      : `تم حفظ إزالة من الفريق: ${projectName}`;
+    const messageEn = action === 'added'
+      ? `You added ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} to project "${projectName}".`
+      : `You removed ${affectedCount} team member${affectedCount !== 1 ? 's' : ''} from project "${projectName}".`;
+    const messageAr = action === 'added'
+      ? `قمت بإضافة ${affectedCount} ${affectedCount !== 1 ? 'أعضاء' : 'عضو'} إلى فريق مشروع "${projectName}".`
+      : `قمت بإزالة ${affectedCount} ${affectedCount !== 1 ? 'أعضاء' : 'عضو'} من فريق مشروع "${projectName}".`;
+
+    dispatchNotification({
+      event: action === 'added' ? 'project_member_added' : 'project_member_removed',
+      recipientIds: [currentUser.id],
+      titleEn,
+      titleAr,
+      messageEn,
+      messageAr,
+      entityType: 'project',
+      entityId: projectId,
+      actionUrl: `/projects/${projectId}`,
+      priority: 'normal',
+      triggeredBy: currentUser.id,
+      triggeredByName: currentUser.fullName ?? undefined,
+      metadata: {
+        project_name: projectName,
+        actor_confirmation: true,
+        affected_count: affectedCount,
+      },
+    }).catch(() => {});
+  };
+
   const updateProject = async (updatedProject: Project) => {
     const session = await ensureValidSession();
     if (!session.success) return;
@@ -411,6 +452,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             metadata: { project_name: projectName, role: roleLabel },
           }).catch(() => {});
         });
+        notifyActorTeamChange('added', updatedProject.id, projectName, newMemberIds.length);
       }
 
       const removedMemberIds = Array.from(previousMemberIds).filter(
@@ -432,6 +474,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           triggeredByName: currentUser?.fullName ?? undefined,
           metadata: { project_name: projectName },
         }).catch(() => {});
+        notifyActorTeamChange('removed', updatedProject.id, projectName, removedMemberIds.length);
       }
     } catch (err) {
       console.error("Error updating project:", err);
@@ -493,6 +536,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             metadata: { project_name: projectName, role: roleLabel },
           }).catch(() => {});
         });
+        notifyActorTeamChange('added', projectId, projectName, newMemberIds.length);
       }
 
       // ── Notify removed team members (in-app + email) ───────────────────────
@@ -516,6 +560,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           triggeredByName: currentUser?.fullName ?? undefined,
           metadata: { project_name: projectName },
         }).catch(() => {});
+        notifyActorTeamChange('removed', projectId, projectName, removedMemberIds.length);
       }
 
       // ── Notify members whose role changed (in-app + email) ─────────────────
