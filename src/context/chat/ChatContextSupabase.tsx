@@ -13,6 +13,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import notificationSoundService from '@/services/NotificationSoundService';
+import {
+  displayNameFromProfile,
+  resolveDisplayName,
+  resolveProfiles,
+} from '@/services/userDirectory';
 
 interface TypingUser {
   id: string;
@@ -55,7 +60,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [channels, setChannels] = useState<RealtimeChannel[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, TypingUser[]>>({});
   const [typingChannel, setTypingChannel] = useState<RealtimeChannel | null>(null);
-  const { currentUser, users } = useUser();
+  const { currentUser } = useUser();
   const { toast } = useToast();
 
   // Cleanup realtime channels on unmount
@@ -208,6 +213,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         // Convert database chats to our Chat type with last messages
+        const nameIds: string[] = [];
+        for (const chatId of chatIds) {
+          const participants = participantsMap[chatId] || [];
+          const dbChat = dbChats.find(c => c.id === chatId);
+          if (dbChat?.type === 'private' && participants.length > 0) {
+            const otherId = participants.find(p => p !== userId);
+            if (otherId) nameIds.push(otherId);
+          }
+        }
+        const profileMap = await resolveProfiles(nameIds);
+
         const convertedChats: Chat[] = dbChats.map(dbChat => {
           const lastMessage = lastMessages[dbChat.id];
           const participants = participantsMap[dbChat.id] || [];
@@ -217,12 +233,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (dbChat.type === 'private' && participants.length > 0) {
             const otherParticipantId = participants.find(p => p !== userId);
             if (otherParticipantId) {
-              // Try to get the user's name from the users list
-              const otherUser = users.find(u => u.id === otherParticipantId);
+              const otherUser = profileMap.get(otherParticipantId);
               if (otherUser) {
-                displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User';
+                displayName = displayNameFromProfile(otherUser);
               } else if (dbChat.name === 'Private Chat' || !dbChat.name) {
-                // If we can't find the user, keep the original name or use a placeholder
                 displayName = 'Unknown User';
               }
             }
@@ -281,19 +295,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const participants = await ChatService.getChatParticipants(chatId);
       if (participants) {
         const participantIds = participants.map(p => p.user_id);
+        let resolvedName: string | null = null;
+        if (currentUser?.id && participantIds.length > 0) {
+          const otherParticipantId = participantIds.find(p => p !== currentUser.id);
+          if (otherParticipantId) {
+            resolvedName = await resolveDisplayName(otherParticipantId);
+          }
+        }
         setChats(prevChats => {
           return prevChats.map(chat => {
             if (chat.id === chatId) {
-              // For private chats, update the name to show the other participant's name
               let displayName = chat.name;
-              if (chat.type === 'private' && currentUser?.id && participantIds.length > 0) {
-                const otherParticipantId = participantIds.find(p => p !== currentUser.id);
-                if (otherParticipantId) {
-                  const otherUser = users.find(u => u.id === otherParticipantId);
-                  if (otherUser) {
-                    displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User';
-                  }
-                }
+              if (chat.type === 'private' && resolvedName) {
+                displayName = resolvedName;
               }
               return { 
                 ...chat, 
@@ -414,21 +428,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             notificationSoundService.play('message');
             
             // Create in-app notification for Messages tab
-            const senderUser = users.find(u => u.id === newMessage.sender_id);
-            const senderName = senderUser?.fullName || senderUser?.name || senderUser?.username || 'Someone';
-            const messagePreview = newMessage.content || 
-              (newMessage.content_type === 'image' ? 'Sent an image' : 
-               newMessage.content_type === 'file' ? 'Sent a file' : 
-               newMessage.content_type === 'audio' ? 'Sent an audio message' : 
-               newMessage.content_type === 'location' ? 'Sent a location' : 'Sent a message');
-            
-            // Send notification to the notifications panel (Messages tab)
-            NotificationTriggerService.newMessage(
-              currentUser.id,
-              senderName,
-              messagePreview,
-              chatId
-            ).catch(err => console.error('Failed to create message notification:', err));
+            void resolveDisplayName(newMessage.sender_id).then((senderName) => {
+              const messagePreview = newMessage.content || 
+                (newMessage.content_type === 'image' ? 'Sent an image' : 
+                 newMessage.content_type === 'file' ? 'Sent a file' : 
+                 newMessage.content_type === 'audio' ? 'Sent an audio message' : 
+                 newMessage.content_type === 'location' ? 'Sent a location' : 'Sent a message');
+              
+              // Send notification to the notifications panel (Messages tab)
+              return NotificationTriggerService.newMessage(
+                currentUser.id,
+                senderName,
+                messagePreview,
+                chatId
+              );
+            }).catch(err => console.error('Failed to create message notification:', err));
           }
           
           // Update chat's last message and re-sort chats
@@ -612,10 +626,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let chatName: string;
       if (type === 'private' && participants.length === 1) {
         const otherParticipantId = participants[0];
-        const otherUser = users.find(u => u.id === otherParticipantId);
-        chatName = name || (otherUser 
-          ? (otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User')
-          : 'Private Chat');
+        chatName = name || (await resolveDisplayName(otherParticipantId));
       } else {
         chatName = name || (participants.length === 1 ? 'Private Chat' : 'Group Chat');
       }
@@ -644,12 +655,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (existingDb.type === 'private' && participantIds.length > 0) {
             const otherParticipantId = participantIds.find(p => p !== currentUser.id);
             if (otherParticipantId) {
-              const otherUser = users.find(u => u.id === otherParticipantId);
-              if (otherUser) {
-                displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || name || 'Unknown User';
-              } else if (name) {
-                displayName = name;
-              }
+              displayName = name || (await resolveDisplayName(otherParticipantId));
             }
           }
           

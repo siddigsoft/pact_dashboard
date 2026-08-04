@@ -32,6 +32,9 @@ export const queryKeys = {
     details: () => [...queryKeys.profiles.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.profiles.details(), id] as const,
     current: () => [...queryKeys.profiles.all, 'current'] as const,
+    directory: (filters?: Record<string, unknown>) =>
+      [...queryKeys.profiles.all, 'directory', filters] as const,
+    byIds: (ids: string[]) => [...queryKeys.profiles.all, 'byIds', ids] as const,
   },
   
   wallets: {

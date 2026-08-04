@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { Chat } from '@/types/chat';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,47 +7,30 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/user/UserContext';
 import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
-import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { getUserStatus } from '@/utils/userStatusUtils';
-import { User } from '@/types/user';
+import { useUserDirectory, flattenDirectoryPages } from '@/hooks/useUserDirectory';
+import { displayNameFromProfile } from '@/services/userDirectory';
 import { 
   Search, 
   Users, 
   MessageSquare, 
   Plus, 
-  Calendar,
   MapPin,
   File,
   Image,
   Mic,
-  Paperclip
+  Paperclip,
+  Loader2,
 } from 'lucide-react';
 
-const USERS_PAGE_SIZE = 10;
+const USERS_PAGE_SIZE = 20;
 
-const getUserStatusDisplay = (user: User, isOnlineRealtime: boolean = false) => {
-  const status = getUserStatus(user, isOnlineRealtime);
-  if (status.type === 'online') {
-    return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
-  }
-  const lastSeenTime = user.location?.lastUpdated || user.lastActive;
-  if (lastSeenTime) {
-    try {
-      const lastSeenDate = parseISO(lastSeenTime);
-      return { 
-        text: `Last seen ${formatDistanceToNow(lastSeenDate, { addSuffix: false })} ago`,
-        color: 'text-gray-500',
-        dotColor: 'bg-gray-400'
-      };
-    } catch {
-      return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
-    }
-  }
-  return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
-};
+const presenceStatus = (isOnline: boolean) =>
+  isOnline
+    ? { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' }
+    : { text: 'Offline', color: 'text-gray-500', dotColor: 'bg-gray-400' };
 
 interface ChatItemProps {
   chat: Chat;
@@ -172,31 +155,25 @@ const ChatSidebar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
-  const [userPage, setUserPage] = useState(1);
-  const { currentUser, users } = useUser();
+  const { currentUser } = useUser();
   const { isUserOnline } = useGlobalPresence();
-  const availableUsers = useMemo(
-    () => users.filter(u => u.id !== currentUser?.id),
-    [users, currentUser?.id]
+
+  const {
+    data,
+    isLoading: isDirectoryLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useUserDirectory({
+    search: userSearch,
+    limit: USERS_PAGE_SIZE,
+    enabled: isNewChatOpen,
+  });
+
+  const directoryUsers = useMemo(
+    () => flattenDirectoryPages(data?.pages).filter((u) => u.id !== currentUser?.id),
+    [data?.pages, currentUser?.id]
   );
-
-  const filteredUsersList = useMemo(() => {
-    return userSearch 
-      ? availableUsers.filter(u => (u.fullName || u.name || u.username || '').toLowerCase().includes(userSearch.toLowerCase()))
-      : availableUsers;
-  }, [availableUsers, userSearch]);
-
-  const paginatedUsers = useMemo(
-    () => filteredUsersList.slice(0, userPage * USERS_PAGE_SIZE),
-    [filteredUsersList, userPage]
-  );
-
-  const hasMoreUsers = paginatedUsers.length < filteredUsersList.length;
-
-  useEffect(() => {
-    // Reset pagination when search changes or dialog is reopened
-    setUserPage(1);
-  }, [userSearch, isNewChatOpen]);
 
   const handleStartChatWith = async (userId: string, displayName: string) => {
     try {
@@ -255,51 +232,58 @@ const ChatSidebar: React.FC = () => {
                 </div>
                 <ScrollArea className="h-64">
                   <div className="space-y-1">
-                    {paginatedUsers.map(u => (
+                    {isDirectoryLoading && directoryUsers.length === 0 ? (
+                      <div className="py-8 flex justify-center">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      directoryUsers.map(u => {
+                        const name = displayNameFromProfile(u);
+                        const status = presenceStatus(isUserOnline(u.id));
+                        return (
                       <button
                         key={u.id}
                         className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted dark:hover:bg-gray-800 text-left transition-colors"
-                        onClick={() => handleStartChatWith(u.id, u.fullName || u.name || u.username || 'Chat')}
+                        onClick={() => handleStartChatWith(u.id, name)}
                         data-testid={`user-item-${u.id}`}
                       >
                         <div className="relative">
                           <Avatar className="h-10 w-10">
                             <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-semibold">
-                              {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
+                              {name.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          {(() => {
-                            const status = getUserStatusDisplay(u, isUserOnline(u.id));
-                            return <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 ${status.dotColor} rounded-full border-2 border-background`} />;
-                          })()}
+                          <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 ${status.dotColor} rounded-full border-2 border-background`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">
-                            {u.fullName || u.name || u.username || 'User'}
-                          </div>
-                          {(() => {
-                            const status = getUserStatusDisplay(u, isUserOnline(u.id));
-                            return <div className={`text-xs truncate ${status.color}`}>{status.text}</div>;
-                          })()}
+                          <div className="text-sm font-medium truncate">{name}</div>
+                          <div className={`text-xs truncate ${status.color}`}>{status.text}</div>
                         </div>
                       </button>
-                    ))}
-                    {paginatedUsers.length === 0 && (
+                        );
+                      })
+                    )}
+                    {!isDirectoryLoading && directoryUsers.length === 0 && (
                       <div className="py-8 text-center">
                         <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
                         <p className="text-sm text-muted-foreground">No contacts found</p>
                       </div>
                     )}
-                    {hasMoreUsers && (
+                    {hasNextPage && (
                       <div className="pt-2">
                         <Button
                           variant="outline"
                           size="sm"
                           className="w-full"
-                          onClick={() => setUserPage(prev => prev + 1)}
+                          onClick={() => fetchNextPage()}
+                          disabled={isFetchingNextPage}
                           data-testid="button-load-more-contacts"
                         >
-                          Load more ({paginatedUsers.length}/{filteredUsersList.length})
+                          {isFetchingNextPage ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Load more'
+                          )}
                         </Button>
                       </div>
                     )}
@@ -335,9 +319,7 @@ const ChatSidebar: React.FC = () => {
                   if (chat.type !== 'private') return null;
                   const targetUserId = chat.participants.find(id => id !== currentUser?.id);
                   if (!targetUserId) return null;
-                  const targetUser = users.find(u => u.id === targetUserId);
-                  if (!targetUser) return null;
-                  return getUserStatusDisplay(targetUser, isUserOnline(targetUser.id));
+                  return presenceStatus(isUserOnline(targetUserId));
                 }}
               />
             ))

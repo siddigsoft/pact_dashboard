@@ -200,102 +200,22 @@ export async function forwardSitesToCoordinator(opts: {
   if (!siteEntryIds.length || !coordinatorId) return;
 
   const forwardedAt = new Date().toISOString();
+  const notes = `Forwarded from MMP ${mmpName || mmpId || ''} for CP verification`;
 
-  // Update entries
-  const { error: updateError } = await supabase
-    .from('mmp_site_entries')
-    .update({
-      status: 'Pending',
-      forwarded_by_user_id: currentUserId || null,
-      forwarded_to_user_id: coordinatorId,
-      forwarded_at: forwardedAt,
-      dispatched_by: currentUserId || null,
-      dispatched_at: forwardedAt,
-    })
-    .in('id', siteEntryIds);
+  const { error: rpcError } = await supabase.rpc('forward_mmp_site_entries', {
+    p_ids: siteEntryIds,
+    p_coordinator_id: coordinatorId,
+    p_supervisor_id: supervisorId || null,
+    p_current_user_id: currentUserId || null,
+    p_state_id: stateId || null,
+    p_attach_state_permit: !!attachStatePermit,
+    p_notes: notes,
+    p_forwarded_at: forwardedAt,
+  });
 
-  if (updateError) {
-    console.error('Batch update error:', updateError);
-    // PGRST100 happens because we can't merge JSON easily via update; we'll do row-by-row fallback.
-    // For other errors, still try row-by-row as a fallback before giving up.
-    const updates = siteEntryIds.map(async (id) => {
-      const { data: existing, error: loadError } = await supabase
-        .from('mmp_site_entries')
-        .select('additional_data')
-        .eq('id', id)
-        .single();
-      if (loadError) {
-        console.error(`Failed to load site entry ${id}:`, loadError);
-        throw loadError;
-      }
-      const existingAD = existing?.additional_data || {};
-      const nextAD = {
-        ...existingAD,
-        assigned_to: coordinatorId,
-        assigned_by: currentUserId || null,
-        assigned_at: forwardedAt,
-        supervisor_id: supervisorId || null,
-        notes: `Forwarded from MMP ${mmpName || mmpId || ''} for CP verification`,
-        ...(attachStatePermit
-          ? {
-              state_permit_attached: true,
-              state_permit_state_id: stateId,
-              state_permit_attached_at: forwardedAt,
-            }
-          : {}),
-      };
-
-      const { error: rowUpdateError } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'Pending',
-          forwarded_by_user_id: currentUserId || null,
-          forwarded_to_user_id: coordinatorId,
-          forwarded_at: forwardedAt,
-          dispatched_by: currentUserId || null,
-          dispatched_at: forwardedAt,
-          additional_data: nextAD,
-        })
-        .eq('id', id);
-      if (rowUpdateError) {
-        console.error(`Failed to update site entry ${id}:`, rowUpdateError);
-        throw rowUpdateError;
-      }
-    });
-    await Promise.all(updates);
-  } else {
-    // Batch update succeeded, but we still need to update additional_data for each entry
-    // since batch updates can't merge JSON fields
-    const updates = siteEntryIds.map(async (id) => {
-      const { data: existing, error: loadError } = await supabase
-        .from('mmp_site_entries')
-        .select('additional_data')
-        .eq('id', id)
-        .single();
-      if (loadError) return; // Skip if can't load
-      const existingAD = existing?.additional_data || {};
-      const nextAD = {
-        ...existingAD,
-        assigned_to: coordinatorId,
-        assigned_by: currentUserId || null,
-        assigned_at: forwardedAt,
-        supervisor_id: supervisorId || null,
-        notes: `Forwarded from MMP ${mmpName || mmpId || ''} for CP verification`,
-        ...(attachStatePermit
-          ? {
-              state_permit_attached: true,
-              state_permit_state_id: stateId,
-              state_permit_attached_at: forwardedAt,
-            }
-          : {}),
-      };
-
-      await supabase
-        .from('mmp_site_entries')
-        .update({ additional_data: nextAD })
-        .eq('id', id);
-    });
-    await Promise.all(updates);
+  if (rpcError) {
+    console.error('forward_mmp_site_entries RPC failed:', rpcError);
+    throw rpcError;
   }
 
   // Log per-site audit entries for the forward operation
@@ -306,6 +226,7 @@ export async function forwardSitesToCoordinator(opts: {
       siteEntryIds.map(id =>
         logSiteEntryAction({
           siteId: id,
+          siteName: id,
           mmpId: mmpId,
           action: 'forward_to_coordinator',
           newStatus: 'Pending',
@@ -472,38 +393,15 @@ export async function reclaimFromCoordinator(opts: {
     if (mmpUpdateError) throw mmpUpdateError;
   }
 
-  // 7. Reset the filtered site entries
+  // 7. Reset the filtered site entries (single RPC — JSONB keys stripped server-side)
   if (forwardedEntryIds.length > 0) {
-    const resetPromises = forwardedEntryIds.map(async (entryId: string) => {
-      const entry = (siteEntries || []).find((e: any) => e.id === entryId);
-      const existingAD = entry?.additional_data || {};
-      const cleanedAD = { ...existingAD };
-      delete cleanedAD.assigned_to;
-      delete cleanedAD.assigned_by;
-      delete cleanedAD.assigned_at;
-      delete cleanedAD.supervisor_id;
-      delete cleanedAD.notes;
-      delete cleanedAD.state_permit_attached;
-      delete cleanedAD.state_permit_state_id;
-      delete cleanedAD.state_permit_attached_at;
-
-      const { error: rowError } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'verified',
-          forwarded_to_user_id: null,
-          forwarded_by_user_id: null,
-          forwarded_at: null,
-          dispatched_by: null,
-          dispatched_at: null,
-          additional_data: cleanedAD,
-        })
-        .eq('id', entryId);
-      if (rowError) {
-        console.error(`Failed to reset site entry ${entryId}:`, rowError);
-      }
+    const { error: reclaimRpcError } = await supabase.rpc('reclaim_mmp_site_entries', {
+      p_ids: forwardedEntryIds,
     });
-    await Promise.all(resetPromises);
+    if (reclaimRpcError) {
+      console.error('reclaim_mmp_site_entries RPC failed:', reclaimRpcError);
+      throw reclaimRpcError;
+    }
 
     // ── FIX: Cancel any open (pending) advance requests for the reclaimed entries ──
     // When a site is reclaimed the collector who held it is no longer responsible.

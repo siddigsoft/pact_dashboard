@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
+import { searchUserDirectory } from '@/services/userDirectory';
+import { queryKeys } from '@/lib/queryKeys';
 
 interface ProfileLite {
   id: string;
@@ -59,32 +60,27 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
     }));
 
     const { data: profiles = [], isLoading } = useQuery<ProfileLite[]>({
-      queryKey: ['/profiles/mentionable'],
+      queryKey: queryKeys.profiles.directory({ search: query, limit: 8, mention: true }),
+      enabled: open,
       queryFn: async () => {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, role')
-          .eq('is_active', true)
-          .order('full_name', { ascending: true });
-        if (error) throw error;
-        return (data ?? []) as ProfileLite[];
+        const { rows } = await searchUserDirectory({
+          search: query,
+          limit: 8,
+          offset: 0,
+          activeOnly: true,
+        });
+        return rows.map((r) => ({
+          id: r.id,
+          full_name: r.full_name || r.username || r.email || 'Unknown',
+          email: r.email,
+          role: r.role,
+        }));
       },
-      staleTime: 5 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
+      staleTime: 1000 * 60,
     });
 
     const excluded = new Set(excludeUserIds ?? []);
-    const filtered = profiles
-      .filter((p) => !excluded.has(p.id))
-      .filter((p) => {
-        if (!query) return true;
-        const q = query.toLowerCase();
-        return (
-          p.full_name?.toLowerCase().includes(q) ||
-          (p.email ?? '').toLowerCase().includes(q)
-        );
-      })
-      .slice(0, 8);
+    const filtered = profiles.filter((p) => !excluded.has(p.id)).slice(0, 8);
 
     useEffect(() => {
       if (activeIdx >= filtered.length) setActiveIdx(0);

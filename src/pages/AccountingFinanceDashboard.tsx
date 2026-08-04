@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo } from 'react';
 import { Navigate, Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/context/AppContext';
+import { fetchAccountingFinanceKpis } from '@/services/accountingFinanceKpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,10 +16,7 @@ import {
   CreditCard, PiggyBank, Receipt, ArrowUpDown, ShieldAlert, Lock,
   Award, RotateCcw, Building2, ClipboardList, ArrowLeftRight, Heart, Shield, Banknote,
 } from 'lucide-react';
-import {
-  format, parseISO, subMonths, startOfMonth, endOfMonth,
-  differenceInDays, startOfYear,
-} from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import {
@@ -27,7 +26,6 @@ import {
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 interface KPIState<T> { data: T | null; loading: boolean; error: string | null }
-const INIT = <T,>(): KPIState<T> => ({ data: null, loading: true, error: null });
 
 interface BudgetKPI { totalBudget: number; totalSpent: number; utilizationPct: number; activeBudgets: number; overBudgetCount: number }
 interface APSummary { outstanding: number; vendorCount: number; current: number; d1_30: number; d31_60: number; d61_90: number; over90: number }
@@ -195,363 +193,50 @@ function QuickLink({ href, icon: Icon, color, label, sub }: { href: string; icon
 
 /* ─── main component ─────────────────────────────────────────────────── */
 export default function AccountingFinanceDashboard() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { authReady } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
-  const [budget, setBudget] = useState<KPIState<BudgetKPI>>(INIT());
-  const [ap, setAP] = useState<KPIState<APSummary>>(INIT());
-  const [assets, setAssets] = useState<KPIState<AssetKPI>>(INIT());
-  const [journals, setJournals] = useState<KPIState<JournalSummary>>(INIT());
-  const [monthlyRevExp, setMonthlyRevExp] = useState<KPIState<MonthlyRevenueExpense[]>>(INIT());
-  const [pos, setPOs] = useState<KPIState<POSummary>>(INIT());
-  const [cash, setCash] = useState<KPIState<CashKPI>>(INIT());
-  const [revenue, setRevenue] = useState<KPIState<RevenueKPI>>(INIT());
-  const [coa, setCOA] = useState<KPIState<COAStatus>>(INIT());
-  const [modules, setModules] = useState<KPIState<ModuleStatus>>(INIT());
-  const [phase4, setPhase4] = useState<KPIState<Phase4KPI>>(INIT());
-  const [phase5, setPhase5] = useState<KPIState<Phase5KPI>>(INIT());
-  const [preFundKPI, setPreFundKPI] = useState<KPIState<{ activeCount: number; totalAvailable: number; lowBalanceCount: number; pendingApproval: number }>>( INIT() );
-  const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [countdown, setCountdown] = useState(60);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const {
+    data: kpis,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: ['accounting', 'finance-kpis'],
+    queryFn: fetchAccountingFinanceKpis,
+    enabled: authReady && allowed,
+    staleTime: 1000 * 60 * 2,
+  });
 
-  /* ── budget ── */
-  const loadBudget = useCallback(async () => {
-    setBudget(p => ({ ...p, loading: true, error: null }));
-    try {
-      const { data, error } = await supabase.from('project_budgets').select('total_budget_cents, spent_budget_cents, status');
-      if (error) throw error;
-      const rows = data ?? [];
-      const active = rows.filter((r: any) => r.status !== 'closed');
-      const total = active.reduce((s: number, r: any) => s + Number(r.total_budget_cents ?? 0), 0) / 100;
-      const spent = active.reduce((s: number, r: any) => s + Number(r.spent_budget_cents ?? 0), 0) / 100;
-      const overBudgetCount = active.filter((r: any) => Number(r.spent_budget_cents ?? 0) > Number(r.total_budget_cents ?? 1)).length;
-      setBudget({ data: { totalBudget: total, totalSpent: spent, utilizationPct: total > 0 ? Math.round((spent / total) * 100) : 0, activeBudgets: active.length, overBudgetCount }, loading: false, error: null });
-    } catch (e: any) { setBudget({ data: null, loading: false, error: e.message }); }
-  }, []);
+  const errMsg = error ? (error as Error).message : null;
+  const wrap = <T,>(d: T | null | undefined): KPIState<T> => ({
+    data: d ?? null,
+    loading: isLoading,
+    error: errMsg,
+  });
 
-  /* ── AP with aging buckets ── */
-  const loadAP = useCallback(async () => {
-    setAP(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [vendorRes, lineRes] = await Promise.all([
-        supabase.from('acct_vendors').select('id, payment_terms').limit(2000),
-        supabase.from('acct_journal_lines').select('vendor_id, debit_credit, functional_amount, acct_journal_entries!inner(posting_date, status)').not('vendor_id', 'is', null).limit(5000),
-      ]);
-      if (lineRes.error?.code === '42P01') { setAP({ data: { outstanding: 0, vendorCount: 0, current: 0, d1_30: 0, d31_60: 0, d61_90: 0, over90: 0 }, loading: false, error: null }); return; }
-      if (lineRes.error) throw lineRes.error;
-      const termsMap: Record<string, number> = {};
-      for (const v of (vendorRes.data ?? []) as any[]) termsMap[v.id] = v.payment_terms ?? 30;
-      const byVendor: Record<string, { balance: number; dates: string[] }> = {};
-      for (const l of (lineRes.data ?? []) as any[]) {
-        const v = l.vendor_id as string;
-        const pd = (l.acct_journal_entries as any)?.posting_date as string;
-        const sign = l.debit_credit === 'CR' ? 1 : -1;
-        if (!byVendor[v]) byVendor[v] = { balance: 0, dates: [] };
-        byVendor[v].balance += sign * Number(l.functional_amount ?? 0);
-        if (pd) byVendor[v].dates.push(pd);
-      }
-      let outstanding = 0, current = 0, d1_30 = 0, d31_60 = 0, d61_90 = 0, over90 = 0;
-      const today = new Date();
-      for (const [vid, vd] of Object.entries(byVendor)) {
-        if (vd.balance <= 0) continue;
-        outstanding += vd.balance;
-        const oldest = vd.dates.length > 0 ? vd.dates.reduce((a, b) => (a < b ? a : b)) : null;
-        if (!oldest) { current += vd.balance; continue; }
-        const due = new Date(oldest);
-        due.setDate(due.getDate() + (termsMap[vid] ?? 30));
-        const overdue = differenceInDays(today, due);
-        if (overdue <= 0) current += vd.balance;
-        else if (overdue <= 30) d1_30 += vd.balance;
-        else if (overdue <= 60) d31_60 += vd.balance;
-        else if (overdue <= 90) d61_90 += vd.balance;
-        else over90 += vd.balance;
-      }
-      setAP({ data: { outstanding, vendorCount: Object.values(byVendor).filter(v => v.balance > 0).length, current, d1_30, d31_60, d61_90, over90 }, loading: false, error: null });
-    } catch (e: any) { setAP({ data: null, loading: false, error: e.message }); }
-  }, []);
+  const budget = wrap(kpis?.budget);
+  const ap = wrap(kpis?.ap);
+  const assets = wrap(kpis?.assets);
+  const journals = wrap(kpis?.journals);
+  const monthlyRevExp = wrap(kpis?.monthlyRevExp ?? []);
+  const pos = wrap(kpis?.pos);
+  const cash = wrap(kpis?.cash);
+  const revenue = wrap(kpis?.revenue);
+  const coa = wrap(kpis?.coa);
+  const modules = wrap(kpis?.modules);
+  const phase4 = wrap(kpis?.phase4);
+  const phase5 = wrap(kpis?.phase5);
+  const preFundKPI = wrap(kpis?.preFund ?? null);
+  const lastRefresh = useMemo(
+    () => (dataUpdatedAt ? new Date(dataUpdatedAt) : new Date()),
+    [dataUpdatedAt]
+  );
 
-  /* ── fixed assets ── */
-  const loadAssets = useCallback(async () => {
-    setAssets(p => ({ ...p, loading: true, error: null }));
-    try {
-      const { data, error } = await supabase.from('acct_fixed_assets').select('acquisition_cost, salvage_value, useful_life_months, acquisition_date, status');
-      if (error?.code === '42P01') { setAssets({ data: { totalBookValue: 0, totalCost: 0, activeCount: 0, depreciatedPct: 0 }, loading: false, error: null }); return; }
-      if (error) throw error;
-      const active = (data ?? []).filter((a: any) => a.status === 'active');
-      const now = new Date();
-      let totalBookValue = 0, totalCost = 0;
-      for (const a of active as any[]) {
-        const cost = Number(a.acquisition_cost); const salvage = Number(a.salvage_value); const life = Number(a.useful_life_months);
-        totalCost += cost;
-        const elapsed = Math.min(Math.max(0, Math.floor((now.getTime() - new Date(a.acquisition_date).getTime()) / (1000 * 60 * 60 * 24 * 30))), life);
-        totalBookValue += Math.max(cost - (life > 0 ? ((cost - salvage) / life) * elapsed : 0), salvage);
-      }
-      const depreciatedPct = totalCost > 0 ? Math.round(((totalCost - totalBookValue) / totalCost) * 100) : 0;
-      setAssets({ data: { totalBookValue, totalCost, activeCount: active.length, depreciatedPct }, loading: false, error: null });
-    } catch (e: any) { setAssets({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── journals — counts + recent ── */
-  const loadJournals = useCallback(async () => {
-    setJournals(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [countRes, recentRes] = await Promise.all([
-        supabase.from('acct_journal_entries').select('status').limit(5000),
-        supabase.from('acct_journal_entries').select('id, posting_date, description_en, status, acct_journal_lines(functional_amount, debit_credit)').order('posting_date', { ascending: false }).limit(8),
-      ]);
-      if (countRes.error?.code === '42P01') { setJournals({ data: { draftCount: 0, pendingCount: 0, postedCount: 0, recent: [] }, loading: false, error: null }); return; }
-      if (countRes.error) throw countRes.error;
-      const entries = (countRes.data ?? []) as any[];
-      const draftCount = entries.filter(e => e.status === 'draft').length;
-      const pendingCount = entries.filter(e => e.status === 'pending_approval').length;
-      const postedCount = entries.filter(e => e.status === 'posted').length;
-      const recent = ((recentRes.data ?? []) as any[]).map(j => {
-        const lines: any[] = j.acct_journal_lines ?? [];
-        const amount = lines.filter((l: any) => l.debit_credit === 'DR').reduce((s: number, l: any) => s + Number(l.functional_amount ?? 0), 0);
-        return { id: j.id, date: j.posting_date, desc: j.description_en || 'Journal Entry', amount, status: j.status };
-      });
-      setJournals({ data: { draftCount, pendingCount, postedCount, recent }, loading: false, error: null });
-    } catch (e: any) { setJournals({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── monthly revenue vs expense (6 months) ── */
-  const loadMonthlyRevExp = useCallback(async () => {
-    setMonthlyRevExp(p => ({ ...p, loading: true, error: null }));
-    try {
-      const months = Array.from({ length: 6 }, (_, i) => {
-        const d = subMonths(new Date(), 5 - i);
-        return { label: format(d, 'MMM yy'), start: format(startOfMonth(d), 'yyyy-MM-dd'), end: format(endOfMonth(d), 'yyyy-MM-dd') };
-      });
-      const monthData = await Promise.all(months.map(m =>
-        supabase.from('acct_journal_lines')
-          .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
-          .in('acct_accounts.account_type', ['revenue', 'expense'])
-          .eq('acct_journal_entries.status', 'posted')
-          .gte('acct_journal_entries.posting_date', m.start)
-          .lte('acct_journal_entries.posting_date', m.end)
-      ));
-      const results: MonthlyRevenueExpense[] = months.map((m, i) => {
-        let rev = 0, exp = 0;
-        for (const l of ((monthData[i].data ?? []) as any[])) {
-          const type = (l.acct_accounts as any)?.account_type;
-          const amt = Number(l.functional_amount ?? 0);
-          if (type === 'revenue' && l.debit_credit === 'CR') rev += amt;
-          if (type === 'expense' && l.debit_credit === 'DR') exp += amt;
-        }
-        return { month: m.label, revenue: rev, expense: exp };
-      });
-      setMonthlyRevExp({ data: results, loading: false, error: null });
-    } catch { setMonthlyRevExp({ data: [], loading: false, error: null }); }
-  }, []);
-
-  /* ── purchase orders ── */
-  const loadPOs = useCallback(async () => {
-    setPOs(p => ({ ...p, loading: true, error: null }));
-    try {
-      const { data, error } = await supabase.from('acct_purchase_orders').select('amount, status').limit(2000);
-      if (error?.code === '42P01') { setPOs({ data: { pendingCount: 0, pendingAmount: 0, draftCount: 0, approvedCount: 0 }, loading: false, error: null }); return; }
-      if (error) throw error;
-      const rows = (data ?? []) as any[];
-      const pending = rows.filter(r => r.status === 'submitted');
-      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
-    } catch (e: any) { setPOs({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── cash position (bank accounts) ── */
-  const loadCash = useCallback(async () => {
-    setCash(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [bankRes, reconRes] = await Promise.all([
-        supabase.from('acct_bank_accounts').select('current_balance, currency, is_active').limit(200),
-        supabase.from('acct_bank_recon_items').select('id, status').limit(5000),
-      ]);
-      if (bankRes.error?.code === '42P01') { setCash({ data: { totalCash: 0, accountCount: 0, unreconciledCount: 0 }, loading: false, error: null }); return; }
-      if (bankRes.error) throw bankRes.error;
-      const activeAccounts = ((bankRes.data ?? []) as any[]).filter(a => a.is_active !== false);
-      const totalCash = activeAccounts.reduce((s: number, a: any) => s + Number(a.current_balance ?? 0), 0);
-      const unreconciledCount = reconRes.error ? 0 : ((reconRes.data ?? []) as any[]).filter((r: any) => r.status === 'unreconciled').length;
-      setCash({ data: { totalCash, accountCount: activeAccounts.length, unreconciledCount }, loading: false, error: null });
-    } catch (e: any) { setCash({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── revenue & net income (YTD) ── */
-  const loadRevenue = useCallback(async () => {
-    setRevenue(p => ({ ...p, loading: true, error: null }));
-    try {
-      const ytdStart = format(startOfYear(new Date()), 'yyyy-MM-dd');
-      const { data, error } = await supabase.from('acct_journal_lines')
-        .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
-        .in('acct_accounts.account_type', ['revenue', 'expense'])
-        .eq('acct_journal_entries.status', 'posted')
-        .gte('acct_journal_entries.posting_date', ytdStart);
-      if (error?.code === '42P01') { setRevenue({ data: { totalRevenue: 0, totalExpense: 0, netIncome: 0, ytdRevenue: 0 }, loading: false, error: null }); return; }
-      if (error) throw error;
-      let totalRevenue = 0, totalExpense = 0;
-      for (const l of (data ?? []) as any[]) {
-        const type = (l.acct_accounts as any)?.account_type;
-        const amt = Number(l.functional_amount ?? 0);
-        if (type === 'revenue' && l.debit_credit === 'CR') totalRevenue += amt;
-        if (type === 'expense' && l.debit_credit === 'DR') totalExpense += amt;
-      }
-      setRevenue({ data: { totalRevenue, totalExpense, netIncome: totalRevenue - totalExpense, ytdRevenue: totalRevenue }, loading: false, error: null });
-    } catch (e: any) { setRevenue({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── COA / fiscal / funds meta ── */
-  const loadCOA = useCallback(async () => {
-    setCOA(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [acctRes, fundRes, periodRes] = await Promise.all([
-        supabase.from('acct_accounts').select('id').limit(5000),
-        supabase.from('acct_funds').select('id').limit(500),
-        supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status').order('start_date', { ascending: false }).limit(100),
-      ]);
-      const periods = (periodRes.data ?? []) as any[];
-      const openPeriod = periods.find((p: any) => p.status === 'open' || p.status === 'soft_closed');
-      const activePeriod = openPeriod
-        ? `P${String(openPeriod.period_no).padStart(2, '0')} · ${format(parseISO(openPeriod.start_date), 'MMM d')}–${format(parseISO(openPeriod.end_date), 'MMM d yy')}`
-        : null;
-      setCOA({
-        data: {
-          accountCount: (acctRes.error?.code === '42P01') ? 0 : (acctRes.data?.length ?? 0),
-          fundCount: (fundRes.error?.code === '42P01') ? 0 : (fundRes.data?.length ?? 0),
-          fiscalPeriodCount: (periodRes.error?.code === '42P01') ? 0 : (periodRes.data?.length ?? 0),
-          activePeriod,
-        },
-        loading: false, error: null,
-      });
-    } catch (e: any) { setCOA({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── Phase 4 advanced controls ── */
-  const loadPhase4 = useCallback(async () => {
-    setPhase4(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [journalRes, encRes, taxRes, periodRes] = await Promise.all([
-        supabase.from('acct_journal_entries').select('id, created_by, posted_by').eq('status', 'posted').not('posted_by', 'is', null).limit(3000),
-        supabase.from('acct_budget_encumbrances' as any).select('amount, status').eq('status', 'open').limit(3000),
-        supabase.from('acct_tax_codes' as any).select('id, is_active').eq('is_active', true).limit(500),
-        supabase.from('acct_period_close_log' as any).select('status, closed_at').order('closed_at', { ascending: false }).limit(1),
-      ]);
-      const sodViolations = journalRes.error ? 0 : ((journalRes.data ?? []) as any[]).filter(e => e.created_by && e.created_by === e.posted_by).length;
-      const encRows = (encRes.error?.code === '42P01') ? [] : ((encRes.data ?? []) as any[]);
-      const openEncumbranceTotal = encRows.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
-      const openEncumbranceCount = encRows.length;
-      const activeTaxCodes = (taxRes.error?.code === '42P01') ? 0 : (taxRes.data?.length ?? 0);
-      const latestClose = (periodRes.error?.code === '42P01') ? null : ((periodRes.data ?? []) as any[])[0]?.status ?? null;
-      setPhase4({ data: { sodViolations, openEncumbranceTotal, openEncumbranceCount, activeTaxCodes, periodCloseStatus: latestClose }, loading: false, error: null });
-    } catch (e: any) { setPhase4({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── Phase 5 expansion KPIs ── */
-  const loadPhase5 = useCallback(async () => {
-    setPhase5(p => ({ ...p, loading: true, error: null }));
-    try {
-      const thisMonth = new Date().toISOString().slice(0, 7);
-      const [grantsRes, deprRunRes, allocRunRes, acctRes] = await Promise.all([
-        supabase.from('acct_grants' as any).select('id, status, award_amount').in('status', ['active', 'expiring_soon']).limit(500),
-        supabase.from('acct_depreciation_runs' as any).select('run_date, total_depreciation').order('run_date', { ascending: false }).limit(1),
-        supabase.from('acct_allocation_runs' as any).select('run_date').gte('run_date', `${thisMonth}-01`).limit(100),
-        supabase.from('acct_accounts').select('country_id', { count: 'estimated' }).not('country_id', 'is', null).limit(1),
-      ]);
-      const grants = (grantsRes.error?.code === '42P01') ? [] : ((grantsRes.data ?? []) as any[]);
-      const deprRuns = (deprRunRes.error?.code === '42P01') ? [] : ((deprRunRes.data ?? []) as any[]);
-      const allocRuns = (allocRunRes.error?.code === '42P01') ? [] : ((allocRunRes.data ?? []) as any[]);
-      const { data: countryData } = await supabase.from('acct_accounts').select('country_id').not('country_id', 'is', null).limit(1000);
-      const entityCount = new Set(((countryData ?? []) as any[]).map((r: any) => r.country_id)).size;
-      setPhase5({
-        data: {
-          activeGrants: grants.length,
-          totalGrantAwarded: grants.reduce((s: number, g: any) => s + Number(g.award_amount ?? 0), 0),
-          lastDeprRunDate: deprRuns[0]?.run_date ?? null,
-          lastDeprRunAmount: Number(deprRuns[0]?.total_depreciation ?? 0),
-          allocationRunsThisMonth: allocRuns.length,
-          entityCount,
-        },
-        loading: false, error: null,
-      });
-    } catch (e: any) { setPhase5({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  /* ── module status probe — checks table existence AND fetches record count ── */
-  const loadModules = useCallback(async () => {
-    setModules(p => ({ ...p, loading: true, error: null }));
-    const probe = async (table: string): Promise<ModuleEntry> => {
-      const { count, error } = await supabase
-        .from(table as any)
-        .select('*', { count: 'exact', head: true });
-      const active = !error || error.code !== '42P01';
-      return { active, count: active ? (count ?? 0) : 0 };
-    };
-    const [coa, journals, journalLines, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon] = await Promise.all([
-      probe('acct_accounts'),
-      probe('acct_journal_entries'),
-      probe('acct_journal_lines'),
-      probe('acct_vendors'),
-      probe('acct_fixed_assets'),
-      probe('acct_purchase_orders'),
-      probe('acct_fiscal_periods'),
-      probe('acct_bank_accounts'),
-      probe('acct_funds'),
-      probe('acct_bank_recon_items'),
-    ]);
-    setModules({ data: { coa, journals, journalLines, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon }, loading: false, error: null });
-  }, []);
-
-  const loadPreFundKPI = useCallback(async () => {
-    setPreFundKPI(p => ({ ...p, loading: true, error: null }));
-    try {
-      const [{ data, error }, { data: fxData }] = await Promise.all([
-        supabase.from('pre_fund_requests').select('status, available_balance, currency'),
-        supabase.from('acct_exchange_rates').select('rate')
-          .eq('from_currency', 'USD').eq('to_currency', 'SDG')
-          .order('effective_date', { ascending: false }).limit(1).maybeSingle(),
-      ]);
-      if (error?.code === '42P01') { setPreFundKPI({ data: null, loading: false, error: 'table_missing' }); return; }
-      if (error) throw error;
-      const rows = (data ?? []) as any[];
-      const active = rows.filter((r: any) => ['active', 'low_balance'].includes(r.status));
-      const usdToSdg = Number((fxData as any)?.rate ?? 1) || 1;
-      const toUSD = (amount: number, currency: string) => {
-        if (currency === 'USD') return amount;
-        if (currency === 'SDG') return usdToSdg > 0 ? amount / usdToSdg : 0;
-        return amount;
-      };
-      setPreFundKPI({
-        data: {
-          activeCount: active.length,
-          totalAvailable: active.reduce((s: number, r: any) => s + toUSD(Number(r.available_balance ?? 0), r.currency ?? 'USD'), 0),
-          lowBalanceCount: rows.filter((r: any) => r.status === 'low_balance').length,
-          pendingApproval: rows.filter((r: any) => r.status === 'pending_approval').length,
-        },
-        loading: false, error: null,
-      });
-    } catch (e: any) { setPreFundKPI({ data: null, loading: false, error: e.message }); }
-  }, []);
-
-  const loadAll = useCallback(() => {
-    setLastRefresh(new Date());
-    setCountdown(60);
-    void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
-    void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
-    void loadCOA(); void loadModules(); void loadPhase4(); void loadPhase5();
-    void loadPreFundKPI();
-  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4, loadPhase5, loadPreFundKPI]);
-
-  useEffect(() => { void loadAll(); }, [loadAll]);
-
-  useEffect(() => {
-    countdownRef.current = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { loadAll(); return 60; }
-        return c - 1;
-      });
-    }, 1000);
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, [loadAll]);
-
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const revExpTrend = monthlyRevExp.data ?? [];
@@ -609,11 +294,11 @@ export default function AccountingFinanceDashboard() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <Button variant="outline" size="sm" onClick={loadAll} data-testid="button-refresh">
-              <RefreshCw className="h-4 w-4 mr-1" />Refresh
+            <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching} data-testid="button-refresh">
+              <RefreshCw className={cn('h-4 w-4 mr-1', isFetching && 'animate-spin')} />Refresh
             </Button>
             <div className="text-[10px] text-muted-foreground text-right">
-              {format(lastRefresh, 'HH:mm:ss')} · auto in {countdown}s
+              {format(lastRefresh, 'HH:mm:ss')}
             </div>
           </div>
         </div>
@@ -1291,7 +976,7 @@ export default function AccountingFinanceDashboard() {
                 }
               </div>
               <div className="flex items-center gap-3 text-muted-foreground shrink-0">
-                <span>{activeModules} active · {totalRecords.toLocaleString()} rows · auto-refresh in {countdown}s</span>
+                <span>{activeModules} active · {totalRecords.toLocaleString()} rows</span>
               </div>
             </div>
           );

@@ -11,8 +11,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatDistanceToNow, format, isToday, isYesterday, parseISO } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
 import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
-import { getUserStatus } from '@/utils/userStatusUtils';
 import { supabase } from '@/integrations/supabase/client';
+import { useProfilesByIds } from '@/hooks/useUserDirectory';
+import { displayNameFromProfile } from '@/services/userDirectory';
 import { 
   Send, ArrowLeft, Paperclip, Users, X, File, Loader2, Phone, Video,
   Smile, Check, CheckCheck, MessageSquare, RotateCcw, Mic, MicOff,
@@ -36,7 +37,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
   const [messageText, setMessageText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
-  const { currentUser, users } = useUser();
+  const { currentUser } = useUser();
   const { isUserOnline } = useGlobalPresence();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -68,25 +69,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
   
   const chatMessages = activeChat ? getChatMessages(activeChat.id) || [] : [];
 
-  const getTargetUser = () => {
-    if (!activeChat || activeChat.type !== 'private') return null;
-    const targetUserId = activeChat.participants.find(id => id !== currentUser?.id);
-    if (!targetUserId) return null;
-    return users.find(u => u.id === targetUserId);
-  };
-  const targetUser = getTargetUser();
+  const targetUserId =
+    activeChat?.type === 'private'
+      ? activeChat.participants.find((id) => id !== currentUser?.id) ?? null
+      : null;
+  const { data: targetProfiles = [] } = useProfilesByIds(
+    targetUserId ? [targetUserId] : [],
+    Boolean(targetUserId)
+  );
+  const targetProfile = targetProfiles[0];
 
   const getTargetUserStatus = () => {
-    if (!targetUser) return null;
-    const status = getUserStatus(targetUser, isUserOnline(targetUser.id));
-    if (status.type === 'online') return { text: 'Online', color: 'text-green-600 dark:text-green-400', dotColor: 'bg-green-500' };
-    const lastSeenTime = targetUser.location?.lastUpdated || targetUser.lastActive;
-    if (lastSeenTime) {
-      try {
-        return { text: `Last seen ${formatDistanceToNow(parseISO(lastSeenTime), { addSuffix: false })} ago`, color: 'text-gray-500 dark:text-gray-400', dotColor: 'bg-gray-400' };
-      } catch { /* noop */ }
+    if (!targetUserId) return null;
+    if (isUserOnline(targetUserId)) {
+      return { text: 'Online', color: 'text-green-600 dark:text-green-400', dotColor: 'bg-green-500' };
     }
-    return { text: status.label, color: 'text-gray-500 dark:text-gray-400', dotColor: 'bg-gray-400' };
+    return { text: 'Offline', color: 'text-gray-500 dark:text-gray-400', dotColor: 'bg-gray-400' };
   };
 
   // Load reactions, pinned messages, and read receipts when chat changes
@@ -152,11 +150,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
     : chatMessages;
 
   const handleCall = (isVideo: boolean = false) => {
-    if (!targetUser) {
+    if (!targetProfile || !targetUserId) {
       toast({ title: 'Cannot call', description: activeChat?.type === 'group' ? 'Group calls are not supported yet' : 'User not found', variant: 'destructive' });
       return;
     }
-    initiateCall(targetUser);
+    initiateCall({
+      id: targetProfile.id,
+      name: displayNameFromProfile(targetProfile),
+      fullName: targetProfile.full_name || undefined,
+      email: targetProfile.email || undefined,
+      role: (targetProfile.role as any) || 'dataCollector',
+      avatar: targetProfile.avatar_url || undefined,
+    } as any);
     navigate('/calls');
   };
 
@@ -432,10 +437,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
                 <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => setSearchOpen(true)} data-testid="button-search">
                   <Search className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => handleCall(false)} disabled={!targetUser} data-testid="button-call">
+                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => handleCall(false)} disabled={!targetProfile} data-testid="button-call">
                   <Phone className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => handleCall(true)} disabled={!targetUser} data-testid="button-video">
+                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => handleCall(true)} disabled={!targetProfile} data-testid="button-video">
                   <Video className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400" onClick={() => window.location.reload()} data-testid="button-refresh">
