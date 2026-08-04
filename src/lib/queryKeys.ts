@@ -119,6 +119,7 @@ export const queryKeys = {
     glBootstrap: () => [...queryKeys.accounting.all, 'glBootstrap'] as const,
     glLedger: (accountId: string, periodId: string) =>
       [...queryKeys.accounting.all, 'glLedger', accountId, periodId] as const,
+    donorReports: () => [...queryKeys.accounting.all, 'donorReports'] as const,
   },
 } as const;
 

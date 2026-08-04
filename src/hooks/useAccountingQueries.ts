@@ -349,98 +349,44 @@ export type GlLedgerResult = {
   openingBalance: number;
 };
 
-async function sumAccountPriorBalance(accountId: string, beforeDate: string): Promise<number> {
-  const { data: prevEntries, error: pErr } = await supabase
-    .from('acct_journal_entries')
-    .select('id')
-    .eq('status', 'posted')
-    .lt('posting_date', beforeDate);
-  if (pErr) throw new Error(pErr.message);
-
-  let openBal = 0;
-  const prevIds = (prevEntries ?? []).map((e) => e.id);
-  const PAGE = 1000;
-  for (let from = 0; from < prevIds.length; from += PAGE) {
-    const batch = prevIds.slice(from, from + PAGE);
-    const { data: prevLines } = await supabase
-      .from('acct_journal_lines')
-      .select('debit_credit, functional_amount')
-      .eq('account_id', accountId)
-      .in('entry_id', batch);
-    for (const l of prevLines ?? []) {
-      const amt = Number(l.functional_amount) || 0;
-      openBal += l.debit_credit === 'DR' ? amt : -amt;
-    }
-  }
-  return openBal;
-}
-
 export async function fetchGlLedger(
   accountId: string,
   startDate: string,
   endDate: string
 ): Promise<GlLedgerResult> {
-  const { data: entriesInPeriod, error: eErr } = await supabase
-    .from('acct_journal_entries')
-    .select('id, entry_no, posting_date, description_en, description_ar, source_type, status')
-    .eq('status', 'posted')
-    .gte('posting_date', startDate)
-    .lte('posting_date', endDate)
-    .order('posting_date')
-    .order('entry_no');
-  if (eErr) throw new Error(eErr.message);
-
-  const openingBalance = await sumAccountPriorBalance(accountId, startDate);
-
-  const periodEntries = entriesInPeriod ?? [];
-  const entryIds = periodEntries.map((e) => e.id);
-  const entryMap = Object.fromEntries(periodEntries.map((e) => [e.id, e]));
-
-  const allLines: GlLine[] = [];
-  if (entryIds.length > 0) {
-    const PAGE = 1000;
-    for (let from = 0; from < entryIds.length; from += PAGE) {
-      const batch = entryIds.slice(from, from + PAGE);
-      const { data: linesData, error: lErr } = await supabase
-        .from('acct_journal_lines')
-        .select(
-          'id, line_no, debit_credit, functional_amount, functional_currency, original_amount, original_currency, description, entry_id'
-        )
-        .eq('account_id', accountId)
-        .in('entry_id', batch)
-        .order('entry_id')
-        .order('line_no');
-      if (lErr) throw new Error(lErr.message);
-      for (const l of linesData ?? []) {
-        const e = entryMap[l.entry_id];
-        if (!e) continue;
-        allLines.push({
-          entry_id: l.entry_id,
-          entry_no: e.entry_no,
-          posting_date: e.posting_date,
-          description_en: e.description_en,
-          description_ar: e.description_ar,
-          source_type: e.source_type,
-          status: e.status,
-          line_no: l.line_no,
-          debit_credit: l.debit_credit as 'DR' | 'CR',
-          functional_amount: Number(l.functional_amount) || 0,
-          functional_currency: l.functional_currency,
-          original_amount: Number(l.original_amount) || 0,
-          original_currency: l.original_currency,
-          line_description: l.description,
-        });
-      }
-    }
-  }
-
-  allLines.sort((a, b) => {
-    if (a.posting_date !== b.posting_date) return a.posting_date < b.posting_date ? -1 : 1;
-    if (a.entry_no !== b.entry_no) return a.entry_no - b.entry_no;
-    return a.line_no - b.line_no;
+  const { data, error } = await supabase.rpc('get_acct_gl_ledger', {
+    p_account_id: accountId,
+    p_start_date: startDate,
+    p_end_date: endDate,
   });
+  if (error) throw new Error(error.message);
 
-  return { lines: allLines, openingBalance };
+  const payload = (data ?? {}) as {
+    openingBalance?: number | string;
+    lines?: Array<Record<string, unknown>>;
+  };
+
+  const lines: GlLine[] = (payload.lines ?? []).map((l) => ({
+    entry_id: String(l.entry_id),
+    entry_no: Number(l.entry_no) || 0,
+    posting_date: String(l.posting_date),
+    description_en: String(l.description_en ?? ''),
+    description_ar: (l.description_ar as string | null) ?? null,
+    source_type: String(l.source_type ?? ''),
+    status: String(l.status ?? ''),
+    line_no: Number(l.line_no) || 0,
+    debit_credit: (l.debit_credit as 'DR' | 'CR') || 'DR',
+    functional_amount: Number(l.functional_amount) || 0,
+    functional_currency: String(l.functional_currency ?? ''),
+    original_amount: Number(l.original_amount) || 0,
+    original_currency: String(l.original_currency ?? ''),
+    line_description: (l.line_description as string | null) ?? null,
+  }));
+
+  return {
+    openingBalance: Number(payload.openingBalance) || 0,
+    lines,
+  };
 }
 
 export function useGlLedgerQuery(
@@ -454,6 +400,100 @@ export function useGlLedgerQuery(
     queryKey: queryKeys.accounting.glLedger(accountId, periodId),
     queryFn: () => fetchGlLedger(accountId, startDate!, endDate!),
     enabled: enabled && !!accountId && !!periodId && !!startDate && !!endDate,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export type DonorFund = {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string | null;
+  restriction_type: string;
+  donor_partner_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+};
+
+export type FundActivity = {
+  fund_id: string;
+  total_debit: number;
+  total_credit: number;
+  line_count: number;
+};
+
+export type DonorReportsBundle = {
+  funds: DonorFund[];
+  activity: FundActivity[];
+  partners: { id: string; name: string }[];
+  preFundRequests: {
+    id: string;
+    name: string | null;
+    currency: string | null;
+    amount: number | null;
+    available_balance: number | null;
+    paid_amount: number | null;
+    status: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    matching_scope: string | null;
+  }[];
+};
+
+export async function fetchDonorReportsBundle(): Promise<DonorReportsBundle> {
+  const [fundsRes, activityRes, partnersRes, preFundRes] = await Promise.all([
+    supabase
+      .from('acct_funds')
+      .select(
+        'id, code, name_en, name_ar, restriction_type, donor_partner_id, start_date, end_date, is_active'
+      )
+      .order('code'),
+    supabase.rpc('get_acct_fund_activity'),
+    supabase.from('crm_partners').select('id, name').limit(500).then(
+      (res) => res,
+      () => ({ data: [] as { id: string; name: string }[], error: null })
+    ),
+    supabase
+      .from('pre_fund_requests' as any)
+      .select(
+        'id, name, currency, amount, available_balance, paid_amount, status, start_date, end_date, matching_scope'
+      )
+      .in('status', ['active', 'low_balance', 'awaiting_receipt'])
+      .order('start_date', { ascending: false })
+      .limit(200)
+      .then(
+        (res: { data: DonorReportsBundle['preFundRequests'] | null }) => res,
+        () => ({ data: [] as DonorReportsBundle['preFundRequests'] })
+      ),
+  ]);
+
+  if (fundsRes.error) throw new Error(fundsRes.error.message);
+  if (activityRes.error) throw new Error(activityRes.error.message);
+
+  const rawActivity = activityRes.data;
+  const activityList = (Array.isArray(rawActivity) ? rawActivity : []) as FundActivity[];
+  const activity = activityList.map((a) => ({
+    fund_id: a.fund_id,
+    total_debit: Number(a.total_debit) || 0,
+    total_credit: Number(a.total_credit) || 0,
+    line_count: Number(a.line_count) || 0,
+  }));
+
+  return {
+    funds: (fundsRes.data ?? []) as DonorFund[],
+    activity,
+    partners: (partnersRes.data ?? []) as { id: string; name: string }[],
+    preFundRequests: (preFundRes.data ?? []) as DonorReportsBundle['preFundRequests'],
+  };
+}
+
+export function useDonorReportsQuery(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.accounting.donorReports(),
+    queryFn: fetchDonorReportsBundle,
+    enabled,
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
