@@ -2,6 +2,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import {
   getProfilesByIds,
+  listProfilesWithLocation,
+  profileWithLocationToUser,
   searchUserDirectory,
   type SearchUserDirectoryParams,
   type UserDirectoryRow,
@@ -47,6 +49,19 @@ export function useProfilesByIds(ids: string[], enabled = true) {
     enabled: enabled && unique.length > 0,
     queryFn: () => getProfilesByIds(unique),
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useProfilesWithLocation(limit = 200, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.profiles.withLocation(limit),
+    enabled,
+    queryFn: async () => {
+      const rows = await listProfilesWithLocation(limit);
+      return rows.map(profileWithLocationToUser);
+    },
+    staleTime: 1000 * 60,
+    refetchInterval: 1000 * 60,
   });
 }
 
