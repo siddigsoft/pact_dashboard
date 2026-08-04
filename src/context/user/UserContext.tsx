@@ -301,11 +301,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Prefer localStorage cache on mount; network only when stale / empty
-    void refreshUsers();
+    // ponytail: only network-fetch the full directory when local cache is empty.
+    // Warm sessions use localStorage seed; Users / admins call refreshUsers({ force: true }).
+    if (appUsersLenRef.current === 0) {
+      void refreshUsers({ force: true });
+    }
 
     const scheduleDirectoryRefresh = () => {
       if (directoryRefreshTimerRef.current) return;
+      // Skip realtime full-table reload when directory was never loaded this session
+      if (appUsersLenRef.current === 0) return;
       directoryRefreshTimerRef.current = setTimeout(() => {
         directoryRefreshTimerRef.current = null;
         void refreshUsers({ force: true });

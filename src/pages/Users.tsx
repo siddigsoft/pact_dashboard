@@ -287,6 +287,10 @@ const Users = () => {
 
   // Track initial load state - set to false after a short delay to handle empty datasets
   useEffect(() => {
+    void refreshUsers({ force: true });
+  }, []);
+
+  useEffect(() => {
     if (users.length > 0) {
       setIsInitialLoad(false);
     } else {
