@@ -343,9 +343,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     setExtName(''); setExtEmail(''); setExtOrg(''); resetFeeFields();
     toast({
       title: 'External member added',
-      description: `${extName} added. Share their portal link so they can view tasks.`,
+      description: `${extName} added. Save the project, then use Copy portal link to share their access URL.`,
       variant: 'success',
     });
+    // Prefill clipboard when possible (link only works after the project is saved)
+    void copyExternalLink(token, extName.trim());
   };
 
   const copyExternalLink = async (token: string, name: string) => {
