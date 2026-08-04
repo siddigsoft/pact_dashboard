@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useNavigate } from 'react-router-dom';
@@ -17,8 +17,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import GpsLocationCapture from '@/components/GpsLocationCapture';
-import { useUserProjects } from '@/hooks/useUserProjects';
 import { getUserStatus } from '@/utils/userStatusUtils';
+import {
+  flattenFieldTeamPagesAsUsers,
+  useFieldTeamDirectory,
+  useInvalidateFieldTeamDirectory,
+} from '@/hooks/useUserDirectory';
 import {
   Users,
   MapPin,
@@ -44,19 +48,98 @@ import {
 import { User } from '@/types';
 
 const FieldTeam = () => {
-  const { users, currentUser, refreshUsers, updateUserLocation } = useUser();
-  const { siteVisits, assignSiteVisit } = useSiteVisitContext();
+  const { currentUser, updateUserLocation } = useUser();
+  const { siteVisits } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState('map');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { checkPermission, hasAnyRole } = useAuthorization();
+  const invalidateFieldTeam = useInvalidateFieldTeamDirectory();
 
   const canAccess = checkPermission('users', 'read') || hasAnyRole(['admin']);
-  
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  const fieldTeamQuery = useFieldTeamDirectory({
+    search: debouncedSearch,
+    enabled: canAccess,
+  });
+  const fieldTeamUsers = useMemo(
+    () => flattenFieldTeamPagesAsUsers(fieldTeamQuery.data?.pages),
+    [fieldTeamQuery.data]
+  );
+
+  useEffect(() => {
+    if (!canAccess) return;
+    if (fieldTeamQuery.hasNextPage && !fieldTeamQuery.isFetchingNextPage) {
+      const pages = fieldTeamQuery.data?.pages.length ?? 0;
+      if (pages > 0 && pages < 3) void fieldTeamQuery.fetchNextPage();
+    }
+  }, [
+    canAccess,
+    fieldTeamQuery.hasNextPage,
+    fieldTeamQuery.isFetchingNextPage,
+    fieldTeamQuery.data?.pages.length,
+    fieldTeamQuery.fetchNextPage,
+  ]);
+
+  const filteredUsers = useMemo(() => {
+    return fieldTeamUsers.filter((user) => {
+      const role = user.role?.toLowerCase() || '';
+      const isDataCollector = ['datacollector', 'data_collector', 'enumerator'].includes(role);
+      const matchesRole = roleFilter === 'all' ||
+        (roleFilter === 'datacollector' && isDataCollector) ||
+        user.role?.toLowerCase() === roleFilter.toLowerCase();
+      const userStatus = getUserStatus(user);
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'online' && userStatus.type === 'online') ||
+        (statusFilter === 'offline' && userStatus.type === 'offline') ||
+        (statusFilter === 'busy' && userStatus.type === 'same-day');
+
+      return matchesRole && matchesStatus;
+    });
+  }, [fieldTeamUsers, roleFilter, statusFilter]);
+
+  const coordinators = useMemo(() =>
+    fieldTeamUsers.filter(u => u.role?.toLowerCase() === 'coordinator'),
+    [fieldTeamUsers]
+  );
+
+  const dataCollectors = useMemo(() =>
+    fieldTeamUsers.filter(u => ['datacollector', 'data_collector', 'enumerator'].includes(u.role?.toLowerCase() || '')),
+    [fieldTeamUsers]
+  );
+
+  const usersWithLocation = useMemo(() =>
+    filteredUsers.filter(u => u.location?.latitude && u.location?.longitude),
+    [filteredUsers]
+  );
+
+  const onlineUsers = useMemo(() =>
+    fieldTeamUsers.filter(u => getUserStatus(u).type === 'online'),
+    [fieldTeamUsers]
+  );
+
+  const activeSiteVisits = useMemo(() => {
+    return siteVisits.filter(
+      (visit) => visit.status === 'assigned' || visit.status === 'inProgress'
+    );
+  }, [siteVisits]);
+
+  const pendingSiteVisits = useMemo(() => {
+    return siteVisits.filter(
+      (visit) => visit.status === 'pending' || visit.status === 'permitVerified'
+    );
+  }, [siteVisits]);
+
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -85,72 +168,11 @@ const FieldTeam = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refreshUsers();
+      await invalidateFieldTeam();
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000);
     }
   };
-
-  const fieldTeamUsers = useMemo(() => {
-    return users.filter((user) => {
-      const role = user.role?.toLowerCase() || '';
-      return ['coordinator', 'datacollector', 'enumerator', 'data_collector'].includes(role);
-    });
-  }, [users]);
-
-  const filteredUsers = useMemo(() => {
-    return fieldTeamUsers.filter((user) => {
-      const matchesSearch = 
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.phone && user.phone.includes(searchTerm));
-      
-      const role = user.role?.toLowerCase() || '';
-      const isDataCollector = ['datacollector', 'data_collector', 'enumerator'].includes(role);
-      const matchesRole = roleFilter === 'all' || 
-        (roleFilter === 'datacollector' && isDataCollector) ||
-        user.role?.toLowerCase() === roleFilter.toLowerCase();
-      const userStatus = getUserStatus(user);
-      const matchesStatus = statusFilter === 'all' || 
-        (statusFilter === 'online' && userStatus.type === 'online') ||
-        (statusFilter === 'offline' && userStatus.type === 'offline') ||
-        (statusFilter === 'busy' && userStatus.type === 'same-day');
-      
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [fieldTeamUsers, searchTerm, roleFilter, statusFilter]);
-
-  const coordinators = useMemo(() => 
-    fieldTeamUsers.filter(u => u.role?.toLowerCase() === 'coordinator'), 
-    [fieldTeamUsers]
-  );
-  
-  const dataCollectors = useMemo(() => 
-    fieldTeamUsers.filter(u => ['datacollector', 'data_collector', 'enumerator'].includes(u.role?.toLowerCase() || '')), 
-    [fieldTeamUsers]
-  );
-
-  const usersWithLocation = useMemo(() => 
-    filteredUsers.filter(u => u.location?.latitude && u.location?.longitude),
-    [filteredUsers]
-  );
-
-  const onlineUsers = useMemo(() => 
-    fieldTeamUsers.filter(u => getUserStatus(u).type === 'online'),
-    [fieldTeamUsers]
-  );
-
-  const activeSiteVisits = useMemo(() => {
-    return siteVisits.filter(
-      (visit) => visit.status === 'assigned' || visit.status === 'inProgress'
-    );
-  }, [siteVisits]);
-
-  const pendingSiteVisits = useMemo(() => {
-    return siteVisits.filter(
-      (visit) => visit.status === 'pending' || visit.status === 'permitVerified'
-    );
-  }, [siteVisits]);
 
   const handleAssignFromMap = (siteVisitId: string) => {
     navigate(`/site-visits/${siteVisitId}`);
@@ -578,7 +600,7 @@ const FieldTeam = () => {
       <SiteVisitsSummary 
         activeSiteVisits={activeSiteVisits}
         pendingSiteVisits={pendingSiteVisits}
-        users={users}
+        users={fieldTeamUsers}
       />
     </div>
   );

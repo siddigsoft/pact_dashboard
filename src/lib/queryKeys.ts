@@ -37,6 +37,8 @@ export const queryKeys = {
     byIds: (ids: string[]) => [...queryKeys.profiles.all, 'byIds', ids] as const,
     withLocation: (limit?: number) =>
       [...queryKeys.profiles.all, 'withLocation', limit ?? 200] as const,
+    fieldTeam: (filters?: Record<string, unknown>) =>
+      [...queryKeys.profiles.all, 'fieldTeam', filters] as const,
   },
   
   wallets: {

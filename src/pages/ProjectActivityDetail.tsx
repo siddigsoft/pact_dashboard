@@ -6,7 +6,11 @@ import { format, isValid, parseISO } from 'date-fns';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useInvalidateProjectsQueries } from '@/context/project/projectQueries';
+import {
+  useInvalidateProjectsQueries,
+  useProjectActivitiesQuery,
+  useUpdateProjectInCache,
+} from '@/context/project/projectQueries';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -36,6 +40,8 @@ const ProjectActivityDetail: FC = () => {
   const { projects, loading, fetchProjects, getProjectById } = useProjectContext();
   const { authReady } = useUser();
   const invalidate = useInvalidateProjectsQueries();
+  const updateProjectCache = useUpdateProjectInCache();
+  const { data: activities } = useProjectActivitiesQuery(id);
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [localStatus, setLocalStatus] = useState<string>('');
@@ -45,10 +51,16 @@ const ProjectActivityDetail: FC = () => {
     if (authReady && projects.length === 0 && !loading) fetchProjects();
   }, [authReady, loading, projects.length]);
 
-  const project = useMemo(() => (id ? getProjectById(id) : undefined), [id, projects]);
+  useEffect(() => {
+    if (!id || !activities) return;
+    const found = getProjectById(id);
+    if (found) updateProjectCache({ ...found, activities });
+  }, [id, activities, projects]);
+
+  const project = useMemo(() => (id ? getProjectById(id) : undefined), [id, projects, activities]);
   const activity: ProjectActivity | undefined = useMemo(
-    () => project?.activities.find((a) => a.id === activityId),
-    [project, activityId]
+    () => (activities ?? project?.activities)?.find((a) => a.id === activityId),
+    [project, activityId, activities]
   );
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 /**
  * React Query keys and hooks for Project data.
- * Provides cached, deduplicated fetches for projects with nested activities.
+ * List fetch is metadata-only; activities load on demand per project.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,7 @@ import { getFirstStageId } from '@/config/projectFlows';
 
 export const projectQueryKeys = {
   all: ['projects'] as const,
+  activities: (projectId: string) => [...projectQueryKeys.all, 'activities', projectId] as const,
 };
 
 export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities'> {
@@ -28,7 +29,7 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
     relatedMMPs: dbProject.related_mmps ?? [],
     relatedSiteVisits: dbProject.related_site_visits ?? [],
     archived: dbProject.archived ?? false,
-    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'customer',
+    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'partner',
     clientName: dbProject.client_name ?? undefined,
     partnerId: dbProject.partner_id ?? undefined,
     crmOpportunityId: dbProject.crm_opportunity_id ?? undefined,
@@ -40,43 +41,27 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
   };
 }
 
+/** List fetch — no nested activities/sub-activities (those load per project). */
 async function fetchProjects(): Promise<Project[]> {
-  // Use RPC function to bypass PostgREST schema cache for new columns
   const { data: projectsData, error: projectsError } = await supabase
     .rpc('get_all_projects');
 
   if (projectsError) throw new Error(projectsError.message);
   if (!projectsData || projectsData.length === 0) return [];
 
-  const projectIds = projectsData.map((p: any) => p.id);
+  return projectsData.map((dbProject: any) => ({
+    ...mapDbProjectToProject(dbProject),
+    activities: [],
+  })) as Project[];
+}
 
-  // Fetch activities separately — table uses `title` as primary name column
-  const { data: activitiesData } = await supabase
-    .from('project_activities')
-    .select('id, project_id, title, description, start_date, end_date, status, created_by')
-    .in('project_id', projectIds);
-
-  const activityIds = (activitiesData || []).map((a: any) => a.id);
-
-  // Fetch sub-activities separately
-  const { data: subActivitiesData } = activityIds.length > 0
-    ? await supabase
-        .from('sub_activities')
-        .select('id, activity_id, name, description, status, is_active, due_date, assigned_to')
-        .in('activity_id', activityIds)
-    : { data: [] };
-
-  // Fetch multi-assignees from project_activity_assignments
-  const { data: assignmentsData } = activityIds.length > 0
-    ? await supabase
-        .from('project_activity_assignments')
-        .select('activity_id, user_id, profiles!user_id(full_name)')
-        .in('activity_id', activityIds)
-    : { data: [] };
-
-  // Group sub-activities by activity_id
+function mapActivitiesFromRows(
+  activitiesData: any[],
+  subActivitiesData: any[],
+  assignmentsData: any[]
+): ProjectActivity[] {
   const subByActivity: Record<string, SubActivity[]> = {};
-  for (const dbSub of (subActivitiesData || [])) {
+  for (const dbSub of subActivitiesData) {
     if (!subByActivity[dbSub.activity_id]) subByActivity[dbSub.activity_id] = [];
     subByActivity[dbSub.activity_id].push({
       id: dbSub.id,
@@ -89,51 +74,104 @@ async function fetchProjects(): Promise<Project[]> {
     });
   }
 
-  // Group assignees by activity_id
   const assigneesByActivity: Record<string, string[]> = {};
-  for (const a of (assignmentsData || [])) {
+  for (const a of assignmentsData) {
     if (!assigneesByActivity[a.activity_id]) assigneesByActivity[a.activity_id] = [];
     const name = (a as any).profiles?.full_name ?? a.user_id;
     assigneesByActivity[a.activity_id].push(name);
   }
 
-  // Group activities by project_id
-  const activitiesByProject: Record<string, ProjectActivity[]> = {};
-  for (const dbActivity of (activitiesData || [])) {
-    if (!activitiesByProject[dbActivity.project_id]) activitiesByProject[dbActivity.project_id] = [];
-    activitiesByProject[dbActivity.project_id].push({
-      id: dbActivity.id,
-      name: dbActivity.title ?? '',
-      description: dbActivity.description,
-      startDate: dbActivity.start_date,
-      endDate: dbActivity.end_date,
-      dueDate: undefined,
-      status: dbActivity.status,
-      priority: 'medium',
-      progress: 0,
-      isActive: true,
-      assignedTo: undefined,
-      assignees: assigneesByActivity[dbActivity.id] ?? [],
-      activityTypeId: undefined,
-      subActivities: subByActivity[dbActivity.id] ?? [],
-    });
+  return activitiesData.map((dbActivity) => ({
+    id: dbActivity.id,
+    name: dbActivity.title ?? '',
+    description: dbActivity.description,
+    startDate: dbActivity.start_date,
+    endDate: dbActivity.end_date,
+    dueDate: undefined,
+    status: dbActivity.status,
+    priority: 'medium' as const,
+    progress: 0,
+    isActive: true,
+    assignedTo: undefined,
+    assignees: assigneesByActivity[dbActivity.id] ?? [],
+    activityTypeId: undefined,
+    subActivities: subByActivity[dbActivity.id] ?? [],
+  }));
+}
+
+/** On-demand activities (+ subs + assignees) for one project. */
+export async function fetchProjectActivities(projectId: string): Promise<ProjectActivity[]> {
+  const { data: activitiesData, error } = await supabase
+    .from('project_activities')
+    .select('id, project_id, title, description, start_date, end_date, status, created_by')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.warn('[fetchProjectActivities]', error.message);
+    return [];
   }
 
-  return projectsData.map((dbProject: any) => ({
-    ...mapDbProjectToProject(dbProject),
-    activities: activitiesByProject[dbProject.id] ?? [],
-  })) as Project[];
+  const rows = activitiesData || [];
+  const activityIds = rows.map((a: any) => a.id);
+  if (!activityIds.length) return [];
+
+  const [{ data: subActivitiesData }, { data: assignmentsData }] = await Promise.all([
+    supabase
+      .from('sub_activities')
+      .select('id, activity_id, name, description, status, is_active, due_date, assigned_to')
+      .in('activity_id', activityIds),
+    supabase
+      .from('project_activity_assignments')
+      .select('activity_id, user_id, profiles!user_id(full_name)')
+      .in('activity_id', activityIds),
+  ]);
+
+  return mapActivitiesFromRows(rows, subActivitiesData || [], assignmentsData || []);
+}
+
+/** Keep lazily loaded activities when the list refetch returns empty arrays. */
+export function mergeProjectsPreserveActivities(
+  fresh: Project[],
+  prev: Project[] | undefined
+): Project[] {
+  if (!prev?.length) return fresh;
+  const prevById = new Map(prev.map((p) => [p.id, p]));
+  return fresh.map((p) => {
+    const prior = prevById.get(p.id);
+    const priorLen = prior?.activities?.length ?? 0;
+    const freshLen = p.activities?.length ?? 0;
+    if (priorLen > 0 && freshLen === 0) {
+      return { ...p, activities: prior!.activities };
+    }
+    return p;
+  });
 }
 
 const STALE_MS = 60 * 1000;
 
 export function useProjectsQuery(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: projectQueryKeys.all,
-    queryFn: fetchProjects,
+    queryFn: async () => {
+      const fresh = await fetchProjects();
+      const prev = queryClient.getQueryData<Project[]>(projectQueryKeys.all);
+      return mergeProjectsPreserveActivities(fresh, prev);
+    },
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
     enabled,
+  });
+}
+
+export function useProjectActivitiesQuery(projectId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: projectQueryKeys.activities(projectId ?? ''),
+    queryFn: () => fetchProjectActivities(projectId!),
+    enabled: !!projectId && enabled,
+    staleTime: STALE_MS,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -151,6 +189,12 @@ export function useUpdateProjectInCache() {
       if (!old) return old;
       return old.map(p => p.id === updatedProject.id ? { ...p, ...updatedProject } : p);
     });
+    if (updatedProject.activities?.length) {
+      queryClient.setQueryData(
+        projectQueryKeys.activities(updatedProject.id),
+        updatedProject.activities
+      );
+    }
   };
 }
 

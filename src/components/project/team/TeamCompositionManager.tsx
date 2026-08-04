@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, UserPlus, UserMinus, Clock, DollarSign, Percent, Users, Briefcase,
   Copy, Link2, Trash2, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Globe,
@@ -11,12 +11,16 @@ import {
   calcMemberTotalCost, generateInstallmentSchedule, derivePaymentStatus, totalPaidFromInstallments,
 } from '@/types/project';
 import { User } from '@/types';
-import { useUser } from '@/context/user/UserContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeRole, toDisplayLabel } from '@/utils/roleMapping';
 import type { RoleCode } from '@/utils/roleMapping';
+import {
+  flattenDirectoryPagesAsUsers,
+  useProfilesByIds,
+  useUserDirectory,
+} from '@/hooks/useUserDirectory';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -118,10 +122,10 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   project,
   onTeamChange,
 }) => {
-  const { users } = useUser();
   const { updateProjectTeam } = useProjectContext();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     project.team?.teamComposition || []
@@ -165,6 +169,34 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   // Copy-link feedback
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  const directoryQuery = useUserDirectory({
+    search: debouncedSearch,
+    limit: 40,
+    enabled: dialogOpen && addMode === 'system',
+  });
+  const directoryUsers = useMemo(
+    () => flattenDirectoryPagesAsUsers(directoryQuery.data?.pages),
+    [directoryQuery.data]
+  );
+
+  const memberIds = useMemo(
+    () => teamMembers.map((m) => m.userId).filter(Boolean),
+    [teamMembers]
+  );
+  const { data: memberProfiles = [] } = useProfilesByIds(memberIds);
+  const memberRoleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of memberProfiles) {
+      if (p.role) map.set(p.id, p.role);
+    }
+    return map;
+  }, [memberProfiles]);
+
   const persistTeam = async (composition: ProjectTeamMember[]) => {
     if (!project.id) return false;
     setPersisting(true);
@@ -188,12 +220,12 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
 
   const teamMemberIds = teamMembers.map(m => m.userId).sort().join(',');
-  const userIdList = users.map(u => u.id).sort().join(',');
+  const directoryIdList = directoryUsers.map(u => u.id).sort().join(',');
 
   const fetchUserWorkloads = useCallback(async () => {
     try {
-      const userIds = [...teamMembers.map(m => m.userId), ...users.map(u => u.id)];
-      const uniqueUserIds = [...new Set(userIds)];
+      const userIds = [...teamMembers.map(m => m.userId), ...directoryUsers.map(u => u.id)];
+      const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
       if (uniqueUserIds.length === 0) return;
 
       const [
@@ -247,7 +279,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     } catch (error) {
       console.error('Error calculating workloads:', error);
     }
-  }, [teamMemberIds, userIdList, project.id]);
+  }, [teamMemberIds, directoryIdList, project.id]);
 
   useEffect(() => {
     fetchUserWorkloads();
@@ -255,14 +287,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
 
   const getWorkload = (userId: string): number => userWorkloads[userId] ?? 0;
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = directoryUsers.filter(user => {
     const isAlreadyTeamMember = teamMembers.some(member => member.userId === user.id);
-    const q = searchTerm.toLowerCase();
-    const matchesSearch = !q ||
-      (user.name || '').toLowerCase().includes(q) ||
-      (user.email || '').toLowerCase().includes(q) ||
-      (user.role || '').toLowerCase().includes(q);
-    return !isAlreadyTeamMember && matchesSearch;
+    return !isAlreadyTeamMember;
   });
 
   const resetFeeFields = () => {
@@ -533,9 +560,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const systemUser = users.find(u => u.id === member.userId);
-                          const label = systemUser
-                            ? formatRoleLabel(systemUser.role)
+                          const systemRole = memberRoleById.get(member.userId);
+                          const label = systemRole
+                            ? formatRoleLabel(systemRole)
                             : formatRoleLabel(member.role);
                           return (
                             <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
@@ -1106,7 +1133,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                     })
                   ) : (
                     <div className="py-8 text-center text-sm text-muted-foreground">
-                      No users found matching your search
+                      {debouncedSearch
+                        ? 'No users found matching your search'
+                        : directoryQuery.isLoading
+                          ? 'Searching…'
+                          : 'Type a name or email to find users'}
                     </div>
                   )}
                 </div>
