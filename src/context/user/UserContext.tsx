@@ -24,7 +24,7 @@ interface UserContextType {
   updateUserLocation: (latitude: number, longitude: number, accuracy?: number) => Promise<boolean>;
   updateUserAvailability: (status: 'online' | 'offline' | 'busy') => Promise<boolean>;
   toggleLocationSharing: (isSharing: boolean) => Promise<boolean>;
-  refreshUsers: () => Promise<void>;
+  refreshUsers: (opts?: { force?: boolean }) => Promise<void>;
   hydrateCurrentUser: () => Promise<boolean>;
   roles: AppRole[];
   hasRole: (role: AppRole) => boolean;
@@ -139,17 +139,34 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearEmailVerificationNotice = () => setEmailVerification({ pending: false, email: undefined });
 
-  const refreshUsers = async () => {
+  // ponytail: session-scoped throttle; full directory still needed by pickers — RPC search later if org >> 2k
+  const DIRECTORY_STALE_MS = 5 * 60 * 1000;
+  const DIRECTORY_FETCHED_KEY = 'pact-users-directory-fetched-at';
+  const directoryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appUsersLenRef = useRef(0);
+  appUsersLenRef.current = appUsers.length;
+
+  const refreshUsers = async (opts?: { force?: boolean }) => {
     try {
+      if (!opts?.force) {
+        try {
+          const last = Number(sessionStorage.getItem(DIRECTORY_FETCHED_KEY) || 0);
+          if (last && Date.now() - last < DIRECTORY_STALE_MS && appUsersLenRef.current > 0) {
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         // Not authenticated: avoid RLS errors and empty responses
         setAppUsers([]);
         return;
       }
+      // Directory fields only — bank_account / photo counts loaded on demand elsewhere
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, bank_account, additional_roles, photo_upload_count, last_activity');
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, additional_roles, last_activity');
       
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -218,7 +235,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             secondaryHubId: profile.secondary_hub_id || (profile.location as Record<string, string> | null)?.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
-            photoUploadCount: (profile as any).photo_upload_count ?? existingUser.photoUploadCount ?? 0,
+            photoUploadCount: existingUser.photoUploadCount ?? 0,
             username: profile.username || existingUser.username,
             fullName: profile.full_name || existingUser.fullName,
             phone: profile.phone || existingUser.phone,
@@ -250,6 +267,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem(`user-${user.id}`, JSON.stringify(user));
         });
         setAppUsers(supabaseUsers);
+        try {
+          sessionStorage.setItem(DIRECTORY_FETCHED_KEY, String(Date.now()));
+        } catch { /* ignore */ }
 
         // Sync currentUser with fresh DB data so the navbar always shows the up-to-date name.
         // refreshUsers() is the only place that fetches ALL profiles from DB; without this
@@ -281,35 +301,39 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    refreshUsers();
+    // Prefer localStorage cache on mount; network only when stale / empty
+    void refreshUsers();
 
-    // Set up real-time subscriptions for users and roles
-    // Listen only to INSERT/DELETE on profiles — UPDATE is handled optimistically
-    // by the 'profiles-updates' channel below to avoid a redundant full re-fetch.
+    const scheduleDirectoryRefresh = () => {
+      if (directoryRefreshTimerRef.current) return;
+      directoryRefreshTimerRef.current = setTimeout(() => {
+        directoryRefreshTimerRef.current = null;
+        void refreshUsers({ force: true });
+      }, 30_000);
+    };
+
+    // Debounce realtime full-directory reloads (was one refreshUsers per INSERT/DELETE)
     const usersChannel = supabase
       .channel('users-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'profiles' },
-        () => { refreshUsers(); }
+        scheduleDirectoryRefresh
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'profiles' },
-        () => { refreshUsers(); }
+        scheduleDirectoryRefresh
       )
       .on(
         'postgres_changes',
-        // Scope to INSERT/DELETE only — UPDATE is rare and INSERT/DELETE covers assignment changes.
-        // Avoid event:'*' on the entire table; that triggers a full refreshUsers() for every
-        // role change by any admin, exhausting the connection pool at scale.
         { event: 'INSERT', schema: 'public', table: 'user_roles' },
-        () => { refreshUsers(); }
+        scheduleDirectoryRefresh
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'user_roles' },
-        () => { refreshUsers(); }
+        scheduleDirectoryRefresh
       )
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
@@ -321,6 +345,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Cleanup subscription on unmount
     return () => {
+      if (directoryRefreshTimerRef.current) {
+        clearTimeout(directoryRefreshTimerRef.current);
+        directoryRefreshTimerRef.current = null;
+      }
       supabase.removeChannel(usersChannel);
     };
   }, []);

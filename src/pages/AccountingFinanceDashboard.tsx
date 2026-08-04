@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -195,7 +196,8 @@ function QuickLink({ href, icon: Icon, color, label, sub }: { href: string; icon
 
 /* ─── main component ─────────────────────────────────────────────────── */
 export default function AccountingFinanceDashboard() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { authReady } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
 
   const [budget, setBudget] = useState<KPIState<BudgetKPI>>(INIT());
@@ -212,8 +214,7 @@ export default function AccountingFinanceDashboard() {
   const [phase5, setPhase5] = useState<KPIState<Phase5KPI>>(INIT());
   const [preFundKPI, setPreFundKPI] = useState<KPIState<{ activeCount: number; totalAvailable: number; lowBalanceCount: number; pendingApproval: number }>>( INIT() );
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [countdown, setCountdown] = useState(60);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ponytail: manual refresh only — 60s full reload of large selects was the hot path
 
   /* ── budget ── */
   const loadBudget = useCallback(async () => {
@@ -532,7 +533,6 @@ export default function AccountingFinanceDashboard() {
 
   const loadAll = useCallback(() => {
     setLastRefresh(new Date());
-    setCountdown(60);
     void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
     void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
     void loadCOA(); void loadModules(); void loadPhase4(); void loadPhase5();
@@ -541,17 +541,7 @@ export default function AccountingFinanceDashboard() {
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
-  useEffect(() => {
-    countdownRef.current = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { loadAll(); return 60; }
-        return c - 1;
-      });
-    }, 1000);
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, [loadAll]);
-
-  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!authReady) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   const revExpTrend = monthlyRevExp.data ?? [];
@@ -613,7 +603,7 @@ export default function AccountingFinanceDashboard() {
               <RefreshCw className="h-4 w-4 mr-1" />Refresh
             </Button>
             <div className="text-[10px] text-muted-foreground text-right">
-              {format(lastRefresh, 'HH:mm:ss')} · auto in {countdown}s
+              {format(lastRefresh, 'HH:mm:ss')}
             </div>
           </div>
         </div>
@@ -1291,7 +1281,7 @@ export default function AccountingFinanceDashboard() {
                 }
               </div>
               <div className="flex items-center gap-3 text-muted-foreground shrink-0">
-                <span>{activeModules} active · {totalRecords.toLocaleString()} rows · auto-refresh in {countdown}s</span>
+                <span>{activeModules} active · {totalRecords.toLocaleString()} rows</span>
               </div>
             </div>
           );
