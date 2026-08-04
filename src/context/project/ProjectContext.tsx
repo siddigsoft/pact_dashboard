@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
-import { useProjectsQuery, useInvalidateProjectsQueries, useUpdateProjectInCache, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
+import { useProjectsQuery, useInvalidateProjectsQueries, useUpdateProjectInCache, useRemoveProjectFromCache, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
 import { getFirstStageId } from '@/config/projectFlows';
 import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
@@ -88,6 +88,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjectsQueries();
   const updateProjectCache = useUpdateProjectInCache();
+  const removeProjectFromCache = useRemoveProjectFromCache();
   const invalidateRef = useRef(invalidateProjects);
   invalidateRef.current = invalidateProjects;
 
@@ -188,16 +189,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         activities: [],
       } as Project;
 
-      // If converting from a CRM opportunity, update the opportunity stage to reflect the project
+      // If converting from a CRM opportunity, update the opportunity stage (don't block UI)
       if (project.crmOpportunityId) {
         const newStage = project.projectType === 'proposal' ? 'proposal' : 'negotiating';
-        await supabase
+        void supabase
           .from('crm_opportunities')
           .update({ stage: newStage, updated_at: new Date().toISOString() })
           .eq('id', project.crmOpportunityId);
       }
-      
-      await invalidateProjects();
+
+      // Optimistic list update — do not await full get_all_projects refetch
+      updateProjectCache(createdProject);
+      void invalidateProjects();
 
       // ── Audit + notify team (fire-and-forget) ────────────────────────────
       const teamRecipients = (() => {
@@ -529,11 +532,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(error.message);
       }
 
-      await invalidateProjects();
-      
+      if (existingProject) {
+        updateProjectCache({ ...existingProject, team });
+      }
       if (currentProject?.id === projectId) {
         setCurrentProject({ ...currentProject, team });
       }
+      void invalidateProjects();
 
       // ── Notify newly added team members (in-app + email) ──────────────────
       const newMemberIds = Array.from(extractTeamMemberIds(team)).filter(
@@ -661,11 +666,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(error.message);
       }
       
-      await invalidateProjects();
-      
+      removeProjectFromCache(id);
       if (currentProject?.id === id) {
         setCurrentProject(null);
       }
+      void invalidateProjects();
 
       // Audit + notify team (fire-and-forget)
       logAuditEvent({

@@ -27,6 +27,8 @@ type ScopeRule = {
   scope: DataScopeId;
   /** Pathname prefixes that activate this scope. */
   prefixes: string[];
+  /** Paths that match a prefix but should not activate this scope. */
+  exclude?: (pathname: string) => boolean;
 };
 
 const SCOPE_RULES: ScopeRule[] = [
@@ -110,6 +112,15 @@ const SCOPE_RULES: ScopeRule[] = [
       '/down-payment',
       '/archive',
     ],
+    // Create/edit forms don't need the full MMP dump — skip until sticky from elsewhere
+    exclude: (pathname) => {
+      const path = pathname.toLowerCase();
+      return (
+        path === '/projects/create' ||
+        path.startsWith('/projects/create/') ||
+        /^\/projects\/[^/]+\/edit\/?$/.test(path)
+      );
+    },
   },
   {
     scope: 'siteVisit',
@@ -129,6 +140,14 @@ const SCOPE_RULES: ScopeRule[] = [
       '/wallet',
       '/cost-submission',
     ],
+    exclude: (pathname) => {
+      const path = pathname.toLowerCase();
+      return (
+        path === '/projects/create' ||
+        path.startsWith('/projects/create/') ||
+        /^\/projects\/[^/]+\/edit\/?$/.test(path)
+      );
+    },
   },
 ];
 
@@ -143,6 +162,7 @@ function pathMatches(pathname: string, prefixes: string[]): boolean {
 function scopesForPath(pathname: string): Set<DataScopeId> {
   const active = new Set<DataScopeId>();
   for (const rule of SCOPE_RULES) {
+    if (rule.exclude?.(pathname)) continue;
     if (pathMatches(pathname, rule.prefixes)) active.add(rule.scope);
   }
   return active;

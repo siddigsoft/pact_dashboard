@@ -29,7 +29,7 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
     relatedMMPs: dbProject.related_mmps ?? [],
     relatedSiteVisits: dbProject.related_site_visits ?? [],
     archived: dbProject.archived ?? false,
-    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'partner',
+    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'customer',
     clientName: dbProject.client_name ?? undefined,
     partnerId: dbProject.partner_id ?? undefined,
     crmOpportunityId: dbProject.crm_opportunity_id ?? undefined,
@@ -181,13 +181,16 @@ export function useInvalidateProjectsQueries() {
 }
 
 /** Immediately patches one project in the TanStack Query cache so consumers
- *  (e.g. getProjectById) see the new data without waiting for a background refetch. */
+ *  (e.g. getProjectById) see the new data without waiting for a background refetch.
+ *  Inserts at the front when the project is not already in the list (create path). */
 export function useUpdateProjectInCache() {
   const queryClient = useQueryClient();
   return (updatedProject: Project) => {
     queryClient.setQueryData<Project[]>(projectQueryKeys.all, (old) => {
-      if (!old) return old;
-      return old.map(p => p.id === updatedProject.id ? { ...p, ...updatedProject } : p);
+      if (!old) return [updatedProject];
+      const idx = old.findIndex((p) => p.id === updatedProject.id);
+      if (idx === -1) return [updatedProject, ...old];
+      return old.map((p) => (p.id === updatedProject.id ? { ...p, ...updatedProject } : p));
     });
     if (updatedProject.activities?.length) {
       queryClient.setQueryData(
@@ -195,6 +198,16 @@ export function useUpdateProjectInCache() {
         updatedProject.activities
       );
     }
+  };
+}
+
+export function useRemoveProjectFromCache() {
+  const queryClient = useQueryClient();
+  return (projectId: string) => {
+    queryClient.setQueryData<Project[]>(projectQueryKeys.all, (old) =>
+      old ? old.filter((p) => p.id !== projectId) : old
+    );
+    queryClient.removeQueries({ queryKey: projectQueryKeys.activities(projectId) });
   };
 }
 

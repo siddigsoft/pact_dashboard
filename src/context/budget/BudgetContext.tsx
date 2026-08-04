@@ -151,8 +151,9 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
         description: 'Project budget created successfully',
       });
 
-      await refreshProjectBudgets();
-      return transformProjectBudgetFromDB(data);
+      const created = transformProjectBudgetFromDB(data);
+      void refreshProjectBudgets();
+      return created;
     } catch (error: any) {
       console.error('Failed to create project budget:', error);
       toast({
