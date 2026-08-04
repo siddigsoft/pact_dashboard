@@ -3758,8 +3758,10 @@ export function ProjectFieldTasksPanel({
 
   const handleStatusChange = async (task: FieldTask, status: FieldTaskStatus) => {
     try {
-      await updateTask(task.id, { status }, { currentUserId, projectName, currentUserName, prevAssignee: task.assignedTo });
-      setDetailTask(prev => prev?.id === task.id ? { ...prev, status } : prev);
+      // Keep percentComplete in sync: done → 100, todo → 0, otherwise preserve existing value
+      const percentComplete = status === 'done' ? 100 : status === 'todo' ? 0 : task.percentComplete;
+      await updateTask(task.id, { status, percentComplete }, { currentUserId, projectName, currentUserName, prevAssignee: task.assignedTo });
+      setDetailTask(prev => prev?.id === task.id ? { ...prev, status, percentComplete } : prev);
     } catch {
       toast({ title: 'Failed to update status', variant: 'destructive' });
     }

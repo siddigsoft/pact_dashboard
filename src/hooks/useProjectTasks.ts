@@ -381,7 +381,14 @@ export function useProjectTasks(projectId: string) {
       if (patch.dependencies    !== undefined) updates.dependencies    = patch.dependencies;
       if (patch.resources       !== undefined) updates.resources        = patch.resources ?? [];
       if (patch.assigneeHours   !== undefined) updates.assignee_hours  = patch.assigneeHours ?? {};
-      if (patch.percentComplete !== undefined) updates.percent_complete = Math.max(0, Math.min(100, patch.percentComplete));
+      if (patch.percentComplete !== undefined) {
+        updates.percent_complete = Math.max(0, Math.min(100, patch.percentComplete));
+      } else if (patch.status !== undefined) {
+        // Keep percentComplete in sync when only status is patched:
+        // done → 100, todo → 0, inprogress/cancelled → leave unchanged
+        if (patch.status === 'done') updates.percent_complete = 100;
+        else if (patch.status === 'todo') updates.percent_complete = 0;
+      }
 
       const { error } = await supabase
         .from('project_field_tasks')
