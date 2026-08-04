@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,23 +13,10 @@ import { exportToExcel } from '@/utils/report-export';
 import { formatNumber, ACCT_FUNCTIONAL_CCY, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
-
-interface Account {
-  id: string; code: string; name_en: string; name_ar: string;
-  account_type: string; subtype: string; country_id: string | null; is_postable: boolean;
-}
-interface FiscalYear { id: string; code: string }
-interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
-interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
-interface GLLine {
-  entry_id: string; entry_no: number; posting_date: string;
-  description_en: string; description_ar: string | null;
-  source_type: string; status: string;
-  line_no: number; debit_credit: 'DR' | 'CR';
-  functional_amount: number; functional_currency: string;
-  original_amount: number; original_currency: string;
-  line_description: string | null;
-}
+import {
+  useGlBootstrapQuery,
+  useGlLedgerQuery,
+} from '@/hooks/useAccountingQueries';
 
 const PAGE_SIZE = 100;
 
@@ -40,21 +26,20 @@ export default function AccountingGeneralLedger() {
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const [searchParams] = useSearchParams();
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [years, setYears] = useState<FiscalYear[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
+  const bootstrapQuery = useGlBootstrapQuery(allowed && isAuthenticated);
+  const accounts = bootstrapQuery.data?.accounts ?? [];
+  const years = bootstrapQuery.data?.years ?? [];
+  const periods = bootstrapQuery.data?.periods ?? [];
+  const countries = bootstrapQuery.data?.countries ?? [];
+  const bootstrap = bootstrapQuery.isLoading;
+
   const [countryFilter, setCountryFilter] = useState<string>('all');
   const [countryInit, setCountryInit] = useState(false);
   const [accountId, setAccountId] = useState<string>('');
   const [periodId, setPeriodId] = useState<string>('');
   const [accountSearch, setAccountSearch] = useState('');
-  const [lines, setLines] = useState<GLLine[]>([]);
-  const [openingBalance, setOpeningBalance] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
-  const [bootstrap, setBootstrap] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [periodInit, setPeriodInit] = useState(false);
 
   useEffect(() => {
     if (!acctLoading && !countryInit) {
@@ -64,24 +49,15 @@ export default function AccountingGeneralLedger() {
   }, [acctLoading, defaultCountryId, countryInit]);
 
   useEffect(() => {
-    (async () => {
-      const [acctRes, yrRes, perRes, cRes] = await Promise.all([
-        supabase.from('acct_accounts').select('id, code, name_en, name_ar, account_type, subtype, country_id, is_postable').eq('is_active', true).eq('is_postable', true).order('code'),
-        supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
-        supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
-        supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
-      ]);
-      setAccounts((acctRes.data ?? []) as Account[]);
-      setYears((yrRes.data ?? []) as FiscalYear[]);
-      setPeriods((perRes.data ?? []) as Period[]);
-      setCountries((cRes.data ?? []) as Country[]);
-      const firstOpen = (perRes.data ?? []).find((p: any) => p.status === 'open' || p.status === 'soft_closed');
-      if (firstOpen) setPeriodId(firstOpen.id);
-      const preAcct = searchParams.get('account');
-      if (preAcct) setAccountId(preAcct);
-      setBootstrap(false);
-    })();
-  }, []);
+    if (periodInit || !bootstrapQuery.data) return;
+    const firstOpen = bootstrapQuery.data.periods.find(
+      (p) => p.status === 'open' || p.status === 'soft_closed'
+    );
+    if (firstOpen) setPeriodId(firstOpen.id);
+    const preAcct = searchParams.get('account');
+    if (preAcct) setAccountId(preAcct);
+    setPeriodInit(true);
+  }, [bootstrapQuery.data, periodInit, searchParams]);
 
   const filteredAccounts = useMemo(() => {
     const q = accountSearch.toLowerCase();
@@ -100,113 +76,27 @@ export default function AccountingGeneralLedger() {
     return c?.currency_code ?? ACCT_FUNCTIONAL_CCY;
   }, [selectedAccount, countries]);
 
-  const runLedger = useCallback(async () => {
-    if (!accountId || !periodId || !selectedPeriod) return;
-    setLoading(true);
-    setError(null);
-    setLines([]);
-    setOpeningBalance(0);
-    setPage(0);
+  const ledgerQuery = useGlLedgerQuery(
+    accountId,
+    periodId,
+    selectedPeriod?.start_date,
+    selectedPeriod?.end_date,
+    !bootstrap && !!accountId && !!periodId
+  );
+  const lines = ledgerQuery.data?.lines ?? [];
+  const openingBalance = ledgerQuery.data?.openingBalance ?? 0;
+  const loading = ledgerQuery.isFetching;
+  const error = ledgerQuery.error
+    ? ledgerQuery.error instanceof Error
+      ? ledgerQuery.error.message
+      : 'Failed to load ledger'
+    : null;
 
-    try {
-      const startDate = selectedPeriod.start_date;
-      const endDate = selectedPeriod.end_date;
+  const runLedger = () => {
+    void ledgerQuery.refetch();
+  };
 
-      // Get all posted entries in this period
-      const { data: entriesInPeriod, error: eErr } = await supabase
-        .from('acct_journal_entries')
-        .select('id, entry_no, posting_date, description_en, description_ar, source_type, status')
-        .eq('status', 'posted')
-        .gte('posting_date', startDate)
-        .lte('posting_date', endDate)
-        .order('posting_date')
-        .order('entry_no');
-      if (eErr) throw new Error(eErr.message);
-
-      // Get all posted entries BEFORE this period (for opening balance)
-      const { data: prevEntries, error: pErr } = await supabase
-        .from('acct_journal_entries')
-        .select('id')
-        .eq('status', 'posted')
-        .lt('posting_date', startDate);
-      if (pErr) throw new Error(pErr.message);
-
-      // Compute opening balance from prior entries
-      let openBal = 0;
-      if ((prevEntries ?? []).length > 0) {
-        const prevIds = (prevEntries ?? []).map(e => e.id);
-        // Paginate to handle large volumes
-        const PAGE = 1000;
-        for (let from = 0; from < prevIds.length; from += PAGE) {
-          const batch = prevIds.slice(from, from + PAGE);
-          const { data: prevLines } = await supabase
-            .from('acct_journal_lines')
-            .select('debit_credit, functional_amount')
-            .eq('account_id', accountId)
-            .in('entry_id', batch);
-          for (const l of (prevLines ?? [])) {
-            const amt = Number(l.functional_amount) || 0;
-            openBal += l.debit_credit === 'DR' ? amt : -amt;
-          }
-        }
-      }
-      setOpeningBalance(openBal);
-
-      // Get lines for this period for this account
-      const entryIds = (entriesInPeriod ?? []).map(e => e.id);
-      const entryMap: Record<string, typeof entriesInPeriod extends (infer T)[] ? T : never> = {};
-      for (const e of (entriesInPeriod ?? [])) entryMap[e.id] = e;
-
-      const allLines: GLLine[] = [];
-      if (entryIds.length > 0) {
-        const PAGE = 1000;
-        for (let from = 0; from < entryIds.length; from += PAGE) {
-          const batch = entryIds.slice(from, from + PAGE);
-          const { data: linesData, error: lErr } = await supabase
-            .from('acct_journal_lines')
-            .select('id, line_no, debit_credit, functional_amount, functional_currency, original_amount, original_currency, description, entry_id')
-            .eq('account_id', accountId)
-            .in('entry_id', batch)
-            .order('entry_id')
-            .order('line_no');
-          if (lErr) throw new Error(lErr.message);
-          for (const l of (linesData ?? [])) {
-            const e = entryMap[l.entry_id];
-            if (!e) continue;
-            allLines.push({
-              entry_id: l.entry_id,
-              entry_no: e.entry_no,
-              posting_date: e.posting_date,
-              description_en: e.description_en,
-              description_ar: e.description_ar,
-              source_type: e.source_type,
-              status: e.status,
-              line_no: l.line_no,
-              debit_credit: l.debit_credit,
-              functional_amount: Number(l.functional_amount) || 0,
-              functional_currency: l.functional_currency,
-              original_amount: Number(l.original_amount) || 0,
-              original_currency: l.original_currency,
-              line_description: l.description,
-            });
-          }
-        }
-      }
-      // Sort by posting_date, entry_no, line_no
-      allLines.sort((a, b) => {
-        if (a.posting_date !== b.posting_date) return a.posting_date < b.posting_date ? -1 : 1;
-        if (a.entry_no !== b.entry_no) return a.entry_no - b.entry_no;
-        return a.line_no - b.line_no;
-      });
-      setLines(allLines);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load ledger');
-    } finally {
-      setLoading(false);
-    }
-  }, [accountId, periodId, selectedPeriod]);
-
-  useEffect(() => { if (!bootstrap && accountId && periodId) void runLedger(); }, [accountId, periodId, bootstrap]);
+  useEffect(() => { setPage(0); }, [accountId, periodId]);
 
   // Running balance computation
   const linesWithBalance = useMemo(() => {

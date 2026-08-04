@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -14,33 +14,19 @@ import { parseJournalError } from '@/lib/journalErrors';
 import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
-import { ACCT_STATUS_TONE, formatNumber } from '@/lib/accountingFormat';
+import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  useInvalidateJournalsBundle,
+  useJournalsBundleQuery,
+  type AcctCountry as Country,
+  type AcctFiscalYear as FiscalYear,
+  type AcctJournalEntry as Entry,
+  type AcctPeriod as Period,
+} from '@/hooks/useAccountingQueries';
 
-interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
-interface FiscalYear { id: string; code: string }
-interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
-interface Entry {
-  id: string;
-  entry_no: number;
-  period_id: string;
-  posting_date: string;
-  description_en: string;
-  description_ar: string | null;
-  source_type: string;
-  source_id: string | null;
-  status: 'draft' | 'pending_approval' | 'posted' | 'reversed' | 'rejected';
-  branch_id: string | null;
-  idempotency_key: string;
-  posted_at: string | null;
-  posted_by: string | null;
-  created_at: string;
-  created_by: string;
-  reversed_by_entry_id: string | null;
-  country_id: string | null;
-}
 interface Line {
   id: string;
   line_no: number;
@@ -77,20 +63,30 @@ const BLANK_LINE = (): NewLine => ({
 });
 
 export default function AccountingJournals() {
-  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
   const { toast } = useToast();
   const { countryId: defaultCountryId } = useAccountingCountry();
 
-  const [years, setYears] = useState<FiscalYear[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [accountsMap, setAccountsMap] = useState<Record<string, { code: string; name_en: string; name_ar: string; country_id: string | null; is_postable: boolean }>>({});
-  const [fundsMap, setFundsMap] = useState<Record<string, { code: string; name_en: string }>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const invalidateJournals = useInvalidateJournalsBundle();
+  const journalsQuery = useJournalsBundleQuery(allowed && isAuthenticated);
+  const years = journalsQuery.data?.years ?? [];
+  const periods = journalsQuery.data?.periods ?? [];
+  const entries = journalsQuery.data?.entries ?? [];
+  const countries = journalsQuery.data?.countries ?? [];
+  const accountsMap = journalsQuery.data?.accountsMap ?? {};
+  const fundsMap = journalsQuery.data?.fundsMap ?? {};
+  const loading = journalsQuery.isLoading;
+  const error = journalsQuery.error
+    ? journalsQuery.error instanceof Error
+      ? journalsQuery.error.message
+      : 'Failed to load journals'
+    : null;
+
+  const loadAll = useCallback(async () => {
+    await invalidateJournals();
+  }, [invalidateJournals]);
 
   const [periodFilter, setPeriodFilter]   = useState<string>('all');
   const [statusFilter, setStatusFilter]   = useState<string>('all');
@@ -227,34 +223,6 @@ export default function AccountingJournals() {
     }
   };
 
-  const loadAll = async () => {
-    setLoading(true);
-    setError(null);
-    const [yres, pres, eres, ares, fres, cres] = await Promise.all([
-      supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
-      supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
-      supabase.from('acct_journal_entries').select('id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id, country_id').order('posting_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
-      supabase.from('acct_accounts').select('id, code, name_en, name_ar, country_id, is_postable').order('code'),
-      supabase.from('acct_funds').select('id, code, name_en'),
-      supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
-    ]);
-    const firstErr = [yres.error, pres.error, eres.error, ares.error, fres.error].find(Boolean);
-    if (firstErr) setError(firstErr.message);
-    setYears((yres.data ?? []) as FiscalYear[]);
-    setPeriods((pres.data ?? []) as Period[]);
-    setEntries((eres.data ?? []) as Entry[]);
-    setCountries((cres.data ?? []) as Country[]);
-    const am: typeof accountsMap = {};
-    for (const a of (ares.data ?? [])) am[a.id] = { code: a.code, name_en: a.name_en, name_ar: a.name_ar, country_id: a.country_id ?? null, is_postable: a.is_postable ?? true };
-    setAccountsMap(am);
-    const fm: typeof fundsMap = {};
-    for (const f of (fres.data ?? [])) fm[f.id] = { code: f.code, name_en: f.name_en };
-    setFundsMap(fm);
-    setLoading(false);
-  };
-
-  useEffect(() => { if (allowed) void loadAll(); }, [allowed]);
-
   const sources = useMemo(() => {
     const s = new Set<string>();
     entries.forEach(e => s.add(e.source_type));
@@ -358,7 +326,7 @@ export default function AccountingJournals() {
     return { dr, cr, balanced: Math.abs(dr - cr) < 0.005 };
   }, [openLines]);
 
-  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!isAuthenticated) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
   return (

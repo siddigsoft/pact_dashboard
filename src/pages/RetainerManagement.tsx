@@ -58,39 +58,19 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
-import type { CurrentUserClassificationRow } from '@/types/hr-finance-tables';
 import { useNavigate } from 'react-router-dom';
 import { format, subMonths } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { exportToExcel } from '@/utils/report-export';
+import {
+  useInvalidateRetainerQueries,
+  useRetainerBundleQuery,
+  type RetainerEligibleUser,
+  type RetainerTransactionRow,
+} from '@/hooks/useHrFinance';
 
-interface RetainerTransaction {
-  id: string;
-  user_id: string;
-  amount: number;
-  currency: string;
-  description: string;
-  metadata: { type: string; period: string; base_currency?: string | null; fx_rate?: number | null } | null;
-  balance_before: number;
-  balance_after: number;
-  created_at: string;
-  created_by: string | null;
-}
-
-interface EligibleUser {
-  id: string;
-  user_id: string;
-  full_name: string;
-  email: string;
-  classification_level: string;
-  role_scope: string;
-  has_retainer: boolean;
-  retainer_amount_cents: number;
-  retainer_currency: string;
-  retainer_payout_currency?: string;
-  retainer_frequency: string;
-  is_active: boolean;
-}
+type RetainerTransaction = RetainerTransactionRow;
+type EligibleUser = RetainerEligibleUser;
 
 interface FxWarning {
   fromCurrency: string;
@@ -172,10 +152,19 @@ const RetainerManagement = () => {
   const { hasAnyRole } = useAuthorization();
   const { processMonthlyRetainers, reprocessFallbackRetainers } = useWallet();
 
+  const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
+  const isAdmin = hasAnyRole(['admin', 'Admin']);
+  const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
+  const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
+  const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
+  const canManage = roleCanManage || overrideCanManage;
+
   const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(true);
-  const [transactions, setTransactions] = useState<RetainerTransaction[]>([]);
-  const [eligibleUsers, setEligibleUsers] = useState<EligibleUser[]>([]);
+  const invalidateRetainer = useInvalidateRetainerQueries();
+  const retainerQuery = useRetainerBundleQuery(canManage);
+  const loading = canManage && retainerQuery.isLoading;
+  const transactions = (retainerQuery.data?.transactions ?? []) as RetainerTransaction[];
+  const eligibleUsers = (retainerQuery.data?.eligibleUsers ?? []) as EligibleUser[];
   const [searchQuery, setSearchQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [levelFilter, setLevelFilter] = useState<string>('all');
@@ -188,13 +177,6 @@ const RetainerManagement = () => {
   const [fxWarnings, setFxWarnings] = useState<FxWarning[]>([]);
   const [fxCheckLoading, setFxCheckLoading] = useState(false);
   const [reprocessTargetUserIds, setReprocessTargetUserIds] = useState<string[]>([]);
-
-  const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
-  const isAdmin = hasAnyRole(['admin', 'Admin']);
-  const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
-  const roleCanManage = isSuperAdmin || isAdmin || isFinancialAdmin;
-  const overrideCanManage = usePageManageOverride('retainer-management', roleCanManage);
-  const canManage = roleCanManage || overrideCanManage;
 
   const getCurrentPeriod = () => {
     const now = new Date();
@@ -212,43 +194,8 @@ const RetainerManagement = () => {
 
   const fetchData = useCallback(async () => {
     if (!canManage) return;
-    setLoading(true);
-    try {
-      const [txResult, classResult] = await Promise.all([
-        supabase
-          .from('wallet_transactions')
-          .select('*')
-          .eq('metadata->>type', 'retainer')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('current_user_classifications' as any)
-          .select('*')
-          .eq('has_retainer', true)
-          .eq('is_active', true) as unknown as Promise<{ data: CurrentUserClassificationRow[] | null }>,
-      ]);
-
-      if (txResult.data) {
-        setTransactions(txResult.data as RetainerTransaction[]);
-      }
-      if (classResult.data) {
-        // Guard against a missing retainer_amount_cents (e.g. incomplete classification
-        // record) turning every downstream /100 calc into NaN.
-        const normalized = (classResult.data as unknown as EligibleUser[]).map(u => ({
-          ...u,
-          retainer_amount_cents: u.retainer_amount_cents ?? 0,
-        }));
-        setEligibleUsers(normalized);
-      }
-    } catch (error) {
-      console.error('Failed to fetch retainer data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [canManage]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    await invalidateRetainer();
+  }, [canManage, invalidateRetainer]);
 
   const userNameMap = useMemo(() => {
     const map: Record<string, { name: string; email: string }> = {};

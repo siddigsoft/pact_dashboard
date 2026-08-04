@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid, differenceInCalendarMonths } from 'date-fns';
 import {
@@ -21,25 +21,13 @@ import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import {
+  useInvalidateSalaryIncrements,
+  useSalaryIncrementsQuery,
+  type SalaryIncrementRow,
+} from '@/hooks/useHrFinance';
 
-interface Increment {
-  id: string;
-  user_id: string;
-  effective_date: string;
-  previous_salary: number | null;
-  new_salary: number;
-  increment_type: string;
-  increment_percent: number | null;
-  currency: string;
-  reason: string | null;
-  approved_by: string | null;
-  notes: string | null;
-  created_at: string;
-  user_name?: string;
-  approver_name?: string;
-}
-
-interface Profile { id: string; full_name: string; }
+type Increment = SalaryIncrementRow;
 
 const INCREMENT_TYPES = [
   { value: 'annual', label: 'Annual Increment' },
@@ -78,9 +66,11 @@ export default function SalaryIncrements() {
   const { hasAnyRole } = useAuthorization();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr', 'hrManager', 'financialAdmin']);
 
-  const [increments, setIncrements] = useState<Increment[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidateIncrements = useInvalidateSalaryIncrements();
+  const incrementsQuery = useSalaryIncrementsQuery(isAdmin || !!currentUser?.id);
+  const increments = incrementsQuery.data?.increments ?? [];
+  const profiles = incrementsQuery.data?.profiles ?? [];
+  const loading = incrementsQuery.isLoading;
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Increment | null>(null);
@@ -90,7 +80,9 @@ export default function SalaryIncrements() {
   const [empSearch, setEmpSearch] = useState('');
   const [dialogEmpSearch, setDialogEmpSearch] = useState('');
 
-  useEffect(() => { fetchAll(); }, []);
+  const fetchAll = useCallback(async () => {
+    await invalidateIncrements();
+  }, [invalidateIncrements]);
 
   // H9: open the new-increment dialog pre-filled when navigated from a Performance Review.
   // URL: /salary-increments?prefill=<userId>&pct=<percent>&reason=<text>
@@ -117,71 +109,8 @@ export default function SalaryIncrements() {
     }
   }, []);
 
-  async function fetchAll() {
-    setLoading(true);
-    const [incRes, profRes] = await Promise.all([
-      supabase.from('salary_increments').select('*').order('effective_date', { ascending: false }).limit(2000),
-      supabase.from('profiles').select('id, full_name').order('full_name').limit(500),
-    ]);
-    const pm: Record<string, string> = Object.fromEntries((profRes.data ?? []).map((p: any) => [p.id, p.full_name]));
-    if (incRes.data) {
-      setIncrements(incRes.data.map((r: any) => ({
-        ...r,
-        user_name: pm[r.user_id] ?? 'Unknown',
-        approver_name: r.approved_by ? (pm[r.approved_by] ?? 'Unknown') : null,
-      })));
-      // Note: auto-application of due increments is now handled by the
-      // hr-salary-increment-apply nightly Edge Function (02:00 UTC).
-      // The syncDueIncrements page-load trigger has been removed.
-    }
-    setProfiles((profRes.data ?? []) as Profile[]);
-    setLoading(false);
-  }
-
-  // T011: increments recorded with a future effective_date were correctly
-  // *not* applied to employee_salary_config at save time (see syncLiveSalary),
-  // but nothing ever came back to apply them once that date arrived — the
-  // employee kept being paid the old salary indefinitely. On every page load,
-  // find each employee's latest increment whose effective_date has now passed
-  // and make sure employee_salary_config actually reflects it.
-  async function syncDueIncrements(all: Increment[]) {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const dueByUser = new Map<string, Increment>();
-    for (const inc of all) {
-      if (inc.effective_date > today) continue;
-      const current = dueByUser.get(inc.user_id);
-      if (!current || inc.effective_date > current.effective_date) dueByUser.set(inc.user_id, inc);
-    }
-    if (dueByUser.size === 0) return;
-    const userIds = [...dueByUser.keys()];
-    const { data: configs } = await supabase
-      .from('employee_salary_config')
-      .select('id, user_id, base_salary, currency')
-      .in('user_id', userIds);
-    const cfgByUser = new Map<string, { id: string; base_salary: number; currency: string }>();
-    for (const c of (configs ?? []) as any[]) cfgByUser.set(c.user_id, c);
-
-    let syncedCount = 0;
-    for (const [userId, inc] of dueByUser.entries()) {
-      const cfg = cfgByUser.get(userId);
-      const needsSync = !cfg || Number(cfg.base_salary) !== Number(inc.new_salary) || cfg.currency !== inc.currency;
-      if (!needsSync) continue;
-      if (cfg) {
-        await supabase.from('employee_salary_config')
-          .update({ base_salary: inc.new_salary, currency: inc.currency })
-          .eq('id', cfg.id);
-      } else {
-        await supabase.from('employee_salary_config').insert({
-          user_id: userId, base_salary: inc.new_salary, currency: inc.currency,
-          allowances: [], deductions: [], effective_date: inc.effective_date,
-        });
-      }
-      syncedCount++;
-    }
-    if (syncedCount > 0) {
-      toast({ title: `${syncedCount} future-dated increment(s) auto-applied`, description: 'Their effective date has now passed, so live salary was synced automatically.' });
-    }
-  }
+  // Note: auto-application of due increments is handled by the
+  // hr-salary-increment-apply nightly Edge Function (not on page load).
 
   function openNew() {
     setEditing(null);
@@ -330,7 +259,7 @@ export default function SalaryIncrements() {
   async function handleDelete(id: string) {
     await supabase.from('salary_increments').delete().eq('id', id);
     toast({ title: 'Record deleted' });
-    setIncrements(p => p.filter(r => r.id !== id));
+    await fetchAll();
   }
 
   const myIncrements = increments.filter(r => r.user_id === currentUser?.id);

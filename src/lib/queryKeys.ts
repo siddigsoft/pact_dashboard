@@ -104,6 +104,17 @@ export const queryKeys = {
       [...queryKeys.hr.all, 'leaveRequests', filters] as const,
     leaveEntitlement: (userId: string, year: number) =>
       [...queryKeys.hr.all, 'leaveEntitlement', userId, year] as const,
+    retainerBundle: () => [...queryKeys.hr.all, 'retainerBundle'] as const,
+    retainerWalletTxs: () => [...queryKeys.hr.all, 'retainerWalletTxs'] as const,
+    salaryIncrements: () => [...queryKeys.hr.all, 'salaryIncrements'] as const,
+  },
+
+  accounting: {
+    all: ['accounting'] as const,
+    journalsBundle: () => [...queryKeys.accounting.all, 'journalsBundle'] as const,
+    glBootstrap: () => [...queryKeys.accounting.all, 'glBootstrap'] as const,
+    glLedger: (accountId: string, periodId: string) =>
+      [...queryKeys.accounting.all, 'glLedger', accountId, periodId] as const,
   },
 } as const;
 
