@@ -559,6 +559,15 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
   const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>(initial?.coAssigneeIds ?? []);
   const [resources,     setResources]     = useState<ResourceLine[]>(initial?.resources ?? []);
+  const [assigneeHours, setAssigneeHours] = useState<Record<string, { allocated: string; actual: string }>>(
+    () => Object.fromEntries(
+      Object.entries(initial?.assigneeHours ?? {}).map(([id, v]) => [
+        id,
+        { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '' },
+      ]),
+    ),
+  );
+  const { data: allProfiles = [] } = useAllProfiles();
 
   // Attachments — only functional when editing an existing task (initial.id present).
   // For new tasks the hook returns empty state and upload is gated behind a prompt.
@@ -610,6 +619,14 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setAssignedTo(initial?.assignedTo ?? null);
       setAssigneeName(initial?.assignedToName ?? '');
       setCoAssigneeIds(initial?.coAssigneeIds ?? []);
+      setAssigneeHours(
+        Object.fromEntries(
+          Object.entries(initial?.assigneeHours ?? {}).map(([id, v]) => [
+            id,
+            { allocated: v.allocated?.toString() ?? '', actual: v.actual?.toString() ?? '' },
+          ]),
+        ),
+      );
       setDueDate(initial?.dueDate ?? '');
       setStartDate(initial?.startDate ?? '');
       setStateName(initial?.stateName ?? '');
@@ -672,6 +689,31 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       depType: depsMeta[id]?.type ?? 'FS',
       lagDays: depsMeta[id]?.lag ?? 0,
     }));
+
+    // Compute totals from per-assignee allocations when any entries exist
+    const filteredCoIds = coAssigneeIds.filter(id => id !== assignedTo);
+    const allAssigneeIds = [assignedTo, ...filteredCoIds].filter(Boolean) as string[];
+    const hasAllocEstimate = allAssigneeIds.some(id => assigneeHours[id]?.allocated);
+    const hasAllocActual   = allAssigneeIds.some(id => assigneeHours[id]?.actual);
+    const allocEstTotal = hasAllocEstimate
+      ? allAssigneeIds.reduce((s, id) => s + (parseFloat(assigneeHours[id]?.allocated || '0') || 0), 0)
+      : null;
+    const allocActTotal = hasAllocActual
+      ? allAssigneeIds.reduce((s, id) => s + (parseFloat(assigneeHours[id]?.actual || '0') || 0), 0)
+      : null;
+
+    // Only persist allocations for assignees who have at least one value
+    const assigneeHoursPayload: Record<string, { allocated: number | null; actual: number | null }> = {};
+    for (const id of allAssigneeIds) {
+      const entry = assigneeHours[id];
+      if (entry?.allocated || entry?.actual) {
+        assigneeHoursPayload[id] = {
+          allocated: entry.allocated ? parseFloat(entry.allocated) : null,
+          actual:    entry.actual    ? parseFloat(entry.actual)    : null,
+        };
+      }
+    }
+
     await onSave({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -683,13 +725,14 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       localityName: localityName.trim() || null,
       stageId: stageId || null,
       notes: notes.trim() || undefined,
-      estimatedHours: estHours ? parseFloat(estHours) : null,
-      actualHours:    actHours ? parseFloat(actHours)  : null,
+      estimatedHours: allocEstTotal ?? (estHours ? parseFloat(estHours) : null),
+      actualHours:    allocActTotal  ?? (actHours ? parseFloat(actHours) : null),
       estimatedCost:  estCost  ? parseFloat(estCost)   : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
       dependencies:   deps,
-      coAssigneeIds:  coAssigneeIds.filter(id => id !== assignedTo),
+      coAssigneeIds:  filteredCoIds,
       resources:      resources,
+      assigneeHours:  assigneeHoursPayload,
     }, typedDeps);
   };
 
@@ -866,69 +909,147 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
             </TabsContent>
 
             {/* ── TIMESHEET TAB ── */}
-            <TabsContent value="timesheet" className="space-y-4 mt-0">
-              <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
-                <p className="text-xs text-muted-foreground">Track estimated vs actual hours for this field task.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Timer className="h-3 w-3" /> Estimated Hours
-                    </Label>
-                    <Input
-                      type="number" min="0" step="0.5"
-                      placeholder="e.g. 8"
-                      value={estHours}
-                      onChange={e => setEstHours(e.target.value)}
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> Actual Hours
-                    </Label>
-                    <Input
-                      type="number" min="0" step="0.5"
-                      placeholder="e.g. 10"
-                      value={actHours}
-                      onChange={e => setActHours(e.target.value)}
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                </div>
+            <TabsContent value="timesheet" className="space-y-3 mt-0">
+              {(() => {
+                const filteredCoIds = coAssigneeIds.filter(id => id !== assignedTo);
+                const allAssigneeIds = [assignedTo, ...filteredCoIds].filter(Boolean) as string[];
+                const hasAssignees = allAssigneeIds.length > 0;
 
-                {(estHours || actHours) && (
-                  <div className="space-y-2 pt-2 border-t">
-                    {estHours && actHours && (
-                      <>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Progress</span>
-                          <span className={cn(
-                            'font-semibold',
-                            parseFloat(actHours) > parseFloat(estHours) ? 'text-red-600' : 'text-emerald-600',
-                          )}>
-                            {fmtHours(parseFloat(actHours))} / {fmtHours(parseFloat(estHours))}
-                          </span>
+                // Computed totals from per-assignee allocations
+                const hasAllocEst = allAssigneeIds.some(id => assigneeHours[id]?.allocated);
+                const hasAllocAct = allAssigneeIds.some(id => assigneeHours[id]?.actual);
+                const allocEstTotal = allAssigneeIds.reduce((s, id) => s + (parseFloat(assigneeHours[id]?.allocated || '0') || 0), 0);
+                const allocActTotal = allAssigneeIds.reduce((s, id) => s + (parseFloat(assigneeHours[id]?.actual || '0') || 0), 0);
+
+                // Display totals: prefer allocation sum, fall back to manual entry
+                const displayEst = hasAllocEst ? allocEstTotal : (estHours ? parseFloat(estHours) : null);
+                const displayAct = hasAllocAct ? allocActTotal : (actHours ? parseFloat(actHours) : null);
+
+                return (
+                  <>
+                    {/* ── Per-assignee hour allocation ── */}
+                    {hasAssignees ? (
+                      <div className="rounded-lg border bg-muted/20 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
+                          <Timer className="h-3.5 w-3.5 text-[#1D3461]" />
+                          <span className="text-xs font-semibold text-[#1D3461] uppercase tracking-wide">Hour Allocation per Assignee</span>
+                          <span className="ml-auto text-[10px] text-muted-foreground">like MS Project — hours per person</span>
                         </div>
-                        <Progress
-                          value={Math.min(100, (parseFloat(actHours) / parseFloat(estHours)) * 100)}
-                          className="h-2"
-                        />
-                        <p className="text-[11px] text-muted-foreground">
-                          {parseFloat(actHours) > parseFloat(estHours)
-                            ? `⚠ ${fmtHours(parseFloat(actHours) - parseFloat(estHours))} over estimate`
-                            : `${fmtHours(parseFloat(estHours) - parseFloat(actHours))} remaining`}
-                        </p>
-                      </>
+                        <div className="p-2 space-y-1">
+                          {/* Column headers */}
+                          <div className="grid grid-cols-[1fr_88px_88px] gap-2 px-2 pb-1">
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase">Assignee</span>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Est. hrs</span>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase text-center">Actual hrs</span>
+                          </div>
+                          {/* Rows */}
+                          {allAssigneeIds.map((uid, idx) => {
+                            const profile = allProfiles.find(p => p.id === uid);
+                            const name = profile?.full_name ?? (idx === 0 ? assigneeName : uid.slice(0, 8));
+                            const isMain = uid === assignedTo;
+                            const entry = assigneeHours[uid] ?? { allocated: '', actual: '' };
+                            const setEntry = (field: 'allocated' | 'actual', val: string) =>
+                              setAssigneeHours(prev => ({
+                                ...prev,
+                                [uid]: { ...(prev[uid] ?? { allocated: '', actual: '' }), [field]: val },
+                              }));
+                            return (
+                              <div key={uid} className={cn('grid grid-cols-[1fr_88px_88px] gap-2 items-center rounded px-2 py-1.5', isMain ? 'bg-[#1D3461]/5' : 'bg-background')}>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className={cn('h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 text-white', isMain ? 'bg-[#1D3461]' : 'bg-slate-500')}>
+                                    {name.charAt(0).toUpperCase()}
+                                  </span>
+                                  <span className="text-xs font-medium truncate">{name}</span>
+                                  {isMain && <span className="text-[9px] text-muted-foreground flex-shrink-0">(lead)</span>}
+                                </div>
+                                <Input
+                                  type="number" min="0" step="0.5"
+                                  placeholder="0"
+                                  value={entry.allocated}
+                                  onChange={e => setEntry('allocated', e.target.value)}
+                                  className="h-7 text-xs text-center px-1"
+                                />
+                                <Input
+                                  type="number" min="0" step="0.5"
+                                  placeholder="0"
+                                  value={entry.actual}
+                                  onChange={e => setEntry('actual', e.target.value)}
+                                  className="h-7 text-xs text-center px-1"
+                                />
+                              </div>
+                            );
+                          })}
+                          {/* Total row */}
+                          {(hasAllocEst || hasAllocAct) && (
+                            <div className="grid grid-cols-[1fr_88px_88px] gap-2 items-center rounded px-2 py-1.5 border-t mt-1 bg-muted/30">
+                              <span className="text-xs font-semibold text-muted-foreground">Total</span>
+                              <span className={cn('text-xs font-bold text-center', hasAllocEst ? 'text-[#1D3461]' : 'text-muted-foreground')}>
+                                {hasAllocEst ? fmtHours(allocEstTotal) : '—'}
+                              </span>
+                              <span className={cn('text-xs font-bold text-center', hasAllocAct ? (hasAllocEst && allocActTotal > allocEstTotal ? 'text-red-600' : 'text-emerald-600') : 'text-muted-foreground')}>
+                                {hasAllocAct ? fmtHours(allocActTotal) : '—'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* No assignees — manual total entry */
+                      <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                        <p className="text-xs text-muted-foreground">Set an assignee in the Basic tab to allocate hours per person, or enter totals manually below.</p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                              <Timer className="h-3 w-3" /> Estimated Hours
+                            </Label>
+                            <Input type="number" min="0" step="0.5" placeholder="e.g. 8" value={estHours} onChange={e => setEstHours(e.target.value)} className="h-9 text-sm" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Actual Hours
+                            </Label>
+                            <Input type="number" min="0" step="0.5" placeholder="e.g. 10" value={actHours} onChange={e => setActHours(e.target.value)} className="h-9 text-sm" />
+                          </div>
+                        </div>
+                      </div>
                     )}
-                    {estHours && !actHours && (
-                      <p className="text-xs text-muted-foreground">Estimated: {fmtHours(parseFloat(estHours))} — actual not yet logged</p>
+
+                    {/* ── Progress summary (always shown when any hours exist) ── */}
+                    {(displayEst !== null || displayAct !== null) && (
+                      <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Progress</span>
+                          {hasAllocEst && (
+                            <span className="text-[10px] text-muted-foreground">auto-summed from allocations</span>
+                          )}
+                        </div>
+                        {displayEst !== null && displayAct !== null && (
+                          <>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Actual vs Estimated</span>
+                              <span className={cn('font-semibold', displayAct > displayEst ? 'text-red-600' : 'text-emerald-600')}>
+                                {fmtHours(displayAct)} / {fmtHours(displayEst)}
+                              </span>
+                            </div>
+                            <Progress value={Math.min(100, (displayAct / displayEst) * 100)} className="h-2" />
+                            <p className="text-[11px] text-muted-foreground">
+                              {displayAct > displayEst
+                                ? `⚠ ${fmtHours(displayAct - displayEst)} over estimate`
+                                : `${fmtHours(displayEst - displayAct)} remaining`}
+                            </p>
+                          </>
+                        )}
+                        {displayEst !== null && displayAct === null && (
+                          <p className="text-xs text-muted-foreground">Estimated: {fmtHours(displayEst)} — actual not yet logged</p>
+                        )}
+                        {displayEst === null && displayAct !== null && (
+                          <p className="text-xs text-muted-foreground">Actual logged: {fmtHours(displayAct)} — no estimate set</p>
+                        )}
+                      </div>
                     )}
-                    {!estHours && actHours && (
-                      <p className="text-xs text-muted-foreground">Actual logged: {fmtHours(parseFloat(actHours))} — no estimate set</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  </>
+                );
+              })()}
             </TabsContent>
 
             {/* ── COSTS TAB ── */}
