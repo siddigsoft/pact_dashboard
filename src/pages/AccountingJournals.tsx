@@ -19,12 +19,12 @@ import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  JOURNAL_PAGE_SIZE,
+  fetchJournalEntriesForExport,
   useInvalidateJournalsBundle,
-  useJournalsBundleQuery,
-  type AcctCountry as Country,
-  type AcctFiscalYear as FiscalYear,
+  useJournalEntriesQuery,
+  useJournalsMetaQuery,
   type AcctJournalEntry as Entry,
-  type AcctPeriod as Period,
 } from '@/hooks/useAccountingQueries';
 
 interface Line {
@@ -45,7 +45,7 @@ interface Line {
   description: string | null;
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = JOURNAL_PAGE_SIZE;
 
 interface NewLine {
   account_id: string;
@@ -70,30 +70,55 @@ export default function AccountingJournals() {
   const { countryId: defaultCountryId } = useAccountingCountry();
 
   const invalidateJournals = useInvalidateJournalsBundle();
-  const journalsQuery = useJournalsBundleQuery(allowed && isAuthenticated);
-  const years = journalsQuery.data?.years ?? [];
-  const periods = journalsQuery.data?.periods ?? [];
-  const entries = journalsQuery.data?.entries ?? [];
-  const countries = journalsQuery.data?.countries ?? [];
-  const accountsMap = journalsQuery.data?.accountsMap ?? {};
-  const fundsMap = journalsQuery.data?.fundsMap ?? {};
-  const loading = journalsQuery.isLoading;
-  const error = journalsQuery.error
-    ? journalsQuery.error instanceof Error
-      ? journalsQuery.error.message
-      : 'Failed to load journals'
-    : null;
-
-  const loadAll = useCallback(async () => {
-    await invalidateJournals();
-  }, [invalidateJournals]);
 
   const [periodFilter, setPeriodFilter]   = useState<string>('all');
   const [statusFilter, setStatusFilter]   = useState<string>('all');
   const [sourceFilter, setSourceFilter]   = useState<string>('all');
   const [countryFilter, setCountryFilter] = useState<string>(() => defaultCountryId);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const metaQuery = useJournalsMetaQuery(allowed && isAuthenticated);
+  const entriesQuery = useJournalEntriesQuery(
+    {
+      periodId: periodFilter,
+      status: statusFilter,
+      source: sourceFilter,
+      countryId: countryFilter,
+      search: debouncedSearch,
+      page,
+      pageSize: PAGE_SIZE,
+    },
+    allowed && isAuthenticated
+  );
+
+  const years = metaQuery.data?.years ?? [];
+  const periods = metaQuery.data?.periods ?? [];
+  const countries = metaQuery.data?.countries ?? [];
+  const accountsMap = metaQuery.data?.accountsMap ?? {};
+  const fundsMap = metaQuery.data?.fundsMap ?? {};
+  const sources = metaQuery.data?.sources ?? [];
+  const entries = entriesQuery.data?.entries ?? [];
+  const paged = entries;
+  const totalMatching = entriesQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalMatching / PAGE_SIZE));
+  const counts = entriesQuery.data?.counts ?? { total: 0, posted: 0, draft: 0, reversed: 0 };
+  const loading = metaQuery.isLoading || entriesQuery.isLoading;
+  const error = (metaQuery.error || entriesQuery.error)
+    ? ((metaQuery.error || entriesQuery.error) instanceof Error
+      ? (metaQuery.error || entriesQuery.error)!.message
+      : 'Failed to load journals')
+    : null;
+
+  const loadAll = useCallback(async () => {
+    await invalidateJournals();
+  }, [invalidateJournals]);
 
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [openLines, setOpenLines] = useState<Line[]>([]);
@@ -223,44 +248,7 @@ export default function AccountingJournals() {
     }
   };
 
-  const sources = useMemo(() => {
-    const s = new Set<string>();
-    entries.forEach(e => s.add(e.source_type));
-    return Array.from(s).sort();
-  }, [entries]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return entries.filter(e => {
-      if (periodFilter !== 'all' && e.period_id !== periodFilter) return false;
-      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
-      if (sourceFilter !== 'all' && e.source_type !== sourceFilter) return false;
-      if (countryFilter !== 'all' && e.country_id !== countryFilter) return false;
-      if (q) {
-        return String(e.entry_no).includes(q)
-          || e.description_en.toLowerCase().includes(q)
-          || (e.description_ar ?? '').toLowerCase().includes(q)
-          || e.idempotency_key.toLowerCase().includes(q)
-          || (e.source_id ?? '').toLowerCase().includes(q);
-      }
-      return true;
-    });
-  }, [entries, periodFilter, statusFilter, sourceFilter, countryFilter, search]);
-
-  const paged = useMemo(() => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [filtered, page]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-
-  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, countryFilter, search]);
-
-  const counts = useMemo(() => {
-    const c = { total: entries.length, posted: 0, draft: 0, reversed: 0 };
-    for (const e of entries) {
-      if (e.status === 'posted') c.posted++;
-      else if (e.status === 'draft') c.draft++;
-      else if (e.status === 'reversed') c.reversed++;
-    }
-    return c;
-  }, [entries]);
+  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, countryFilter, debouncedSearch]);
 
   const periodLabel = (id: string) => {
     const p = periods.find(x => x.id === id);
@@ -282,39 +270,69 @@ export default function AccountingJournals() {
     setLinesLoading(false);
   };
 
-  const exportExcel = () => {
-    const rows = filtered.map(e => ({
-      'Entry #': e.entry_no,
-      'Posting Date': e.posting_date,
-      'Period': periodLabel(e.period_id),
-      'Status': e.status,
-      'Source Type': e.source_type,
-      'Source ID': e.source_id ?? '',
-      'Description (EN)': e.description_en,
-      'Description (AR)': e.description_ar ?? '',
-      'Idempotency Key': e.idempotency_key,
-      'Posted At': e.posted_at ? format(parseISO(e.posted_at), 'yyyy-MM-dd HH:mm') : '',
-      'Created At': format(parseISO(e.created_at), 'yyyy-MM-dd HH:mm'),
-    }));
-    exportToExcel(rows, 'Journal Entries', `journal-entries-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  const exportExcel = async () => {
+    try {
+      const rowsData = await fetchJournalEntriesForExport({
+        periodId: periodFilter,
+        status: statusFilter,
+        source: sourceFilter,
+        countryId: countryFilter,
+        search: debouncedSearch,
+      });
+      const rows = rowsData.map(e => ({
+        'Entry #': e.entry_no,
+        'Posting Date': e.posting_date,
+        'Period': periodLabel(e.period_id),
+        'Status': e.status,
+        'Source Type': e.source_type,
+        'Source ID': e.source_id ?? '',
+        'Description (EN)': e.description_en,
+        'Description (AR)': e.description_ar ?? '',
+        'Idempotency Key': e.idempotency_key,
+        'Posted At': e.posted_at ? format(parseISO(e.posted_at), 'yyyy-MM-dd HH:mm') : '',
+        'Created At': format(parseISO(e.created_at), 'yyyy-MM-dd HH:mm'),
+      }));
+      exportToExcel(rows, 'Journal Entries', `journal-entries-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not export',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const exportCsv = () => {
-    const header = ['Entry #', 'Posting Date', 'Period', 'Status', 'Source Type', 'Source ID', 'Description (EN)', 'Description (AR)', 'Idempotency Key', 'Posted At', 'Created At'];
-    const body = filtered.map(e => [
-      e.entry_no,
-      e.posting_date,
-      periodLabel(e.period_id),
-      e.status,
-      e.source_type,
-      e.source_id ?? '',
-      e.description_en,
-      e.description_ar ?? '',
-      e.idempotency_key,
-      e.posted_at ?? '',
-      e.created_at,
-    ]);
-    downloadCsv(`journal-entries-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  const exportCsv = async () => {
+    try {
+      const rowsData = await fetchJournalEntriesForExport({
+        periodId: periodFilter,
+        status: statusFilter,
+        source: sourceFilter,
+        countryId: countryFilter,
+        search: debouncedSearch,
+      });
+      const header = ['Entry #', 'Posting Date', 'Period', 'Status', 'Source Type', 'Source ID', 'Description (EN)', 'Description (AR)', 'Idempotency Key', 'Posted At', 'Created At'];
+      const body = rowsData.map(e => [
+        e.entry_no,
+        e.posting_date,
+        periodLabel(e.period_id),
+        e.status,
+        e.source_type,
+        e.source_id ?? '',
+        e.description_en,
+        e.description_ar ?? '',
+        e.idempotency_key,
+        e.posted_at ?? '',
+        e.created_at,
+      ]);
+      downloadCsv(`journal-entries-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not export',
+        variant: 'destructive',
+      });
+    }
   };
 
   const lineTotals = useMemo(() => {
@@ -350,17 +368,17 @@ export default function AccountingJournals() {
           <Button variant="outline" size="sm" onClick={() => void loadAll()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={exportExcel} disabled={!filtered.length} data-testid="button-export-excel">
+          <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={!totalMatching} data-testid="button-export-excel">
             <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
+          <Button variant="outline" size="sm" onClick={() => void exportCsv()} disabled={!totalMatching} data-testid="button-export-csv">
             <FileText className="w-4 h-4 mr-1" /> CSV
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Loaded entries</div><div className="text-xl font-bold" data-testid="kpi-total">{counts.total}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Matching</div><div className="text-xl font-bold" data-testid="kpi-total">{totalMatching}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Posted</div><div className="text-xl font-bold text-emerald-700" data-testid="kpi-posted">{counts.posted}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Draft</div><div className="text-xl font-bold text-slate-700" data-testid="kpi-draft">{counts.draft}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Reversed</div><div className="text-xl font-bold text-rose-700" data-testid="kpi-reversed">{counts.reversed}</div></CardContent></Card>
@@ -421,7 +439,7 @@ export default function AccountingJournals() {
 
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading entries…</div>
-          ) : filtered.length === 0 ? (
+          ) : totalMatching === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm" data-testid="text-empty">No journal entries match the current filters.</div>
           ) : (
             <>
@@ -471,7 +489,7 @@ export default function AccountingJournals() {
                 </table>
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</div>
+                <div>Showing {totalMatching === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalMatching)} of {totalMatching}</div>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} data-testid="button-prev">Prev</Button>
                   <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} data-testid="button-next">Next</Button>

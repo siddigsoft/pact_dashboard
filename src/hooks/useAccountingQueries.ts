@@ -2,7 +2,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKeys } from '@/lib/queryKeys';
 
-const JOURNAL_ENTRY_LIMIT = 1000;
+export const JOURNAL_PAGE_SIZE = 50;
+const JOURNAL_EXPORT_LIMIT = 2000;
+const JOURNAL_ENTRY_SELECT =
+  'id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id, country_id';
 
 export type AcctFiscalYear = { id: string; code: string };
 export type AcctPeriod = {
@@ -47,30 +50,64 @@ export type AcctAccountRef = {
   is_postable: boolean;
 };
 
-export type JournalsBundle = {
+export type JournalsMeta = {
   years: AcctFiscalYear[];
   periods: AcctPeriod[];
-  entries: AcctJournalEntry[];
   countries: AcctCountry[];
   accountsMap: Record<string, AcctAccountRef>;
   fundsMap: Record<string, { code: string; name_en: string }>;
+  sources: string[];
 };
 
-export async function fetchJournalsBundle(): Promise<JournalsBundle> {
-  const [yres, pres, eres, ares, fres, cres] = await Promise.all([
+export type JournalEntryFilters = {
+  periodId: string;
+  status: string;
+  source: string;
+  countryId: string;
+  search: string;
+  page: number;
+  pageSize?: number;
+};
+
+export type JournalEntriesPage = {
+  entries: AcctJournalEntry[];
+  total: number;
+  counts: { total: number; posted: number; draft: number; reversed: number };
+};
+
+function applyJournalFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  filters: Pick<JournalEntryFilters, 'periodId' | 'status' | 'source' | 'countryId' | 'search'>,
+  opts?: { skipStatus?: boolean }
+) {
+  let q = query;
+  if (filters.periodId !== 'all') q = q.eq('period_id', filters.periodId);
+  if (!opts?.skipStatus && filters.status !== 'all') q = q.eq('status', filters.status);
+  if (filters.source !== 'all') q = q.eq('source_type', filters.source);
+  if (filters.countryId !== 'all') q = q.eq('country_id', filters.countryId);
+  const search = filters.search.trim().replace(/[%_,]/g, ' ').slice(0, 80);
+  if (search) {
+    const asNum = Number(search);
+    if (Number.isFinite(asNum) && String(asNum) === search) {
+      q = q.eq('entry_no', asNum);
+    } else {
+      const like = `%${search}%`;
+      q = q.or(
+        `description_en.ilike.${like},description_ar.ilike.${like},idempotency_key.ilike.${like},source_id.ilike.${like}`
+      );
+    }
+  }
+  return q;
+}
+
+export async function fetchJournalsMeta(): Promise<JournalsMeta> {
+  const [yres, pres, ares, fres, cres, sres] = await Promise.all([
     supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
     supabase
       .from('acct_fiscal_periods')
       .select('id, period_no, start_date, end_date, status, fiscal_year_id')
       .order('start_date', { ascending: false }),
-    supabase
-      .from('acct_journal_entries')
-      .select(
-        'id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id, country_id'
-      )
-      .order('posting_date', { ascending: false })
-      .order('entry_no', { ascending: false })
-      .limit(JOURNAL_ENTRY_LIMIT),
     supabase
       .from('acct_accounts')
       .select('id, code, name_en, name_ar, country_id, is_postable')
@@ -81,14 +118,20 @@ export async function fetchJournalsBundle(): Promise<JournalsBundle> {
       .select('id, code, name_en, flag_emoji, currency_code')
       .eq('is_active', true)
       .order('name_en'),
+    // ponytail: sample recent source_types for the filter dropdown
+    supabase
+      .from('acct_journal_entries')
+      .select('source_type')
+      .order('posting_date', { ascending: false })
+      .limit(300),
   ]);
 
-  const firstErr = [yres.error, pres.error, eres.error, ares.error, fres.error, cres.error].find(
+  const firstErr = [yres.error, pres.error, ares.error, fres.error, cres.error, sres.error].find(
     Boolean
   );
   if (firstErr) throw new Error(firstErr.message);
 
-  const accountsMap: JournalsBundle['accountsMap'] = {};
+  const accountsMap: JournalsMeta['accountsMap'] = {};
   for (const a of ares.data ?? []) {
     accountsMap[a.id] = {
       code: a.code,
@@ -99,34 +142,130 @@ export async function fetchJournalsBundle(): Promise<JournalsBundle> {
     };
   }
 
-  const fundsMap: JournalsBundle['fundsMap'] = {};
+  const fundsMap: JournalsMeta['fundsMap'] = {};
   for (const f of fres.data ?? []) {
     fundsMap[f.id] = { code: f.code, name_en: f.name_en };
   }
 
+  const sources = Array.from(
+    new Set((sres.data ?? []).map((r) => r.source_type).filter(Boolean) as string[])
+  ).sort();
+
   return {
     years: (yres.data ?? []) as AcctFiscalYear[],
     periods: (pres.data ?? []) as AcctPeriod[],
-    entries: (eres.data ?? []) as AcctJournalEntry[],
     countries: (cres.data ?? []) as AcctCountry[],
     accountsMap,
     fundsMap,
+    sources,
   };
 }
 
-export function useJournalsBundleQuery(enabled = true) {
+export async function fetchJournalEntriesPage(
+  filters: JournalEntryFilters
+): Promise<JournalEntriesPage> {
+  const pageSize = filters.pageSize ?? JOURNAL_PAGE_SIZE;
+  const from = filters.page * pageSize;
+  const to = from + pageSize - 1;
+
+  let listQuery = supabase
+    .from('acct_journal_entries')
+    .select(JOURNAL_ENTRY_SELECT, { count: 'exact' })
+    .order('posting_date', { ascending: false })
+    .order('entry_no', { ascending: false })
+    .range(from, to);
+  listQuery = applyJournalFilters(listQuery, filters);
+
+  const baseFilters = {
+    periodId: filters.periodId,
+    status: 'all' as const,
+    source: filters.source,
+    countryId: filters.countryId,
+    search: filters.search,
+  };
+
+  const countFor = async (status: string) => {
+    let q = supabase
+      .from('acct_journal_entries')
+      .select('id', { count: 'exact', head: true });
+    q = applyJournalFilters(q, { ...baseFilters, status });
+    const { count, error } = await q;
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  };
+
+  const [listRes, posted, draft, reversed] = await Promise.all([
+    listQuery,
+    countFor('posted'),
+    countFor('draft'),
+    countFor('reversed'),
+  ]);
+
+  if (listRes.error) throw new Error(listRes.error.message);
+
+  const matched = listRes.count ?? 0;
+  return {
+    entries: (listRes.data ?? []) as AcctJournalEntry[],
+    total: matched,
+    counts: {
+      total: filters.status === 'all' ? matched : posted + draft + reversed,
+      posted,
+      draft,
+      reversed,
+    },
+  };
+}
+
+/** Export helper — same filters, hard cap. */
+export async function fetchJournalEntriesForExport(
+  filters: Omit<JournalEntryFilters, 'page' | 'pageSize'>
+): Promise<AcctJournalEntry[]> {
+  let q = supabase
+    .from('acct_journal_entries')
+    .select(JOURNAL_ENTRY_SELECT)
+    .order('posting_date', { ascending: false })
+    .order('entry_no', { ascending: false })
+    .limit(JOURNAL_EXPORT_LIMIT);
+  q = applyJournalFilters(q, filters);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AcctJournalEntry[];
+}
+
+export function useJournalsMetaQuery(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.accounting.journalsBundle(),
-    queryFn: fetchJournalsBundle,
+    queryKey: queryKeys.accounting.journalsMeta(),
+    queryFn: fetchJournalsMeta,
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useJournalEntriesQuery(filters: JournalEntryFilters, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.accounting.journalEntries({
+      periodId: filters.periodId,
+      status: filters.status,
+      source: filters.source,
+      countryId: filters.countryId,
+      search: filters.search,
+      page: filters.page,
+      pageSize: filters.pageSize ?? JOURNAL_PAGE_SIZE,
+    }),
+    queryFn: () => fetchJournalEntriesPage(filters),
+    enabled,
+    staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
 }
 
 export function useInvalidateJournalsBundle() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: queryKeys.accounting.journalsBundle() });
+  return () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.accounting.journalsMeta() });
+    queryClient.invalidateQueries({ queryKey: [...queryKeys.accounting.all, 'journalEntries'] });
+  };
 }
 
 export type GlBootstrapAccount = {

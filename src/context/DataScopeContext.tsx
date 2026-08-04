@@ -19,7 +19,9 @@ export type DataScopeId =
   | 'budget'
   | 'downPayment'
   | 'costs'
-  | 'audit';
+  | 'audit'
+  | 'mmp'
+  | 'siteVisit';
 
 type ScopeRule = {
   scope: DataScopeId;
@@ -83,6 +85,49 @@ const SCOPE_RULES: ScopeRule[] = [
       '/admin-hub',
       '/super-admin-hub',
       '/compliance',
+    ],
+  },
+  {
+    scope: 'mmp',
+    prefixes: [
+      '/mmp',
+      '/mmp-management',
+      '/dashboard',
+      '/projects',
+      '/coordinator',
+      '/coordinator-dashboard',
+      '/supervisor',
+      '/supervisor-approvals',
+      '/field',
+      '/field-ops',
+      '/field-team',
+      '/site-visits',
+      '/site-visit',
+      '/finance-hub',
+      '/cost-submission',
+      '/cost-approval',
+      '/wallet',
+      '/down-payment',
+      '/archive',
+    ],
+  },
+  {
+    scope: 'siteVisit',
+    prefixes: [
+      '/site-visits',
+      '/site-visit',
+      '/dashboard',
+      '/mmp',
+      '/coordinator',
+      '/coordinator-dashboard',
+      '/supervisor',
+      '/supervisor-approvals',
+      '/field',
+      '/field-ops',
+      '/field-team',
+      '/projects',
+      '/wallet',
+      '/cost-submission',
     ],
   },
 ];
@@ -161,6 +206,8 @@ export function useDataScope(): DataScopeContextValue {
         'downPayment',
         'costs',
         'audit',
+        'mmp',
+        'siteVisit',
       ]),
       isScopeActive: () => true,
     };

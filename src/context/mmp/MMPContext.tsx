@@ -17,6 +17,7 @@ import {
   defaultSiteEntryCounts,
 } from './mmpQueries';
 import { useUser } from '@/context/user/UserContext';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
@@ -54,13 +55,16 @@ const MMPContext = createContext<MMPContextType>({
 export const useMMPProvider = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const mmpScopeActive = useIsDataScopeActive('mmp');
 
   // Gate queries on authentication so they never run unauthenticated.
   // RLS would silently return 0 rows for unauthenticated requests and
   // that empty result would be cached, showing stale zeros after login.
+  // Also skip on non-field routes until the mmp DataScope activates (sticky).
   const isAuthenticated = !!currentUser?.id;
-  const filesQuery = useMMPFilesQuery(isAuthenticated);
-  const countsQuery = useMMPSiteEntryCountsQuery(isAuthenticated);
+  const queriesEnabled = isAuthenticated && mmpScopeActive;
+  const filesQuery = useMMPFilesQuery(queriesEnabled);
+  const countsQuery = useMMPSiteEntryCountsQuery(queriesEnabled);
 
   // When the user's session is first restored (null → id), invalidate
   // MMP caches so they re-fetch with valid credentials.
@@ -82,7 +86,7 @@ export const useMMPProvider = () => {
   // pages like MMPCycleClose that chain mmpFiles through multiple hooks.
   const emptyMmpFiles = useRef<MMPFile[]>([]);
   const mmpFiles = filesQuery.data ?? emptyMmpFiles.current;
-  const loading = filesQuery.isLoading;
+  const loading = queriesEnabled && filesQuery.isLoading;
   const error = filesQuery.error ? 'Failed to load MMP files' : null;
   const siteEntryCounts = countsQuery.data ?? defaultSiteEntryCounts;
 

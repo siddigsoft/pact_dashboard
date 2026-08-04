@@ -111,7 +111,11 @@ export const queryKeys = {
 
   accounting: {
     all: ['accounting'] as const,
-    journalsBundle: () => [...queryKeys.accounting.all, 'journalsBundle'] as const,
+    journalsMeta: () => [...queryKeys.accounting.all, 'journalsMeta'] as const,
+    journalEntries: (filters?: Record<string, unknown>) =>
+      [...queryKeys.accounting.all, 'journalEntries', filters] as const,
+    /** @deprecated use journalsMeta + journalEntries */
+    journalsBundle: () => [...queryKeys.accounting.all, 'journalsMeta'] as const,
     glBootstrap: () => [...queryKeys.accounting.all, 'glBootstrap'] as const,
     glLedger: (accountId: string, periodId: string) =>
       [...queryKeys.accounting.all, 'glLedger', accountId, periodId] as const,
