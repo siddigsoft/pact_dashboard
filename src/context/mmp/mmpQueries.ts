@@ -2,11 +2,14 @@
  * React Query keys and hooks for MMP data.
  * Provides cached, deduplicated fetches for MMP files and site entry counts.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { transformDBToMMPFile } from './mmpTransform';
 import type { MMPFile } from '@/types';
 import type { SiteEntryCounts } from './types';
+
+/** Server page size for coordinator / supervisor site-entry lists. */
+export const SITE_ENTRIES_PAGE_SIZE = 100;
 
 export const mmpQueryKeys = {
   all: ['mmp'] as const,
@@ -157,21 +160,42 @@ export interface CoordinatorSiteEntryRow {
   created_at: string;
 }
 
-async function fetchCoordinatorSiteEntries(userId: string | null): Promise<CoordinatorSiteEntryRow[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return [];
+export type SiteEntriesPage = {
+  rows: CoordinatorSiteEntryRow[];
+  nextOffset: number | undefined;
+};
 
-  if (!navigator.onLine) return [];
+export function flattenSiteEntryPages(
+  pages?: SiteEntriesPage[]
+): CoordinatorSiteEntryRow[] {
+  if (!pages?.length) return [];
+  return pages.flatMap((p) => p.rows);
+}
+
+async function fetchCoordinatorSiteEntriesPage(
+  userId: string | null,
+  offset: number
+): Promise<SiteEntriesPage> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { rows: [], nextOffset: undefined };
+
+  if (!navigator.onLine) return { rows: [], nextOffset: undefined };
 
   const { data, error } = await supabase.rpc('get_coordinator_site_entries', {
     p_user_id: userId,
+    p_limit: SITE_ENTRIES_PAGE_SIZE,
+    p_offset: offset,
   });
 
   if (error) {
     console.warn('[fetchCoordinatorSiteEntries] RPC error:', error.message);
-    return [];
+    return { rows: [], nextOffset: undefined };
   }
-  return (data ?? []) as CoordinatorSiteEntryRow[];
+
+  const rows = (data ?? []) as CoordinatorSiteEntryRow[];
+  const nextOffset =
+    rows.length >= SITE_ENTRIES_PAGE_SIZE ? offset + SITE_ENTRIES_PAGE_SIZE : undefined;
+  return { rows, nextOffset };
 }
 
 // Tighter stale times so data feels fresh on every page visit.
@@ -240,53 +264,29 @@ export function useMMPSiteEntryCountsQuery(enabled = true) {
 }
 
 /**
- * Fetches coordinator-relevant site entries only (RPC). Use for coordinator page to avoid loading all MMP + entries.
+ * Fetches coordinator-relevant site entries only (paginated RPC).
  * When isAdmin is true, pass userId = null to get all entries.
  */
 const COORDINATOR_SITES_STALE_MS = 60 * 1000;
 
 export function useCoordinatorSiteEntriesQuery(userId: string | null, isAdmin: boolean) {
   const effectiveUserId = isAdmin ? null : userId;
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: mmpQueryKeys.coordinatorSiteEntries(effectiveUserId),
-    queryFn: () => fetchCoordinatorSiteEntries(effectiveUserId),
+    queryFn: ({ pageParam }) => fetchCoordinatorSiteEntriesPage(effectiveUserId, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset,
     enabled: isAdmin || !!userId,
     staleTime: COORDINATOR_SITES_STALE_MS,
-    placeholderData: (previousData) => previousData,
   });
 }
 
 /**
- * Fetches all site entries for supervisor view — direct table query bypassing the coordinator RPC.
- * Returns all pipeline-relevant entries joined with their MMP name.
- * Hub/status filtering is applied client-side in useCoordinatorSites.
+ * One page of site entries for supervisor view — direct table query (no coordinator RPC).
+ * Hub/status filtering stays client-side in useCoordinatorSites.
  */
-async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return [];
-  if (!navigator.onLine) return [];
-
-  // No join — avoids FK registration issues with PostgREST.
-  // mmp_name is resolved client-side from the MMP context.
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .select(
-      'id, mmp_file_id, site_code, hub_office, state, locality, site_name,' +
-      'cp_name, visit_type, visit_date, main_activity, activity_at_site,' +
-      'monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring,' +
-      'comments, additional_data, status,' +
-      'verified_at, verified_by, verification_notes,' +
-      'cost, enumerator_fee, transport_fee,' +
-      'accepted_by, accepted_at, visit_completed_at, forwarded_to_user_id, created_at'
-    )
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.warn('[fetchSupervisorSiteEntries] query error:', error.message);
-    return [];
-  }
-
-  return (data || []).map((row: any) => ({
+function mapSupervisorSiteEntryRow(row: any): CoordinatorSiteEntryRow {
+  return {
     id: row.id,
     mmp_file_id: row.mmp_file_id,
     mmp_name: 'Unknown MMP', // filled in by the hook from contextMmpFiles
@@ -318,18 +318,53 @@ async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> 
     visit_completed_at: row.visit_completed_at ?? null,
     forwarded_to_user_id: row.forwarded_to_user_id ?? null,
     created_at: row.created_at,
-  })) as CoordinatorSiteEntryRow[];
+  };
+}
+
+async function fetchSupervisorSiteEntriesPage(offset: number): Promise<SiteEntriesPage> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { rows: [], nextOffset: undefined };
+  if (!navigator.onLine) return { rows: [], nextOffset: undefined };
+
+  const from = offset;
+  const to = offset + SITE_ENTRIES_PAGE_SIZE - 1;
+
+  // No join — avoids FK registration issues with PostgREST.
+  const { data, error } = await supabase
+    .from('mmp_site_entries')
+    .select(
+      'id, mmp_file_id, site_code, hub_office, state, locality, site_name,' +
+      'cp_name, visit_type, visit_date, main_activity, activity_at_site,' +
+      'monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring,' +
+      'comments, additional_data, status,' +
+      'verified_at, verified_by, verification_notes,' +
+      'cost, enumerator_fee, transport_fee,' +
+      'accepted_by, accepted_at, visit_completed_at, forwarded_to_user_id, created_at'
+    )
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.warn('[fetchSupervisorSiteEntries] query error:', error.message);
+    return { rows: [], nextOffset: undefined };
+  }
+
+  const rows = (data || []).map(mapSupervisorSiteEntryRow);
+  const nextOffset =
+    rows.length >= SITE_ENTRIES_PAGE_SIZE ? offset + SITE_ENTRIES_PAGE_SIZE : undefined;
+  return { rows, nextOffset };
 }
 
 const SUPERVISOR_SITES_STALE_MS = 60 * 1000;
 
 export function useSupervisorSiteEntriesQuery(enabled: boolean) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: mmpQueryKeys.supervisorSiteEntries(),
-    queryFn: fetchSupervisorSiteEntries,
+    queryFn: ({ pageParam }) => fetchSupervisorSiteEntriesPage(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset,
     enabled,
     staleTime: SUPERVISOR_SITES_STALE_MS,
-    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -342,5 +377,6 @@ export function useInvalidateMMPQueries() {
     queryClient.invalidateQueries({ queryKey: mmpQueryKeys.files() });
     queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
     queryClient.invalidateQueries({ queryKey: [...mmpQueryKeys.all, 'coordinatorSiteEntries'] });
+    queryClient.invalidateQueries({ queryKey: mmpQueryKeys.supervisorSiteEntries() });
   };
 }

@@ -479,7 +479,7 @@ const CoordinatorSites: FC = () => {
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
-  const { coordinatorSites, loading: contextLoading, refetch: refreshSites, siteCounts } = useCoordinatorSites();
+  const { coordinatorSites, loading: contextLoading, refetch: refreshSites, siteCounts, fetchNextPage, hasNextPage, isFetchingNextPage } = useCoordinatorSites();
   
   // Parallel refresh helper for speed optimization
   const refreshAll = useCallback(async () => {
@@ -850,6 +850,14 @@ const CoordinatorSites: FC = () => {
   const totalPages = useMemo(() => {
     return Math.ceil(filteredSites.length / itemsPerPage);
   }, [filteredSites.length, itemsPerPage]);
+
+  // Pull the next server page when the user reaches the last client page.
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (totalPages > 0 && currentPage >= totalPages) {
+      void fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, currentPage, totalPages, fetchNextPage]);
 
   // Memoize sites grouped by locality
   const sitesGroupedByLocality = useMemo(() => {

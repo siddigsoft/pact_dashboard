@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import {
+  flattenSiteEntryPages,
   useCoordinatorSiteEntriesQuery,
   useSupervisorSiteEntriesQuery,
   type CoordinatorSiteEntryRow,
@@ -137,18 +138,64 @@ export const useCoordinatorSites = () => {
 
   // Supervisors use a dedicated direct query (not the coordinator RPC which filters by user_id).
   const {
-    data: supervisorRows,
+    data: supervisorPages,
     isLoading: supervisorQueryLoading,
     refetch: refetchSupervisorQuery,
+    fetchNextPage: fetchNextSupervisorPage,
+    hasNextPage: hasNextSupervisorPage,
+    isFetchingNextPage: isFetchingNextSupervisorPage,
   } = useSupervisorSiteEntriesQuery(isSupervisor && !!currentUser?.id);
 
   // Coordinators use the coordinator-specific RPC.
   const rpcUserId = isSupervisor ? null : currentUser?.id ?? null;
   const {
-    data: coordinatorRows,
+    data: coordinatorPages,
     isLoading: coordinatorQueryLoading,
     refetch: refetchCoordinatorQuery,
+    fetchNextPage: fetchNextCoordinatorPage,
+    hasNextPage: hasNextCoordinatorPage,
+    isFetchingNextPage: isFetchingNextCoordinatorPage,
   } = useCoordinatorSiteEntriesQuery(rpcUserId, isAdminOrSuperUser ?? false);
+
+  const supervisorRows = useMemo(
+    () => flattenSiteEntryPages(supervisorPages?.pages),
+    [supervisorPages]
+  );
+  const coordinatorRows = useMemo(
+    () => flattenSiteEntryPages(coordinatorPages?.pages),
+    [coordinatorPages]
+  );
+
+  // Prefetch a few server pages so hub/status client filters still have enough rows.
+  useEffect(() => {
+    if (!isSupervisor) return;
+    if (!hasNextSupervisorPage || isFetchingNextSupervisorPage) return;
+    const loadedPages = supervisorPages?.pages.length ?? 0;
+    if (loadedPages > 0 && loadedPages < 5) {
+      void fetchNextSupervisorPage();
+    }
+  }, [
+    isSupervisor,
+    hasNextSupervisorPage,
+    isFetchingNextSupervisorPage,
+    supervisorPages?.pages.length,
+    fetchNextSupervisorPage,
+  ]);
+
+  useEffect(() => {
+    if (isSupervisor) return;
+    if (!hasNextCoordinatorPage || isFetchingNextCoordinatorPage) return;
+    const loadedPages = coordinatorPages?.pages.length ?? 0;
+    if (loadedPages > 0 && loadedPages < 5) {
+      void fetchNextCoordinatorPage();
+    }
+  }, [
+    isSupervisor,
+    hasNextCoordinatorPage,
+    isFetchingNextCoordinatorPage,
+    coordinatorPages?.pages.length,
+    fetchNextCoordinatorPage,
+  ]);
 
   const allowedSupervisorStatuses = useMemo(() => new Set([
     // Pre-pipeline
@@ -337,8 +384,13 @@ export const useCoordinatorSites = () => {
 
   const loading = isSupervisor
     ? supervisorQueryLoading
-    : coordinatorRows !== undefined ? coordinatorQueryLoading : contextLoading;
+    : coordinatorPages !== undefined ? coordinatorQueryLoading : contextLoading;
   const refetch = isSupervisor ? refetchSupervisorQuery : refetchCoordinatorQuery;
+  const fetchNextPage = isSupervisor ? fetchNextSupervisorPage : fetchNextCoordinatorPage;
+  const hasNextPage = isSupervisor ? !!hasNextSupervisorPage : !!hasNextCoordinatorPage;
+  const isFetchingNextPage = isSupervisor
+    ? isFetchingNextSupervisorPage
+    : isFetchingNextCoordinatorPage;
 
   return {
     coordinatorSites,
@@ -346,5 +398,8 @@ export const useCoordinatorSites = () => {
     error: null,
     siteCounts,
     refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
   };
 };
