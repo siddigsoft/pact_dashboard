@@ -1503,6 +1503,22 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   );
 }
 
+function formatBytes(bytes: number | null) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentIcon({ type }: { type: string | null }) {
+  if (!type) return <FileText className="h-4 w-4 text-slate-400" />;
+  if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />;
+  if (type.includes('sheet') || type.includes('excel') || type.includes('csv'))
+    return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+  if (type.includes('pdf')) return <FileText className="h-4 w-4 text-red-500" />;
+  return <FileText className="h-4 w-4 text-slate-400" />;
+}
+
 // ── Task Detail Dialog ────────────────────────────────────────────────────
 
 interface TaskDetailProps {
@@ -1577,22 +1593,6 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
       toast({ title: okCount === 1 ? 'File uploaded' : `${okCount} files uploaded` });
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const formatBytes = (bytes: number | null) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const AttachmentIcon = ({ type }: { type: string | null }) => {
-    if (!type) return <FileText className="h-4 w-4 text-slate-400" />;
-    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />;
-    if (type.includes('sheet') || type.includes('excel') || type.includes('csv'))
-      return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
-    if (type.includes('pdf')) return <FileText className="h-4 w-4 text-red-500" />;
-    return <FileText className="h-4 w-4 text-slate-400" />;
   };
 
   return (
