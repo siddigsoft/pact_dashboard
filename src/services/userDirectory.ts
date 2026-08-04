@@ -94,3 +94,69 @@ export async function resolveDisplayName(id: string): Promise<string> {
   const map = await resolveProfiles([id]);
   return displayNameFromProfile(map.get(id));
 }
+
+export type ProfileWithLocationRow = {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  availability: string | null;
+  avatar_url: string | null;
+  state_id: string | null;
+  hub_id: string | null;
+  location: {
+    latitude?: number | string;
+    longitude?: number | string;
+    region?: string;
+    lastUpdated?: string;
+    [key: string]: unknown;
+  } | null;
+  last_activity: string | null;
+  is_active: boolean | null;
+};
+
+/** Map RPC row → User shape expected by field maps. */
+export function profileWithLocationToUser(row: ProfileWithLocationRow): import('@/types').User {
+  const lat = Number(row.location?.latitude);
+  const lng = Number(row.location?.longitude);
+  const name = row.full_name || row.username || row.email || 'Unknown';
+  return {
+    id: row.id,
+    name,
+    fullName: row.full_name || undefined,
+    username: row.username || undefined,
+    email: row.email || '',
+    role: row.role || 'dataCollector',
+    avatar: row.avatar_url || undefined,
+    stateId: row.state_id || undefined,
+    hubId: row.hub_id || undefined,
+    availability: (row.availability as 'online' | 'offline' | 'busy') || 'offline',
+    profileStatus: row.status || undefined,
+    isApproved: row.status === 'approved',
+    lastActive: row.last_activity || new Date().toISOString(),
+    location:
+      Number.isFinite(lat) && Number.isFinite(lng)
+        ? {
+            latitude: lat,
+            longitude: lng,
+            region: typeof row.location?.region === 'string' ? row.location.region : undefined,
+            lastUpdated:
+              typeof row.location?.lastUpdated === 'string'
+                ? row.location.lastUpdated
+                : row.last_activity || undefined,
+          }
+        : undefined,
+  } as import('@/types').User;
+}
+
+export async function listProfilesWithLocation(
+  limit = 200
+): Promise<ProfileWithLocationRow[]> {
+  const { data, error } = await supabase.rpc('list_profiles_with_location', {
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as ProfileWithLocationRow[];
+}

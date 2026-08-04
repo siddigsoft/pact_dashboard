@@ -894,6 +894,31 @@ serve(async (req) => {
     }
 
     if (recipients.length === 0) {
+      // Audit warning for silent drops when no recipients resolve from IDs/roles
+      try {
+        await supabase.from('audit_logs').insert({
+          module: 'notification',
+          action: 'send',
+          entity_type: 'notification',
+          entity_id: `notify-no-recipients-${Date.now()}`,
+          entity_name: finalTitleEn,
+          description: `Notification skipped: no recipients resolved for event "${event_type}"`,
+          success: false,
+          actor_id: triggered_by || 'system',
+          actor_name: effectiveActorName || 'System',
+          metadata: {
+            event_type,
+            entity_type,
+            entity_id,
+            recipient_ids_count: recipient_ids.length,
+            recipient_roles_count: recipient_roles.length,
+            action_url,
+          },
+        })
+      } catch (auditErr) {
+        console.warn('Failed to write no-recipient audit warning:', auditErr)
+      }
+
       return new Response(
         JSON.stringify({ success: true, message: 'No recipients found', notifications_created: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

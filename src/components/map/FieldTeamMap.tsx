@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
+import { useProfilesWithLocation } from '@/hooks/useUserDirectory';
 import { Clock, Navigation, CheckCircle, Clock3, AlertTriangle, MapPin, UserCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,8 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
   selectedUserId = null,
   onUserSelect
 }) => {
-  const { users, currentUser } = useUser();
+  const { currentUser } = useUser();
+  const { data: locationUsers = [] } = useProfilesWithLocation(200, !eligibleCollectors?.length);
   const [activeUsers, setActiveUsers] = useState<User[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'online' | 'offline' | 'busy'>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
@@ -98,9 +100,7 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
       return;
     }
     
-    if (!users) return;
-    
-    const usersWithLocation = users.filter(user => {
+    const usersWithLocation = locationUsers.filter(user => {
       if (!user?.location?.latitude || !user?.location?.longitude) return false;
       
       const userStatus = getUserStatus(user);
@@ -116,7 +116,7 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
       return matchesFilter && matchesRegion;
     });
     setActiveUsers(usersWithLocation);
-  }, [users, selectedFilter, selectedRegion, eligibleCollectors]);
+  }, [locationUsers, selectedFilter, selectedRegion, eligibleCollectors]);
 
   const escapeHtml = (text: string) => {
     return text
