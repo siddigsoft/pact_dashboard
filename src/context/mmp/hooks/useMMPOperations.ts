@@ -103,7 +103,7 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     }
   };
 
-  const deleteMMPFile = async (id: string): Promise<boolean> => {
+  const deleteMMPFile = async (id: string, bypassGuard = false): Promise<boolean> => {
     const session = await ensureValidSession();
     if (!session.success) {
       toast.error(session.error || 'Session expired. Please refresh and try again.');
@@ -114,47 +114,46 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
       return await withTimeout(
         (async () => {
           // ── SAFETY GUARD ────────────────────────────────────────────────────
-          // Block permanent delete when ANY field submissions are linked to this
-          // MMP. Permanently deleting an MMP with active submissions destroys the
-          // audit trail and orphans all requests (exactly the July 2026 incident).
-          // Admins must use "Archive MMP" instead — it hides the MMP while keeping
-          // all linked data intact and recoverable.
-          try {
-            // 1a. Check via site entries → down_payment_requests
-            const { data: entryIds } = await supabase
-              .from('mmp_site_entries')
-              .select('id')
-              .eq('mmp_file_id', id);
-            if (entryIds && entryIds.length > 0) {
-              const ids = entryIds.map((e: any) => e.id as string);
-              const { data: linkedDPs } = await supabase
-                .from('down_payment_requests')
+          // bypassGuard is only set by unlinkAndDeleteMMPFile AFTER it has
+          // already cleared all FK references — it is never exposed to the UI.
+          if (!bypassGuard) {
+            try {
+              // 1a. Check via site entries → down_payment_requests
+              const { data: entryIds } = await supabase
+                .from('mmp_site_entries')
                 .select('id')
-                .in('mmp_site_entry_id', ids)
+                .eq('mmp_file_id', id);
+              if (entryIds && entryIds.length > 0) {
+                const ids = entryIds.map((e: any) => e.id as string);
+                const { data: linkedDPs } = await supabase
+                  .from('down_payment_requests')
+                  .select('id')
+                  .in('mmp_site_entry_id', ids)
+                  .limit(1);
+                if (linkedDPs && linkedDPs.length > 0) {
+                  toast.error(
+                    'Blocked: this MMP has linked advance requests. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
+                  );
+                  return false;
+                }
+              }
+              // 1b. Check operational_cost_submissions directly
+              const { data: linkedCosts } = await supabase
+                .from('operational_cost_submissions')
+                .select('id')
+                .eq('mmp_id', id)
                 .limit(1);
-              if (linkedDPs && linkedDPs.length > 0) {
+              if (linkedCosts && linkedCosts.length > 0) {
                 toast.error(
-                  'Blocked: this MMP has linked advance requests. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
+                  'Blocked: this MMP has linked cost submissions. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
                 );
                 return false;
               }
-            }
-            // 1b. Check operational_cost_submissions directly
-            const { data: linkedCosts } = await supabase
-              .from('operational_cost_submissions')
-              .select('id')
-              .eq('mmp_id', id)
-              .limit(1);
-            if (linkedCosts && linkedCosts.length > 0) {
-              toast.error(
-                'Blocked: this MMP has linked cost submissions. Use "Unlink & Delete" in the delete dialog to detach them first, or use "Archive MMP" to hide the MMP without losing any data.'
-              );
+            } catch (guardErr) {
+              console.warn('[MMP Delete] Safety guard check failed — blocking delete as a precaution:', guardErr);
+              toast.error('Could not verify submission links. Delete blocked for safety. Use Archive instead.');
               return false;
             }
-          } catch (guardErr) {
-            console.warn('[MMP Delete] Safety guard check failed — blocking delete as a precaution:', guardErr);
-            toast.error('Could not verify submission links. Delete blocked for safety. Use Archive instead.');
-            return false;
           }
           // ── END SAFETY GUARD ────────────────────────────────────────────────
 
@@ -436,10 +435,15 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
           .in('mmp_site_entry_id', entryIds);
         downPaymentCount = dpRows?.length ?? 0;
         if (downPaymentCount > 0) {
-          await supabase
+          const { error: dpErr } = await supabase
             .from('down_payment_requests')
             .update({ mmp_site_entry_id: null } as any)
             .in('mmp_site_entry_id', entryIds);
+          if (dpErr) {
+            console.error('[MMP UnlinkAndDelete] Failed to unlink down_payment_requests:', dpErr);
+            toast.error('Could not unlink advance requests: ' + dpErr.message);
+            return { unlinked: { downPayments: 0, costSubmissions: 0 }, deleted: false };
+          }
         }
       }
 
@@ -450,14 +454,19 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
         .eq('mmp_id', id);
       const costCount = costRows?.length ?? 0;
       if (costCount > 0) {
-        await supabase
+        const { error: costErr } = await supabase
           .from('operational_cost_submissions')
           .update({ mmp_id: null } as any)
           .eq('mmp_id', id);
+        if (costErr) {
+          console.error('[MMP UnlinkAndDelete] Failed to unlink operational_cost_submissions:', costErr);
+          toast.error('Could not unlink cost submissions: ' + costErr.message);
+          return { unlinked: { downPayments: 0, costSubmissions: 0 }, deleted: false };
+        }
       }
 
-      // 4. Now proceed with normal delete (guard will pass since links are cleared)
-      const deleted = await deleteMMPFile(id);
+      // 4. Bypass the guard — we just cleared all FK references above
+      const deleted = await deleteMMPFile(id, true);
       return { unlinked: { downPayments: downPaymentCount, costSubmissions: costCount }, deleted };
     } catch (err) {
       console.error('[MMP UnlinkAndDelete] Error:', err);
