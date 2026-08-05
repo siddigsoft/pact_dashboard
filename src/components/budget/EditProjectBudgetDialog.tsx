@@ -33,14 +33,84 @@ interface EditProjectBudgetDialogProps {
   currentUserName?: string;
 }
 
-/** Maps legacy budget category keys to their nearest new canonical key */
+/**
+ * Maps every known legacy budget category key to its nearest canonical new key.
+ * Keys that already use a canonical key (personnel_labor_fees, etc.) are not listed —
+ * they pass through the `LEGACY_KEY_MAP[key] ?? key` lookup unchanged.
+ * When two legacy keys share the same canonical target, the useEffect merges their
+ * amounts into one line item so admins never see two rows with identical labels.
+ *
+ * Source of truth: all `key:` values in src/config/projectTypeConfig.ts +
+ * legacy keys observed in src/components/budget/BudgetCard.tsx and
+ * src/components/project/ProjectCostTab.tsx.
+ */
 const LEGACY_KEY_MAP: Record<string, string> = {
-  transportation_and_visit_fees: 'transportation_logistics',
-  permit_fee: 'permits_taxes_legal',
+  // ── Transportation ────────────────────────────────────────────────────────
+  transportation_and_visit_fees:  'transportation_logistics',
+  transportation:                 'transportation_logistics',
+  transport:                      'transportation_logistics',
+  vehicle:                        'transportation_logistics',
+  site_visits:                    'transportation_logistics',
+
+  // ── Personnel / labor ────────────────────────────────────────────────────
+  professional_fees:              'personnel_labor_fees',
+  personnel_fees:                 'personnel_labor_fees',
+  enumerator_fees:                'personnel_labor_fees',
+  supervisor_fees:                'personnel_labor_fees',
+  supervision_fees:               'personnel_labor_fees',
+  contractor_fees:                'personnel_labor_fees',
+  facilitator_fees:               'personnel_labor_fees',
+  evaluation_team_fees:           'personnel_labor_fees',
+  reviewer_fees:                  'personnel_labor_fees',
+  review_fees:                    'personnel_labor_fees',
+  proposal_writing_fees:          'personnel_labor_fees',
+  key_informant_incentives:       'personnel_labor_fees',
+  incentives:                     'personnel_labor_fees',
+  allowances:                     'personnel_labor_fees',
+  per_diem:                       'personnel_labor_fees',
+
+  // ── Equipment / supplies ─────────────────────────────────────────────────
+  equipment:                      'equipment_supplies',
+  supplies:                       'equipment_supplies',
+  materials:                      'equipment_supplies',
+  data_collection_tools:          'equipment_supplies',
+  printing:                       'equipment_supplies',
+  printing_and_materials:         'equipment_supplies',
+  training_materials:             'equipment_supplies',
+  publication_costs:              'equipment_supplies',
+
+  // ── Field ops / activities ───────────────────────────────────────────────
+  accommodation:                  'field_operations_activities',
+  catering:                       'field_operations_activities',
+  meals:                          'field_operations_activities',
+  training:                       'field_operations_activities',
+  meetings:                       'field_operations_activities',
+  field_operations:               'field_operations_activities',
+  report_production:              'field_operations_activities',
+  venue_costs:                    'field_operations_activities',
+  workshop_facilitation:          'field_operations_activities',
+  construction_costs:             'field_operations_activities',
+  research_protocol_costs:        'field_operations_activities',
+
+  // ── Internet / comms ─────────────────────────────────────────────────────
   internet_and_communication_fees: 'internet_communication',
-  professional_fees: 'personnel_labor_fees',
-  personnel_fees: 'personnel_labor_fees',
-  management_overhead_legacy: 'management_overhead',
+  communications:                 'internet_communication',
+  communication:                  'internet_communication',
+
+  // ── Permits / legal ──────────────────────────────────────────────────────
+  permit_fee:                     'permits_taxes_legal',
+  permits:                        'permits_taxes_legal',
+
+  // ── Overhead / admin ─────────────────────────────────────────────────────
+  management_overhead_legacy:     'management_overhead',
+  overhead:                       'management_overhead',
+  data_management:                'management_overhead',
+  document_management:            'management_overhead',
+
+  // ── Contingency / catch-all ──────────────────────────────────────────────
+  contingency:                    'contingency_reserve',
+  miscellaneous:                  'contingency_reserve',
+  other:                          'contingency_reserve',
 };
 
 const CATEGORY_OPTIONS = [
@@ -164,15 +234,15 @@ export function EditProjectBudgetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-950 to-purple-950 border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-cyan-100">Edit Budget: {projectName}</DialogTitle>
+          <DialogTitle>Edit Budget: {projectName}</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4">
           {/* Reference banner showing project creation budget */}
           {projectTotalAmount != null && projectTotalAmount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-900/40 border border-blue-500/40 text-sm text-blue-200">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300">
               <span className="shrink-0">📌</span>
               <span>
                 Original project funding: <strong>{displayCurrency} {projectTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
@@ -183,7 +253,7 @@ export function EditProjectBudgetDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="edit-total-budget" className="text-cyan-200">
+                <Label htmlFor="edit-total-budget">
                   Total Budget ({displayCurrency})
                 </Label>
                 {projectTotalAmount != null && projectTotalAmount > 0 && (
@@ -192,7 +262,7 @@ export function EditProjectBudgetDialog({
                     variant="ghost"
                     size="sm"
                     onClick={syncFromProjectFunding}
-                    className="h-6 px-2 text-[11px] text-cyan-300 hover:text-cyan-100 hover:bg-cyan-900/30"
+                    className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                     data-testid="button-sync-project-funding"
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />
@@ -208,15 +278,15 @@ export function EditProjectBudgetDialog({
                 value={totalBudget}
                 onChange={e => setTotalBudget(e.target.value)}
                 placeholder="0.00"
-                className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
+                className=""
                 data-testid="input-edit-total-budget"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-budget-period" className="text-cyan-200">Budget Period</Label>
+              <Label htmlFor="edit-budget-period">Budget Period</Label>
               <Select value={budgetPeriod} onValueChange={v => setBudgetPeriod(v as ProjectBudget['budgetPeriod'])}>
-                <SelectTrigger id="edit-budget-period" className="bg-slate-800/50 border-blue-500/30 text-cyan-100" data-testid="select-edit-budget-period">
+                <SelectTrigger id="edit-budget-period" className="" data-testid="select-edit-budget-period">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -231,7 +301,7 @@ export function EditProjectBudgetDialog({
 
           {(budgetPeriod === 'annual' || budgetPeriod === 'quarterly') && (
             <div className="grid gap-2">
-              <Label htmlFor="edit-fiscal-year" className="text-cyan-200">Fiscal Year</Label>
+              <Label htmlFor="edit-fiscal-year">Fiscal Year</Label>
               <Input
                 id="edit-fiscal-year"
                 type="number"
@@ -239,21 +309,21 @@ export function EditProjectBudgetDialog({
                 max="2050"
                 value={fiscalYear}
                 onChange={e => setFiscalYear(e.target.value)}
-                className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
+                className=""
                 data-testid="input-edit-fiscal-year"
               />
             </div>
           )}
 
-          <div className="border-t border-cyan-500/20 pt-4">
+          <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="font-medium text-cyan-100">Budget Line Items</h4>
+              <h4 className="font-medium">Budget Line Items</h4>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addLineItem}
-                className="border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20"
+                className=""
                 data-testid="button-add-line-item"
               >
                 <Plus className="w-4 h-4 mr-1" /> Add Item
@@ -264,9 +334,9 @@ export function EditProjectBudgetDialog({
               {lineItems.map((item, index) => (
                 <div key={item.id} className="grid grid-cols-[1fr_140px_40px] gap-2 items-end">
                   <div className="grid gap-1">
-                    {index === 0 && <Label className="text-xs text-cyan-300/70">Category</Label>}
+                    {index === 0 && <Label className="text-xs text-muted-foreground">Category</Label>}
                     <Select value={item.category} onValueChange={v => updateLineItem(item.id, 'category', v)}>
-                      <SelectTrigger className="bg-slate-800/50 border-blue-500/30 text-cyan-100" data-testid={`select-category-${index}`}>
+                      <SelectTrigger className="" data-testid={`select-category-${index}`}>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -283,7 +353,7 @@ export function EditProjectBudgetDialog({
                     </Select>
                   </div>
                   <div className="grid gap-1">
-                    {index === 0 && <Label className="text-xs text-cyan-300/70">Amount ({displayCurrency})</Label>}
+                    {index === 0 && <Label className="text-xs text-muted-foreground">Amount ({displayCurrency})</Label>}
                     <Input
                       type="number"
                       min="0"
@@ -291,7 +361,7 @@ export function EditProjectBudgetDialog({
                       value={item.amount}
                       onChange={e => updateLineItem(item.id, 'amount', e.target.value)}
                       placeholder="0.00"
-                      className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
+                      className=""
                       data-testid={`input-amount-${index}`}
                     />
                   </div>
@@ -311,15 +381,15 @@ export function EditProjectBudgetDialog({
             </div>
 
             {categoryTotal > 0 && (
-              <div className="mt-3 p-3 rounded-md bg-cyan-900/20 border border-cyan-500/30">
+              <div className="mt-3 p-3 rounded-md bg-muted/40 border">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-cyan-200">Total Allocated:</span>
-                  <span className="text-sm font-bold text-cyan-100">
+                  <span className="text-sm font-medium text-muted-foreground">Total Allocated:</span>
+                  <span className="text-sm font-bold">
                     {displayCurrency} {categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {totalBudget && categoryTotal > parseFloat(totalBudget) && (
-                  <p className="text-sm text-red-300 mt-1">
+                  <p className="text-sm text-red-600 mt-1">
                     Category total exceeds budget by {displayCurrency} {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
                   </p>
                 )}
@@ -328,26 +398,25 @@ export function EditProjectBudgetDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="edit-notes" className="text-cyan-200">Budget Notes</Label>
+            <Label htmlFor="edit-notes">Budget Notes</Label>
             <Textarea
               id="edit-notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="Additional notes about this budget..."
               rows={3}
-              className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
+              className=""
               data-testid="textarea-edit-budget-notes"
             />
           </div>
         </div>
 
-        <div className="flex gap-3 justify-end pt-4 border-t border-cyan-500/20">
+        <div className="flex gap-3 justify-end pt-4 border-t">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20"
             data-testid="button-edit-cancel"
           >
             Cancel
@@ -356,7 +425,6 @@ export function EditProjectBudgetDialog({
             type="button"
             onClick={handleSubmit}
             disabled={!totalBudget || parseFloat(totalBudget) <= 0 || loading}
-            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border border-cyan-400/50"
             data-testid="button-edit-submit"
           >
             {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}

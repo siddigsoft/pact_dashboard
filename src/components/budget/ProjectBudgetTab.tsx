@@ -394,8 +394,8 @@ export function ProjectBudgetTab({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Approval workflow */}
-          {projectBudget.status === 'draft' && (
+          {/* Approval workflow — only privileged roles can UPDATE project_budgets */}
+          {projectBudget.status === 'draft' && isAdmin && (
             <Button size="sm" variant="outline" onClick={handleSubmitForApproval} disabled={submitting} data-testid="button-submit-approval">
               {submitting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
               Submit for Approval
