@@ -80,6 +80,33 @@ export async function provisionProjectChat(
   );
 }
 
+/**
+ * Diffs the project chat room's current participant list against a new team
+ * composition and adds / removes participants accordingly.
+ *
+ * Safe to fire-and-forget: if no chat room exists yet (project was created
+ * before auto-provisioning), or the room is unreachable, this is a silent no-op.
+ *
+ * @param projectId  The project whose chat room to sync
+ * @param addedIds   User IDs newly added to the team
+ * @param removedIds User IDs removed from the team
+ */
+export async function syncProjectChatParticipants(
+  projectId: string,
+  addedIds: string[],
+  removedIds: string[],
+): Promise<void> {
+  if (addedIds.length === 0 && removedIds.length === 0) return;
+
+  const chat = await ChatService.getProjectChat(projectId);
+  if (!chat) return; // No room provisioned yet — nothing to sync
+
+  await Promise.allSettled([
+    ...addedIds.map(uid => ChatService.addParticipant(chat.id, uid)),
+    ...removedIds.map(uid => ChatService.removeParticipant(chat.id, uid)),
+  ]);
+}
+
 export function useProjectChat() {
   const navigate = useNavigate();
   const { toast } = useToast();

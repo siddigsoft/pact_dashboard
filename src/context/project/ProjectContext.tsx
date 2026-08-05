@@ -11,7 +11,7 @@ import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
 import { dispatchNotification } from '@/lib/notify';
 import { logAuditEvent } from '@/utils/audit-logger';
-import { provisionProjectChat } from '@/hooks/use-project-chat';
+import { provisionProjectChat, syncProjectChatParticipants } from '@/hooks/use-project-chat';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -525,6 +525,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const removedMemberIds = Array.from(previousMemberIds).filter(
         id => !updatedTeamMemberIds.has(id) && id !== currentUser?.id
       );
+
+      // ── Sync chat room participants (fire-and-forget) ─────────────────────
+      if (newMemberIds.length > 0 || removedMemberIds.length > 0) {
+        syncProjectChatParticipants(updatedProject.id, newMemberIds, removedMemberIds)
+          .catch(err => {
+            console.warn('[ProjectContext] Failed to sync project chat participants:', err?.message);
+          });
+      }
+
       if (removedMemberIds.length > 0) {
         dispatchNotification({
           event: 'project_member_removed',
@@ -653,6 +662,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           removedMemberIds.length,
           removedMemberIds.map(id => resolveTeamMemberName(existingProject?.team, id)),
         );
+      }
+
+      // ── Sync chat room participants (fire-and-forget) ─────────────────────
+      if (newMemberIds.length > 0 || removedMemberIds.length > 0) {
+        syncProjectChatParticipants(projectId, newMemberIds, removedMemberIds)
+          .catch(err => {
+            console.warn('[ProjectContext] Failed to sync project chat participants:', err?.message);
+          });
       }
 
       // ── Notify members whose role changed (in-app + email) ─────────────────
