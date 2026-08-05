@@ -33,12 +33,12 @@ const BUDGET_CAT_LABEL: Record<string, string> = {
   permits_taxes_legal: 'Permits, Taxes & Legal Fees',
   management_overhead: 'Management & Overhead',
   contingency_reserve: 'Contingency / Reserve',
-  // Legacy keys (existing saved budgets)
+  // Legacy keys (existing saved budgets) — mapped to the same canonical labels as the edit form
   transportation_and_visit_fees: 'Transportation & Logistics',
-  permit_fee: 'Permits & Legal Fees',
+  permit_fee: 'Permits, Taxes & Legal Fees',
   internet_and_communication_fees: 'Internet & Communication',
-  professional_fees: 'Professional Fees',
-  personnel_fees: 'Personnel Fees',
+  professional_fees: 'Personnel & Labor Fees',
+  personnel_fees: 'Personnel & Labor Fees',
   management_overhead_legacy: 'Management & Overhead',
 };
 
