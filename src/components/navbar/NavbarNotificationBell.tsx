@@ -51,7 +51,6 @@ export function NavbarNotificationBell() {
         const unread = (notifications || []).filter((n: any) => !n.isRead);
         await Promise.all(unread.map((n: any) => markNotificationAsRead?.(n.id)));
       }
-      setDirectUnreadCount(0);
     } finally {
       setLoadingNotifs(false);
     }
@@ -73,7 +72,7 @@ export function NavbarNotificationBell() {
           label: 'Cost submissions awaiting your approval',
           count: counts.pendingCostTier1Hub,
           url: '/finance/operational-costs?tab=approvals',
-          icon: <ClipboardCheck className="h-4 w-4 text-amber-500" />,
+          icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'high',
         });
       }
@@ -83,7 +82,7 @@ export function NavbarNotificationBell() {
           label: 'Down-payment requests awaiting approval',
           count: counts.pendingDpSupervisor,
           url: '/finance/down-payments?tab=pending',
-          icon: <CreditCard className="h-4 w-4 text-blue-500" />,
+          icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
       }
@@ -96,7 +95,7 @@ export function NavbarNotificationBell() {
           label: 'New user registrations awaiting approval',
           count: counts.pendingUsers,
           url: '/users?tab=pending-approvals',
-          icon: <UserCheck className="h-4 w-4 text-purple-500" />,
+          icon: <UserCheck className="h-4 w-4" />,
           urgency: 'high',
         });
       }
@@ -106,7 +105,7 @@ export function NavbarNotificationBell() {
           label: 'Cost submissions pending final approval',
           count: counts.pendingTier2Cost,
           url: '/finance/operational-costs?tab=approvals',
-          icon: <ClipboardCheck className="h-4 w-4 text-orange-500" />,
+          icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'normal',
         });
       }
@@ -116,7 +115,7 @@ export function NavbarNotificationBell() {
           label: 'Down-payment requests pending admin review',
           count: counts.pendingDpAdmin,
           url: '/finance/down-payments?tab=pending',
-          icon: <CreditCard className="h-4 w-4 text-red-500" />,
+          icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
       }
@@ -128,7 +127,7 @@ export function NavbarNotificationBell() {
         label: 'Verified sites awaiting MMP approval',
         count: counts.mmpVerifiedSites,
         url: '/mmp?tab=verified',
-        icon: <FileText className="h-4 w-4 text-green-500" />,
+        icon: <FileText className="h-4 w-4" />,
         urgency: 'normal',
       });
     }
@@ -212,84 +211,78 @@ export function NavbarNotificationBell() {
         align="end"
         sideOffset={8}
         collisionPadding={12}
-        className="w-[420px] max-w-[calc(100vw-24px)] p-0 shadow-2xl border border-border/60 rounded-xl overflow-hidden"
+        className="w-[min(440px,calc(100vw-24px))] p-0 shadow-xl border border-border/60 rounded-xl overflow-hidden"
       >
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b bg-gradient-to-r from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Bell className="h-3.5 w-3.5 text-primary" />
+        <div className="flex items-center gap-2 px-4 py-3 border-b bg-background">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Bell className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <span className="font-semibold text-sm leading-none">Notifications</span>
-              {totalBadge > 0 && (
-                <span className="ml-2 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
-                  {displayBadge}
-                </span>
-              )}
-            </div>
+            <span className="font-semibold text-sm text-foreground truncate">Notifications</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={() => void refreshBadgeCounts()}
               title="Refresh"
               data-testid="button-refresh-notifications"
             >
-              <RefreshCw className={cn("h-3 w-3", badgeCountsLoading && "animate-spin")} />
+              <RefreshCw className={cn('h-4 w-4', badgeCountsLoading && 'animate-spin')} />
             </Button>
             {unreadCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground"
+                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
                 onClick={markAllAsRead}
                 disabled={loadingNotifs}
+                title="Mark all as read"
                 data-testid="button-mark-all-read"
               >
-                <CheckCheck className="h-3 w-3 mr-1" />
+                <CheckCheck className="h-3.5 w-3.5 mr-1.5 shrink-0" />
                 Mark all read
               </Button>
             )}
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={() => setOpen(false)}
               data-testid="button-close-notifications"
             >
-              <X className="h-3 w-3" />
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full justify-start rounded-none border-b px-3 h-9 bg-gray-50/80 dark:bg-gray-900/60 gap-1">
+          <TabsList className="w-[calc(100%-1.5rem)] mx-3 mt-3 mb-1 grid grid-cols-2 h-10 rounded-lg bg-muted/70 p-1">
             <TabsTrigger
               value="actions"
-              className="text-xs h-7 px-3 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm rounded-md relative"
+              className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:shadow-sm"
               data-testid="tab-pending-actions"
             >
-              <ClipboardCheck className="h-3 w-3 mr-1.5 opacity-70" />
-              Actions
+              <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
+              <span>Actions</span>
               {pendingActionsCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold">
+                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none">
                   {pendingActionsCount > 99 ? '99+' : pendingActionsCount}
                 </span>
               )}
             </TabsTrigger>
             <TabsTrigger
               value="notifications"
-              className="text-xs h-7 px-3 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm rounded-md relative"
+              className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:shadow-sm"
               data-testid="tab-notifications"
             >
-              <Bell className="h-3 w-3 mr-1.5 opacity-70" />
-              Inbox
+              <Inbox className="h-3.5 w-3.5 shrink-0" />
+              <span>Inbox</span>
               {unreadCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold">
+                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -313,42 +306,38 @@ export function NavbarNotificationBell() {
                   <p className="text-xs opacity-60">No pending actions right now</p>
                 </div>
               ) : (
-                <div className="divide-y divide-border/50">
+                <div className="py-1">
                   {pendingActions.map(action => (
                     <button
                       key={action.id}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/60 active:bg-muted transition-colors text-left group"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 active:bg-muted transition-colors text-left group border-b border-border/40 last:border-b-0"
                       onClick={() => { navigate(action.url); setOpen(false); }}
                       data-testid={`action-item-${action.id}`}
                     >
                       <div className={cn(
-                        "flex-shrink-0 h-9 w-9 rounded-xl flex items-center justify-center",
+                        'flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center',
                         action.urgency === 'high'
-                          ? "bg-red-50 dark:bg-red-900/20 ring-1 ring-red-200 dark:ring-red-800"
-                          : "bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800"
+                          ? 'bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400'
+                          : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400',
                       )}>
                         {action.icon}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground leading-snug">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">
                           {action.label}
                         </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={cn(
-                            "inline-flex items-center justify-center h-4 min-w-[16px] px-1.5 rounded-full text-[10px] font-bold text-white",
-                            action.urgency === 'high' ? "bg-red-500" : "bg-amber-500"
-                          )}>
-                            {action.count}
-                          </span>
-                          <span className={cn(
-                            "text-xs font-medium",
-                            action.urgency === 'high' ? "text-red-500" : "text-amber-500"
-                          )}>
-                            {action.count === 1 ? 'item' : 'items'} pending
-                          </span>
-                        </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
+                          action.urgency === 'high'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+                        )}>
+                          {action.count} pending
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -441,25 +430,25 @@ export function NavbarNotificationBell() {
               )}
             </ScrollArea>
             {/* Footer */}
-            <div className="border-t px-4 py-2 flex items-center justify-between bg-gray-50/80 dark:bg-gray-900/60">
-              <span className="text-[11px] text-muted-foreground">
+            <div className="border-t px-4 py-2.5 flex items-center justify-between bg-muted/30">
+              <span className="text-xs text-muted-foreground">
                 {unreadCount > 0
-                  ? <span className="font-medium text-blue-600 dark:text-blue-400">{unreadCount} unread</span>
-                  : <span className="text-green-600 dark:text-green-400 font-medium">All read</span>
+                  ? <span className="font-medium text-foreground">{unreadCount} unread</span>
+                  : <span className="font-medium text-emerald-600 dark:text-emerald-400">All read</span>
                 }
                 {recentNotifications.length > 0 && (
-                  <span className="ml-1 text-muted-foreground/60">· {recentNotifications.length} shown</span>
+                  <span className="ml-1.5 text-muted-foreground/70">· {recentNotifications.length} shown</span>
                 )}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[11px] px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium"
+                className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium"
                 onClick={() => { navigate('/notifications'); setOpen(false); }}
                 data-testid="link-view-all-notifications"
               >
                 View all
-                <ChevronRight className="h-3 w-3 ml-0.5" />
+                <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
               </Button>
             </div>
           </TabsContent>
