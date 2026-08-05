@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useNavigationGuard } from '@/hooks/use-navigation-guard';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContextSelector } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -79,11 +80,19 @@ const BudgetPage = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const navigate = useNavigate();
-  const { projects } = useProjectContext();
-
   const [selectedProjectIdOverview, setSelectedProjectIdOverview] = useState<string>('');
   const [selectedProjectIdProjects, setSelectedProjectIdProjects] = useState<string>('');
+
+  // Track whether a budget-creation dialog is open so the navigation guard can warn before leaving
+  const [createBudgetDialogOpenOverview, setCreateBudgetDialogOpenOverview] = useState(false);
+  const [createBudgetDialogOpenProjects, setCreateBudgetDialogOpenProjects] = useState(false);
+  const hasUnsavedBudgetWork = createBudgetDialogOpenOverview || createBudgetDialogOpenProjects;
+
+  const navigate = useNavigate();
+  const { projects } = useProjectContext();
+  const { guardedNavigate } = useNavigationGuard(hasUnsavedBudgetWork, {
+    message: 'You have a budget creation form open with unsaved data. Leave anyway?',
+  });
 
   const [actualSpendByProject, setActualSpendByProject] = useState<Record<string, { approved: number; paid: number; count: number }>>({});
 
@@ -361,7 +370,7 @@ const BudgetPage = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/financial-operations')}
+            onClick={() => guardedNavigate('/financial-operations')}
             data-testid="button-goto-financial-ops"
             className="text-muted-foreground hover:text-primary"
           >
@@ -371,7 +380,7 @@ const BudgetPage = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/cost-submission')}
+            onClick={() => guardedNavigate('/cost-submission')}
             data-testid="button-goto-cost-submissions"
             className="text-muted-foreground hover:text-primary"
           >
@@ -555,7 +564,8 @@ const BudgetPage = () => {
                             <CreateProjectBudgetDialog
                               projectId={selectedOverviewProject.id}
                               projectName={selectedOverviewProject.name}
-                              onSuccess={() => setSelectedProjectIdOverview('')}
+                              onSuccess={() => { setSelectedProjectIdOverview(''); setCreateBudgetDialogOpenOverview(false); }}
+                              onOpenChange={setCreateBudgetDialogOpenOverview}
                             />
                           )}
                         </>
@@ -746,7 +756,8 @@ const BudgetPage = () => {
                       <CreateProjectBudgetDialog
                         projectId={selectedProjectsTabProject.id}
                         projectName={selectedProjectsTabProject.name}
-                        onSuccess={() => setSelectedProjectIdProjects('')}
+                        onSuccess={() => { setSelectedProjectIdProjects(''); setCreateBudgetDialogOpenProjects(false); }}
+                        onOpenChange={setCreateBudgetDialogOpenProjects}
                       />
                     )}
                   </>

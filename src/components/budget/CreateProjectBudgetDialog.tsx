@@ -58,7 +58,7 @@ export function CreateProjectBudgetDialog({
   const open = isControlled ? openProp : openInternal;
   const setOpen = isControlled
     ? (v: boolean) => onOpenChange?.(v)
-    : (v: boolean) => setOpenInternal(v);
+    : (v: boolean) => { setOpenInternal(v); onOpenChange?.(v); };
 
   const [totalBudget, setTotalBudget] = useState(() =>
     initialAmount != null && initialAmount > 0 ? initialAmount.toString() : '',
