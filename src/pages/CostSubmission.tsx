@@ -67,7 +67,7 @@ import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel
 import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { dispatchNotification } from '@/lib/notify';
-import { getStatesInHub, normalizeHubId, hubs } from '@/data/sudanStates';
+import { getStatesInHub, normalizeHubId, hubs, getStateName } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub, getAdditionalSupervisorHubIds } from '@/utils/hubAccessControl';
 
 const MGMT_ROLES = [
@@ -439,7 +439,7 @@ const CostSubmission = () => {
       const stateId = u?.stateId || (u as any)?.state;
       if (!stateId || seen.has(stateId)) continue;
       seen.add(stateId);
-      opts.push({ id: stateId, label: stateId });
+      opts.push({ id: stateId, label: getStateName(stateId) });
     }
     return opts.sort((a, b) => a.label.localeCompare(b.label));
   }, [operationalCosts, users]);
@@ -5329,7 +5329,7 @@ const CostSubmission = () => {
                 )}
                 {stateFilter !== 'all' && (
                   <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full px-2 py-0.5 font-medium">
-                    State: {stateFilter}
+                    State: {stateOptions.find(s => s.id === stateFilter)?.label ?? getStateName(stateFilter)}
                     <button onClick={() => setStateFilter('all')} className="ml-0.5 hover:text-emerald-900" data-testid="button-clear-state-filter">✕</button>
                   </span>
                 )}
