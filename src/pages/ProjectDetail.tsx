@@ -1,7 +1,7 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LayoutDashboard, FolderKanban } from 'lucide-react';
 
 import { useProjectContext } from '@/context/project/ProjectContext';
 import {
@@ -127,17 +127,49 @@ const ProjectDetailPage = () => {
     );
   }
 
+  // Auto-redirect countdown when project is not found
+  const [countdown, setCountdown] = useState(5);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!project && authReady && !loading && projects.length > 0) {
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownRef.current!);
+            navigate('/projects');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, [project, authReady, loading, projects.length]);
+
   if (!project && authReady && !loading) {
     return (
-      <div className="max-w-2xl mx-auto my-12">
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Project Not Found</AlertTitle>
-          <AlertDescription>
-            The project you are looking for does not exist or has been removed.
-            <div className="mt-4">
-              <Button variant="outline" onClick={() => navigate('/projects')}>
-                Back to Projects
+      <div className="max-w-xl mx-auto my-16 px-4">
+        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-amber-800 dark:text-amber-300">Project Not Found</AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-400">
+            This project does not exist or has been removed.
+            {projects.length > 0 && (
+              <span className="block mt-1 text-xs text-amber-600 dark:text-amber-500">
+                Redirecting to Projects in {countdown}s…
+              </span>
+            )}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <Button size="sm" variant="outline" onClick={() => navigate('/dashboard')} className="gap-1.5">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Dashboard
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/projects')} className="gap-1.5">
+                <FolderKanban className="h-3.5 w-3.5" />
+                All Projects
               </Button>
             </div>
           </AlertDescription>
