@@ -72,6 +72,16 @@ const Chat: React.FC = () => {
     }
   }, [currentUser, navigate]);
 
+  /** Remove only the deep-link keys; keep `tab` and any other params intact. */
+  const removeProcessedParams = () => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('chatId');
+      next.delete('userId');
+      return next;
+    }, { replace: true });
+  };
+
   useEffect(() => {
     const userId = searchParams.get('userId');
     const chatId = searchParams.get('chatId');
@@ -86,7 +96,7 @@ const Chat: React.FC = () => {
         setActiveChat(existingChat);
         setActiveTab('conversations');
         if (isMobile) setActiveView('chat');
-        setSearchParams({}, { replace: true });
+        removeProcessedParams();
       } else if (currentUser) {
         // Chat not in local state yet — fetch it from DB (e.g. just-created project chat)
         lastProcessedParamRef.current = paramKey;
@@ -112,7 +122,7 @@ const Chat: React.FC = () => {
           setActiveTab('conversations');
           if (isMobile) setActiveView('chat');
         });
-        setSearchParams({}, { replace: true });
+        removeProcessedParams();
       }
     } else if (userId && users.length > 0 && currentUser) {
       const targetUser = users.find(u => u.id === userId);
@@ -138,7 +148,7 @@ const Chat: React.FC = () => {
             }
           });
         }
-        setSearchParams({}, { replace: true });
+        removeProcessedParams();
       }
     }
   }, [searchParams, chats, users, currentUser, isMobile, setActiveChat, createChat, setSearchParams]);

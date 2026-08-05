@@ -54,8 +54,10 @@ export class ChatService {
         const code = (error as any)?.code;
         const msg = (error as any)?.message?.toString().toLowerCase?.() || '';
         const isUniqueViolation = code === '23505' || msg.includes('duplicate key');
-        if (isUniqueViolation && chatData.pair_key && chatData.type === 'private') {
-          const existing = await ChatService.getPrivateChatByPairKey(chatData.pair_key);
+        if (isUniqueViolation && chatData.pair_key) {
+          // Regardless of type, if we have a pair_key and hit a unique violation,
+          // the row already exists — fetch and return it.
+          const existing = await ChatService.getChatByPairKey(chatData.pair_key);
           if (existing) return existing;
         }
         console.error('Error creating chat:', error);
@@ -195,8 +197,47 @@ export class ChatService {
     }
   }
 
-  // Get existing project-linked chat by project ID
+  /**
+   * Get a chat by its pair_key (works for any type).
+   * pair_key is a unique string assigned at creation time to prevent duplicates.
+   */
+  static async getChatByPairKey(pairKey: string): Promise<DatabaseChat | null> {
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select(`
+          id,
+          name,
+          type,
+          is_group,
+          created_by,
+          state_id,
+          related_entity_id,
+          related_entity_type,
+          created_at,
+          updated_at,
+          pair_key
+        `)
+        .eq('pair_key', pairKey)
+        .maybeSingle();
+      if (error) return null;
+      return data as DatabaseChat | null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get the project-scoped group chat.
+   * Uses the deterministic pair_key 'project:<projectId>' for reliable single-row lookup.
+   * Falls back to querying by related_entity_id for rooms created before this convention.
+   */
   static async getProjectChat(projectId: string): Promise<DatabaseChat | null> {
+    // Primary: deterministic pair_key lookup (avoids maybeSingle issues with duplicates)
+    const byKey = await ChatService.getChatByPairKey(`project:${projectId}`);
+    if (byKey) return byKey;
+
+    // Fallback: legacy rooms created without a pair_key, take oldest to be deterministic
     try {
       const { data, error } = await supabase
         .from('chats')
@@ -215,6 +256,8 @@ export class ChatService {
         `)
         .eq('related_entity_type', 'project')
         .eq('related_entity_id', projectId)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
       if (error) return null;
       return data as DatabaseChat | null;

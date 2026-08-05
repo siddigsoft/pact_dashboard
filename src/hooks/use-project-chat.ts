@@ -2,19 +2,18 @@
  * useProjectChat — find or create a project-scoped group chat room.
  *
  * On first call for a project it:
- *   1. Checks whether a `chats` row with
- *      `related_entity_type='project'` and `related_entity_id=projectId` already exists.
- *   2. Creates one if missing (group type, name = "<project name> Team").
+ *   1. Checks whether a `chats` row with pair_key='project:<projectId>' already exists.
+ *   2. Creates one if missing (group type, related_entity_type='project').
  *   3. Syncs participants so every current team member is in the room.
- *   4. Returns the chat ID and navigates the user to the Communication Hub
- *      with that chat pre-selected.
+ *   4. Navigates to the Communication Hub with that chat pre-selected.
  *
- * Subsequent calls reuse the same room and only add newly-joined members.
+ * Duplicate-safety: the deterministic pair_key means even if two users click
+ * "Message Team" simultaneously, `ChatService.createChat` will catch the unique
+ * violation and return the already-created room instead of creating a second one.
  */
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useChat } from '@/context/chat/ChatContextSupabase';
+import { useToast } from '@/hooks/use-toast';
 import { ChatService } from '@/services/ChatService';
 import type { Project } from '@/types/project';
 
@@ -28,15 +27,20 @@ function getTeamMemberIds(project: Project): string[] {
   return Array.from(ids);
 }
 
+/** Deterministic pair_key used to identify a project's group chat room. */
+function projectChatKey(projectId: string) {
+  return `project:${projectId}`;
+}
+
 export function useProjectChat() {
-  const { chats, setActiveChat } = useChat();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
   /**
    * Open (or create) the project chat room and navigate to the Chat page.
-   * @param project   Full project object (needs `.id`, `.name`, `.team`)
-   * @param currentUserId  The logged-in user's ID so they are always included
+   * @param project        Full project object (needs `.id`, `.name`, `.team`)
+   * @param currentUserId  The logged-in user's ID — always added to the room
    */
   const openProjectChat = useCallback(async (
     project: Project,
@@ -47,36 +51,22 @@ export function useProjectChat() {
 
     try {
       const memberIds = getTeamMemberIds(project);
-      // Always include the current user even if they're not in the team object yet
+      // Always include the initiating user even if not in the team object yet
       if (currentUserId && !memberIds.includes(currentUserId)) {
         memberIds.push(currentUserId);
       }
 
-      /* ── 1. Check local state first (already loaded chats) ── */
+      const pairKey = projectChatKey(project.id);
+
+      /* ── 1. Find existing room by deterministic pair_key ── */
       let chatId: string | null = null;
-
-      const localChat = chats.find(
-        c => c.relatedEntityType === 'project' && c.relatedEntityId === project.id,
-      );
-
-      if (localChat) {
-        chatId = localChat.id;
-      } else {
-        /* ── 2. Query DB for existing project chat ── */
-        const dbChat = await ChatService.getProjectChat(project.id);
-        if (dbChat) {
-          chatId = dbChat.id;
-        }
+      const existing = await ChatService.getProjectChat(project.id);
+      if (existing) {
+        chatId = existing.id;
       }
 
-      if (chatId) {
-        /* ── 3. Sync participants (idempotent addParticipant ignores duplicates) ── */
-        const existing = await ChatService.getChatParticipants(chatId);
-        const existingIds = (existing ?? []).map(p => p.user_id);
-        const toAdd = memberIds.filter(id => !existingIds.includes(id));
-        await Promise.all(toAdd.map(uid => ChatService.addParticipant(chatId!, uid).catch(() => {})));
-      } else {
-        /* ── 4. Create a brand-new project group chat ── */
+      if (!chatId) {
+        /* ── 2. Create a new project group chat ── */
         const newDbChat = await ChatService.createChat({
           name: `${project.name} Team`,
           type: 'group',
@@ -84,25 +74,60 @@ export function useProjectChat() {
           created_by: currentUserId,
           related_entity_id: project.id,
           related_entity_type: 'project',
+          pair_key: pairKey,
         });
 
-        if (!newDbChat) throw new Error('Failed to create project chat');
+        if (!newDbChat) throw new Error('Failed to create project chat room');
         chatId = newDbChat.id;
-
-        // Add all team members as participants
-        await Promise.all(
-          memberIds.map(uid => ChatService.addParticipant(chatId!, uid).catch(() => {})),
-        );
       }
 
-      /* ── 5. Navigate to Communication Hub with chat pre-selected ── */
+      /* ── 3. Sync participants ── */
+      const existingParticipants = await ChatService.getChatParticipants(chatId);
+      const existingIds = new Set((existingParticipants ?? []).map(p => p.user_id));
+      const toAdd = memberIds.filter(id => !existingIds.has(id));
+
+      // Ensure the initiator is in the room first — this is critical, surface any failure
+      if (toAdd.includes(currentUserId)) {
+        try {
+          await ChatService.addParticipant(chatId, currentUserId);
+        } catch (err: any) {
+          // If it's not a duplicate-key error, surface it to the user
+          const isDuplicate = err?.message?.includes('duplicate') || err?.message?.includes('already exists');
+          if (!isDuplicate) {
+            throw new Error(`Could not add you to the project chat: ${err?.message ?? 'Unknown error'}`);
+          }
+        }
+      }
+
+      // Add remaining members — log failures but don't block navigation
+      const otherToAdd = toAdd.filter(id => id !== currentUserId);
+      const results = await Promise.allSettled(
+        otherToAdd.map(uid => ChatService.addParticipant(chatId!, uid)),
+      );
+      results.forEach((result, i) => {
+        if (result.status === 'rejected') {
+          const uid = otherToAdd[i];
+          const isDuplicate = result.reason?.message?.includes('duplicate') ||
+            result.reason?.message?.includes('already exists');
+          if (!isDuplicate) {
+            console.warn(`[useProjectChat] Could not add member ${uid} to chat ${chatId}:`, result.reason);
+          }
+        }
+      });
+
+      /* ── 4. Navigate to Communication Hub with chat pre-selected ── */
       navigate(`/communication-hub?tab=chat&chatId=${chatId}`);
-    } catch (err) {
-      console.error('[useProjectChat] Error opening project chat:', err);
+    } catch (err: any) {
+      console.error('[useProjectChat] Error:', err);
+      toast({
+        title: 'Could not open project chat',
+        description: err?.message ?? 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setBusy(false);
     }
-  }, [busy, chats, navigate]);
+  }, [busy, navigate, toast]);
 
   return { openProjectChat, busy };
 }
