@@ -374,6 +374,9 @@
     if (!isHidden('/my-tasks')) {
       workspaceItems.push({ id: 'my-tasks', title: "My Tasks", url: "/my-tasks", icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
     }
+    if (!isHidden('/my-projects')) {
+      workspaceItems.push({ id: 'my-projects', title: "My Projects", url: "/my-projects", icon: FolderKanban, priority: 2.5, isPinned: isPinned('/my-projects') });
+    }
     if (!isHidden('/team-tasks') && (isSuperAdmin || isAdmin || ['ceo','coo','cto','hr_manager'].includes(defaultRole.toLowerCase()))) {
       workspaceItems.push({ id: 'team-tasks', title: "Team Monitor", url: "/team-tasks", icon: Users, priority: 3, isPinned: isPinned('/team-tasks') });
     }
