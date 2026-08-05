@@ -346,6 +346,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const watchBudgetTotal = form.watch('budgetTotal') ?? 0;
   const watchBudgetCurrency = form.watch('budgetCurrency') || 'USD';
 
+  // Formatted display string for Budget Total (shows commas + decimals)
+  const formatBudgetDisplay = (n: number) =>
+    n > 0 ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+  const [budgetDisplayValue, setBudgetDisplayValue] = useState(() =>
+    formatBudgetDisplay(form.getValues('budgetTotal') ?? 0)
+  );
+
   // Budget categories react to selected project type
   const budgetCategories = getProjectTypeConfig(watchProjectType || 'tpm').budgetCategories;
   const categoryTotal = Object.values(categoryValues).reduce((s, v) => s + (parseFloat(v) || 0), 0);
@@ -887,13 +894,23 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       </FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="e.g. 500,000.00"
-                          {...field}
-                          value={field.value === 0 ? '' : field.value}
-                          onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          value={budgetDisplayValue}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            setBudgetDisplayValue(e.target.value.replace(/[^0-9.,]/g, ''));
+                            field.onChange(parseFloat(raw) || 0);
+                          }}
+                          onBlur={() => {
+                            setBudgetDisplayValue(formatBudgetDisplay(field.value ?? 0));
+                            field.onBlur();
+                          }}
+                          onFocus={() => {
+                            const v = field.value ?? 0;
+                            setBudgetDisplayValue(v > 0 ? String(v) : '');
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
