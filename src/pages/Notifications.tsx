@@ -423,7 +423,7 @@ const Notifications: FC = () => {
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
-  const { notifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
+  const { notifications, markNotificationAsRead, clearAllNotifications, hasMore, loadingMore, loadMore } = useNotifications();
 
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'actions' | 'analytics'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1059,6 +1059,14 @@ const Notifications: FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {hasMore && activeTab !== 'analytics' && (
+          <div className="flex justify-center pt-6 max-w-3xl">
+            <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </Button>
           </div>
         )}
       </div>
