@@ -178,7 +178,9 @@ const BUDGET_CAT_TO_EXPENSE: Record<string, string> = {
   other:                           'other',
 };
 
-// Human labels for budget category keys
+// Human labels for budget category keys.
+// All legacy keys resolve to the same canonical label used in BudgetCard and
+// EditProjectBudgetDialog so every surface shows consistent category names.
 const BUDGET_CAT_LABELS: Record<string, string> = {
   // ── Canonical (standardised) keys ────────────────────────────────────────
   personnel_labor_fees:            'Personnel & Labor Fees',
@@ -190,72 +192,72 @@ const BUDGET_CAT_LABELS: Record<string, string> = {
   management_overhead:             'Management & Overhead',
   contingency_reserve:             'Contingency / Reserve',
 
-  // ── Transportation legacy keys ────────────────────────────────────────────
-  transportation_and_visit_fees:   'Transportation & Visit Fees',
-  transportation:                  'Transportation',
-  transport:                       'Transport',
-  vehicle:                         'Vehicle',
-  site_visits:                     'Site Visits',
+  // ── Transportation legacy keys → canonical ────────────────────────────────
+  transportation_and_visit_fees:   'Transportation & Logistics',
+  transportation:                  'Transportation & Logistics',
+  transport:                       'Transportation & Logistics',
+  vehicle:                         'Transportation & Logistics',
+  site_visits:                     'Transportation & Logistics',
 
-  // ── Personnel / labor legacy keys ─────────────────────────────────────────
-  professional_fees:               'Professional Fees',
-  personnel_fees:                  'Personnel Fees',
-  enumerator_fees:                 'Enumerator Fees',
-  supervisor_fees:                 'Supervisor Fees',
-  supervision_fees:                'Supervision Fees',
-  contractor_fees:                 'Contractor Fees',
-  facilitator_fees:                'Facilitator Fees',
-  evaluation_team_fees:            'Evaluation Team Fees',
-  reviewer_fees:                   'Reviewer Fees',
-  review_fees:                     'Review Fees',
-  proposal_writing_fees:           'Proposal Writing Fees',
-  key_informant_incentives:        'Key Informant Incentives',
-  incentives:                      'Incentives',
-  allowances:                      'Allowances',
-  per_diem:                        'Per Diem',
+  // ── Personnel / labor legacy keys → canonical ─────────────────────────────
+  professional_fees:               'Personnel & Labor Fees',
+  personnel_fees:                  'Personnel & Labor Fees',
+  enumerator_fees:                 'Personnel & Labor Fees',
+  supervisor_fees:                 'Personnel & Labor Fees',
+  supervision_fees:                'Personnel & Labor Fees',
+  contractor_fees:                 'Personnel & Labor Fees',
+  facilitator_fees:                'Personnel & Labor Fees',
+  evaluation_team_fees:            'Personnel & Labor Fees',
+  reviewer_fees:                   'Personnel & Labor Fees',
+  review_fees:                     'Personnel & Labor Fees',
+  proposal_writing_fees:           'Personnel & Labor Fees',
+  key_informant_incentives:        'Personnel & Labor Fees',
+  incentives:                      'Personnel & Labor Fees',
+  allowances:                      'Personnel & Labor Fees',
+  per_diem:                        'Personnel & Labor Fees',
 
-  // ── Equipment / supplies legacy keys ──────────────────────────────────────
+  // ── Equipment / supplies legacy keys → canonical ──────────────────────────
   equipment:                       'Equipment & Supplies',
-  supplies:                        'Supplies',
-  materials:                       'Materials',
-  data_collection_tools:           'Data Collection Tools',
-  printing:                        'Printing & Materials',
-  printing_and_materials:          'Printing & Materials',
-  training_materials:              'Training Materials',
-  publication_costs:               'Publication Costs',
+  supplies:                        'Equipment & Supplies',
+  materials:                       'Equipment & Supplies',
+  data_collection_tools:           'Equipment & Supplies',
+  printing:                        'Equipment & Supplies',
+  printing_and_materials:          'Equipment & Supplies',
+  training_materials:              'Equipment & Supplies',
+  publication_costs:               'Equipment & Supplies',
 
-  // ── Field ops / activities legacy keys ────────────────────────────────────
-  accommodation:                   'Accommodation',
-  catering:                        'Catering',
-  meals:                           'Meals',
-  training:                        'Training',
-  meetings:                        'Meetings & Events',
-  field_operations:                'Field Operations',
-  report_production:               'Report Production',
-  venue_costs:                     'Venue Costs',
-  workshop_facilitation:           'Workshop Facilitation',
-  construction_costs:              'Construction Costs',
-  research_protocol_costs:         'Research Protocol Costs',
+  // ── Field ops / activities legacy keys → canonical ────────────────────────
+  accommodation:                   'Field Operations & Activities',
+  catering:                        'Field Operations & Activities',
+  meals:                           'Field Operations & Activities',
+  training:                        'Field Operations & Activities',
+  meetings:                        'Field Operations & Activities',
+  field_operations:                'Field Operations & Activities',
+  report_production:               'Field Operations & Activities',
+  venue_costs:                     'Field Operations & Activities',
+  workshop_facilitation:           'Field Operations & Activities',
+  construction_costs:              'Field Operations & Activities',
+  research_protocol_costs:         'Field Operations & Activities',
 
-  // ── Internet / communications legacy keys ─────────────────────────────────
-  internet_and_communication_fees: 'Internet & Communications',
-  communications:                  'Communications',
-  communication:                   'Communication',
+  // ── Internet / communications legacy keys → canonical ─────────────────────
+  internet_and_communication_fees: 'Internet & Communication',
+  communications:                  'Internet & Communication',
+  communication:                   'Internet & Communication',
 
-  // ── Permits / legal legacy keys ───────────────────────────────────────────
-  permit_fee:                      'Permit Fees',
-  permits:                         'Permits',
+  // ── Permits / legal legacy keys → canonical ───────────────────────────────
+  permit_fee:                      'Permits, Taxes & Legal Fees',
+  permits:                         'Permits, Taxes & Legal Fees',
 
-  // ── Overhead / admin legacy keys ──────────────────────────────────────────
+  // ── Overhead / admin legacy keys → canonical ──────────────────────────────
   management_overhead_legacy:      'Management & Overhead',
-  overhead:                        'Overhead',
-  data_management:                 'Data Management',
-  document_management:             'Document Management',
+  overhead:                        'Management & Overhead',
+  data_management:                 'Management & Overhead',
+  document_management:             'Management & Overhead',
 
-  // ── Contingency / catch-all legacy keys ───────────────────────────────────
-  contingency:                     'Contingency',
-  miscellaneous:                   'Miscellaneous',
-  other:                           'Other',
+  // ── Contingency / catch-all legacy keys → canonical ───────────────────────
+  contingency:                     'Contingency / Reserve',
+  miscellaneous:                   'Contingency / Reserve',
+  other:                           'Contingency / Reserve',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
