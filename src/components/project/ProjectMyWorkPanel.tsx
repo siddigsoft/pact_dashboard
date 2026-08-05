@@ -76,9 +76,13 @@ interface Props {
   currentUserName?: string;
   /** Total project budget amount (for % fee calculation) */
   projectBudgetTotal?: number;
+  /** Called when the user clicks "Team Chat" — opens the inline chat drawer */
+  onOpenChatDrawer?: () => void;
+  /** True while the chat room is being found / provisioned */
+  chatDrawerLoading?: boolean;
 }
 
-export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal }: Props) {
+export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal, onOpenChatDrawer, chatDrawerLoading }: Props) {
   const navigate = useNavigate();
   const { openProjectChat, busy: chatBusy } = useProjectChat();
   const [tasks, setTasks] = useState<FieldTask[]>([]);
@@ -161,9 +165,14 @@ export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, pr
             size="sm"
             variant="outline"
             className="h-7 text-[11px] gap-1.5"
-            onClick={() => navigate(`/projects/${project.id}?tab=comments`)}
+            disabled={chatDrawerLoading}
+            onClick={() => onOpenChatDrawer
+              ? onOpenChatDrawer()
+              : navigate(`/projects/${project.id}?tab=comments`)}
           >
-            <MessageSquare className="h-3.5 w-3.5" />
+            {chatDrawerLoading
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <MessageSquare className="h-3.5 w-3.5" />}
             Team Chat
           </Button>
           <Button

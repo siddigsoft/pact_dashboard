@@ -8,6 +8,7 @@ export interface ProjectComment {
   author_id: string;
   content: string;
   created_at: string;
+  parent_id?: string | null;
   author_name?: string;
   optimistic?: boolean;
 }
@@ -18,6 +19,7 @@ interface CommentRow {
   author_id: string;
   content: string;
   created_at: string;
+  parent_id: string | null;
   // PostgREST may type a many-to-one embed as an object or a 1-element array.
   profiles: { full_name: string | null } | { full_name: string | null }[] | null;
 }
@@ -40,27 +42,46 @@ export function useProjectComments(projectId: string) {
     author_id: row.author_id,
     content: row.content,
     created_at: row.created_at,
+    parent_id: row.parent_id ?? null,
     author_name: authorNameFromRow(row.profiles),
   });
 
   const fetchComments = useCallback(async () => {
-    // Disambiguate profiles FK: table has both author_id and user_id → profiles.
-    const { data, error } = await supabase
-      .from('project_comments')
-      .select('id, project_id, author_id, content, created_at, profiles!project_comments_author_id_fkey(full_name)')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
+    // Try selecting parent_id (requires migration 20260805_project_comments_replies).
+    // Fall back to query without parent_id if the column doesn't exist yet.
+    let data: CommentRow[] | null = null;
 
-    if (error) {
-      console.error('Failed to load comments:', error);
-      toast({
-        title: 'Could not load comments',
-        description: error.message,
-        variant: 'destructive',
-      });
+    const withParent = await supabase
+      .from('project_comments')
+      .select('id, project_id, author_id, content, created_at, parent_id, profiles!project_comments_author_id_fkey(full_name)')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true });
+
+    if (withParent.error?.message?.includes('parent_id') || withParent.error?.code === '42703') {
+      // Column not yet added — fall back without parent_id (replies disabled until migration runs)
+      const fallback = await supabase
+        .from('project_comments')
+        .select('id, project_id, author_id, content, created_at, profiles!project_comments_author_id_fkey(full_name)')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true });
+
+      if (fallback.error) {
+        console.error('Failed to load comments:', fallback.error);
+        toast({ title: 'Could not load comments', description: fallback.error.message, variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+      data = ((fallback.data ?? []) as any[]).map(r => ({ ...r, parent_id: null }));
+    } else if (withParent.error) {
+      console.error('Failed to load comments:', withParent.error);
+      toast({ title: 'Could not load comments', description: withParent.error.message, variant: 'destructive' });
+      setLoading(false);
+      return;
     } else {
-      setComments(((data ?? []) as CommentRow[]).map(mapRow));
+      data = (withParent.data ?? []) as CommentRow[];
     }
+
+    setComments(data.map(mapRow));
     setLoading(false);
   }, [projectId, toast]);
 
@@ -90,7 +111,12 @@ export function useProjectComments(projectId: string) {
   }, [projectId, fetchComments]);
 
   const addComment = useCallback(
-    async (content: string, authorId: string, authorName?: string): Promise<boolean> => {
+    async (
+      content: string,
+      authorId: string,
+      authorName?: string,
+      parentId?: string | null,
+    ): Promise<boolean> => {
       if (!content.trim()) return false;
       setSubmitting(true);
 
@@ -102,16 +128,18 @@ export function useProjectComments(projectId: string) {
         author_id: authorId,
         content: content.trim(),
         created_at: new Date().toISOString(),
+        parent_id: parentId ?? null,
         author_name: authorName ?? 'You',
         optimistic: true,
       };
-      setComments((prev) => [optimisticComment, ...prev]);
+      setComments((prev) => [...prev, optimisticComment]);
 
       const { error } = await supabase.from('project_comments').insert({
         project_id: projectId,
         author_id: authorId,
         user_id: authorId,
         content: content.trim(),
+        ...(parentId ? { parent_id: parentId } : {}),
       });
 
       setSubmitting(false);
@@ -123,8 +151,7 @@ export function useProjectComments(projectId: string) {
         return false;
       }
 
-      // The Realtime subscription will fire fetchComments() to replace the optimistic row with the real one.
-      // Ensure no duplicate by removing the optimistic entry now (fetchComments replaces it).
+      // The Realtime subscription will fire fetchComments() to replace the optimistic row.
       setComments((prev) => prev.filter((c) => c.id !== optimisticId));
       await fetchComments();
       return true;
@@ -134,12 +161,11 @@ export function useProjectComments(projectId: string) {
 
   const deleteComment = useCallback(
     async (commentId: string): Promise<boolean> => {
-      // Optimistic delete
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      // Optimistic delete (also removes replies if cascade is set up in DB)
+      setComments((prev) => prev.filter((c) => c.id !== commentId && c.parent_id !== commentId));
 
       const { error } = await supabase.from('project_comments').delete().eq('id', commentId);
       if (error) {
-        // Rollback: re-fetch to restore the deleted item
         fetchComments();
         toast({ title: 'Failed to delete comment', description: error.message, variant: 'destructive' });
         return false;
