@@ -15,6 +15,7 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { ChatService } from '@/services/ChatService';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import type { Project } from '@/types/project';
 
 /** Gather all unique member user-IDs from a project's team field. */
@@ -105,6 +106,91 @@ export async function syncProjectChatParticipants(
     ...addedIds.map(uid => ChatService.addParticipant(chat.id, uid)),
     ...removedIds.map(uid => ChatService.removeParticipant(chat.id, uid)),
   ]);
+}
+
+/**
+ * Manages the open/close state for an inline project chat drawer.
+ *
+ * On open:
+ *   1. Finds or provisions the project chat room.
+ *   2. Fetches its participant list.
+ *   3. Sets `activeChat` in the global chat context so `<ChatWindow>` renders it.
+ *   4. Opens the drawer.
+ *
+ * On close: clears `activeChat` and closes the drawer.
+ */
+export function useProjectChatDrawer(project: Project, currentUserId: string) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const { setActiveChat } = useChat();
+  const { toast } = useToast();
+
+  const openDrawer = useCallback(async () => {
+    if (loading || !currentUserId) return;
+    setLoading(true);
+    try {
+      // ── 1. Find or provision the chat room ──
+      let dbChat = await ChatService.getProjectChat(project.id);
+      if (!dbChat) {
+        await provisionProjectChat(project, currentUserId);
+        dbChat = await ChatService.getProjectChat(project.id);
+      }
+      if (!dbChat) throw new Error('Could not create project chat room');
+
+      // ── 2. Ensure the current user is a participant (mirror openProjectChat initiator-first logic) ──
+      try {
+        await ChatService.addParticipant(dbChat.id, currentUserId);
+      } catch (err: any) {
+        // Duplicate-key means already a member — safe to continue
+        const isDuplicate =
+          err?.message?.includes('duplicate') || err?.message?.includes('already exists');
+        if (!isDuplicate) {
+          throw new Error(`Could not join the project chat: ${err?.message ?? 'Unknown error'}`);
+        }
+      }
+
+      // ── 3. Fetch the updated participant list ──
+      const participants = await ChatService.getChatParticipants(dbChat.id);
+      const participantIds = (participants ?? []).map(p => p.user_id);
+
+      // ── 4. Build a Chat object and set it as active ──
+      const chatObj = {
+        id: dbChat.id,
+        name: dbChat.name || `${project.name} Team`,
+        type: dbChat.type,
+        isGroup: dbChat.is_group,
+        createdBy: dbChat.created_by,
+        stateId: dbChat.state_id,
+        relatedEntityId: dbChat.related_entity_id,
+        relatedEntityType: dbChat.related_entity_type,
+        createdAt: dbChat.created_at,
+        updatedAt: dbChat.updated_at,
+        participants: participantIds,
+        status: 'active' as const,
+      };
+      setActiveChat(chatObj);
+
+      // ── 5. Open the drawer ──
+      setIsOpen(true);
+    } catch (err: any) {
+      console.error('[useProjectChatDrawer] Failed to open chat drawer:', err?.message);
+      toast({
+        title: 'Could not open project chat',
+        description: err?.message ?? 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [project, currentUserId, loading, setActiveChat, toast]);
+
+  const closeDrawer = useCallback(() => {
+    setIsOpen(false);
+    setActiveChat(null);
+  }, [setActiveChat]);
+
+  return { isOpen, openDrawer, closeDrawer, loading };
 }
 
 export function useProjectChat() {

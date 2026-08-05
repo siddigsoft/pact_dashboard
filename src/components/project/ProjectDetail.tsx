@@ -75,6 +75,8 @@ import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 import { ProjectMyWorkPanel } from './ProjectMyWorkPanel';
+import { ProjectChatDrawer } from './ProjectChatDrawer';
+import { useProjectChatDrawer } from '@/hooks/use-project-chat';
 
 import { Project, calcMemberTotalCost } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -278,6 +280,14 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const flow = useProjectFlow(project);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const { currentUser } = useUser();
+
+  // Inline project chat drawer
+  const {
+    isOpen: chatDrawerOpen,
+    openDrawer: openChatDrawer,
+    closeDrawer: closeChatDrawer,
+    loading: chatDrawerLoading,
+  } = useProjectChatDrawer(project, currentUser?.id ?? '');
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -287,6 +297,23 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
       (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
   const canArchive = isAdminUser || isProjectManagerUser;
+
+  /**
+   * A "restricted member" is a team member who has no elevated role:
+   * they are on the project team but are not an admin, FOM, PM (anywhere),
+   * Country Director, or Senior Operations Lead.
+   * They see only the tabs relevant to their own work, not financial/management data.
+   */
+  const hasElevatedRole =
+    isAdminUser ||
+    isProjectManagerUser ||
+    hasAnyRole(['projectManager', 'countryDirector', 'seniorOperationsLead', 'cd', 'sol']);
+  const isRestrictedMember = !!currentUser?.id && !hasElevatedRole;
+
+  /** Tabs that restricted team members are allowed to see */
+  const RESTRICTED_MEMBER_TABS = new Set([
+    'overview', 'field_tasks', 'comments', 'documents', 'calendar', 'milestones',
+  ]);
 
   // Weekly dashboard: superAdmin + admin only (NOT fom / CD / others)
   // projectManager sees ONLY their own project's dashboard
@@ -321,6 +348,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       markCommentsRead();
     }
   }, [activeTab, markCommentsRead]);
+
+  // If a restricted member lands on a tab they can't see (e.g. via URL), bounce to overview
+  useEffect(() => {
+    if (isRestrictedMember && !RESTRICTED_MEMBER_TABS.has(activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [isRestrictedMember, activeTab]);
 
   useEffect(() => {
     if (!project.partnerId) { setPartnerName(null); return; }
@@ -914,16 +948,18 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               {/* Currency display preference */}
               <CurrencySwitcher mode="split" />
 
-              {/* PDF Export */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportPdf}
-                data-testid="button-export-pdf"
-              >
-                <Download className="h-4 w-4 mr-1.5" />
-                Export PDF
-              </Button>
+              {/* PDF Export — hidden for restricted team members */}
+              {!isRestrictedMember && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportPdf}
+                  data-testid="button-export-pdf"
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Export PDF
+                </Button>
+              )}
 
               {/* Close Project (with readiness gate) */}
               {canArchive && !project.archived && (
@@ -1029,7 +1065,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       <Tabs defaultValue="overview" value={activeTab} onValueChange={v => { setActiveTab(v); setTabDropOpen(false); }}>
         {/* ── Tab dropdown selector ── */}
         {(() => {
-          const projectTabs = [
+          const allProjectTabs = [
             { value: 'overview',    label: 'Overview',                                    icon: LayoutGrid },
             { value: 'activities', label: typeConfig.tabLabels.planning ?? 'Activities', icon: Activity },
             { value: 'team',       label: 'Team',                                         icon: Users },
@@ -1047,6 +1083,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'changelog',  label: 'Change Log',                                   icon: History },
             { value: 'reports',    label: 'Reports',                                      icon: FileBarChart2 },
           ];
+          // Restricted team members (non-admin, non-PM) only see their own work tabs
+          const projectTabs = isRestrictedMember
+            ? allProjectTabs.filter(t => RESTRICTED_MEMBER_TABS.has(t.value))
+            : allProjectTabs;
           const currentTab = projectTabs.find(t => t.value === activeTab) ?? projectTabs[0];
           const CurrentIcon = currentTab.icon;
           const idx = projectTabs.findIndex(t => t.value === activeTab);
@@ -1123,6 +1163,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               currentUserId={currentUser.id}
               currentUserName={currentUser.fullName}
               projectBudgetTotal={budgetSummary?.total}
+              onOpenChatDrawer={openChatDrawer}
+              chatDrawerLoading={chatDrawerLoading}
             />
           )}
 
@@ -1978,6 +2020,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+      {/* ── Inline project chat drawer ── */}
+      <ProjectChatDrawer
+        open={chatDrawerOpen}
+        onClose={closeChatDrawer}
+        projectName={project.name}
+      />
     </div>
   );
 };

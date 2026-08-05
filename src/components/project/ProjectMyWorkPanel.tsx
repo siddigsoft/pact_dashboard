@@ -11,12 +11,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useProjectChat } from '@/hooks/use-project-chat';
+import { useProjectChatUnread } from '@/hooks/useProjectChatUnread';
 import {
-  CheckSquare, Receipt, DollarSign, MessageSquare, ArrowRight,
+  CheckSquare, Receipt, DollarSign, MessageSquare, ExternalLink,
   Clock, CheckCircle2, AlertCircle, Circle, Loader2, Users,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { calcMemberTotalCost } from '@/types/project';
 import type { Project, ProjectTeamMember } from '@/types/project';
@@ -76,11 +78,16 @@ interface Props {
   currentUserName?: string;
   /** Total project budget amount (for % fee calculation) */
   projectBudgetTotal?: number;
+  /** Called when the user clicks "Team Chat" — opens the inline chat drawer */
+  onOpenChatDrawer?: () => void;
+  /** True while the chat room is being found / provisioned */
+  chatDrawerLoading?: boolean;
 }
 
-export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal }: Props) {
+export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal, onOpenChatDrawer, chatDrawerLoading }: Props) {
   const navigate = useNavigate();
   const { openProjectChat, busy: chatBusy } = useProjectChat();
+  const { unreadCount: chatUnread, markAsRead: markChatRead } = useProjectChatUnread(project.id, currentUserId);
   const [tasks, setTasks] = useState<FieldTask[]>([]);
   const [costs, setCosts] = useState<CostSub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,29 +162,63 @@ export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, pr
             {myRole}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 text-[11px] gap-1.5"
-            onClick={() => navigate(`/projects/${project.id}?tab=comments`)}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Team Chat
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 text-[11px] gap-1 text-primary"
-            disabled={chatBusy}
-            onClick={() => openProjectChat(project, currentUserId)}
-          >
-            {chatBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-            Message Team
-          </Button>
-        </div>
+        <TooltipProvider delayDuration={400}>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] gap-1.5 relative"
+                  disabled={chatDrawerLoading}
+                  onClick={() => {
+                    markChatRead();
+                    if (onOpenChatDrawer) {
+                      onOpenChatDrawer();
+                    } else {
+                      navigate(`/projects/${project.id}?tab=comments`);
+                    }
+                  }}
+                >
+                  {chatDrawerLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <MessageSquare className="h-3.5 w-3.5" />}
+                  Team Chat
+                  {chatUnread > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white leading-none">
+                      {chatUnread > 99 ? '99+' : chatUnread}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Open the inline chat panel for this project
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px] gap-1 text-muted-foreground hover:text-primary"
+                  disabled={chatBusy}
+                  onClick={() => openProjectChat(project, currentUserId)}
+                >
+                  {chatBusy
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <ExternalLink className="h-3 w-3" />}
+                  Message Team
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Open the Communication Hub for this project
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
       {!hasContent ? (
