@@ -535,6 +535,265 @@ function AdvanceRequestsReportContent() {
   const [reclaimSelectedIds, setReclaimSelectedIds] = useState<Set<string>>(new Set());
   const [bulkResolveProcessing, setBulkResolveProcessing] = useState(false);
   const [digestSending, setDigestSending] = useState(false);
+
+  // ── Reclaim History Report ────────────────────────────────────────────────
+  interface ReclaimHistoryRow {
+    mmpId: string;
+    mmpName: string;
+    siteName: string;
+    siteEntryId: string | null;
+    coordinatorId: string | null;
+    coordinatorName: string;
+    reclaimedAt: string;
+    reclaimReason: string;
+    reclaimReasonCategory: string;
+    advanceId: string | null;
+    advanceStatus: string;
+    requestedAmount: number;
+    paidAmount: number;
+    advanceRequestedAt: string | null;
+  }
+  const [reclaimHistoryRows, setReclaimHistoryRows] = useState<ReclaimHistoryRow[]>([]);
+  const [reclaimHistoryLoading, setReclaimHistoryLoading] = useState(false);
+  const [reclaimHistoryLoaded, setReclaimHistoryLoaded] = useState(false);
+  const [riMmpFilter, setRiMmpFilter] = useState<string>('all');
+  const [riDateFrom, setRiDateFrom] = useState<string>('');
+  const [riDateTo, setRiDateTo] = useState<string>('');
+  const [riCoordinatorFilter, setRiCoordinatorFilter] = useState<string>('all');
+  const [riStatusFilter, setRiStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (activeTab !== 'reclaimImpact' || reclaimHistoryLoaded) return;
+    const load = async () => {
+      setReclaimHistoryLoading(true);
+      try {
+        // 1. Fetch all MMP files (we filter in JS for non-empty reclaimHistory)
+        const { data: mmps } = await supabase
+          .from('mmp_files')
+          .select('id, name, workflow');
+
+        const mmpsWithHistory = (mmps || []).filter((m: any) => {
+          const wf = m.workflow as any;
+          return Array.isArray(wf?.reclaimHistory) && wf.reclaimHistory.length > 0;
+        });
+
+        if (mmpsWithHistory.length === 0) {
+          setReclaimHistoryRows([]);
+          setReclaimHistoryLoaded(true);
+          return;
+        }
+
+        const mmpIds = mmpsWithHistory.map((m: any) => m.id);
+
+        // 2. Fetch site entries for these MMPs
+        const { data: siteEntries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, mmp_file_id, additional_data')
+          .in('mmp_file_id', mmpIds);
+
+        const siteEntryIds = (siteEntries || []).map((s: any) => s.id);
+
+        // 3. Fetch advances linked to those site entries
+        const { data: advances } = siteEntryIds.length > 0
+          ? await supabase
+              .from('down_payment_requests')
+              .select('id, mmp_site_entry_id, status, requested_amount, total_paid_amount, requested_at, requested_by, metadata')
+              .in('mmp_site_entry_id', siteEntryIds)
+          : { data: [] as any[] };
+
+        // Build lookup maps
+        const siteMap = new Map<string, any>();
+        (siteEntries || []).forEach((s: any) => siteMap.set(s.id, s));
+
+        const sitesByMmp = new Map<string, any[]>();
+        (siteEntries || []).forEach((s: any) => {
+          const arr = sitesByMmp.get(s.mmp_file_id) || [];
+          arr.push(s);
+          sitesByMmp.set(s.mmp_file_id, arr);
+        });
+
+        // Group all reclaim-affected advances by mmpId for efficient per-MMP processing
+        const advancesByMmp = new Map<string, any[]>();
+        (advances || []).forEach((adv: any) => {
+          if (!adv.mmp_site_entry_id) return;
+          const site = siteMap.get(adv.mmp_site_entry_id);
+          if (!site) return;
+          const meta = adv.metadata as any;
+          const isReclaimRelated =
+            meta?.auto_cancelled_on_reclaim === true ||
+            meta?.site_reclaimed === true ||
+            meta?.manual_reconciliation_required === true ||
+            (typeof meta?.auto_cancelled_reason === 'string' && meta.auto_cancelled_reason.includes('reclaim'));
+          if (!isReclaimRelated) return;
+          const arr = advancesByMmp.get(site.mmp_file_id) || [];
+          arr.push(adv);
+          advancesByMmp.set(site.mmp_file_id, arr);
+        });
+
+        // Extract ISO timestamp from an auto_cancelled_reason string:
+        // "Auto-cancelled: site reclaimed on 2026-07-15T10:30:00.000Z. Reason: ..."
+        const extractTimestamp = (reason: string): number | null => {
+          const m = reason.match(/reclaimed on (\d{4}-\d{2}-\d{2}T[\d:.]+Z)/);
+          if (!m) return null;
+          try { return new Date(m[1]).getTime(); } catch { return null; }
+        };
+
+        // Associate an advance to the best-matching reclaim event for its MMP.
+        // Returns the index into `history` that best matches, or -1 if unattributable.
+        const matchEventIndex = (adv: any, history: any[]): number => {
+          const meta = adv.metadata as any;
+          if (!history.length) return -1;
+
+          // Strategy 1: parse timestamp from auto_cancelled_reason → closest event within 5 min
+          const cancelledReason: string = meta?.auto_cancelled_reason || '';
+          const cancelTs = cancelledReason ? extractTimestamp(cancelledReason) : null;
+          if (cancelTs !== null) {
+            let bestIdx = -1;
+            let bestDelta = Infinity;
+            history.forEach((e, i) => {
+              if (!e.reclaimedAt) return;
+              try {
+                const d = Math.abs(new Date(e.reclaimedAt).getTime() - cancelTs);
+                if (d < bestDelta) { bestDelta = d; bestIdx = i; }
+              } catch { /* skip */ }
+            });
+            // Accept if within 5 minutes (300 000 ms)
+            if (bestIdx >= 0 && bestDelta <= 300_000) return bestIdx;
+          }
+
+          // Strategy 2: match by reclaimed_by user ID
+          const reclaimedBy: string | undefined = meta?.reclaimed_by;
+          if (reclaimedBy) {
+            // Among events with matching reclaimedBy, pick the one whose timestamp
+            // is closest to (but not after) the advance's updated_at or requested_at
+            const refTs = adv.updated_at
+              ? new Date(adv.updated_at).getTime()
+              : adv.requested_at
+              ? new Date(adv.requested_at).getTime()
+              : null;
+            const candidatesByUser = history
+              .map((e, i) => ({ e, i }))
+              .filter(({ e }) => e.reclaimedBy === reclaimedBy);
+            if (candidatesByUser.length > 0) {
+              if (refTs !== null) {
+                // Prefer the closest event to refTs
+                let bestIdx = candidatesByUser[0].i;
+                let bestDelta = Infinity;
+                candidatesByUser.forEach(({ e, i }) => {
+                  if (!e.reclaimedAt) return;
+                  try {
+                    const d = Math.abs(new Date(e.reclaimedAt).getTime() - refTs);
+                    if (d < bestDelta) { bestDelta = d; bestIdx = i; }
+                  } catch { /* skip */ }
+                });
+                return bestIdx;
+              }
+              // Fallback: pick the first candidate
+              return candidatesByUser[0].i;
+            }
+          }
+
+          // Strategy 3: match by coordinator — assign to event whose previousCoordinatorId
+          // matches the advance's requester (coordinator who submitted)
+          // (less precise but avoids losing the advance entirely)
+          const reqBy: string | undefined = adv.requested_by;
+          if (reqBy) {
+            const idx = history.findIndex((e: any) => e.previousCoordinatorId === reqBy);
+            if (idx >= 0) return idx;
+          }
+
+          // Strategy 4: fall back to the most recent event (last in array)
+          return history.length - 1;
+        };
+
+        const rows: ReclaimHistoryRow[] = [];
+
+        for (const mmp of mmpsWithHistory) {
+          const wf = mmp.workflow as any;
+          const history: any[] = wf.reclaimHistory || [];
+          const mmpAdvances = advancesByMmp.get(mmp.id) || [];
+          const mmpsites = sitesByMmp.get(mmp.id) || [];
+
+          // Assign each advance to exactly one event index
+          const eventAdvances: Map<number, any[]> = new Map();
+          history.forEach((_, i) => eventAdvances.set(i, []));
+
+          for (const adv of mmpAdvances) {
+            const idx = matchEventIndex(adv, history);
+            const bucket = eventAdvances.get(idx) || [];
+            bucket.push(adv);
+            eventAdvances.set(idx, bucket);
+          }
+
+          // Emit rows — one per (event × advance), or one "no_advance" row per event
+          for (let i = 0; i < history.length; i++) {
+            const entry = history[i];
+            const coordinatorId = entry.previousCoordinatorId || null;
+            const coordinatorName = coordinatorId ? (userMap.get(coordinatorId) || 'Unknown') : 'N/A';
+            const reclaimedAt = entry.reclaimedAt || '';
+            const reclaimReason = entry.reason || 'N/A';
+            const reclaimReasonCategory = entry.reasonCategory || '';
+
+            const bucket = eventAdvances.get(i) || [];
+
+            if (bucket.length > 0) {
+              for (const adv of bucket) {
+                const site = siteMap.get(adv.mmp_site_entry_id);
+                rows.push({
+                  mmpId: mmp.id,
+                  mmpName: mmp.name,
+                  siteName: site?.site_name || 'N/A',
+                  siteEntryId: adv.mmp_site_entry_id || null,
+                  coordinatorId,
+                  coordinatorName,
+                  reclaimedAt,
+                  reclaimReason,
+                  reclaimReasonCategory,
+                  advanceId: adv.id,
+                  advanceStatus: adv.status,
+                  requestedAmount: adv.requested_amount || 0,
+                  paidAmount: adv.total_paid_amount || 0,
+                  advanceRequestedAt: adv.requested_at || null,
+                });
+              }
+            } else {
+              // No advances attributed to this event — still show it for accountability
+              rows.push({
+                mmpId: mmp.id,
+                mmpName: mmp.name,
+                siteName: mmpsites.length > 0 ? `(${mmpsites.length} site(s))` : 'N/A',
+                siteEntryId: null,
+                coordinatorId,
+                coordinatorName,
+                reclaimedAt,
+                reclaimReason,
+                reclaimReasonCategory,
+                advanceId: null,
+                advanceStatus: 'no_advance',
+                requestedAmount: 0,
+                paidAmount: 0,
+                advanceRequestedAt: null,
+              });
+            }
+          }
+        }
+
+        rows.sort((a, b) => {
+          if (!a.reclaimedAt) return 1;
+          if (!b.reclaimedAt) return -1;
+          return new Date(b.reclaimedAt).getTime() - new Date(a.reclaimedAt).getTime();
+        });
+
+        setReclaimHistoryRows(rows);
+        setReclaimHistoryLoaded(true);
+      } catch (err) {
+        console.error('[ReclaimHistory] Failed to load:', err);
+      } finally {
+        setReclaimHistoryLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, reclaimHistoryLoaded, userMap]);
   const handleSendReclaimDigest = async () => {
     setDigestSending(true);
     try {
@@ -3833,6 +4092,31 @@ function AdvanceRequestsReportContent() {
             const totalExposed = needsReconciliationRows.reduce((s, r) => s + r.requestedAmount, 0);
             const totalWrittenOff = writtenOffRows.reduce((s, r) => s + r.requestedAmount, 0);
 
+            // ── Filtered Reclaim History rows ────────────────────────────
+            const filteredReclaimHistory = reclaimHistoryRows.filter(row => {
+              if (riMmpFilter !== 'all' && row.mmpId !== riMmpFilter) return false;
+              if (riCoordinatorFilter !== 'all' && row.coordinatorId !== riCoordinatorFilter) return false;
+              if (riStatusFilter !== 'all' && row.advanceStatus !== riStatusFilter) return false;
+              if (riDateFrom) {
+                try { if (new Date(row.reclaimedAt) < new Date(riDateFrom)) return false; } catch { /* skip */ }
+              }
+              if (riDateTo) {
+                try { if (new Date(row.reclaimedAt) > new Date(riDateTo + 'T23:59:59')) return false; } catch { /* skip */ }
+              }
+              return true;
+            });
+
+            const riTotalTransport = filteredReclaimHistory.reduce((s, r) => s + r.requestedAmount, 0);
+            const riTotalPaid = filteredReclaimHistory.reduce((s, r) => s + r.paidAmount, 0);
+            const riUniqueMmps = new Set(filteredReclaimHistory.map(r => r.mmpId)).size;
+            const riUniqueCoords = new Set(filteredReclaimHistory.filter(r => r.coordinatorId).map(r => r.coordinatorId)).size;
+
+            // Dropdown option lists
+            const riMmpOptions = Array.from(new Map(reclaimHistoryRows.map(r => [r.mmpId, r.mmpName])).entries());
+            const riCoordOptions = Array.from(
+              new Map(reclaimHistoryRows.filter(r => r.coordinatorId).map(r => [r.coordinatorId!, r.coordinatorName])).entries()
+            );
+
             const exportReclaimImpactPdf = () => {
               const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
               doc.setFontSize(16);
@@ -3843,11 +4127,12 @@ function AdvanceRequestsReportContent() {
               doc.text(`Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`, 148.5, 22, { align: 'center' });
 
               const summaryRows = [
-                ['Total Reclaimed Advances', allReclaimedAdvances.length.toString()],
+                ['Total Reclaim Events', filteredReclaimHistory.length.toString()],
+                ['MMPs Affected', riUniqueMmps.toString()],
+                ['Coordinators Affected', riUniqueCoords.toString()],
+                ['Total Transport Requested (SDG)', riTotalTransport.toLocaleString()],
+                ['Total Paid Out (SDG)', riTotalPaid.toLocaleString()],
                 ['Needs Reconciliation', needsReconciliationRows.length.toString()],
-                ['Resolved', resolvedRows.length.toString()],
-                ['Auto-Cancelled (Pending)', autoCancelledRows.length.toString()],
-                ['Total Exposed (SDG)', totalExposed.toLocaleString()],
                 ['Written Off (SDG)', totalWrittenOff.toLocaleString()],
               ];
               autoTable(doc, {
@@ -3857,32 +4142,29 @@ function AdvanceRequestsReportContent() {
                 styles: { fontSize: 9 },
                 headStyles: { fillColor: [220, 100, 30], textColor: 255 },
                 margin: { left: 15, right: 15 },
-                tableWidth: 80,
+                tableWidth: 100,
               });
 
-              const dataRows = allReclaimedAdvances.map(r => [
-                r.id.substring(0, 8).toUpperCase(),
-                r.siteName || 'N/A',
-                format(parseISO(r.requestedAt), 'MMM dd, yyyy'),
-                getProfileName(r.requestedBy),
-                r.requestedAmount.toLocaleString(),
-                r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                (r.metadata as any)?.site_reclaim_reason || (r.metadata as any)?.reclaim_reason || 'N/A',
-                (r.metadata as any)?.reclaimed_by_name || 'N/A',
-                (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'MMM dd, yyyy') : 'N/A',
-                (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending' :
-                (r.metadata as any)?.reconciliation_resolved_by ? 'Resolved' :
-                (r.metadata as any)?.auto_cancelled_on_reclaim ? 'Auto-Cancelled' : 'N/A',
+              const dataRows = filteredReclaimHistory.map(row => [
+                row.mmpName,
+                row.siteName,
+                row.coordinatorName,
+                row.reclaimedAt ? format(parseISO(row.reclaimedAt), 'MMM dd, yyyy') : 'N/A',
+                row.reclaimReasonCategory || row.reclaimReason,
+                row.reclaimReason,
+                row.advanceStatus === 'no_advance' ? 'No Advance' : row.advanceStatus.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                row.requestedAmount > 0 ? row.requestedAmount.toLocaleString() : '—',
+                row.paidAmount > 0 ? row.paidAmount.toLocaleString() : '—',
               ]);
 
               autoTable(doc, {
-                head: [['ID', 'Site', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed By', 'Reclaimed At', 'Reconciliation']],
+                head: [['MMP', 'Site', 'Coordinator', 'Reclaim Date', 'Category', 'Reason', 'Advance Status', 'Requested (SDG)', 'Paid (SDG)']],
                 body: dataRows,
                 startY: (doc as any).lastAutoTable.finalY + 8,
-                styles: { fontSize: 7.5, cellPadding: 1.5 },
+                styles: { fontSize: 7, cellPadding: 1.5 },
                 headStyles: { fillColor: [220, 100, 30], textColor: 255 },
                 alternateRowStyles: { fillColor: [255, 248, 245] },
-                margin: { left: 15, right: 15 },
+                margin: { left: 10, right: 10 },
               });
 
               doc.save(`reclaim-impact-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
@@ -3893,15 +4175,31 @@ function AdvanceRequestsReportContent() {
               const summaryWsData = [
                 ['Reclaim Impact Report', '', `Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`],
                 [],
-                ['Total Reclaimed Advances', allReclaimedAdvances.length],
+                ['Total Reclaim Events', filteredReclaimHistory.length],
+                ['MMPs Affected', riUniqueMmps],
+                ['Coordinators Affected', riUniqueCoords],
+                ['Total Transport Requested (SDG)', riTotalTransport],
+                ['Total Paid Out (SDG)', riTotalPaid],
                 ['Needs Reconciliation', needsReconciliationRows.length],
-                ['Resolved', resolvedRows.length],
-                ['Auto-Cancelled (Pending)', autoCancelledRows.length],
-                ['Total Exposed (SDG)', totalExposed],
                 ['Written Off (SDG)', totalWrittenOff],
               ];
-              const detailWsData = [
-                ['ID', 'Site', 'Hub', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed By', 'Reclaimed At', 'Reconciliation Status'],
+              const historyWsData = [
+                ['MMP Name', 'Site Name', 'Coordinator', 'Reclaim Date', 'Reason Category', 'Reclaim Reason', 'Advance Status', 'Requested Amount (SDG)', 'Paid Amount (SDG)', 'Advance ID'],
+                ...filteredReclaimHistory.map(row => [
+                  row.mmpName,
+                  row.siteName,
+                  row.coordinatorName,
+                  row.reclaimedAt ? format(parseISO(row.reclaimedAt), 'yyyy-MM-dd') : 'N/A',
+                  row.reclaimReasonCategory || 'N/A',
+                  row.reclaimReason,
+                  row.advanceStatus === 'no_advance' ? 'No Advance Submitted' : row.advanceStatus.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                  row.requestedAmount || 0,
+                  row.paidAmount || 0,
+                  row.advanceId ? row.advanceId.substring(0, 8).toUpperCase() : 'N/A',
+                ]),
+              ];
+              const reconcWsData = [
+                ['ID', 'Site', 'Hub', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed At', 'Reconciliation Status'],
                 ...allReclaimedAdvances.map(r => [
                   r.id.substring(0, 8).toUpperCase(),
                   r.siteName || 'N/A',
@@ -3911,7 +4209,6 @@ function AdvanceRequestsReportContent() {
                   r.requestedAmount,
                   r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
                   (r.metadata as any)?.site_reclaim_reason || (r.metadata as any)?.reclaim_reason || 'N/A',
-                  (r.metadata as any)?.reclaimed_by_name || 'N/A',
                   (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'yyyy-MM-dd') : 'N/A',
                   (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending Reconciliation' :
                   (r.metadata as any)?.reconciliation_resolved_by ? 'Resolved' :
@@ -3920,7 +4217,8 @@ function AdvanceRequestsReportContent() {
               ];
               const wb = utils.book_new();
               utils.book_append_sheet(wb, utils.aoa_to_sheet(summaryWsData), 'Summary');
-              utils.book_append_sheet(wb, utils.aoa_to_sheet(detailWsData), 'Reclaim Details');
+              utils.book_append_sheet(wb, utils.aoa_to_sheet(historyWsData), 'Reclaim History');
+              utils.book_append_sheet(wb, utils.aoa_to_sheet(reconcWsData), 'Reconciliation');
               writeFile(wb, `reclaim-impact-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
             };
 
@@ -3929,7 +4227,7 @@ function AdvanceRequestsReportContent() {
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <h3 className="font-semibold text-lg">Reclaim Impact Report / تقرير تأثير الاسترداد</h3>
-                    <p className="text-sm text-muted-foreground">Advances affected by site reclaims — reconciliation tracking</p>
+                    <p className="text-sm text-muted-foreground">Reclaimed sites, coordinator history, and transport costs</p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {isAdmin && reclaimSelectedIds.size > 0 && (
@@ -3958,23 +4256,202 @@ function AdvanceRequestsReportContent() {
                         {digestSending ? 'Sending…' : 'Send Digest Email'}
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
+                    <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
                       <FileText className="h-4 w-4 mr-1" />
                       Export PDF
                     </Button>
-                    <Button size="sm" onClick={exportReclaimImpactExcel} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-excel">
+                    <Button size="sm" onClick={exportReclaimImpactExcel} disabled={filteredReclaimHistory.length === 0 && allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-excel">
                       <Download className="h-4 w-4 mr-1" />
                       Export Excel
                     </Button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {/* Summary stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Total Reclaimed', value: allReclaimedAdvances.length, color: 'text-orange-600' },
+                    { label: 'Reclaim Events', value: filteredReclaimHistory.length, color: 'text-orange-600' },
+                    { label: 'MMPs Affected', value: riUniqueMmps, color: 'text-blue-600' },
+                    { label: 'Transport Requested (SDG)', value: riTotalTransport > 0 ? riTotalTransport.toLocaleString() : '—', color: 'text-orange-600' },
+                    { label: 'Amount Paid Out (SDG)', value: riTotalPaid > 0 ? riTotalPaid.toLocaleString() : '—', color: 'text-purple-600' },
+                  ].map(stat => (
+                    <Card key={stat.label}>
+                      <CardContent className="p-3">
+                        <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Filters */}
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex flex-col gap-1 min-w-[160px]">
+                        <label className="text-xs text-muted-foreground">MMP</label>
+                        <Select value={riMmpFilter} onValueChange={setRiMmpFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="filter-ri-mmp">
+                            <SelectValue placeholder="All MMPs" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All MMPs</SelectItem>
+                            {riMmpOptions.map(([id, name]) => (
+                              <SelectItem key={id} value={id}>{name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1 min-w-[160px]">
+                        <label className="text-xs text-muted-foreground">Coordinator</label>
+                        <Select value={riCoordinatorFilter} onValueChange={setRiCoordinatorFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="filter-ri-coordinator">
+                            <SelectValue placeholder="All Coordinators" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Coordinators</SelectItem>
+                            {riCoordOptions.map(([id, name]) => (
+                              <SelectItem key={id} value={id}>{name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1 min-w-[150px]">
+                        <label className="text-xs text-muted-foreground">Advance Status</label>
+                        <Select value={riStatusFilter} onValueChange={setRiStatusFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="filter-ri-status">
+                            <SelectValue placeholder="All Statuses" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                            <SelectItem value="fully_paid">Fully Paid</SelectItem>
+                            <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
+                            <SelectItem value="pending_admin">Pending Admin</SelectItem>
+                            <SelectItem value="no_advance">No Advance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Reclaim Date From</label>
+                        <Input type="date" className="h-8 text-xs w-36" value={riDateFrom} onChange={e => setRiDateFrom(e.target.value)} data-testid="filter-ri-date-from" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">To</label>
+                        <Input type="date" className="h-8 text-xs w-36" value={riDateTo} onChange={e => setRiDateTo(e.target.value)} data-testid="filter-ri-date-to" />
+                      </div>
+                      {(riMmpFilter !== 'all' || riCoordinatorFilter !== 'all' || riStatusFilter !== 'all' || riDateFrom || riDateTo) && (
+                        <Button variant="ghost" size="sm" className="h-8 text-xs self-end" onClick={() => { setRiMmpFilter('all'); setRiCoordinatorFilter('all'); setRiStatusFilter('all'); setRiDateFrom(''); setRiDateTo(''); }} data-testid="button-ri-clear-filters">
+                          <XCircle className="h-3.5 w-3.5 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Reclaim History Table */}
+                <Card>
+                  <CardHeader className="p-3 pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <History className="h-4 w-4 text-orange-500" />
+                      Reclaim History / سجل الاسترداد
+                      {reclaimHistoryLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-1" />}
+                      <Badge variant="outline" className="ml-auto text-xs">{filteredReclaimHistory.length} row{filteredReclaimHistory.length !== 1 ? 's' : ''}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {reclaimHistoryLoading ? (
+                      <div className="p-6 space-y-2">
+                        {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+                      </div>
+                    ) : filteredReclaimHistory.length === 0 ? (
+                      <div className="p-10 text-center text-muted-foreground text-sm">
+                        {reclaimHistoryRows.length === 0
+                          ? 'No reclaim history found — no MMP has been reclaimed yet.'
+                          : 'No rows match the current filters.'}
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>MMP</TableHead>
+                              <TableHead>Site</TableHead>
+                              <TableHead>Coordinator</TableHead>
+                              <TableHead>Reclaim Date</TableHead>
+                              <TableHead>Category</TableHead>
+                              <TableHead>Reason</TableHead>
+                              <TableHead>Advance Status</TableHead>
+                              <TableHead className="text-right">Requested (SDG)</TableHead>
+                              <TableHead className="text-right">Paid (SDG)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredReclaimHistory.map((row, idx) => (
+                              <TableRow key={`${row.mmpId}-${row.advanceId ?? idx}`} data-testid={`row-reclaim-history-${idx}`}>
+                                <TableCell className="font-medium text-sm max-w-[140px] truncate">{row.mmpName}</TableCell>
+                                <TableCell className="text-sm max-w-[140px] truncate">{row.siteName}</TableCell>
+                                <TableCell className="text-sm">{row.coordinatorName}</TableCell>
+                                <TableCell className="text-sm whitespace-nowrap">
+                                  {row.reclaimedAt ? format(parseISO(row.reclaimedAt), 'MMM dd, yyyy') : 'N/A'}
+                                </TableCell>
+                                <TableCell>
+                                  {row.reclaimReasonCategory ? (
+                                    <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700">{row.reclaimReasonCategory}</Badge>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={row.reclaimReason}>
+                                  {row.reclaimReason}
+                                </TableCell>
+                                <TableCell>
+                                  {row.advanceStatus === 'no_advance' ? (
+                                    <Badge variant="secondary" className="text-[10px] bg-gray-100 text-gray-500">No Advance</Badge>
+                                  ) : row.advanceStatus === 'cancelled' ? (
+                                    <Badge variant="secondary" className="text-[10px] bg-orange-100 text-orange-700">Cancelled</Badge>
+                                  ) : row.advanceStatus === 'fully_paid' ? (
+                                    <Badge className="text-[10px] bg-emerald-500">Fully Paid</Badge>
+                                  ) : row.advanceStatus === 'partially_paid' ? (
+                                    <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700">Partially Paid</Badge>
+                                  ) : row.advanceStatus === 'approved' ? (
+                                    <Badge className="text-[10px] bg-green-500">Approved</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {row.advanceStatus.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-sm">
+                                  {row.requestedAmount > 0 ? row.requestedAmount.toLocaleString() : '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-sm">
+                                  {row.paidAmount > 0 ? (
+                                    <span className="text-purple-700 font-semibold">{row.paidAmount.toLocaleString()}</span>
+                                  ) : '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Reconciliation section header */}
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <span className="font-medium text-sm">Reconciliation Tracking / تتبع التسوية</span>
+                  {needsReconciliationRows.length > 0 && (
+                    <Badge className="bg-red-500 text-white text-xs">{needsReconciliationRows.length} pending</Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
                     { label: 'Needs Reconciliation', value: needsReconciliationRows.length, color: 'text-red-600' },
                     { label: 'Resolved', value: resolvedRows.length, color: 'text-green-600' },
-                    { label: 'Exposed Amount (SDG)', value: totalExposed.toLocaleString(), color: 'text-orange-600' },
                     { label: 'Written Off (SDG)', value: totalWrittenOff > 0 ? totalWrittenOff.toLocaleString() : '—', color: 'text-gray-500' },
                   ].map(stat => (
                     <Card key={stat.label}>

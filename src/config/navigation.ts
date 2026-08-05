@@ -51,6 +51,15 @@ export const navigationConfig: NavigationGroup[] = [
         description: 'Personal workspace — assigned tasks and daily to-dos'
       },
       {
+        id: 'my-projects',
+        icon: FolderKanban,
+        label: 'My Projects',
+        path: '/my-projects',
+        category: 'primary',
+        priority: 97,
+        description: 'Projects you are a member or consultant of'
+      },
+      {
         id: 'notifications',
         icon: Bell,
         label: 'Notifications',
