@@ -379,17 +379,20 @@ const NotificationCard: FC<{
 };
 
 // ── Analytics bar ──────────────────────────────────────────────────────────────
-const AnalyticsBar: FC<{ notifications: Notification[] }> = ({ notifications }) => {
+const AnalyticsBar: FC<{ notifications: Notification[]; realCounts?: { total: number; unread: number; today: number } | null }> = ({ notifications, realCounts }) => {
   const stats = useMemo(() => {
-    const total = notifications.length;
-    const unread = notifications.filter(n => !n.isRead).length;
+    // Prefer true DB counts (the loaded `notifications` array is a capped page, so its
+    // length under-reports total/unread/today). Urgent + pending-actions stay derived
+    // from the loaded set since they depend on client-side needsAction/priority logic.
+    const total = realCounts?.total ?? notifications.length;
+    const unread = realCounts?.unread ?? notifications.filter(n => !n.isRead).length;
     const urgent = notifications.filter(n => (n.priority === 'urgent' || n.priority === 'high') && !n.isRead).length;
     const pendingActions = notifications.filter(n => needsAction(n) && !n.isRead).length;
-    const todayCount = notifications.filter(n => {
+    const todayCount = realCounts?.today ?? notifications.filter(n => {
       try { return isToday(parseISO(n.createdAt || '')); } catch { return false; }
     }).length;
     return { total, unread, urgent, pendingActions, todayCount };
-  }, [notifications]);
+  }, [notifications, realCounts]);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
@@ -492,8 +495,34 @@ const Notifications: FC = () => {
     })();
   }, [activeTab, isAdmin]);
 
-  const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
+  const loadedUnread = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
   const pendingActionsCount = useMemo(() => notifications.filter(n => needsAction(n) && !n.isRead).length, [notifications]);
+
+  // True DB counts for this user — the context only holds a capped recent page, so
+  // deriving totals from its length under-reports (and mismatches the bell badge).
+  // Scoped to recipient_id like get_nav_badge_counts so the page and badge agree.
+  const [realCounts, setRealCounts] = useState<{ total: number; unread: number; today: number } | null>(null);
+  useEffect(() => {
+    if (!currentUser?.id) { setRealCounts(null); return; }
+    let cancelled = false;
+    (async () => {
+      const uid = currentUser.id;
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+      const base = () => supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('recipient_id', uid);
+      const [totalRes, unreadRes, todayRes] = await Promise.allSettled([
+        base(),
+        base().eq('is_read', false),
+        base().gte('created_at', startOfToday.toISOString()),
+      ]);
+      if (cancelled) return;
+      const val = (r: PromiseSettledResult<{ count: number | null }>) => (r.status === 'fulfilled' ? (r.value?.count ?? 0) : 0);
+      setRealCounts({ total: val(totalRes), unread: val(unreadRes), today: val(todayRes) });
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser?.id, notifications.length, loadedUnread]);
+
+  // Prefer true counts; fall back to the loaded page before the count query resolves.
+  const unreadCount = realCounts?.unread ?? loadedUnread;
 
   const filteredNotifications = useMemo(() => {
     let filtered = notifications;
@@ -677,9 +706,9 @@ const Notifications: FC = () => {
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 ml-10">
               {unreadCount > 0 ? (
-                <span><span className="text-blue-600 font-medium">{unreadCount} unread</span> · {notifications.length} total</span>
+                <span><span className="text-blue-600 font-medium">{unreadCount} unread</span> · {realCounts?.total ?? notifications.length} total</span>
               ) : (
-                <span>{notifications.length} notifications</span>
+                <span>{realCounts?.total ?? notifications.length} notifications</span>
               )}
             </p>
           </div>
@@ -794,7 +823,7 @@ const Notifications: FC = () => {
       </div>
 
       {/* ── Analytics Bar ── */}
-      <AnalyticsBar notifications={notifications} />
+      <AnalyticsBar notifications={notifications} realCounts={realCounts} />
 
       {/* ── Tabs + Search toolbar ── */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3 flex items-center gap-3 flex-wrap">
