@@ -7,8 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { dispatchNotification } from '@/lib/notify';
-import { Loader2, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Trash2, RefreshCw, Users } from 'lucide-react';
 import type { ProjectBudget } from '@/types/budget';
+import type { ProjectTeamMember } from '@/types/project';
+import { calcMemberTotalCost } from '@/types/project';
 
 interface BudgetLineItem {
   id: string;
@@ -31,6 +33,8 @@ interface EditProjectBudgetDialogProps {
   /** Current user info for notification dispatch */
   currentUserId?: string;
   currentUserName?: string;
+  /** Team composition from projects.team.teamComposition — used by "Import Team Fees" */
+  teamComposition?: ProjectTeamMember[];
 }
 
 /**
@@ -135,6 +139,7 @@ export function EditProjectBudgetDialog({
   projectManagerId,
   currentUserId,
   currentUserName,
+  teamComposition = [],
 }: EditProjectBudgetDialogProps) {
   const { updateProjectBudget } = useBudget();
   const [loading, setLoading] = useState(false);
@@ -184,6 +189,33 @@ export function EditProjectBudgetDialog({
     if (projectTotalAmount != null && projectTotalAmount > 0) {
       setTotalBudget(projectTotalAmount.toString());
     }
+  };
+
+  /** Compute sum of all team member fees and upsert into the personnel_labor_fees line item. */
+  const importTeamFees = () => {
+    if (!teamComposition.length) return;
+    const projectTotal = projectTotalAmount || parseFloat(totalBudget) || 0;
+    const totalTeamFees = teamComposition.reduce((sum, member) => {
+      if (!member.feeType) return sum;
+      return sum + calcMemberTotalCost(member, projectTotal);
+    }, 0);
+    if (totalTeamFees <= 0) return;
+    const rounded = parseFloat(totalTeamFees.toFixed(2));
+
+    setLineItems(prev => {
+      const existing = prev.find(i => i.category === 'personnel_labor_fees');
+      if (existing) {
+        return prev.map(i =>
+          i.category === 'personnel_labor_fees' ? { ...i, amount: rounded.toString() } : i
+        );
+      }
+      // Append a new personnel_labor_fees line if absent
+      const withoutEmpty = prev.filter(i => i.category !== '');
+      return [
+        ...withoutEmpty,
+        { id: crypto.randomUUID(), category: 'personnel_labor_fees', amount: rounded.toString() },
+      ];
+    });
   };
 
   const handleSubmit = async () => {
@@ -318,16 +350,37 @@ export function EditProjectBudgetDialog({
           <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-medium">Budget Line Items</h4>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addLineItem}
-                className=""
-                data-testid="button-add-line-item"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Add Item
-              </Button>
+              <div className="flex items-center gap-2">
+                {teamComposition.length > 0 && (() => {
+                  const projectTotal = projectTotalAmount || parseFloat(totalBudget) || 0;
+                  const teamTotal = teamComposition.reduce((s, m) => {
+                    if (!m.feeType) return s;
+                    return s + calcMemberTotalCost(m, projectTotal);
+                  }, 0);
+                  return teamTotal > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={importTeamFees}
+                      className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-700 dark:hover:bg-emerald-950/30"
+                      data-testid="button-import-team-fees"
+                    >
+                      <Users className="w-3.5 h-3.5 mr-1" />
+                      Import Team Fees ({displayCurrency} {teamTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+                    </Button>
+                  ) : null;
+                })()}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addLineItem}
+                  data-testid="button-add-line-item"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add Item
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-3">

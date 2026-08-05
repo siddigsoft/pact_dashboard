@@ -74,7 +74,7 @@ import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 
-import { Project } from '@/types/project';
+import { Project, calcMemberTotalCost } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1646,6 +1646,26 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 await supabase.from('projects').update({ team: newTeam }).eq('id', project.id);
                 queryClient.invalidateQueries({ queryKey: ['projects'] });
                 queryClient.invalidateQueries({ queryKey: ['project', project.id] });
+
+                // Post GL bridge log entries for members whose fee was just marked paid
+                const prevComposition = project.team?.teamComposition || [];
+                const prevStatusMap = Object.fromEntries(prevComposition.map(m => [m.userId, m.paymentStatus || 'unpaid']));
+                const newlyPaid = updatedComposition.filter(m => {
+                  const prev = prevStatusMap[m.userId] || 'unpaid';
+                  const curr = m.paymentStatus || 'unpaid';
+                  return curr !== 'unpaid' && prev !== curr;
+                });
+                if (newlyPaid.length > 0) {
+                  const projectBudgetForCalc = budgetSummary?.total || project.budget?.total || 0;
+                  const bridgeRows = newlyPaid.map(m => ({
+                    source_table: 'project_team_fees',
+                    source_id: `${project.id}::${m.userId}`,
+                    event_type: 'team_fee_payment',
+                    status: 'pending' as const,
+                  }));
+                  // Fire-and-forget — GL bridge failure must never block the fee save
+                  supabase.from('acct_gl_bridge_log' as any).insert(bridgeRows).then(() => {});
+                }
               } catch {
                 toast({ title: 'Save failed', description: 'Could not save fee changes. Please try again.', variant: 'destructive' });
               }
@@ -1696,6 +1716,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 currentUserId={currentUser?.id}
                 isAdmin={isAdminUser}
                 projectManagerId={project.team?.projectManager}
+                teamComposition={project.team?.teamComposition || []}
               />
               <EditProjectBudgetDialog
                 budget={projectBudget}
@@ -1708,6 +1729,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 projectManagerId={project.team?.projectManager}
                 currentUserId={currentUser?.id}
                 currentUserName={currentUser?.fullName}
+                teamComposition={project.team?.teamComposition || []}
               />
             </>
           ) : (

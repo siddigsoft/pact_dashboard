@@ -21,7 +21,8 @@ import { exportFormattedExcel } from '@/utils/formattedExcelExport';
 import { exportBudgetPDF } from '@/utils/budgetPdfExport';
 import { dispatchNotification } from '@/lib/notify';
 import type { ProjectBudget } from '@/types/budget';
-import type { Project } from '@/types/project';
+import type { Project, ProjectTeamMember } from '@/types/project';
+import { calcMemberTotalCost, totalPaidFromInstallments } from '@/types/project';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface OpsCost {
@@ -56,41 +57,78 @@ interface PreFundRow {
 }
 
 /* ─── Category helpers ───────────────────────────────────────────────── */
+/** Maps ops-cost expense_category values → canonical project_budgets category keys */
 const EXPENSE_TO_BUDGET: Record<string, string> = {
-  transport: 'transportation_and_visit_fees',
-  transportation: 'transportation_and_visit_fees',
-  vehicle: 'transportation_and_visit_fees',
-  permit: 'permit_fee',
-  permits: 'permit_fee',
-  locality_permit: 'permit_fee',
-  internet: 'internet_and_communication_fees',
-  communication: 'internet_and_communication_fees',
-  communications: 'internet_and_communication_fees',
-  accommodation: 'accommodation',
-  hotel: 'accommodation',
-  meals: 'meals',
-  food: 'meals',
-  per_diem: 'meals',
-  equipment: 'equipment',
-  training: 'training',
-  supplies: 'supplies',
-  supply: 'supplies',
-  professional_fees: 'professional_fees',
-  consultancy: 'professional_fees',
-  consultant: 'professional_fees',
+  // transportation
+  transport: 'transportation_logistics',
+  transportation: 'transportation_logistics',
+  vehicle: 'transportation_logistics',
+  site_visits: 'transportation_logistics',
+  // permits / legal
+  permit: 'permits_taxes_legal',
+  permits: 'permits_taxes_legal',
+  locality_permit: 'permits_taxes_legal',
+  permit_fee: 'permits_taxes_legal',
+  // internet / comms
+  internet: 'internet_communication',
+  communication: 'internet_communication',
+  communications: 'internet_communication',
+  internet_and_communication_fees: 'internet_communication',
+  // field ops
+  accommodation: 'field_operations_activities',
+  hotel: 'field_operations_activities',
+  meals: 'field_operations_activities',
+  food: 'field_operations_activities',
+  per_diem: 'field_operations_activities',
+  training: 'field_operations_activities',
+  meetings: 'field_operations_activities',
+  catering: 'field_operations_activities',
+  // equipment / supplies
+  equipment: 'equipment_supplies',
+  supplies: 'equipment_supplies',
+  supply: 'equipment_supplies',
+  materials: 'equipment_supplies',
+  printing: 'equipment_supplies',
+  // personnel / labor
+  professional_fees: 'personnel_labor_fees',
+  consultancy: 'personnel_labor_fees',
+  consultant: 'personnel_labor_fees',
+  labor: 'personnel_labor_fees',
+  personnel: 'personnel_labor_fees',
+  enumerator_fees: 'personnel_labor_fees',
+  supervisor_fees: 'personnel_labor_fees',
+  facilitator_fees: 'personnel_labor_fees',
+  evaluation_team_fees: 'personnel_labor_fees',
+  // overhead
+  overhead: 'management_overhead',
+  management: 'management_overhead',
+  // contingency
+  miscellaneous: 'contingency_reserve',
+  other: 'contingency_reserve',
 };
 
+/** Human-readable labels for every canonical + legacy category key */
 const CATEGORY_LABELS: Record<string, string> = {
-  professional_fees: 'Professional Fees',
+  // canonical keys (project_budgets.category_allocations standard set)
+  personnel_labor_fees:          'Personnel & Labor Fees',
+  transportation_logistics:      'Transportation & Logistics',
+  equipment_supplies:            'Equipment & Supplies',
+  field_operations_activities:   'Field Operations & Activities',
+  internet_communication:        'Internet & Communication',
+  permits_taxes_legal:           'Permits, Taxes & Legal',
+  management_overhead:           'Management & Overhead',
+  contingency_reserve:           'Contingency / Reserve',
+  // legacy keys kept for backward compat
+  professional_fees:             'Personnel & Labor Fees',
   transportation_and_visit_fees: 'Transportation & Visits',
-  permit_fee: 'Permit Fees',
+  permit_fee:                    'Permit Fees',
   internet_and_communication_fees: 'Internet & Comms',
-  accommodation: 'Accommodation',
-  meals: 'Meals',
-  equipment: 'Equipment',
-  training: 'Training',
-  supplies: 'Supplies',
-  other: 'Other',
+  accommodation:                 'Accommodation',
+  meals:                         'Meals',
+  equipment:                     'Equipment',
+  training:                      'Training',
+  supplies:                      'Supplies',
+  other:                         'Other',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
@@ -113,6 +151,8 @@ interface ProjectBudgetTabProps {
   currentUserId?: string;
   isAdmin?: boolean;
   projectManagerId?: string;
+  /** Team composition from projects.team.teamComposition — used to include professional fees in budget */
+  teamComposition?: ProjectTeamMember[];
 }
 
 /* ─── Component ──────────────────────────────────────────────────────── */
@@ -125,6 +165,7 @@ export function ProjectBudgetTab({
   currentUserId,
   isAdmin,
   projectManagerId,
+  teamComposition = [],
 }: ProjectBudgetTabProps) {
   const currency = budgetSummary?.currency || 'SDG';
   const fmt = (cents: number) =>
@@ -164,7 +205,9 @@ export function ProjectBudgetTab({
   }, [project.id]);
 
   /* ── Spending calculations ── */
-  const { totalSpentCents, opsCents, advCents, pfCents } = useMemo(() => {
+  const projectBudgetForFees = budgetSummary?.total || project.budget?.total || 0;
+
+  const { totalSpentCents, opsCents, advCents, pfCents, teamFeePaidCents } = useMemo(() => {
     const opsCents = opsCosts
       .filter(c => {
         const s = (c.tier2_status || c.tier1_status || c.status || '').toLowerCase();
@@ -176,8 +219,24 @@ export function ProjectBudgetTab({
       .reduce((s, a) => s + Math.round((a.total_paid_amount || 0) * 100), 0);
     const pfCents = preFunds
       .reduce((s, p) => s + Math.round((p.paid_amount || 0) * 100), 0);
-    return { totalSpentCents: opsCents + advCents + pfCents, opsCents, advCents, pfCents };
-  }, [opsCosts, advances, preFunds]);
+
+    // Team composition professional fees (paid portion only)
+    const teamFeePaidCents = teamComposition.reduce((sum, member) => {
+      if (!member.feeType) return sum;
+      const memberTotal = calcMemberTotalCost(member, projectBudgetForFees);
+      if (memberTotal <= 0) return sum;
+      const memberTotalCents = Math.round(memberTotal * 100);
+      const status = member.paymentStatus || 'unpaid';
+      if (status === 'paid') return sum + memberTotalCents;
+      if (status === 'partially_paid') {
+        const paidAmt = totalPaidFromInstallments(member.installments || []) || (member.amountPaid || 0);
+        return sum + Math.round(paidAmt * 100);
+      }
+      return sum;
+    }, 0);
+
+    return { totalSpentCents: opsCents + advCents + pfCents + teamFeePaidCents, opsCents, advCents, pfCents, teamFeePaidCents };
+  }, [opsCosts, advances, preFunds, teamComposition, projectBudgetForFees]);
 
   const totalBudgetCents = projectBudget.totalBudgetCents;
   const remainingCents = Math.max(totalBudgetCents - totalSpentCents, 0);
@@ -189,12 +248,49 @@ export function ProjectBudgetTab({
 
   /* ── Category breakdown ── */
   const categoryBreakdown = useMemo(() => {
-    const allocs = projectBudget.categoryAllocations || {};
+    // Start with a mutable copy of stored allocations, normalising legacy keys
+    const LEGACY_TO_CANONICAL: Record<string, string> = {
+      professional_fees: 'personnel_labor_fees',
+      personnel_fees: 'personnel_labor_fees',
+      transportation_and_visit_fees: 'transportation_logistics',
+      permit_fee: 'permits_taxes_legal',
+      internet_and_communication_fees: 'internet_communication',
+      accommodation: 'field_operations_activities',
+      meals: 'field_operations_activities',
+      equipment: 'equipment_supplies',
+      supplies: 'equipment_supplies',
+      training: 'field_operations_activities',
+      other: 'contingency_reserve',
+    };
+    const allocs: Record<string, number> = {};
+    Object.entries(projectBudget.categoryAllocations || {}).forEach(([k, v]) => {
+      const canonical = LEGACY_TO_CANONICAL[k] ?? k;
+      if (typeof v === 'number' && v > 0) allocs[canonical] = (allocs[canonical] || 0) + v;
+    });
+
+    // Inject team fee totals into personnel_labor_fees allocation when not already covered
+    const teamFeeTotalCents = teamComposition.reduce((sum, member) => {
+      if (!member.feeType) return sum;
+      return sum + Math.round(calcMemberTotalCost(member, projectBudgetForFees) * 100);
+    }, 0);
+    if (teamFeeTotalCents > 0) {
+      // Use the larger of the explicit allocation or the sum of team fees
+      allocs['personnel_labor_fees'] = Math.max(allocs['personnel_labor_fees'] || 0, teamFeeTotalCents);
+    }
+
+    // Actuals from operational cost submissions (approved / paid)
     const actuals: Record<string, number> = {};
     opsCosts.forEach(c => {
-      const budgetKey = EXPENSE_TO_BUDGET[c.expense_category?.toLowerCase()] || c.expense_category;
+      const raw = (c.expense_category || '').toLowerCase();
+      const budgetKey = EXPENSE_TO_BUDGET[raw] || LEGACY_TO_CANONICAL[raw] || raw;
       if (budgetKey) actuals[budgetKey] = (actuals[budgetKey] || 0) + (c.amount_cents || 0);
     });
+
+    // Add paid team fees to actuals under personnel_labor_fees
+    if (teamFeePaidCents > 0) {
+      actuals['personnel_labor_fees'] = (actuals['personnel_labor_fees'] || 0) + teamFeePaidCents;
+    }
+
     const cats = new Set([...Object.keys(allocs), ...Object.keys(actuals)]);
     return Array.from(cats).map(cat => {
       const budgeted = allocs[cat] || 0;
@@ -202,7 +298,7 @@ export function ProjectBudgetTab({
       const pct = budgeted > 0 ? Math.min((spent / budgeted) * 100, 100) : 0;
       return { cat, label: CATEGORY_LABELS[cat] || cat, budgeted, spent, pct };
     }).filter(r => r.budgeted > 0 || r.spent > 0).sort((a, b) => b.budgeted - a.budgeted);
-  }, [projectBudget.categoryAllocations, opsCosts]);
+  }, [projectBudget.categoryAllocations, opsCosts, teamComposition, projectBudgetForFees, teamFeePaidCents]);
 
   /* ── Spending rate forecast ── */
   const forecast = useMemo(() => {
@@ -459,11 +555,12 @@ export function ProjectBudgetTab({
       </div>
 
       {/* ── Spending breakdown mini-row ── */}
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         {[
           { label: 'Operational Costs', cents: opsCents, color: 'text-purple-600 dark:text-purple-400' },
           { label: 'Advances / Down-payments', cents: advCents, color: 'text-orange-600 dark:text-orange-400' },
           { label: 'Pre-fund Disbursed', cents: pfCents, color: 'text-blue-600 dark:text-blue-400' },
+          { label: 'Team Fees (Paid)', cents: teamFeePaidCents, color: 'text-emerald-600 dark:text-emerald-400' },
         ].map(({ label, cents, color }) => (
           <div key={label} className="rounded-lg border border-border/50 px-3 py-2.5 bg-muted/30">
             <p className="text-[11px] text-muted-foreground">{label}</p>
