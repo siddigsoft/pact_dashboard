@@ -130,6 +130,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     project.team?.teamComposition || []
   );
+
+  useEffect(() => {
+    setTeamMembers(project.team?.teamComposition || []);
+  }, [project.team?.teamComposition]);
+
   const [persisting, setPersisting] = useState(false);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   // Cross-project workload: other active projects each member is on
