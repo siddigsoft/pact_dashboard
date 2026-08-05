@@ -11,6 +11,7 @@ import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
 import { dispatchNotification } from '@/lib/notify';
 import { logAuditEvent } from '@/utils/audit-logger';
+import { provisionProjectChat } from '@/hooks/use-project-chat';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -207,6 +208,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Optimistic list update — do not await full get_all_projects refetch
       updateProjectCache(createdProject);
       void invalidateProjects();
+
+      // ── Provision project group chat (fire-and-forget) ───────────────────
+      if (currentUser?.id) {
+        provisionProjectChat(createdProject, currentUser.id).catch(err => {
+          console.warn('[ProjectContext] Failed to provision project chat:', err?.message);
+        });
+      }
 
       // ── Audit + notify team (fire-and-forget) ────────────────────────────
       const teamRecipients = (() => {

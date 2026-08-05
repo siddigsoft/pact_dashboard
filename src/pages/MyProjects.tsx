@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useAppContext } from '@/context/AppContext';
+import { useProjectCommentUnread } from '@/hooks/useProjectCommentUnread';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types/project';
 
@@ -55,6 +56,7 @@ function ProjectCard({ project, userId }: { project: Project; userId?: string })
   const myRole = getMyRole(project, userId);
   const days = daysLeft(project.endDate);
   const budget = (project as any).budget;
+  const { unreadCount } = useProjectCommentUnread(project.id, userId);
 
   return (
     <Card
@@ -140,6 +142,11 @@ function ProjectCard({ project, userId }: { project: Project; userId?: string })
             onClick={e => { e.stopPropagation(); navigate(`/projects/${project.id}?tab=comments`); }}
           >
             <MessageSquare className="h-3.5 w-3.5" /> Comments
+            {unreadCount > 0 && (
+              <span className="ml-auto flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Button>
           <Button
             type="button"
