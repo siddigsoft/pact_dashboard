@@ -17,6 +17,7 @@ import {
   X,
   GitBranch,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -166,8 +167,8 @@ const ProjectsPage = () => {
         </div>
         <div className="flex items-center gap-2">
           {(isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'projectManager'])) && (
-            <Button variant="outline" size="sm" onClick={() => navigate('/tracker-preparation-plan')} data-testid="button-tracker-prep">
-              <ClipboardList className="h-4 w-4 mr-1.5" />
+            <Button variant="ghost" size="sm" onClick={() => navigate('/tracker-preparation-plan')} data-testid="button-tracker-prep" className="text-muted-foreground hover:text-primary">
+              <ExternalLink className="h-4 w-4 mr-1.5" />
               Tracker Prep
             </Button>
           )}

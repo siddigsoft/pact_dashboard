@@ -12,7 +12,7 @@ import {
   Search, ArrowLeft, CheckCircle, Download, X,
   FileSpreadsheet as FileSpreadsheetIcon, Upload, Calendar, Wrench, AlertTriangle,
   Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send,
-  MapPin, Users, Clock, BarChart3, FileText, RotateCcw
+  MapPin, Users, Clock, BarChart3, FileText, RotateCcw, ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAppContext } from "@/context/AppContext";
@@ -571,8 +571,8 @@ const MMPDetailView = () => {
             Audit
           </Button>
           {canAccessQuestionnaires && (
-            <Button variant="outline" size="sm" onClick={() => navigate('/questionnaire-analytics')} data-testid="button-goto-questionnaire-analytics">
-              <BarChart3 className="h-4 w-4 mr-2" />
+            <Button variant="ghost" size="sm" onClick={() => navigate('/questionnaire-analytics')} data-testid="button-goto-questionnaire-analytics" className="text-muted-foreground hover:text-primary">
+              <ExternalLink className="h-4 w-4 mr-2" />
               Questionnaire Analytics
             </Button>
           )}

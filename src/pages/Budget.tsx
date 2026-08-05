@@ -34,7 +34,8 @@ import {
   BarChart3,
   FileText,
   Zap,
-  Wallet
+  Wallet,
+  ExternalLink,
 } from 'lucide-react';
 import { CreateProjectBudgetDialog } from '@/components/budget/CreateProjectBudgetDialog';
 import { CreateMMPBudgetDialog } from '@/components/budget/CreateMMPBudgetDialog';
@@ -358,23 +359,23 @@ const BudgetPage = () => {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => navigate('/financial-operations')}
             data-testid="button-goto-financial-ops"
-            className="border-blue-500/30 text-blue-300"
+            className="text-muted-foreground hover:text-primary"
           >
-            <DollarSign className="w-4 h-4 mr-1" />
+            <ExternalLink className="w-4 h-4 mr-1" />
             Financial Ops
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => navigate('/cost-submission')}
             data-testid="button-goto-cost-submissions"
-            className="border-green-500/30 text-green-300"
+            className="text-muted-foreground hover:text-primary"
           >
-            <FileText className="w-4 h-4 mr-1" />
+            <ExternalLink className="w-4 h-4 mr-1" />
             Cost Submissions
           </Button>
         </div>
