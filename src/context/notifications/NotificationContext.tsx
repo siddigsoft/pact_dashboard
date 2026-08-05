@@ -7,6 +7,10 @@ import { insertNotificationsToDb } from '@/services/notification-insert';
 
 const initialNotifications: Notification[] = [];
 
+const NOTIF_PAGE = 50;
+const NOTIF_LIST_COLS =
+  'id, recipient_id, user_id, title, message, type, event_type, entity_type, entity_id, is_read, created_at, metadata, link';
+
 type RealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 interface NotificationContextType {
@@ -19,12 +23,17 @@ interface NotificationContextType {
   lastRefresh: Date | null;
   broadcastQueue: Notification[];
   dismissBroadcast: (notificationId: string) => Promise<void>;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [appNotifications, setAppNotifications] = useState<Notification[]>(initialNotifications);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [clearedAt, setClearedAt] = useState<Date | null>(null);
@@ -272,6 +281,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
             const mapped = allNotifications.map(mapDbToNotification);
             const filteredOutChat = mapped.filter(n => n.title !== 'Chat System Active');
             const filtered = filteredOutChat.filter(filterByRoleAndProject);
+            setHasMore((recipientData?.length ?? 0) >= NOTIF_PAGE);
             setAppNotifications(prev => {
               const currentClearedAt = clearedAt;
               const currentDismissedIds = dismissedIds;
@@ -603,6 +613,46 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     }
   }, []);
 
+  // Keyset pagination — fetch the next page of older notifications and append.
+  const loadMore = useCallback(async () => {
+    if (!currentUserId || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const oldest = appNotifications.reduce<string | null>(
+        (min, n) => (min === null || n.createdAt < min ? n.createdAt : min),
+        null,
+      );
+      let q = supabase
+        .from('notifications')
+        .select(NOTIF_LIST_COLS)
+        .eq('recipient_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(NOTIF_PAGE);
+      if (oldest) q = q.lt('created_at', oldest);
+      const { data, error } = await q;
+      if (error) throw error;
+      const rows = data || [];
+      setHasMore(rows.length >= NOTIF_PAGE);
+      const mapped = rows
+        .map(mapDbToNotification)
+        .filter(n => n.title !== 'Chat System Active')
+        .filter(filterByRoleAndProject)
+        .filter(n => {
+          if (dismissedIds.has(n.id)) return false;
+          if (clearedAt && new Date(n.createdAt) <= clearedAt) return false;
+          return true;
+        });
+      setAppNotifications(prev => {
+        const seen = new Set(prev.map(n => n.id));
+        return [...prev, ...mapped.filter(n => !seen.has(n.id))];
+      });
+    } catch (e) {
+      console.error('[NotificationContext] loadMore error:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [currentUserId, loadingMore, appNotifications, mapDbToNotification, filterByRoleAndProject, dismissedIds, clearedAt]);
+
   return (
     <NotificationContext.Provider
       value={{
@@ -615,6 +665,9 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
         lastRefresh,
         broadcastQueue,
         dismissBroadcast,
+        hasMore,
+        loadingMore,
+        loadMore,
       }}
     >
       {children}
