@@ -195,6 +195,61 @@ export class ChatService {
     }
   }
 
+  // Get existing project-linked chat by project ID
+  static async getProjectChat(projectId: string): Promise<DatabaseChat | null> {
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select(`
+          id,
+          name,
+          type,
+          is_group,
+          created_by,
+          state_id,
+          related_entity_id,
+          related_entity_type,
+          created_at,
+          updated_at,
+          pair_key
+        `)
+        .eq('related_entity_type', 'project')
+        .eq('related_entity_id', projectId)
+        .maybeSingle();
+      if (error) return null;
+      return data as DatabaseChat | null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Get a single chat by its ID
+  static async getChatById(chatId: string): Promise<DatabaseChat | null> {
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select(`
+          id,
+          name,
+          type,
+          is_group,
+          created_by,
+          state_id,
+          related_entity_id,
+          related_entity_type,
+          created_at,
+          updated_at,
+          pair_key
+        `)
+        .eq('id', chatId)
+        .maybeSingle();
+      if (error) return null;
+      return data as DatabaseChat | null;
+    } catch {
+      return null;
+    }
+  }
+
   // Get chat participants
   static async getChatParticipants(chatId: string): Promise<ChatParticipant[] | null> {
     try {

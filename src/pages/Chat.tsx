@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ChatWindow from '@/components/chat/ChatWindow';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
+import { ChatService } from '@/services/ChatService';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { User } from '@/types/user';
 import { 
@@ -78,13 +79,39 @@ const Chat: React.FC = () => {
     
     if (!paramKey || lastProcessedParamRef.current === paramKey) return;
     
-    if (chatId && chats.length > 0) {
+    if (chatId) {
       const existingChat = chats.find(c => c.id === chatId);
       if (existingChat) {
         lastProcessedParamRef.current = paramKey;
         setActiveChat(existingChat);
         setActiveTab('conversations');
         if (isMobile) setActiveView('chat');
+        setSearchParams({}, { replace: true });
+      } else if (currentUser) {
+        // Chat not in local state yet — fetch it from DB (e.g. just-created project chat)
+        lastProcessedParamRef.current = paramKey;
+        ChatService.getChatById(chatId).then(async dbChat => {
+          if (!dbChat) return;
+          const participantsData = await ChatService.getChatParticipants(dbChat.id);
+          const participantIds = (participantsData ?? []).map(p => p.user_id);
+          const chat = {
+            id: dbChat.id,
+            name: dbChat.name,
+            type: dbChat.type,
+            isGroup: dbChat.is_group,
+            createdBy: dbChat.created_by,
+            stateId: dbChat.state_id,
+            relatedEntityId: dbChat.related_entity_id,
+            relatedEntityType: dbChat.related_entity_type,
+            createdAt: dbChat.created_at,
+            updatedAt: dbChat.updated_at,
+            participants: participantIds,
+            status: 'active' as const,
+          };
+          setActiveChat(chat);
+          setActiveTab('conversations');
+          if (isMobile) setActiveView('chat');
+        });
         setSearchParams({}, { replace: true });
       }
     } else if (userId && users.length > 0 && currentUser) {

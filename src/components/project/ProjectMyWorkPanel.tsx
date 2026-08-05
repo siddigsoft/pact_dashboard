@@ -10,6 +10,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useProjectChat } from '@/hooks/use-project-chat';
 import {
   CheckSquare, Receipt, DollarSign, MessageSquare, ArrowRight,
   Clock, CheckCircle2, AlertCircle, Circle, Loader2, Users,
@@ -79,6 +80,7 @@ interface Props {
 
 export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal }: Props) {
   const navigate = useNavigate();
+  const { openProjectChat, busy: chatBusy } = useProjectChat();
   const [tasks, setTasks] = useState<FieldTask[]>([]);
   const [costs, setCosts] = useState<CostSub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,9 +171,11 @@ export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, pr
             size="sm"
             variant="ghost"
             className="h-7 text-[11px] gap-1 text-primary"
-            onClick={() => navigate('/communication-hub?tab=chat')}
+            disabled={chatBusy}
+            onClick={() => openProjectChat(project, currentUserId)}
           >
-            Message Team <ArrowRight className="h-3 w-3" />
+            {chatBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+            Message Team
           </Button>
         </div>
       </div>
