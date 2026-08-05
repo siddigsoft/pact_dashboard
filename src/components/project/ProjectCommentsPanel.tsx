@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 
 interface ProjectCommentsPanelProps {
   projectId: string;
+  projectName?: string;
   currentUserId: string;
   currentUserName?: string;
   isAdmin: boolean;
@@ -153,6 +154,7 @@ function CommentBubble({
 /* ── Panel ───────────────────────────────────────────────────────────── */
 const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
   projectId,
+  projectName,
   currentUserId,
   currentUserName,
   isAdmin,
@@ -210,8 +212,34 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
     const ok = await addComment(trimmed, currentUserId, currentUserName, replyingTo.id);
     if (ok) {
       setReplyText('');
+      const parentAuthorId = replyingTo.author_id;
+      const capturedReplyingTo = replyingTo;
       setReplyingTo(null);
-      dispatchMentionNotification(trimmed, projectId, replyingTo.id);
+      dispatchMentionNotification(trimmed, projectId, capturedReplyingTo.id);
+
+      // Notify the parent comment author — skip if they are the replier or already mentioned
+      const mentionIds = extractMentionIds(trimmed);
+      const isSelfReply = parentAuthorId === currentUserId;
+      const alreadyMentioned = mentionIds.includes(parentAuthorId);
+      if (!isSelfReply && !alreadyMentioned) {
+        const authorName = currentUserName ?? 'A teammate';
+        const projectLabel = projectName ? ` on project ${projectName}` : ' on a project';
+        dispatchNotification({
+          event: 'comment_reply',
+          recipientIds: [parentAuthorId],
+          titleEn: `${authorName} replied to your comment`,
+          titleAr: `${authorName} رد على تعليقك`,
+          messageEn: `${authorName} replied to your comment${projectLabel}`,
+          messageAr: `${authorName} رد على تعليقك${projectLabel}`,
+          priority: 'normal',
+          entityType: 'project',
+          entityId: projectId,
+          actionUrl: `/projects/${projectId}`,
+          sendEmail: true,
+          triggeredBy: currentUserId,
+          triggeredByName: authorName,
+        });
+      }
     }
   };
 

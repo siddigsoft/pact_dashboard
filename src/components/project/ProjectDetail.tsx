@@ -1490,6 +1490,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <CardContent className="p-3 pt-0">
                 <ProjectCommentsPanel
                   projectId={project.id}
+                  projectName={project.name}
                   currentUserId={currentUser.id}
                   currentUserName={currentUser.fullName}
                   isAdmin={isAdminUser}
@@ -1927,6 +1928,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <TabsContent value="comments" className="mt-4">
           <ProjectCommentsPanel
             projectId={project.id}
+            projectName={project.name}
             currentUserId={currentUser?.id ?? ''}
             currentUserName={currentUser?.fullName}
             isAdmin={canArchive}
