@@ -738,6 +738,7 @@ export function FlowTab({
   };
 
   // Save custom outputs for a specific stage via updateCustomStages
+  const SENTINEL_PREFIX = '~~rm~~:';
   const saveOutputsForStage = async (stageId: string, outputs: string[]) => {
     setOutputsSaving(stageId);
     try {
@@ -750,7 +751,11 @@ export function FlowTab({
         ? base.map(e => e.id === stageId ? { ...e, customOutputs: outputs } : e)
         : [...base, { id: stageId, customOutputs: outputs }];
       await updateCustomStages(updated);
-      setOutputsState(prev => ({ ...prev, [stageId]: { items: outputs, inputVal: '' } }));
+      // Only store user-visible items in local state — sentinels are internal markers
+      setOutputsState(prev => ({
+        ...prev,
+        [stageId]: { items: outputs.filter(o => !o.startsWith(SENTINEL_PREFIX)), inputVal: '' },
+      }));
     } catch (err: any) {
       toast({ title: 'Failed to save outputs', description: err.message, variant: 'destructive' });
     } finally {

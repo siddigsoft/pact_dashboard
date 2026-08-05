@@ -77,9 +77,11 @@ function getRiskLevel(score: number): { label: string; bg: string; text: string 
   return               { label: 'Critical',  bg: 'bg-red-100 dark:bg-red-900/30',        text: 'text-red-700 dark:text-red-400' };
 }
 
+const NONE_OWNER = '__none__';
+
 const BLANK = {
   title: '', description: '', category: 'operational', likelihood: 'medium',
-  impact: 'moderate', status: 'open', owner_id: '', mitigation_plan: '',
+  impact: 'moderate', status: 'open', owner_id: NONE_OWNER, mitigation_plan: '',
   contingency_plan: '', due_date: '', responsible_unit: '', resolution_date: '',
 };
 
@@ -130,7 +132,7 @@ export function ProjectRisksPanel({ projectId }: Props) {
       likelihood: risk.likelihood,
       impact: risk.impact,
       status: risk.status,
-      owner_id: risk.owner_id ?? '',
+      owner_id: risk.owner_id ?? NONE_OWNER,
       mitigation_plan: risk.mitigation_plan ?? '',
       contingency_plan: risk.contingency_plan ?? '',
       due_date: risk.due_date ?? '',
@@ -151,7 +153,7 @@ export function ProjectRisksPanel({ projectId }: Props) {
       likelihood: form.likelihood,
       impact: form.impact,
       status: form.status,
-      owner_id: form.owner_id || null,
+      owner_id: form.owner_id && form.owner_id !== NONE_OWNER ? form.owner_id : null,
       mitigation_plan: form.mitigation_plan || null,
       contingency_plan: form.contingency_plan || null,
       due_date: form.due_date || null,
@@ -409,10 +411,10 @@ export function ProjectRisksPanel({ projectId }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Risk Owner</Label>
-                <Select value={form.owner_id} onValueChange={v => setForm(p => ({ ...p, owner_id: v }))}>
+                <Select value={form.owner_id || NONE_OWNER} onValueChange={v => setForm(p => ({ ...p, owner_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value={NONE_OWNER}>Unassigned</SelectItem>
                     {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}
                   </SelectContent>
                 </Select>

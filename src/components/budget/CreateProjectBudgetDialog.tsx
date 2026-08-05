@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useBudget } from '@/context/budget/BudgetContext';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, DollarSign } from 'lucide-react';
 import type { ProjectBudget } from '@/types/budget';
 
 interface CreateProjectBudgetDialogProps {
@@ -140,28 +140,33 @@ export function CreateProjectBudgetDialog({
   const usedCategories = lineItems.map(i => i.category).filter(Boolean);
 
   const defaultTrigger = (
-    <button
+    <Button
       type="button"
-      className="px-4 py-2 rounded-md bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border border-blue-400/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-400/70 transition inline-flex items-center"
+      size="sm"
+      variant="outline"
+      className="gap-1.5"
       data-testid="button-create-project-budget"
     >
-      <Plus className="w-4 h-4 mr-2" />
+      <Plus className="w-4 h-4" />
       Create Budget
-    </button>
+    </Button>
   );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {!isControlled && (trigger ?? defaultTrigger)}
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-950 to-purple-950 border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-cyan-100">Create Budget: {projectName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-[#1D3461]" />
+            Create Budget: {projectName}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4">
           {/* Reference banner when pre-filled */}
           {initialAmount != null && initialAmount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-900/40 border border-blue-500/40 text-sm text-blue-200">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-sm text-blue-700 dark:text-blue-300">
               <span className="shrink-0">📌</span>
               <span>
                 Project funding: <strong>{initialCurrency} {initialAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>.
@@ -172,9 +177,7 @@ export function CreateProjectBudgetDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="total-budget" className="text-cyan-200">
-                Total Budget ({initialCurrency})
-              </Label>
+              <Label htmlFor="total-budget">Total Budget ({initialCurrency})</Label>
               <Input
                 id="total-budget"
                 type="number"
@@ -183,15 +186,14 @@ export function CreateProjectBudgetDialog({
                 value={totalBudget}
                 onChange={e => setTotalBudget(e.target.value)}
                 placeholder="0.00"
-                className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
                 data-testid="input-total-budget"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="budget-period" className="text-cyan-200">Budget Period</Label>
+              <Label htmlFor="budget-period">Budget Period</Label>
               <Select value={budgetPeriod} onValueChange={v => setBudgetPeriod(v as ProjectBudget['budgetPeriod'])}>
-                <SelectTrigger id="budget-period" className="bg-slate-800/50 border-blue-500/30 text-cyan-100" data-testid="select-budget-period">
+                <SelectTrigger id="budget-period" data-testid="select-budget-period">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -206,7 +208,7 @@ export function CreateProjectBudgetDialog({
 
           {(budgetPeriod === 'annual' || budgetPeriod === 'quarterly') && (
             <div className="grid gap-2">
-              <Label htmlFor="fiscal-year" className="text-cyan-200">Fiscal Year</Label>
+              <Label htmlFor="fiscal-year">Fiscal Year</Label>
               <Input
                 id="fiscal-year"
                 type="number"
@@ -214,38 +216,38 @@ export function CreateProjectBudgetDialog({
                 max="2050"
                 value={fiscalYear}
                 onChange={e => setFiscalYear(e.target.value)}
-                className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
                 data-testid="input-fiscal-year"
               />
             </div>
           )}
 
           {/* Line items */}
-          <div className="border-t border-cyan-500/20 pt-4">
+          <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="font-medium text-cyan-100">Budget Line Items (Optional)</h4>
+              <h4 className="text-sm font-semibold">Budget Line Items <span className="font-normal text-muted-foreground">(Optional)</span></h4>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addLineItem}
-                className="border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20"
+                className="gap-1"
                 data-testid="button-add-line-item"
               >
-                <Plus className="w-4 h-4 mr-1" /> Add Item
+                <Plus className="w-3.5 h-3.5" /> Add Item
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {lineItems.map((item, index) => (
-                <div key={item.id} className="grid grid-cols-[1fr_140px_36px] gap-2 items-end">
+                <div key={item.id} className="grid grid-cols-[1fr_140px_32px] gap-2 items-end">
                   <div className="grid gap-1">
-                    {index === 0 && <Label className="text-xs text-cyan-300/70">Category</Label>}
-                    <Select value={item.category} onValueChange={v => updateLineItem(item.id, 'category', v)}>
-                      <SelectTrigger className="bg-slate-800/50 border-blue-500/30 text-cyan-100" data-testid={`select-category-${index}`}>
+                    {index === 0 && <Label className="text-xs text-muted-foreground">Category</Label>}
+                    <Select value={item.category || '__none__'} onValueChange={v => updateLineItem(item.id, 'category', v === '__none__' ? '' : v)}>
+                      <SelectTrigger data-testid={`select-category-${index}`}>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">Select category</SelectItem>
                         {CATEGORY_OPTIONS.map(opt => (
                           <SelectItem
                             key={opt.value}
@@ -259,7 +261,7 @@ export function CreateProjectBudgetDialog({
                     </Select>
                   </div>
                   <div className="grid gap-1">
-                    {index === 0 && <Label className="text-xs text-cyan-300/70">Amount ({initialCurrency})</Label>}
+                    {index === 0 && <Label className="text-xs text-muted-foreground">Amount ({initialCurrency})</Label>}
                     <Input
                       type="number"
                       min="0"
@@ -267,7 +269,6 @@ export function CreateProjectBudgetDialog({
                       value={item.amount}
                       onChange={e => updateLineItem(item.id, 'amount', e.target.value)}
                       placeholder="0.00"
-                      className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
                       data-testid={`input-amount-${index}`}
                     />
                   </div>
@@ -275,7 +276,7 @@ export function CreateProjectBudgetDialog({
                     type="button"
                     onClick={() => removeLineItem(item.id)}
                     disabled={lineItems.length === 1}
-                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded disabled:opacity-40"
+                    className="h-9 w-8 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded disabled:opacity-30 transition-colors"
                     data-testid={`button-remove-item-${index}`}
                   >
                     ×
@@ -285,15 +286,15 @@ export function CreateProjectBudgetDialog({
             </div>
 
             {categoryTotal > 0 && (
-              <div className="mt-3 p-3 rounded-md bg-cyan-900/20 border border-cyan-500/30">
+              <div className="mt-3 p-3 rounded-md bg-muted/50 border">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-cyan-200">Total Allocated:</span>
-                  <span className="text-sm font-bold text-cyan-100">
+                  <span className="text-sm font-medium">Total Allocated:</span>
+                  <span className="text-sm font-bold">
                     {initialCurrency} {categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {totalBudget && categoryTotal > parseFloat(totalBudget) && (
-                  <p className="text-sm text-red-300 mt-1">
+                  <p className="text-sm text-destructive mt-1">
                     Category total exceeds budget by {initialCurrency} {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
                   </p>
                 )}
@@ -302,26 +303,24 @@ export function CreateProjectBudgetDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="notes" className="text-cyan-200">Budget Notes</Label>
+            <Label htmlFor="notes">Budget Notes</Label>
             <Textarea
               id="notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="Additional notes about this budget..."
               rows={3}
-              className="bg-slate-800/50 border-blue-500/30 text-cyan-100"
               data-testid="textarea-budget-notes"
             />
           </div>
         </div>
 
-        <div className="flex gap-3 justify-end pt-4 border-t border-cyan-500/20">
+        <div className="flex gap-3 justify-end pt-4 border-t">
           <Button
             type="button"
             variant="outline"
             onClick={() => setOpen(false)}
             disabled={loading}
-            className="border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20"
             data-testid="button-cancel"
           >
             Cancel
@@ -330,7 +329,6 @@ export function CreateProjectBudgetDialog({
             type="button"
             onClick={handleSubmit}
             disabled={!totalBudget || parseFloat(totalBudget) <= 0 || loading}
-            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border border-cyan-400/50"
             data-testid="button-submit"
           >
             {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Budget'}
