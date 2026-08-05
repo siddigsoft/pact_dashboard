@@ -96,6 +96,61 @@ const createFormSchema = (isEditing: boolean) => z.object({
 
 type FormSchema = z.infer<ReturnType<typeof createFormSchema>>;
 
+type PmUserRef = { id: string; name: string; performance?: { currentWorkload?: number } };
+
+/**
+ * When projectManager changes, keep teamComposition aligned:
+ * - promote/add the selected PM with role projectManager
+ * - demote any former PM still on the team (role → other)
+ */
+function syncProjectManagerInTeam(
+  members: ProjectTeamMember[],
+  pmUser: PmUserRef | undefined,
+): ProjectTeamMember[] {
+  const existing = Array.isArray(members) ? members : [];
+
+  const updated = existing.map((member) => {
+    if (member.role !== 'projectManager') return member;
+    if (pmUser?.id && member.userId === pmUser.id) {
+      return { ...member, name: pmUser.name, role: 'projectManager' as const };
+    }
+    return { ...member, role: 'other' as const };
+  });
+
+  if (!pmUser?.id) return updated;
+
+  const pmIndex = updated.findIndex((m) => m.userId === pmUser.id);
+  if (pmIndex >= 0) {
+    const next = [...updated];
+    next[pmIndex] = {
+      ...next[pmIndex],
+      name: pmUser.name,
+      role: 'projectManager',
+    };
+    return next;
+  }
+
+  return [
+    ...updated,
+    {
+      userId: pmUser.id,
+      name: pmUser.name,
+      role: 'projectManager',
+      joinedAt: new Date().toISOString(),
+      memberType: 'internal',
+      workload: pmUser.performance?.currentWorkload || 0,
+    },
+  ];
+}
+
+function resolvePmUser(
+  pmName: string,
+  candidates: PmUserRef[],
+): PmUserRef | undefined {
+  if (!pmName) return undefined;
+  return candidates.find((u) => String(u.name).trim() === pmName);
+}
+
 export interface BudgetFormData {
   budgetPeriod: 'monthly' | 'quarterly' | 'annual' | 'project_lifetime';
   fiscalYear: string;
@@ -221,6 +276,20 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
     },
   });
 
+  const watchProjectManager = form.watch('projectManager');
+
+  // When PM changes on edit/create, reflect it in team members immediately.
+  useEffect(() => {
+    const pmNameRaw = (watchProjectManager ?? '').toString().trim();
+    const pmName = pmNameRaw && pmNameRaw.toLowerCase() !== 'none' ? pmNameRaw : '';
+    if (pmName && projectManagerUsers.length === 0) return;
+
+    const pmUser = resolvePmUser(pmName, projectManagerUsers);
+    if (pmName && !pmUser) return;
+
+    setTeamMembers((prev) => syncProjectManagerInTeam(prev, pmUser));
+  }, [watchProjectManager, projectManagerUsers]);
+
   const handleFormSubmit = async (values: FormSchema) => {
     // T35 — region validation: a Sudan project without any state selection
     // breaks geo-zone matching, MMP coverage, and site dispatch. Block submit
@@ -250,27 +319,11 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       // while `teamComposition` requires the member's `userId`.
       const pmNameRaw = (values.projectManager ?? '').toString().trim();
       const pmName = pmNameRaw && pmNameRaw.toLowerCase() !== 'none' ? pmNameRaw : '';
-      const pmUser = pmName
-        ? projectManagerUsers.find(u => String(u.name).trim() === pmName)
-        : undefined;
-
-      const teamCompositionWithPm: ProjectTeamMember[] = (() => {
-        const existing = Array.isArray(teamMembers) ? teamMembers : [];
-        if (!pmUser?.id) return existing;
-        const alreadyInTeam = existing.some(m => m?.userId && m.userId === pmUser.id);
-        if (alreadyInTeam) return existing;
-        return [
-          ...existing,
-          {
-            userId: pmUser.id,
-            name: pmUser.name,
-            role: 'projectManager',
-            joinedAt: new Date().toISOString(),
-            memberType: 'internal',
-            workload: pmUser.performance?.currentWorkload || 0,
-          },
-        ];
-      })();
+      const pmUser = resolvePmUser(pmName, projectManagerUsers);
+      const teamCompositionWithPm = syncProjectManagerInTeam(
+        Array.isArray(teamMembers) ? teamMembers : [],
+        pmUser,
+      );
 
       const project: Project = {
         id: initialData?.id || `proj-${Date.now()}`,
@@ -1128,9 +1181,20 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
             </div>
 
             {isEditing && initialData?.id && (
-              <TeamCompositionManager 
-                project={initialData as Project} 
-                onTeamChange={handleTeamChange} 
+              <TeamCompositionManager
+                project={{
+                  ...(initialData as Project),
+                  team: {
+                    ...(initialData?.team || {}),
+                    projectManager: watchProjectManager || initialData?.team?.projectManager,
+                    teamComposition: teamMembers,
+                    members: teamMembers
+                      .filter((m) => m.memberType !== 'external')
+                      .map((m) => m.userId)
+                      .filter(Boolean),
+                  },
+                }}
+                onTeamChange={handleTeamChange}
               />
             )}
             
