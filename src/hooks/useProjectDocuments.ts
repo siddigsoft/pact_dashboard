@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { mirrorProjectDocumentToWorkspace } from '@/utils/projectDocumentWorkspace';
 
 export interface ProjectDocument {
   id: string;
@@ -130,6 +131,21 @@ export function useProjectDocuments(projectId: string) {
         if (dbError) {
           await supabase.storage.from(BUCKET).remove([storagePath]);
           throw dbError;
+        }
+
+        // Mirror into Workspace: Projects / {project} / {uploader} / file (non-fatal)
+        try {
+          await mirrorProjectDocumentToWorkspace({
+            projectId,
+            uploaderId,
+            file,
+            label: label.trim(),
+          });
+        } catch (mirrorErr: unknown) {
+          console.warn(
+            '[projectDocuments] workspace mirror failed:',
+            mirrorErr instanceof Error ? mirrorErr.message : mirrorErr,
+          );
         }
 
         await fetchDocuments();
