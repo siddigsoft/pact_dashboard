@@ -501,14 +501,23 @@ const CostSubmission = () => {
     submission: OperationalCostSubmission | null;
   }>({ open: false, submission: null });
   const [confirmingReceipt, setConfirmingReceipt] = useState(false);
+  // Track IDs the user has already confirmed this session so the useEffect
+  // doesn't re-open the dialog before the DB refresh propagates back.
+  const confirmedReceiptIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!currentUser?.id || operationalCosts.length === 0) return;
-    // Only show for the requester (person who submitted)
+    // Only show for the requester — skip any already confirmed this session
     const pending = operationalCosts.find(
-      o => o.status === 'paid' && !(o as any).fund_receipt_confirmed && o.submitted_by === currentUser.id
+      o =>
+        o.status === 'paid' &&
+        !o.fund_receipt_confirmed &&
+        o.submitted_by === currentUser.id &&
+        !confirmedReceiptIds.current.has(o.id)
     );
-    if (pending) setReceiptConfirmDialog({ open: true, submission: pending });
+    if (pending) {
+      setReceiptConfirmDialog({ open: true, submission: pending });
+    }
   }, [operationalCosts, currentUser?.id]);
 
   const handleConfirmReceipt = async () => {
@@ -521,6 +530,9 @@ const CostSubmission = () => {
         .update({ fund_receipt_confirmed: true, fund_receipt_confirmed_at: new Date().toISOString() })
         .eq('id', sub.id);
       if (error) throw error;
+      // Mark confirmed locally so the useEffect doesn't re-trigger before the
+      // next data refresh delivers the updated fund_receipt_confirmed flag.
+      confirmedReceiptIds.current.add(sub.id);
       toast({ title: 'Receipt confirmed', description: 'Thank you for confirming you received the payment.' });
       setReceiptConfirmDialog({ open: false, submission: null });
     } catch (e: any) {
@@ -13294,7 +13306,9 @@ const CostSubmission = () => {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                      {(sub as any).currency || 'SDG'} {new Intl.NumberFormat().format((sub as any).total_amount || (sub as any).amount || 0)}
+                      {sub.currency || 'SDG'} {new Intl.NumberFormat().format(
+                        (sub.amount_paid_cents ?? sub.amount_cents ?? 0) / 100
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
