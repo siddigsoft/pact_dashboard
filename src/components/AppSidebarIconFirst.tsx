@@ -121,6 +121,8 @@ const getWorkflowMenuGroups = (
     workspaceItems.push({ id: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1 });
   if (!isHidden("/my-tasks"))
     workspaceItems.push({ id: "my-tasks", title: "My Tasks", url: "/my-tasks", icon: CheckSquare, priority: 2 });
+  if (!isHidden("/my-projects"))
+    workspaceItems.push({ id: "my-projects", title: "My Projects", url: "/my-projects", icon: FolderKanban, priority: 2.5 });
   if (!isHidden("/team-tasks") && (isSuperAdmin || isAdmin || isCountryDirector || ["ceo","coo","cto","hr_manager"].includes(defaultRole.toLowerCase())))
     workspaceItems.push({ id: "team-tasks", title: "Team Monitor", url: "/team-tasks", icon: Users, priority: 3 });
   if (!isHidden("/my-team"))
