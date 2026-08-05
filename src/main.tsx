@@ -8,9 +8,11 @@ import { initCapacitor } from './lib/capacitor-init'
 import './lib/i18n' // Initialize i18n for multilingual support
 import { initializeCrashlytics, setupGlobalErrorHandler } from './lib/crashlytics'
 import { validateEnv, verifyServiceWorkerFiles } from './utils/env-validation'
+import { setupChunkLoadRecovery } from './lib/chunk-load-recovery'
 
 validateEnv();
 verifyServiceWorkerFiles();
+setupChunkLoadRecovery();
 
 initCapacitor().then(async () => {
   console.log('[PACT] Capacitor initialized');

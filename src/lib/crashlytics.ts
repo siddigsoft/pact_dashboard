@@ -263,6 +263,15 @@ export function setupGlobalErrorHandler(): void {
     const error = event.reason instanceof Error 
       ? event.reason 
       : new Error(String(event.reason));
+
+    // Chunk load failures are handled by setupChunkLoadRecovery — not app bugs.
+    const msg = error.message ?? '';
+    if (/loading chunk|failed to fetch dynamically imported module|importing a module script failed/i.test(msg)) {
+      if (originalOnUnhandledRejection) {
+        originalOnUnhandledRejection.call(window, event);
+      }
+      return;
+    }
     
     logNonFatalError(error, {
       handler: 'unhandledrejection',

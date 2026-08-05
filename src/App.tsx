@@ -1,4 +1,6 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { lazyWithRetry as lazy } from '@/lib/chunk-load-recovery';
+import { useDeployVersionCheck } from '@/hooks/use-deploy-version-check';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -250,6 +252,7 @@ import { NotificationStack } from './components/NotificationStack';
 import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ChunkLoadRecoveryUI } from './components/ChunkLoadRecoveryUI';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
 import { canSeePage, canSeePageWithOverrides, resolveSlug, getPageLabel } from './lib/page-roles';
@@ -269,25 +272,10 @@ const PageLoader = () => (
 );
 
 // Per-page error boundary so a single page crash doesn't take down the whole app
-const PageCrashFallback = () => (
-  <div className="min-h-[60vh] flex items-center justify-center p-8">
-    <div className="bg-card border rounded-lg p-6 text-center max-w-md w-full shadow-sm">
-      <h2 className="text-lg font-semibold text-destructive mb-2">Page failed to load</h2>
-      <p className="text-muted-foreground text-sm mb-4">
-        Something went wrong on this page. Try refreshing, or navigate to another section.
-      </p>
-      <button
-        onClick={() => window.location.reload()}
-        className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors text-sm"
-      >
-        Refresh Page
-      </button>
-    </div>
-  </div>
-);
+const PageCrashFallback = () => <ChunkLoadRecoveryUI />;
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
-  <ErrorBoundary>
+  <ErrorBoundary fallback={<PageCrashFallback />}>
     {children}
   </ErrorBoundary>
 );
@@ -553,7 +541,7 @@ const AppRoutes = () => {
         <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
         <Route path="/team-tasks" element={<PageWrapper><TeamTaskMonitor /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
-        <Route path="/programme-hub" element={<ProgrammeHub />} />
+        <Route path="/programme-hub" element={<PageWrapper><ProgrammeHub /></PageWrapper>} />
         <Route path="/projects/analytics" element={<Navigate to="/programme-hub?tab=analytics" replace />} />
         <Route path="/portfolio" element={<Navigate to="/programme-hub?tab=portfolio" replace />} />
         <Route path="/projects/create" element={<PageWrapper><CreateProject /></PageWrapper>} />
@@ -790,6 +778,7 @@ const AppRoutes = () => {
 
 function App() {
   const [isMounted, setIsMounted] = useState(false);
+  useDeployVersionCheck();
 
   // Ensure component mounts before rendering to avoid hydration issues
   useEffect(() => {

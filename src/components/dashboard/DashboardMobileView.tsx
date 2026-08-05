@@ -13,16 +13,17 @@ import { MMPStageIndicator } from '@/components/MMPStageIndicator';
 import ForwardedMMPsCard from './ForwardedMMPsCard';
 import { useAppContext } from '@/context/AppContext';
 import React from 'react';
+import { lazyWithRetry } from '@/lib/chunk-load-recovery';
 
-const DashboardCalendar = React.lazy(() => 
+const DashboardCalendar = lazyWithRetry(() => 
   import('@/components/dashboard/DashboardCalendar')
     .then(module => ({ default: module.DashboardCalendar }))
 );
 
-const SiteVisitsOverview = React.lazy(() => import('@/components/dashboard/SiteVisitsOverview'));
-const ActivityFeed = React.lazy(() => import('@/components/dashboard/ActivityFeed'));
-const DashboardLocationSharingCard = React.lazy(() => import('@/components/DashboardLocationSharingCard'));
-const LiveTeamMapWidget = React.lazy(() => import('@/components/dashboard/LiveTeamMapWidget'));
+const SiteVisitsOverview = lazyWithRetry(() => import('@/components/dashboard/SiteVisitsOverview'));
+const ActivityFeed = lazyWithRetry(() => import('@/components/dashboard/ActivityFeed'));
+const DashboardLocationSharingCard = lazyWithRetry(() => import('@/components/DashboardLocationSharingCard'));
+const LiveTeamMapWidget = lazyWithRetry(() => import('@/components/dashboard/LiveTeamMapWidget'));
 
 const LoadingCard = () => (
   <Card className="animate-pulse">
