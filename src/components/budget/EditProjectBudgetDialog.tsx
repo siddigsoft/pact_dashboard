@@ -33,6 +33,16 @@ interface EditProjectBudgetDialogProps {
   currentUserName?: string;
 }
 
+/** Maps legacy budget category keys to their nearest new canonical key */
+const LEGACY_KEY_MAP: Record<string, string> = {
+  transportation_and_visit_fees: 'transportation_logistics',
+  permit_fee: 'permits_taxes_legal',
+  internet_and_communication_fees: 'internet_communication',
+  professional_fees: 'personnel_labor_fees',
+  personnel_fees: 'personnel_labor_fees',
+  management_overhead_legacy: 'management_overhead',
+};
+
 const CATEGORY_OPTIONS = [
   { value: 'personnel_labor_fees', label: 'Personnel & Labor Fees' },
   { value: 'transportation_logistics', label: 'Transportation & Logistics' },
@@ -76,10 +86,16 @@ export function EditProjectBudgetDialog({
 
       const items: BudgetLineItem[] = [];
       if (budget.categoryAllocations) {
+        // Merge allocations, normalising legacy keys to canonical new keys
+        const merged: Record<string, number> = {};
         Object.entries(budget.categoryAllocations).forEach(([category, amountCents]) => {
           if (typeof amountCents === 'number' && amountCents > 0) {
-            items.push({ id: crypto.randomUUID(), category, amount: (amountCents / 100).toString() });
+            const canonical = LEGACY_KEY_MAP[category] ?? category;
+            merged[canonical] = (merged[canonical] ?? 0) + amountCents;
           }
+        });
+        Object.entries(merged).forEach(([category, amountCents]) => {
+          items.push({ id: crypto.randomUUID(), category, amount: (amountCents / 100).toString() });
         });
       }
       if (items.length === 0) {

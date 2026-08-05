@@ -265,17 +265,21 @@ export function ProjectBudgetCard({ budget, projectName, onClick }: ProjectBudge
               <div>
                 <h4 className="font-semibold mb-3 text-cyan-100">Category Breakdown</h4>
                 <div className="space-y-2">
-                  {Object.entries(budget.categoryAllocations).map(([key, value]) => {
-                    const amount = typeof value === 'number' ? value : 0;
-                    if (amount === 0) return null;
-                    const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
-                    return (
-                      <div key={key} className="flex items-center justify-between">
+                  {(() => {
+                    const merged = new Map<string, number>();
+                    for (const [key, value] of Object.entries(budget.categoryAllocations)) {
+                      const amount = typeof value === 'number' ? value : 0;
+                      if (amount === 0) continue;
+                      const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
+                      merged.set(displayName, (merged.get(displayName) ?? 0) + amount);
+                    }
+                    return Array.from(merged.entries()).map(([displayName, amount]) => (
+                      <div key={displayName} className="flex items-center justify-between">
                         <span className="text-sm text-cyan-200">{displayName}</span>
                         <span className="font-semibold text-cyan-100">{formatCurrency(amount)}</span>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
@@ -478,17 +482,21 @@ export function MMPBudgetCard({ budget, mmpName, onClick }: MMPBudgetCardProps) 
               <div>
                 <h4 className="font-semibold mb-3 text-purple-100">Category Breakdown</h4>
                 <div className="space-y-2">
-                  {Object.entries(budget.categoryBreakdown).map(([key, value]) => {
-                    const amount = typeof value === 'number' ? value : 0;
-                    if (amount === 0) return null;
-                    const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
-                    return (
-                      <div key={key} className="flex items-center justify-between">
+                  {(() => {
+                    const merged = new Map<string, number>();
+                    for (const [key, value] of Object.entries(budget.categoryBreakdown)) {
+                      const amount = typeof value === 'number' ? value : 0;
+                      if (amount === 0) continue;
+                      const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
+                      merged.set(displayName, (merged.get(displayName) ?? 0) + amount);
+                    }
+                    return Array.from(merged.entries()).map(([displayName, amount]) => (
+                      <div key={displayName} className="flex items-center justify-between">
                         <span className="text-sm text-purple-200">{displayName}</span>
                         <span className="font-semibold text-purple-100">{formatCurrency(amount)}</span>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
