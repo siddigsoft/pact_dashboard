@@ -30,17 +30,50 @@ interface MentionTextareaProps {
   excludeUserIds?: string[];
 }
 
-const MENTION_PATTERN = /@\[([^\]]+)\]\(([a-f0-9\-]+)\)/g;
+// ── Token helpers ───────────────────────────────────────────────────────────
+
+/** Full token regex: @[Name](uuid) */
+const TOKEN_RE = /@\[([^\]]+)\]\(([a-f0-9-]{36})\)/g;
+
+/** Convert raw value (with full tokens) → display value (@Name only) */
+function rawToDisplay(raw: string): string {
+  return raw.replace(TOKEN_RE, '@$1');
+}
+
+/** Convert display value + mentionMap → raw value (with full tokens) */
+function displayToRaw(display: string, mentionMap: Record<string, string>): string {
+  let result = display;
+  // Process longer names first to avoid partial-name collisions
+  const entries = Object.entries(mentionMap).sort((a, b) => b[0].length - a[0].length);
+  for (const [name, id] of entries) {
+    // Use split/join to avoid needing regex escape
+    result = result.split(`@${name}`).join(`@[${name}](${id})`);
+  }
+  return result;
+}
+
+/** Build a name→id map from all tokens present in a raw string */
+function extractMentionMap(raw: string): Record<string, string> {
+  const map: Record<string, string> = {};
+  const re = new RegExp(TOKEN_RE.source, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    map[m[1]] = m[2];
+  }
+  return map;
+}
 
 export function extractMentionIds(content: string): string[] {
   const ids: string[] = [];
   let match;
-  const regex = new RegExp(MENTION_PATTERN.source, 'g');
+  const regex = new RegExp(TOKEN_RE.source, 'g');
   while ((match = regex.exec(content)) !== null) {
     ids.push(match[2]);
   }
   return Array.from(new Set(ids));
 }
+
+// ── Component ───────────────────────────────────────────────────────────────
 
 export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextareaProps>(
   function MentionTextarea(
@@ -53,6 +86,27 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
     const [query, setQuery] = useState('');
     const [activeIdx, setActiveIdx] = useState(0);
     const [atPos, setAtPos] = useState<number | null>(null);
+
+    // Map of name → uuid for all mentions ever inserted/loaded.
+    // We accumulate; we never shrink (stale entries are harmless).
+    const [mentionMap, setMentionMap] = useState<Record<string, string>>(
+      () => extractMentionMap(value)
+    );
+
+    // Sync map when the parent sets a new value (e.g. opening an existing task for edit)
+    const prevValueRef = useRef(value);
+    useEffect(() => {
+      if (prevValueRef.current !== value) {
+        prevValueRef.current = value;
+        const parsed = extractMentionMap(value);
+        if (Object.keys(parsed).length > 0) {
+          setMentionMap(prev => ({ ...parsed, ...prev }));
+        }
+      }
+    }, [value]);
+
+    // Display value: strip UUIDs so the textarea shows @Name only
+    const displayValue = rawToDisplay(value);
 
     useImperativeHandle(ref, () => ({
       focus: () => taRef.current?.focus(),
@@ -113,41 +167,52 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
       []
     );
 
+    // Textarea onChange: user typed/deleted in the display value → convert back to raw
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const next = e.target.value;
-      onChange(next);
-      const caret = e.target.selectionStart ?? next.length;
-      updateQueryFromCaret(next, caret);
+      const nextDisplay = e.target.value;
+      const nextRaw = displayToRaw(nextDisplay, mentionMap);
+      onChange(nextRaw);
+      const caret = e.target.selectionStart ?? nextDisplay.length;
+      updateQueryFromCaret(nextDisplay, caret);
     };
 
     const handleSelect = useCallback(
       (e?: React.SyntheticEvent<HTMLTextAreaElement>) => {
         const ta = (e?.currentTarget as HTMLTextAreaElement | undefined) ?? taRef.current;
         if (!ta) return;
-        const caret = ta.selectionStart ?? value.length;
-        updateQueryFromCaret(value, caret);
+        const caret = ta.selectionStart ?? displayValue.length;
+        updateQueryFromCaret(displayValue, caret);
       },
-      [value, updateQueryFromCaret]
+      [displayValue, updateQueryFromCaret]
     );
 
     const insertMention = useCallback(
       (profile: ProfileLite) => {
         if (atPos === null || !taRef.current) return;
         const ta = taRef.current;
-        const caret = ta.selectionStart ?? value.length;
-        const token = `@[${profile.full_name}](${profile.id}) `;
-        const next = value.slice(0, atPos) + token + value.slice(caret);
-        onChange(next);
+        const caret = ta.selectionStart ?? displayValue.length;
+
+        // Insert @Name (display form) into the display string
+        const displayToken = `@${profile.full_name} `;
+        const nextDisplay = displayValue.slice(0, atPos) + displayToken + displayValue.slice(caret);
+
+        // Update the map and reconstruct the raw value
+        const newMap = { ...mentionMap, [profile.full_name]: profile.id };
+        setMentionMap(newMap);
+        const nextRaw = displayToRaw(nextDisplay, newMap);
+        onChange(nextRaw);
+
         setOpen(false);
         setAtPos(null);
         setQuery('');
-        const newCaret = atPos + token.length;
+
+        const newCaret = atPos + displayToken.length;
         requestAnimationFrame(() => {
           ta.focus();
           ta.setSelectionRange(newCaret, newCaret);
         });
       },
-      [atPos, value, onChange]
+      [atPos, displayValue, mentionMap, onChange]
     );
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -184,7 +249,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
       <div className="relative w-full">
         <Textarea
           ref={taRef}
-          value={value}
+          value={displayValue}
           onChange={handleChange}
           onSelect={handleSelect}
           onKeyDown={handleKeyDown}
