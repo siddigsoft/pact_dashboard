@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
@@ -315,6 +315,7 @@ const CostSubmission = () => {
   });
   const [showGuide, setShowGuide] = useState(false);
   // ----- Operational Costs (cached via TanStack Query) -----
+  const queryClient = useQueryClient();
   const _opsQueryKey = useMemo(
     () => ['operationalCosts', currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser] as const,
     [currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser]
@@ -525,14 +526,27 @@ const CostSubmission = () => {
     if (!sub) return;
     setConfirmingReceipt(true);
     try {
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('operational_cost_submissions' as any)
-        .update({ fund_receipt_confirmed: true, fund_receipt_confirmed_at: new Date().toISOString() })
+        .update({ fund_receipt_confirmed: true, fund_receipt_confirmed_at: now })
         .eq('id', sub.id);
       if (error) throw error;
-      // Mark confirmed locally so the useEffect doesn't re-trigger before the
-      // next data refresh delivers the updated fund_receipt_confirmed flag.
+
+      // 1. Track confirmed ID in ref so the useEffect filter skips it instantly.
       confirmedReceiptIds.current.add(sub.id);
+
+      // 2. Optimistically patch the React Query cache so any re-render or
+      //    background refetch within the stale window sees the confirmed flag
+      //    and never reopens this dialog for the same submission.
+      queryClient.setQueryData(_opsQueryKey, (old: OperationalCostSubmission[] | undefined) =>
+        (old ?? []).map(o =>
+          o.id === sub.id
+            ? { ...o, fund_receipt_confirmed: true, fund_receipt_confirmed_at: now }
+            : o
+        )
+      );
+
       toast({ title: 'Receipt confirmed', description: 'Thank you for confirming you received the payment.' });
       setReceiptConfirmDialog({ open: false, submission: null });
     } catch (e: any) {
@@ -13333,7 +13347,7 @@ const CostSubmission = () => {
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-400">
                       {sub.currency || 'SDG'} {new Intl.NumberFormat().format(
-                        (sub.amount_paid_cents ?? sub.amount_cents ?? 0) / 100
+                        ((sub as any).paid_amount_cents ?? sub.amount_cents ?? 0) / 100
                       )}
                     </span>
                   </div>
