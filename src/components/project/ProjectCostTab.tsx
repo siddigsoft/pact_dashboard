@@ -100,6 +100,16 @@ const EXPENSE_LABELS: Record<string, string> = {
 
 // Maps budget category_allocations keys → expense_category keys (best-effort)
 const BUDGET_CAT_TO_EXPENSE: Record<string, string> = {
+  // New standardised keys
+  personnel_labor_fees: 'other',
+  transportation_logistics: 'general_transport',
+  equipment_supplies: 'equipment',
+  field_operations_activities: 'meetings',
+  internet_communication: 'communications',
+  permits_taxes_legal: 'permits',
+  management_overhead: 'other',
+  contingency_reserve: 'other',
+  // Legacy keys (kept for existing saved budgets)
   transportation_and_visit_fees: 'general_transport',
   permit_fee: 'permits',
   internet_and_communication_fees: 'communications',
@@ -113,6 +123,16 @@ const BUDGET_CAT_TO_EXPENSE: Record<string, string> = {
 
 // Human labels for budget category keys
 const BUDGET_CAT_LABELS: Record<string, string> = {
+  // New standardised keys
+  personnel_labor_fees: 'Personnel & Labor Fees',
+  transportation_logistics: 'Transportation & Logistics',
+  equipment_supplies: 'Equipment & Supplies',
+  field_operations_activities: 'Field Operations & Activities',
+  internet_communication: 'Internet & Communication',
+  permits_taxes_legal: 'Permits, Taxes & Legal Fees',
+  management_overhead: 'Management & Overhead',
+  contingency_reserve: 'Contingency / Reserve',
+  // Legacy keys (kept for existing saved budgets)
   transportation_and_visit_fees: 'Transportation & Visit Fees',
   permit_fee: 'Permit Fees',
   internet_and_communication_fees: 'Internet & Communications',

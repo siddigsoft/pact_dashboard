@@ -7,6 +7,7 @@ import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, H
 import { supabase } from '@/integrations/supabase/client';
 import { getProjectFlow } from '@/config/projectFlows';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
 import { useUser } from '@/context/user/UserContext';
@@ -185,6 +186,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const [budgetPeriod, setBudgetPeriod] = useState<BudgetFormData['budgetPeriod']>('annual');
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
   const [categoryValues, setCategoryValues] = useState<Record<string, string>>({});
+  const [categoryDisplayValues, setCategoryDisplayValues] = useState<Record<string, string>>({});
   const [budgetNotes, setBudgetNotes] = useState('');
   const [categoriesExpanded, setCategoriesExpanded] = useState(true);
   useEffect(() => {
@@ -344,6 +346,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const watchProjectType = form.watch('projectType');
   const watchBudgetTotal = form.watch('budgetTotal') ?? 0;
   const watchBudgetCurrency = form.watch('budgetCurrency') || 'USD';
+
+  // Formatted display string for Budget Total (shows commas + decimals)
+  const formatBudgetDisplay = (n: number) =>
+    n > 0 ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+  const [budgetDisplayValue, setBudgetDisplayValue] = useState(() =>
+    formatBudgetDisplay(form.getValues('budgetTotal') ?? 0)
+  );
 
   // Budget categories react to selected project type
   const budgetCategories = getProjectTypeConfig(watchProjectType || 'tpm').budgetCategories;
@@ -886,13 +895,23 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       </FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="e.g. 500,000.00"
-                          {...field}
-                          value={field.value === 0 ? '' : field.value}
-                          onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          value={budgetDisplayValue}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            setBudgetDisplayValue(e.target.value.replace(/[^0-9.,]/g, ''));
+                            field.onChange(parseFloat(raw) || 0);
+                          }}
+                          onBlur={() => {
+                            setBudgetDisplayValue(formatBudgetDisplay(field.value ?? 0));
+                            field.onBlur();
+                          }}
+                          onFocus={() => {
+                            const v = field.value ?? 0;
+                            setBudgetDisplayValue(v > 0 ? String(v) : '');
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1008,18 +1027,48 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg bg-muted/30 border p-3">
                     {budgetCategories.map((cat) => (
                       <div key={cat.key} className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
+                          {cat.description && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground/50 cursor-help shrink-0" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs">
+                                  {cat.description}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                         <div className="flex rounded-md shadow-sm">
                           <span className="inline-flex items-center px-2 rounded-l-md border border-r-0 border-input bg-muted text-[11px] font-semibold text-muted-foreground select-none whitespace-nowrap">
                             {watchBudgetCurrency}
                           </span>
                           <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0"
-                            value={categoryValues[cat.key] ?? ''}
-                            onChange={(e) => setCategoryValues(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                            value={categoryDisplayValues[cat.key] ?? categoryValues[cat.key] ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, '');
+                              setCategoryDisplayValues(prev => ({ ...prev, [cat.key]: e.target.value.replace(/[^0-9.,]/g, '') }));
+                              setCategoryValues(prev => ({ ...prev, [cat.key]: raw }));
+                            }}
+                            onFocus={() => {
+                              const raw = categoryValues[cat.key] ?? '';
+                              setCategoryDisplayValues(prev => ({ ...prev, [cat.key]: raw }));
+                            }}
+                            onBlur={() => {
+                              const num = parseFloat(categoryValues[cat.key] ?? '');
+                              setCategoryDisplayValues(prev => ({
+                                ...prev,
+                                [cat.key]: num > 0
+                                  ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                  : '',
+                              }));
+                            }}
                             className="h-8 text-sm rounded-l-none"
                           />
                         </div>

@@ -34,16 +34,14 @@ interface EditProjectBudgetDialogProps {
 }
 
 const CATEGORY_OPTIONS = [
-  { value: 'professional_fees', label: 'Professional Fees' },
-  { value: 'transportation_and_visit_fees', label: 'Transportation and Visit Fees' },
-  { value: 'permit_fee', label: 'Permit Fee' },
-  { value: 'internet_and_communication_fees', label: 'Internet & Communication Fees' },
-  { value: 'accommodation', label: 'Accommodation' },
-  { value: 'meals', label: 'Meals' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'training', label: 'Training' },
-  { value: 'supplies', label: 'Supplies' },
-  { value: 'other', label: 'Other' },
+  { value: 'personnel_labor_fees', label: 'Personnel & Labor Fees' },
+  { value: 'transportation_logistics', label: 'Transportation & Logistics' },
+  { value: 'equipment_supplies', label: 'Equipment & Supplies' },
+  { value: 'field_operations_activities', label: 'Field Operations & Activities' },
+  { value: 'internet_communication', label: 'Internet & Communication' },
+  { value: 'permits_taxes_legal', label: 'Permits, Taxes & Legal Fees' },
+  { value: 'management_overhead', label: 'Management & Overhead' },
+  { value: 'contingency_reserve', label: 'Contingency / Reserve' },
 ];
 
 export function EditProjectBudgetDialog({

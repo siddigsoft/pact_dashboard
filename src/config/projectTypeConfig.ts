@@ -9,8 +9,53 @@ export interface ProjectDeliverable {
 export interface BudgetCategory {
   key: string;
   label: string;
+  description?: string;
   placeholder?: string;
 }
+
+/** Standardised 8-category budget framework used across all project types. */
+export const STANDARD_BUDGET_CATEGORIES: BudgetCategory[] = [
+  {
+    key: 'personnel_labor_fees',
+    label: 'Personnel & Labor Fees',
+    description: 'Salaries, stipends, consultant fees, field enumerator wages, and associated staff benefits or per diems.',
+  },
+  {
+    key: 'transportation_logistics',
+    label: 'Transportation & Logistics',
+    description: 'Vehicle rentals, fuel, local transit, airfare, freight, shipping, and field movement costs.',
+  },
+  {
+    key: 'equipment_supplies',
+    label: 'Equipment & Supplies',
+    description: 'Hardware devices, mobile phones or tablets for data collection, office equipment, software licenses, and direct project materials.',
+  },
+  {
+    key: 'field_operations_activities',
+    label: 'Field Operations & Activities',
+    description: 'Workshop venues, catering, training events, community outreach costs, and direct data collection implementation.',
+  },
+  {
+    key: 'internet_communication',
+    label: 'Internet & Communication',
+    description: 'Mobile data plans, satellite connectivity, field communication devices, and hosting or server tool costs.',
+  },
+  {
+    key: 'permits_taxes_legal',
+    label: 'Permits, Taxes & Legal Fees',
+    description: 'Local regulatory clearances, governmental authorization letters, research permits, and compliance fees.',
+  },
+  {
+    key: 'management_overhead',
+    label: 'Management & Overhead',
+    description: 'Indirect operational support, administrative apportionment, corporate oversight, and office utility shares.',
+  },
+  {
+    key: 'contingency_reserve',
+    label: 'Contingency / Reserve',
+    description: 'An unallocated buffer (typically 5–10%) reserved for emergency expenses, currency fluctuation risks, or unexpected scope adjustments.',
+  },
+];
 
 export interface TeamRoleSuggestion {
   role: string;
@@ -543,7 +588,9 @@ export const PROJECT_TYPE_CONFIGS: Record<string, ProjectTypeConfig> = {
 };
 
 export function getProjectTypeConfig(projectType: string): ProjectTypeConfig {
-  return PROJECT_TYPE_CONFIGS[projectType] ?? PROJECT_TYPE_CONFIGS.other;
+  const config = PROJECT_TYPE_CONFIGS[projectType] ?? PROJECT_TYPE_CONFIGS.other;
+  // Always use the standardised 8-category budget framework regardless of project type
+  return { ...config, budgetCategories: STANDARD_BUDGET_CATEGORIES };
 }
 
 export const PROJECT_TEMPLATES = Object.entries(PROJECT_TYPE_CONFIGS).map(([type, config]) => ({

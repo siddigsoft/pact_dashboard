@@ -14,10 +14,11 @@ import {
 } from 'recharts';
 import {
   CheckCircle2, Clock, AlertTriangle, TrendingDown, Wallet, DollarSign,
-  FileDown, Send, ThumbsUp, Loader2, RefreshCw, Zap,
+  FileDown, FileText, Send, ThumbsUp, Loader2, RefreshCw, Zap,
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 import { exportFormattedExcel } from '@/utils/formattedExcelExport';
+import { exportBudgetPDF } from '@/utils/budgetPdfExport';
 import { dispatchNotification } from '@/lib/notify';
 import type { ProjectBudget } from '@/types/budget';
 import type { Project } from '@/types/project';
@@ -282,6 +283,26 @@ export function ProjectBudgetTab({
     }
   };
 
+  /* ── PDF export ── */
+  const handleExportPDF = () => {
+    exportBudgetPDF({
+      projectName:      project.name,
+      projectCode:      project.id?.slice(0, 8).toUpperCase(),
+      budgetStatus:     projectBudget.status,
+      budgetPeriod:     projectBudget.budgetPeriod || 'project_lifetime',
+      fiscalYear:       projectBudget.fiscalYear,
+      currency,
+      expenseCurrency:  budgetSummary?.expenseCurrency,
+      totalBudgetCents,
+      totalSpentCents,
+      opsCents,
+      advCents,
+      pfCents,
+      categoryBreakdown,
+      forecast,
+    });
+  };
+
   /* ── Excel export ── */
   const handleExport = () => {
     exportFormattedExcel({
@@ -388,6 +409,9 @@ export function ProjectBudgetTab({
           )}
           <Button size="sm" variant="outline" onClick={onEditBudget} data-testid="button-edit-budget-tab">
             Edit Budget
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleExportPDF} data-testid="button-export-budget-pdf">
+            <FileText className="h-3.5 w-3.5 mr-1.5" /> Export PDF
           </Button>
           <Button size="sm" variant="outline" onClick={handleExport} data-testid="button-export-budget">
             <FileDown className="h-3.5 w-3.5 mr-1.5" /> Export Excel
