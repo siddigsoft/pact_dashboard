@@ -20,7 +20,7 @@ import {
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
   DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
   Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet, Activity,
-  ChevronRight
+  ChevronRight, ExternalLink
 } from "lucide-react";
 import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
@@ -1114,7 +1114,8 @@ const Finance: React.FC = () => {
                     <div className="text-center py-6">
                       <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground">No project budgets have been created yet.</p>
-                      <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/budget')}>
+                      <Button variant="ghost" size="sm" className="mt-3" onClick={() => navigate('/budget')}>
+                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                         Go to Budget Page
                       </Button>
                     </div>
@@ -1140,12 +1141,12 @@ const Finance: React.FC = () => {
                         <p className="text-sm font-medium">{utilizationRate.toFixed(1)}%</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" onClick={() => navigate('/budget')}>
-                          <BadgePercent className="h-4 w-4 mr-2" />
+                        <Button variant="ghost" onClick={() => navigate('/budget')}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
                           Manage Budgets
                         </Button>
-                        <Button variant="outline" onClick={() => navigate('/budget')}>
-                          <FileBarChart className="h-4 w-4 mr-2" />
+                        <Button variant="ghost" onClick={() => navigate('/budget')}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
                           View Details
                         </Button>
                       </div>

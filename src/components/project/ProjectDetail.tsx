@@ -43,6 +43,7 @@ import {
   ChevronDown,
   Percent,
   FileBarChart2,
+  ExternalLink,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1547,8 +1548,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <Handshake className="h-4 w-4 mr-1.5" /> Import from CRM
                 </Button>
               )}
-              <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
-                <Plus className="h-4 w-4 mr-1.5" /> Add Members
+              <Button size="sm" variant="ghost" onClick={() => navigate(`/projects/${project.id}/team`)}>
+                <ExternalLink className="h-4 w-4 mr-1.5" /> Add Members
               </Button>
             </div>
           </div>
