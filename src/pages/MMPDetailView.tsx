@@ -73,6 +73,23 @@ const MMPDetailView = () => {
   const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
   
   const mmpFile = id ? getMmpById(id) : undefined;
+
+  // Legacy site-entry notifications wrongly linked to /mmp/{siteEntryId}.
+  // Resolve to the parent MMP file and keep ?site= for context.
+  useEffect(() => {
+    if (!id || mmpFile || mmpContextLoading) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('mmp_site_entries')
+        .select('id, mmp_file_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (cancelled || !data?.mmp_file_id) return;
+      navigate(`/mmp/${data.mmp_file_id}?site=${data.id}`, { replace: true });
+    })();
+    return () => { cancelled = true; };
+  }, [id, mmpFile, mmpContextLoading, navigate]);
   
   useEffect(() => {
     // If mmpFile is found, immediately stop loading
@@ -90,7 +107,7 @@ const MMPDetailView = () => {
     }
     
     // Context is done loading and we still have no MMP — give a short grace
-    // period for any in-flight state updates, then show the error.
+    // period for any in-flight state updates / site-entry redirect, then show the error.
     const timer = setTimeout(() => {
       if (!mmpFile && id) {
         setNotFound(true);
@@ -106,7 +123,7 @@ const MMPDetailView = () => {
         });
       }
       setLoading(false);
-    }, 1500);
+    }, 2500);
     
     return () => clearTimeout(timer);
   }, [id, mmpFile, mmpContextLoading, toast]);
