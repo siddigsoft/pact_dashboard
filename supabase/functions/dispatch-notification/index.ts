@@ -66,6 +66,13 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'site_visit_postponed':       { title_en: 'Site Visit Postponed',                 title_ar: 'تم تأجيل الزيارة الميدانية',                  category: 'assignments',  priority: 'normal' },
   'site_flagged_uncovered':     { title_en: 'Site Flagged as Uncovered',            title_ar: 'تم تعليم الموقع كغير مغطى',                   category: 'assignments',  priority: 'high'   },
   // Financial
+  // Project Director Updates
+  'project_director_update_submitted': { title_en: 'Director Update Awaiting Validation', title_ar: 'تحديث مدير المشروع بانتظار التحقق', category: 'approvals', priority: 'high' },
+  'project_director_update_validated': { title_en: 'Director Update Validated',            title_ar: 'تم التحقق من تحديث مدير المشروع',   category: 'approvals', priority: 'normal' },
+  'project_director_update_returned':  { title_en: 'Director Update Returned',             title_ar: 'أُعيد تحديث مدير المشروع للمراجعة', category: 'approvals', priority: 'high' },
+  'project_director_update_escalated': { title_en: 'Director Update Escalated',            title_ar: 'تصعيد تحديث مدير المشروع',           category: 'approvals', priority: 'urgent' },
+  'project_director_update_due':       { title_en: 'Director Update Due',                  title_ar: 'تحديث مدير المشروع مستحق',           category: 'approvals', priority: 'high' },
+  'project_director_update_validation_pending': { title_en: 'Director Updates Awaiting Validation', title_ar: 'تحديثات مدير المشروع بانتظار التحقق', category: 'approvals', priority: 'high' },
   'cost_submitted':             { title_en: 'Cost Submission Received',             title_ar: 'تم استلام طلب التكلفة',                       category: 'approvals',    priority: 'normal' },
   'cost_approved':              { title_en: 'Cost Approved',                        title_ar: 'تمت الموافقة على التكلفة',                    category: 'financial',    priority: 'normal' },
   'cost_rejected':              { title_en: 'Cost Rejected / Returned',             title_ar: 'تم رفض التكلفة / إعادتها',                   category: 'financial',    priority: 'high'   },

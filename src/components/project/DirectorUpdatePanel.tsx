@@ -4,10 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Info, Check, Send } from 'lucide-react';
+import { Plus, Trash2, Info, Check, Send, Undo2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
 import {
-  useProjectDirectorUpdate, type RiskFlag, type UpdateAction, type ActionStatus,
+  useProjectDirectorUpdate, PDU_VALIDATOR_ROLES,
+  type RiskFlag, type UpdateAction, type ActionStatus, type ReportingCadence,
 } from '@/hooks/useProjectDirectorUpdate';
 
 const FLAG_META: Record<RiskFlag, { label: string; dot: string; soft: string; ring: string; text: string }> = {
@@ -66,10 +68,14 @@ function Sparkline({ points }: { points: number[] }) {
 
 export function DirectorUpdatePanel({ projectId }: { projectId: string }) {
   const { toast } = useToast();
-  const { cycle, snapshot, snapshotLoading, current, actions, history, saveDraft, submit, isSaving } =
+  const { hasAnyRole } = useAuthorization();
+  const canValidate = hasAnyRole(PDU_VALIDATOR_ROLES);
+  const { cycle, cadence, setCadence, isSettingCadence, snapshot, snapshotLoading, current, actions, history, saveDraft, submit, validate, returnUpdate, isSaving } =
     useProjectDirectorUpdate(projectId);
 
   const readOnly = current?.status === 'submitted' || current?.status === 'validated';
+  const [returnReason, setReturnReason] = useState('');
+  const [showReturn, setShowReturn] = useState(false);
 
   // Form state
   const [override, setOverride] = useState<string>('');
@@ -86,6 +92,8 @@ export function DirectorUpdatePanel({ projectId }: { projectId: string }) {
   const [sumSupport, setSumSupport] = useState('');
   const [openActions, setOpenActions] = useState<UpdateAction[]>([]);
   const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => { setSeeded(false); }, [projectId]);
 
   // Seed once from the saved row (if any), else from the computed suggestion
   useEffect(() => {
@@ -169,6 +177,27 @@ export function DirectorUpdatePanel({ projectId }: { projectId: string }) {
     }
   }
 
+  async function onValidate() {
+    try {
+      await validate();
+      toast({ title: 'Validated — published to dashboards' });
+    } catch (e: any) {
+      toast({ title: 'Could not validate', description: e?.message, variant: 'destructive' });
+    }
+  }
+
+  async function onReturn() {
+    if (!returnReason.trim()) { toast({ title: 'Add a return reason', variant: 'destructive' }); return; }
+    try {
+      await returnUpdate(returnReason.trim());
+      setShowReturn(false);
+      setReturnReason('');
+      toast({ title: 'Returned for revision' });
+    } catch (e: any) {
+      toast({ title: 'Could not return', description: e?.message, variant: 'destructive' });
+    }
+  }
+
   if (snapshotLoading) {
     return <div className="py-16 text-center text-sm text-muted-foreground">Computing this cycle's progress…</div>;
   }
@@ -186,9 +215,30 @@ export function DirectorUpdatePanel({ projectId }: { projectId: string }) {
             <span className="text-muted-foreground/70"> · {cycle.start} → {cycle.end}</span>
           </p>
         </div>
-        <Badge className={STATUS_BADGE[current?.status ?? 'draft']}>
-          {(current?.status ?? 'not started').replace('_', ' ')}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {!readOnly && (
+            <select
+              value={cadence}
+              disabled={isSettingCadence || isSaving}
+              onChange={async e => {
+                try {
+                  await setCadence(e.target.value as ReportingCadence);
+                  toast({ title: `Cadence set to ${e.target.value}` });
+                } catch (err: any) {
+                  toast({ title: 'Could not update cadence', description: err?.message, variant: 'destructive' });
+                }
+              }}
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+              title="Reporting cadence for this project"
+            >
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
+            </select>
+          )}
+          <Badge className={STATUS_BADGE[current?.status ?? 'draft']}>
+            {(current?.status ?? 'not started').replace('_', ' ')}
+          </Badge>
+        </div>
       </div>
 
       {current?.status === 'returned' && current.returned_reason && (
@@ -381,10 +431,40 @@ export function DirectorUpdatePanel({ projectId }: { projectId: string }) {
           </Button>
           <span className="text-xs text-muted-foreground ml-auto">Only validated updates reach the dashboards.</span>
         </div>
+      ) : current?.status === 'submitted' && canValidate ? (
+        <div className="space-y-3 pt-2 border-t">
+          <p className="text-sm text-muted-foreground">
+            Submitted — review formulas, risk flag and narrative, then validate or return.
+          </p>
+          {showReturn ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Reason for return (required)"
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+                className="flex-1 min-w-[220px]"
+                disabled={isSaving}
+              />
+              <Button variant="outline" onClick={() => { setShowReturn(false); setReturnReason(''); }} disabled={isSaving}>Cancel</Button>
+              <Button variant="destructive" onClick={onReturn} disabled={isSaving}>
+                <Undo2 className="h-4 w-4 mr-1.5" /> Return
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Button onClick={onValidate} disabled={isSaving}>
+                <Check className="h-4 w-4 mr-1.5" /> Validate &amp; publish
+              </Button>
+              <Button variant="outline" onClick={() => setShowReturn(true)} disabled={isSaving}>Return for revision</Button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex items-center gap-2 pt-2 border-t text-sm text-muted-foreground">
           <Check className="h-4 w-4 text-emerald-600" />
-          {current?.status === 'validated' ? 'Validated and published to the dashboards.' : 'Submitted — awaiting validation by the Implementation & Management Department.'}
+          {current?.status === 'validated'
+            ? 'Validated and published to the dashboards.'
+            : 'Submitted — awaiting validation by the Implementation & Management Department.'}
         </div>
       )}
     </div>

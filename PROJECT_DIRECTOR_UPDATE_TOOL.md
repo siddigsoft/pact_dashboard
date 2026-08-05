@@ -1,6 +1,6 @@
 # Project Director Update Tool — In-App Implementation Plan
 
-**Status:** Design doc (pre-build)
+**Status:** Phases 1–4 implemented. Formulas locked as **v1** (linear planned baseline; weights optional with hours/equal fallback). Field/formula/threshold changes require joint IT + Implementation Dept approval — record decisions in this doc before changing code.
 **Goal:** Replace the external "Project Directors' Update Tool" Word document with a native module in the PACT Command Center that produces the *same* structured weekly/biweekly update, validated and published into the existing project dashboards, **reusing the infrastructure already in place** rather than building a parallel tracker.
 
 The governing constraint from the source document is explicit and we honor it:

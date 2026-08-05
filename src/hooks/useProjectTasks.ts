@@ -37,6 +37,8 @@ export interface FieldTask {
   notes: string | null;
   estimatedHours: number | null;
   actualHours: number | null;
+  /** Activity weight for director-update progress (NULL → hours/equal fallback in RPC). */
+  weight: number | null;
   estimatedCost: number | null;
   actualCost: number | null;
   /** 0–100 % complete. Auto-drives status: 0=todo, 1–99=inprogress, 100=done. */
@@ -74,6 +76,7 @@ export interface CreateFieldTask {
   notes?: string;
   estimatedHours?: number | null;
   actualHours?: number | null;
+  weight?: number | null;
   estimatedCost?: number | null;
   actualCost?: number | null;
   /** 0–100 % complete. Auto-drives status: 0=todo, 1–99=inprogress, 100=done. */
@@ -235,7 +238,7 @@ export function useProjectTasks(projectId: string) {
           id, project_id, title, description, priority, status,
           assigned_to, assigned_to_name, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
-          estimated_hours, actual_hours, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
+          estimated_hours, actual_hours, weight, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
           baseline_start, baseline_due, baseline_hours, baseline_cost, baseline_set_at,
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
@@ -283,6 +286,7 @@ export function useProjectTasks(projectId: string) {
           notes: r.notes,
           estimatedHours: r.estimated_hours ?? null,
           actualHours: r.actual_hours ?? null,
+          weight: r.weight != null ? Number(r.weight) : null,
           estimatedCost: r.estimated_cost ?? null,
           actualCost: r.actual_cost ?? null,
           percentComplete: r.percent_complete ?? 0,
@@ -337,6 +341,7 @@ export function useProjectTasks(projectId: string) {
           notes: task.notes ?? null,
           estimated_hours: task.estimatedHours ?? null,
           actual_hours: task.actualHours ?? null,
+          weight: task.weight ?? null,
           estimated_cost: task.estimatedCost ?? null,
           actual_cost: task.actualCost ?? null,
           percent_complete: task.percentComplete ?? 0,
@@ -417,6 +422,7 @@ export function useProjectTasks(projectId: string) {
       if (patch.stageId        !== undefined) updates.stage_id        = patch.stageId;
       if (patch.estimatedHours !== undefined) updates.estimated_hours = patch.estimatedHours;
       if (patch.actualHours    !== undefined) updates.actual_hours    = patch.actualHours;
+      if (patch.weight         !== undefined) updates.weight          = patch.weight;
       if (patch.estimatedCost  !== undefined) updates.estimated_cost  = patch.estimatedCost;
       if (patch.actualCost     !== undefined) updates.actual_cost     = patch.actualCost;
       if (patch.dependencies    !== undefined) updates.dependencies    = patch.dependencies;

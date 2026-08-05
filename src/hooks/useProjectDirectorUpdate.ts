@@ -1,6 +1,18 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
+
+/** Roles that may validate / return a submitted director update (UI check; normalizeRole-friendly). */
+export const PDU_VALIDATOR_ROLES = [
+  'admin', 'Admin', 'super_admin', 'superAdmin', 'Super Admin', 'SuperAdmin',
+  'fom', 'Field Operation Manager (FOM)',
+  'countryDirector', 'Country Director',
+  'ict', 'ICT',
+];
+
+/** Exact role strings stored in user_roles — used for dispatchNotification recipientRoles. */
+const PDU_NOTIFY_ROLES = ['admin', 'Admin', 'superAdmin', 'super_admin', 'fom', 'countryDirector'];
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,36 +85,94 @@ export interface DirectorUpdate {
   updated_at: string;
 }
 
-// ── Reporting cycle (ISO week; biweekly is Phase 4) ──────────────────────────
+// ── Reporting cycle (ISO week; biweekly = odd+even week pair) ─────────────────
 
-export function currentCycle() {
-  const now = new Date();
-  // ISO week number
+export type ReportingCadence = 'weekly' | 'biweekly';
+
+function isoWeekParts(now = new Date()) {
   const t = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const day = t.getUTCDay() || 7;
   t.setUTCDate(t.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  // Monday..Sunday of the current week
+  const year = t.getUTCFullYear();
   const monday = new Date(now);
   monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   monday.setHours(0, 0, 0, 0);
+  return { year, week, monday };
+}
+
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+/** Current reporting window for a project cadence. */
+export function currentCycle(cadence: ReportingCadence = 'weekly') {
+  const { year, week, monday } = isoWeekParts();
+  if (cadence === 'biweekly') {
+    // Pair weeks 1–2, 3–4, … (odd week starts the biweek)
+    const startWeek = week % 2 === 1 ? week : week - 1;
+    const endWeek = startWeek + 1;
+    const startMonday = new Date(monday);
+    if (week % 2 === 0) startMonday.setDate(monday.getDate() - 7);
+    const endSunday = new Date(startMonday);
+    endSunday.setDate(startMonday.getDate() + 13);
+    return {
+      period: `${year}-W${String(startWeek).padStart(2, '0')}/${String(endWeek).padStart(2, '0')}`,
+      start: isoDate(startMonday),
+      end: isoDate(endSunday),
+      label: `Weeks ${startWeek}–${endWeek}, ${year}`,
+      cadence: 'biweekly' as const,
+    };
+  }
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
   return {
-    period: `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`,
-    start: iso(monday),
-    end: iso(sunday),
-    label: `Week ${week}, ${t.getUTCFullYear()}`,
+    period: `${year}-W${String(week).padStart(2, '0')}`,
+    start: isoDate(monday),
+    end: isoDate(sunday),
+    label: `Week ${week}, ${year}`,
+    cadence: 'weekly' as const,
   };
+}
+
+/** Both period keys that may be "current" across the portfolio today. */
+export function activeCyclePeriods() {
+  return [currentCycle('weekly').period, currentCycle('biweekly').period];
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useProjectDirectorUpdate(projectId: string) {
   const qc = useQueryClient();
-  const cycle = useMemo(() => currentCycle(), []);
+
+  const projectMeta = useQuery({
+    queryKey: ['pdu_project_meta', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('reporting_cadence, name, project_code')
+        .eq('id', projectId)
+        .single();
+      if (error) throw error;
+      return data as { reporting_cadence: ReportingCadence | null; name: string; project_code: string | null };
+    },
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
+
+  const cadence: ReportingCadence = projectMeta.data?.reporting_cadence === 'biweekly' ? 'biweekly' : 'weekly';
+  const cycle = useMemo(() => currentCycle(cadence), [cadence]);
+
+  const setCadence = useMutation({
+    mutationFn: async (next: ReportingCadence) => {
+      const { error } = await supabase.from('projects').update({ reporting_cadence: next }).eq('id', projectId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pdu_project_meta', projectId] });
+      qc.invalidateQueries({ queryKey: ['pu_projects'] });
+      qc.invalidateQueries({ queryKey: ['pdu_current', projectId] });
+    },
+  });
 
   const snapshot = useQuery({
     queryKey: ['pdu_snapshot', projectId],
@@ -164,7 +234,19 @@ export function useProjectDirectorUpdate(projectId: string) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['pdu_current', projectId, cycle.period] });
     qc.invalidateQueries({ queryKey: ['pdu_history', projectId] });
+    qc.invalidateQueries({ queryKey: ['pu_cycle_updates'] });
   };
+
+  async function projectLabel() {
+    if (projectMeta.data) {
+      return projectMeta.data.project_code
+        ? `${projectMeta.data.name} (${projectMeta.data.project_code})`
+        : projectMeta.data.name;
+    }
+    const { data } = await supabase.from('projects').select('name, project_code').eq('id', projectId).maybeSingle();
+    if (!data) return 'a project';
+    return data.project_code ? `${data.name} (${data.project_code})` : data.name;
+  }
 
   // Upsert the draft for this cycle (create or update the single row per project+period)
   const save = useMutation({
@@ -185,6 +267,7 @@ export function useProjectDirectorUpdate(projectId: string) {
         row.status = 'submitted';
         row.submitted_by = uid;
         row.submitted_at = new Date().toISOString();
+        row.returned_reason = null;
       }
 
       const { data, error } = await supabase
@@ -211,6 +294,25 @@ export function useProjectDirectorUpdate(projectId: string) {
           }));
         if (rows.length) await supabase.from('project_update_actions').insert(rows);
       }
+
+      if (_submit) {
+        const label = await projectLabel();
+        void dispatchNotification({
+          event: 'project_director_update_submitted',
+          recipientRoles: PDU_NOTIFY_ROLES,
+          titleEn: 'Director update awaiting validation',
+          titleAr: 'تحديث مدير المشروع بانتظار التحقق',
+          messageEn: `${label} — ${cycle.label} is ready for Implementation & Management review.`,
+          messageAr: `${label} — ${cycle.label} جاهز لمراجعة إدارة التنفيذ.`,
+          priority: 'high',
+          entityType: 'project_director_update',
+          entityId: updateId,
+          actionUrl: `/project-updates`,
+          metadata: { project_id: projectId, reporting_period: cycle.period },
+          triggeredBy: uid ?? undefined,
+        });
+      }
+
       return data as DirectorUpdate;
     },
     onSuccess: () => {
@@ -219,8 +321,101 @@ export function useProjectDirectorUpdate(projectId: string) {
     },
   });
 
+  const decide = useMutation({
+    mutationFn: async (opts: { action: 'validate' | 'return'; reason?: string }) => {
+      if (!current.data?.id) throw new Error('No update to decide on');
+      if (current.data.status !== 'submitted') throw new Error('Only submitted updates can be validated or returned');
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id ?? null;
+      const now = new Date().toISOString();
+
+      if (opts.action === 'return' && !opts.reason?.trim()) {
+        throw new Error('A return reason is required');
+      }
+
+      const patch =
+        opts.action === 'validate'
+          ? { status: 'validated' as const, validated_by: uid, validated_at: now, returned_reason: null, updated_at: now }
+          : { status: 'returned' as const, returned_reason: opts.reason!.trim(), validated_by: null, validated_at: null, updated_at: now };
+
+      const { data, error } = await supabase
+        .from('project_director_updates')
+        .update(patch)
+        .eq('id', current.data.id)
+        .eq('status', 'submitted')
+        .select()
+        .single();
+      if (error) throw error;
+
+      const label = await projectLabel();
+      const submitter = current.data.submitted_by;
+      if (opts.action === 'validate') {
+        void dispatchNotification({
+          event: 'project_director_update_validated',
+          recipientIds: submitter ? [submitter] : undefined,
+          recipientRoles: submitter ? undefined : PDU_NOTIFY_ROLES,
+          titleEn: 'Director update validated',
+          titleAr: 'تم التحقق من تحديث مدير المشروع',
+          messageEn: `${label} — ${cycle.label} is published to the dashboards.`,
+          messageAr: `${label} — ${cycle.label} نُشر على لوحات المعلومات.`,
+          priority: 'normal',
+          entityType: 'project_director_update',
+          entityId: current.data.id,
+          actionUrl: `/project-updates`,
+          metadata: { project_id: projectId, reporting_period: cycle.period },
+          triggeredBy: uid ?? undefined,
+        });
+        // ponytail: escalate via edge notify on orange/red; DB trigger if fan-out must be guaranteed without client
+        const flag = (current.data.risk_flag ?? '').toLowerCase();
+        if (flag === 'orange' || flag === 'red') {
+          void dispatchNotification({
+            event: 'project_director_update_escalated',
+            recipientRoles: PDU_NOTIFY_ROLES,
+            titleEn: `${flag === 'red' ? 'Red' : 'Orange'} risk — director update escalated`,
+            titleAr: `تصعيد تحديث مدير المشروع — علم ${flag === 'red' ? 'أحمر' : 'برتقالي'}`,
+            messageEn: `${label} — ${cycle.label} validated with a ${flag} risk flag.${current.data.main_challenge ? ` Challenge: ${current.data.main_challenge}` : ''}${current.data.support_needed ? ` Support: ${current.data.support_needed}` : ''}`,
+            messageAr: `${label} — ${cycle.label} تم التحقق بعلم مخاطر ${flag}.`,
+            priority: flag === 'red' ? 'urgent' : 'high',
+            entityType: 'project_director_update',
+            entityId: current.data.id,
+            actionUrl: `/project-updates`,
+            metadata: {
+              project_id: projectId,
+              reporting_period: cycle.period,
+              risk_flag: flag,
+              responsible_unit: current.data.responsible_unit,
+            },
+            triggeredBy: uid ?? undefined,
+          });
+        }
+      } else {
+        void dispatchNotification({
+          event: 'project_director_update_returned',
+          recipientIds: submitter ? [submitter] : undefined,
+          recipientRoles: submitter ? undefined : PDU_NOTIFY_ROLES,
+          titleEn: 'Director update returned for revision',
+          titleAr: 'أُعيد تحديث مدير المشروع للمراجعة',
+          messageEn: `${label} — ${cycle.label}: ${opts.reason!.trim()}`,
+          messageAr: `${label} — ${cycle.label}: ${opts.reason!.trim()}`,
+          priority: 'high',
+          entityType: 'project_director_update',
+          entityId: current.data.id,
+          actionUrl: `/project-updates`,
+          metadata: { project_id: projectId, reporting_period: cycle.period, reason: opts.reason!.trim() },
+          triggeredBy: uid ?? undefined,
+        });
+      }
+
+      return data as DirectorUpdate;
+    },
+    onSuccess: () => invalidate(),
+  });
+
   return {
     cycle,
+    cadence,
+    setCadence: (next: ReportingCadence) => setCadence.mutateAsync(next),
+    isSettingCadence: setCadence.isPending,
     snapshot: snapshot.data,
     snapshotLoading: snapshot.isLoading,
     current: current.data ?? null,
@@ -229,6 +424,8 @@ export function useProjectDirectorUpdate(projectId: string) {
     isLoading: current.isLoading,
     saveDraft: (patch: Partial<DirectorUpdate> & { _actions?: UpdateAction[] }) => save.mutateAsync(patch),
     submit: (patch: Partial<DirectorUpdate> & { _actions?: UpdateAction[] }) => save.mutateAsync({ ...patch, _submit: true }),
-    isSaving: save.isPending,
+    validate: () => decide.mutateAsync({ action: 'validate' }),
+    returnUpdate: (reason: string) => decide.mutateAsync({ action: 'return', reason }),
+    isSaving: save.isPending || decide.isPending,
   };
 }

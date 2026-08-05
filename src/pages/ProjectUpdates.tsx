@@ -5,11 +5,22 @@ import { ClipboardCheck, ChevronRight, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DirectorUpdatePanel } from '@/components/project/DirectorUpdatePanel';
-import { currentCycle, type RiskFlag, type UpdateStatus } from '@/hooks/useProjectDirectorUpdate';
+import {
+  activeCyclePeriods, currentCycle,
+  type ReportingCadence, type RiskFlag, type UpdateStatus,
+} from '@/hooks/useProjectDirectorUpdate';
 import { cn } from '@/lib/utils';
 
-interface ProjectRow { id: string; name: string; project_code: string | null; status: string | null; current_flow_stage: string | null; }
-interface CycleUpdate { project_id: string; status: UpdateStatus; risk_flag: RiskFlag | null; overall_progress: number | null; overall_progress_override: number | null; }
+interface ProjectRow {
+  id: string; name: string; project_code: string | null; status: string | null;
+  current_flow_stage: string | null; reporting_cadence: ReportingCadence | null;
+}
+interface CycleUpdate {
+  project_id: string; reporting_period: string; status: UpdateStatus;
+  risk_flag: RiskFlag | null; overall_progress: number | null; overall_progress_override: number | null;
+}
+
+type QueueFilter = 'all' | 'submitted' | 'pending' | 'validated' | 'returned';
 
 const FLAG_DOT: Record<RiskFlag, string> = {
   green: 'bg-emerald-500', yellow: 'bg-amber-400', orange: 'bg-orange-500', red: 'bg-red-500',
@@ -22,17 +33,23 @@ const STATUS_BADGE: Record<string, string> = {
   returned: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
 };
 
+function projectPeriod(p: ProjectRow) {
+  return currentCycle(p.reporting_cadence === 'biweekly' ? 'biweekly' : 'weekly').period;
+}
+
 export default function ProjectUpdates() {
-  const cycle = useMemo(() => currentCycle(), []);
+  const periods = useMemo(() => activeCyclePeriods(), []);
+  const weekLabel = useMemo(() => currentCycle('weekly').label, []);
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<QueueFilter>('all');
 
   const projects = useQuery({
     queryKey: ['pu_projects'],
     queryFn: async (): Promise<ProjectRow[]> => {
       const { data, error } = await supabase
         .from('projects')
-        .select('id, name, project_code, status, current_flow_stage')
+        .select('id, name, project_code, status, current_flow_stage, reporting_cadence')
         .neq('archived', true)
         .order('name');
       if (error) throw error;
@@ -42,44 +59,64 @@ export default function ProjectUpdates() {
   });
 
   const cycleUpdates = useQuery({
-    queryKey: ['pu_cycle_updates', cycle.period],
-    queryFn: async (): Promise<Record<string, CycleUpdate>> => {
+    queryKey: ['pu_cycle_updates', ...periods],
+    queryFn: async (): Promise<CycleUpdate[]> => {
       const { data, error } = await supabase
         .from('project_director_updates')
-        .select('project_id, status, risk_flag, overall_progress, overall_progress_override')
-        .eq('reporting_period', cycle.period);
+        .select('project_id, reporting_period, status, risk_flag, overall_progress, overall_progress_override')
+        .in('reporting_period', periods);
       if (error) throw error;
-      const map: Record<string, CycleUpdate> = {};
-      for (const r of (data ?? []) as CycleUpdate[]) map[r.project_id] = r;
-      return map;
+      return (data ?? []) as CycleUpdate[];
     },
     staleTime: 30_000,
   });
 
-  const rows = useMemo(() => {
-    const list = projects.data ?? [];
-    const needle = q.trim().toLowerCase();
-    return list.filter(p => !needle || p.name.toLowerCase().includes(needle) || (p.project_code ?? '').toLowerCase().includes(needle));
-  }, [projects.data, q]);
+  const updatesList = cycleUpdates.data ?? [];
 
-  const updates = cycleUpdates.data ?? {};
-  const selectedProject = (projects.data ?? []).find(p => p.id === selected) ?? null;
+  const updatesFor = (p: ProjectRow): CycleUpdate | undefined => {
+    const period = projectPeriod(p);
+    return updatesList.find(u => u.project_id === p.id && u.reporting_period === period);
+  };
 
   const summary = useMemo(() => {
     const list = projects.data ?? [];
-    let submitted = 0, validated = 0, pending = 0;
+    let submitted = 0, validated = 0, pending = 0, returned = 0;
     for (const p of list) {
-      const u = updates[p.id];
+      const u = updatesFor(p);
       if (u?.status === 'validated') validated++;
       else if (u?.status === 'submitted') submitted++;
+      else if (u?.status === 'returned') returned++;
       else pending++;
     }
-    return { total: list.length, submitted, validated, pending };
-  }, [projects.data, updates]);
+    return { total: list.length, submitted, validated, pending, returned };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.data, updatesList]);
+
+  const rows = useMemo(() => {
+    const list = projects.data ?? [];
+    const needle = q.trim().toLowerCase();
+    return list.filter(p => {
+      if (needle && !p.name.toLowerCase().includes(needle) && !(p.project_code ?? '').toLowerCase().includes(needle)) return false;
+      const st = updatesFor(p)?.status;
+      if (filter === 'all') return true;
+      if (filter === 'pending') return !st || st === 'draft';
+      return st === filter;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.data, q, filter, updatesList]);
+
+  const selectedProject = (projects.data ?? []).find(p => p.id === selected) ?? null;
+
+  const filters: { id: QueueFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: summary.total },
+    { id: 'submitted', label: 'To review', count: summary.submitted },
+    { id: 'pending', label: 'Pending', count: summary.pending },
+    { id: 'returned', label: 'Returned', count: summary.returned },
+    { id: 'validated', label: 'Validated', count: summary.validated },
+  ];
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -88,7 +125,7 @@ export default function ProjectUpdates() {
           <div>
             <h1 className="text-xl font-semibold">Project Updates</h1>
             <p className="text-sm text-muted-foreground">
-              Directors' implementation updates for <span className="font-medium text-foreground">{cycle.label}</span>. Pick a project to record or review its update.
+              Directors' implementation updates for the current cycle (calendar: {weekLabel}; biweekly projects use a two-week window).
             </p>
           </div>
         </div>
@@ -100,20 +137,36 @@ export default function ProjectUpdates() {
       </div>
 
       <div className="grid lg:grid-cols-[minmax(280px,360px)_1fr] gap-6">
-        {/* Project list */}
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search projects…" value={q} onChange={e => setQ(e.target.value)} className="pl-9" />
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {filters.map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs border transition',
+                  filter === f.id ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted text-muted-foreground',
+                )}
+              >
+                {f.label}
+                <span className={cn('ml-1 tabular-nums', filter === f.id ? 'opacity-90' : 'opacity-70')}>{f.count}</span>
+              </button>
+            ))}
+          </div>
           <div className="rounded-xl border divide-y overflow-hidden">
             {projects.isLoading && <div className="p-4 text-sm text-muted-foreground">Loading projects…</div>}
             {!projects.isLoading && rows.length === 0 && <div className="p-4 text-sm text-muted-foreground">No projects match.</div>}
             {rows.map(p => {
-              const u = updates[p.id];
+              const u = updatesFor(p);
               const st = u?.status ?? 'not started';
               const prog = u?.overall_progress_override ?? u?.overall_progress;
               const active = selected === p.id;
+              const bi = p.reporting_cadence === 'biweekly';
               return (
                 <button key={p.id} onClick={() => setSelected(p.id)}
                   className={cn('w-full text-left px-3.5 py-3 flex items-center gap-3 transition', active ? 'bg-primary/5' : 'hover:bg-muted/50')}>
@@ -121,7 +174,7 @@ export default function ProjectUpdates() {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{p.name}</div>
                     <div className="text-[11px] text-muted-foreground truncate">
-                      {p.project_code ? `${p.project_code} · ` : ''}{prog != null ? `${Math.round(Number(prog))}%` : p.current_flow_stage ?? '—'}
+                      {p.project_code ? `${p.project_code} · ` : ''}{bi ? 'biweekly · ' : ''}{prog != null ? `${Math.round(Number(prog))}%` : p.current_flow_stage ?? '—'}
                     </div>
                   </div>
                   <Badge className={cn('shrink-0 text-[10px]', STATUS_BADGE[st])}>{st.replace('_', ' ')}</Badge>
@@ -132,7 +185,6 @@ export default function ProjectUpdates() {
           </div>
         </div>
 
-        {/* Detail */}
         <div className="min-w-0">
           {selectedProject ? (
             <div className="rounded-xl border p-5 sm:p-6">
@@ -147,7 +199,7 @@ export default function ProjectUpdates() {
               <ClipboardCheck className="h-8 w-8 text-muted-foreground/50 mb-3" />
               <p className="font-medium">Select a project</p>
               <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Choose a project on the left to record this cycle's implementation update, log challenges and open actions, and set its risk flag.
+                Choose a project on the left to record this cycle's implementation update, or filter to <button type="button" className="underline underline-offset-2" onClick={() => setFilter('submitted')}>To review</button> to validate submissions.
               </p>
             </div>
           )}
