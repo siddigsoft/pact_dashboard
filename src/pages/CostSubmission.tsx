@@ -13347,7 +13347,7 @@ const CostSubmission = () => {
                     <span className="text-muted-foreground">Amount</span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-400">
                       {sub.currency || 'SDG'} {new Intl.NumberFormat().format(
-                        ((sub as any).paid_amount_cents ?? sub.amount_cents ?? 0) / 100
+                        (sub.amount_paid_cents ?? sub.amount_cents ?? 0) / 100
                       )}
                     </span>
                   </div>

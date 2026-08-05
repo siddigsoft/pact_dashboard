@@ -645,10 +645,10 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .order('due_date', { ascending: true, nullsFirst: false });
       if (e2) throw e2;
 
+      const allRows = [...(primary ?? []), ...(coAssigned ?? [])];
+
       const projectIds = [...new Set(
-        [...(primary ?? []), ...(coAssigned ?? [])]
-          .map((r: any) => r.project_id)
-          .filter(Boolean)
+        allRows.map((r: any) => r.project_id).filter(Boolean)
       )] as string[];
       const projectNameById = new Map<string, string>();
       if (projectIds.length > 0) {
@@ -661,6 +661,25 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         }
       }
 
+      // Build a profile-name fallback for rows whose assigned_to_name snapshot
+      // is null (e.g. tasks assigned before the snapshot column was added, or
+      // tasks assigned to internal users who never had an external snapshot).
+      const missingNameIds = [...new Set(
+        allRows
+          .filter((r: any) => !r.assigned_to_name && r.assigned_to)
+          .map((r: any) => r.assigned_to as string)
+      )];
+      const profileNameById = new Map<string, string>();
+      if (missingNameIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', missingNameIds);
+        for (const p of profiles ?? []) {
+          if (p.full_name) profileNameById.set(p.id, p.full_name);
+        }
+      }
+
       const toRow = (r: any): MyFieldTask => ({
         id: r.id,
         projectId: r.project_id,
@@ -670,7 +689,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         priority: r.priority as FieldTaskPriority,
         status: r.status as FieldTaskStatus,
         assignedTo: r.assigned_to,
-        assignedToName: r.assigned_to_name ?? null,
+        assignedToName: r.assigned_to_name || (r.assigned_to ? (profileNameById.get(r.assigned_to) ?? null) : null),
         coAssigneeIds: r.co_assignee_ids ?? [],
         dueDate: r.due_date,
         createdAt: r.created_at,

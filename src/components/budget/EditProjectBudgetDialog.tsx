@@ -11,6 +11,7 @@ import { Loader2, Plus, Trash2, RefreshCw, Users } from 'lucide-react';
 import type { ProjectBudget } from '@/types/budget';
 import type { ProjectTeamMember } from '@/types/project';
 import { calcMemberTotalCost } from '@/types/project';
+import { LEGACY_KEY_MAP, CATEGORY_OPTIONS } from '@/config/budgetCategoryMaps';
 
 interface BudgetLineItem {
   id: string;
@@ -36,98 +37,6 @@ interface EditProjectBudgetDialogProps {
   /** Team composition from projects.team.teamComposition — used by "Import Team Fees" */
   teamComposition?: ProjectTeamMember[];
 }
-
-/**
- * Maps every known legacy budget category key to its nearest canonical new key.
- * Keys that already use a canonical key (personnel_labor_fees, etc.) are not listed —
- * they pass through the `LEGACY_KEY_MAP[key] ?? key` lookup unchanged.
- * When two legacy keys share the same canonical target, the useEffect merges their
- * amounts into one line item so admins never see two rows with identical labels.
- *
- * Source of truth: all `key:` values in src/config/projectTypeConfig.ts +
- * legacy keys observed in src/components/budget/BudgetCard.tsx and
- * src/components/project/ProjectCostTab.tsx.
- */
-const LEGACY_KEY_MAP: Record<string, string> = {
-  // ── Transportation ────────────────────────────────────────────────────────
-  transportation_and_visit_fees:  'transportation_logistics',
-  transportation:                 'transportation_logistics',
-  transport:                      'transportation_logistics',
-  vehicle:                        'transportation_logistics',
-  site_visits:                    'transportation_logistics',
-
-  // ── Personnel / labor ────────────────────────────────────────────────────
-  professional_fees:              'personnel_labor_fees',
-  personnel_fees:                 'personnel_labor_fees',
-  enumerator_fees:                'personnel_labor_fees',
-  supervisor_fees:                'personnel_labor_fees',
-  supervision_fees:               'personnel_labor_fees',
-  contractor_fees:                'personnel_labor_fees',
-  facilitator_fees:               'personnel_labor_fees',
-  evaluation_team_fees:           'personnel_labor_fees',
-  reviewer_fees:                  'personnel_labor_fees',
-  review_fees:                    'personnel_labor_fees',
-  proposal_writing_fees:          'personnel_labor_fees',
-  key_informant_incentives:       'personnel_labor_fees',
-  incentives:                     'personnel_labor_fees',
-  allowances:                     'personnel_labor_fees',
-  per_diem:                       'personnel_labor_fees',
-
-  // ── Equipment / supplies ─────────────────────────────────────────────────
-  equipment:                      'equipment_supplies',
-  supplies:                       'equipment_supplies',
-  materials:                      'equipment_supplies',
-  data_collection_tools:          'equipment_supplies',
-  printing:                       'equipment_supplies',
-  printing_and_materials:         'equipment_supplies',
-  training_materials:             'equipment_supplies',
-  publication_costs:              'equipment_supplies',
-
-  // ── Field ops / activities ───────────────────────────────────────────────
-  accommodation:                  'field_operations_activities',
-  catering:                       'field_operations_activities',
-  meals:                          'field_operations_activities',
-  training:                       'field_operations_activities',
-  meetings:                       'field_operations_activities',
-  field_operations:               'field_operations_activities',
-  report_production:              'field_operations_activities',
-  venue_costs:                    'field_operations_activities',
-  workshop_facilitation:          'field_operations_activities',
-  construction_costs:             'field_operations_activities',
-  research_protocol_costs:        'field_operations_activities',
-
-  // ── Internet / comms ─────────────────────────────────────────────────────
-  internet_and_communication_fees: 'internet_communication',
-  communications:                 'internet_communication',
-  communication:                  'internet_communication',
-
-  // ── Permits / legal ──────────────────────────────────────────────────────
-  permit_fee:                     'permits_taxes_legal',
-  permits:                        'permits_taxes_legal',
-
-  // ── Overhead / admin ─────────────────────────────────────────────────────
-  management_overhead_legacy:     'management_overhead',
-  overhead:                       'management_overhead',
-  data_management:                'management_overhead',
-  document_management:            'management_overhead',
-
-  // ── Contingency / catch-all ──────────────────────────────────────────────
-  contingency:                    'contingency_reserve',
-  miscellaneous:                  'contingency_reserve',
-  other:                          'contingency_reserve',
-};
-
-const CATEGORY_OPTIONS = [
-  { value: 'personnel_labor_fees', label: 'Personnel & Labor Fees' },
-  { value: 'transportation_logistics', label: 'Transportation & Logistics' },
-  { value: 'equipment_supplies', label: 'Equipment & Supplies' },
-  { value: 'field_operations_activities', label: 'Field Operations & Activities' },
-  { value: 'internet_communication', label: 'Internet & Communication' },
-  { value: 'permits_taxes_legal', label: 'Permits, Taxes & Legal Fees' },
-  { value: 'management_overhead', label: 'Management & Overhead' },
-  { value: 'contingency_reserve', label: 'Contingency / Reserve' },
-];
-
 export function EditProjectBudgetDialog({
   budget,
   projectName,
