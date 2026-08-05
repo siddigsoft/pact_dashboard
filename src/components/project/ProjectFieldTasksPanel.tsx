@@ -1302,6 +1302,50 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                     )}
                   </div>
                 )}
+
+                {/* ── Earned Value ── */}
+                {estCost && percentComplete > 0 && (() => {
+                  const est = parseFloat(estCost);
+                  const act = actCost ? parseFloat(actCost) : null;
+                  const ev  = est * (percentComplete / 100);
+                  const variance = act !== null ? ev - act : null;
+                  const evPct = Math.min(100, (ev / est) * 100);
+                  const underBudget = variance !== null && variance >= 0;
+                  return (
+                    <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/10 p-3 space-y-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <Target className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                        <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">Earned Value</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground">{percentComplete}% complete</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Earned value</span>
+                          <span className="font-semibold text-violet-700 dark:text-violet-300 tabular-nums">
+                            {fmtCost(ev)}
+                            <span className="text-muted-foreground font-normal"> / {fmtCost(est)}</span>
+                          </span>
+                        </div>
+                        <Progress value={evPct} className="h-2 [&>div]:bg-violet-500" />
+                        {variance !== null && (
+                          <div className="flex items-center gap-1 text-[11px]">
+                            {underBudget
+                              ? <TrendingDown className="h-3 w-3 text-emerald-500" />
+                              : <TrendingUp className="h-3 w-3 text-red-500" />}
+                            <span className={underBudget ? 'text-emerald-600' : 'text-red-600'}>
+                              {underBudget
+                                ? `${fmtCost(variance)} under — running ahead of spend`
+                                : `${fmtCost(Math.abs(variance))} over — actual exceeds earned value`}
+                            </span>
+                          </div>
+                        )}
+                        {act === null && (
+                          <p className="text-[11px] text-muted-foreground">Log actual cost above to see cost variance.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </TabsContent>
 
