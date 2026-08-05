@@ -242,6 +242,34 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
 
       const selectedStates = values.selectedState ? [values.selectedState] : [];
 
+      // Ensure the selected Project Manager is always included in the
+      // teamComposition so they appear in the "Team" section immediately.
+      // In DB, `projects.team.projectManager` is stored as a display name,
+      // while `teamComposition` requires the member's `userId`.
+      const pmNameRaw = (values.projectManager ?? '').toString().trim();
+      const pmName = pmNameRaw && pmNameRaw.toLowerCase() !== 'none' ? pmNameRaw : '';
+      const pmUser = pmName
+        ? projectManagerUsers.find(u => String(u.name).trim() === pmName)
+        : undefined;
+
+      const teamCompositionWithPm: ProjectTeamMember[] = (() => {
+        const existing = Array.isArray(teamMembers) ? teamMembers : [];
+        if (!pmUser?.id) return existing;
+        const alreadyInTeam = existing.some(m => m?.userId && m.userId === pmUser.id);
+        if (alreadyInTeam) return existing;
+        return [
+          ...existing,
+          {
+            userId: pmUser.id,
+            name: pmUser.name,
+            role: 'projectManager',
+            joinedAt: new Date().toISOString(),
+            memberType: 'internal',
+            workload: pmUser.performance?.currentWorkload || 0,
+          },
+        ];
+      })();
+
       const project: Project = {
         id: initialData?.id || `proj-${Date.now()}`,
         name: values.name,
@@ -271,8 +299,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         },
         team: {
           ...(initialData?.team || {}),
-          projectManager: values.projectManager,
-          teamComposition: teamMembers
+          projectManager: pmName || undefined,
+          teamComposition: teamCompositionWithPm,
+          // Keep legacy `members` in sync for any UI that reads it.
+          members: teamCompositionWithPm
+            .filter(m => m?.memberType !== 'external')
+            .map(m => m.userId)
+            .filter(Boolean),
         },
         activities: initialData?.activities || [],
         relatedMMPs,
