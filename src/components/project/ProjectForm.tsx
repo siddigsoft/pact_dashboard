@@ -186,6 +186,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const [budgetPeriod, setBudgetPeriod] = useState<BudgetFormData['budgetPeriod']>('annual');
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
   const [categoryValues, setCategoryValues] = useState<Record<string, string>>({});
+  const [categoryDisplayValues, setCategoryDisplayValues] = useState<Record<string, string>>({});
   const [budgetNotes, setBudgetNotes] = useState('');
   const [categoriesExpanded, setCategoriesExpanded] = useState(true);
   useEffect(() => {
@@ -1046,12 +1047,28 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                             {watchBudgetCurrency}
                           </span>
                           <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="0"
-                            value={categoryValues[cat.key] ?? ''}
-                            onChange={(e) => setCategoryValues(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                            value={categoryDisplayValues[cat.key] ?? categoryValues[cat.key] ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, '');
+                              setCategoryDisplayValues(prev => ({ ...prev, [cat.key]: e.target.value.replace(/[^0-9.,]/g, '') }));
+                              setCategoryValues(prev => ({ ...prev, [cat.key]: raw }));
+                            }}
+                            onFocus={() => {
+                              const raw = categoryValues[cat.key] ?? '';
+                              setCategoryDisplayValues(prev => ({ ...prev, [cat.key]: raw }));
+                            }}
+                            onBlur={() => {
+                              const num = parseFloat(categoryValues[cat.key] ?? '');
+                              setCategoryDisplayValues(prev => ({
+                                ...prev,
+                                [cat.key]: num > 0
+                                  ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                  : '',
+                              }));
+                            }}
                             className="h-8 text-sm rounded-l-none"
                           />
                         </div>
