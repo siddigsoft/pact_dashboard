@@ -536,15 +536,30 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
     selectedSiteObjects.forEach((site) => {
       if (!newCosts.has(site.id)) {
+        // Restore costs from a previous dispatch if the site was reclaimed.
+        // The reclaim RPC preserves transport_fee and the additional_data
+        // transportation keys so we can pre-fill them here rather than forcing
+        // admins to re-enter the same figures each time.
+        const ad = (site.additional_data || {}) as Record<string, any>;
+        const prevTransport =
+          Number(ad.transportation_cost) ||
+          Number(site.transport_fee) ||
+          Number((site as any).transportFee) ||
+          0;
+        const prevMeal      = Number(ad.meal_per_diem)     || 0;
+        const prevOther     = Number(ad.other_logistics)   || 0;
+        const prevAccomm    = Number(ad.accommodation_cost)|| 0;
+
         newCosts.set(site.id, {
           siteId: site.id,
-          siteName: site.site_name || site.siteName || "Unknown Site",
-          transportation:
-            Number(site.transport_fee) || Number(site.transportFee) || 0,
-          accommodation: 0,
-          mealAllowance: 0,
-          otherCosts: 0,
-          calculationNotes: "",
+          siteName: site.site_name || (site as any).siteName || "Unknown Site",
+          transportation: prevTransport,
+          accommodation:  prevAccomm,
+          mealAllowance:  prevMeal,
+          otherCosts:     prevOther,
+          calculationNotes: prevTransport > 0
+            ? "Pre-filled from previous dispatch — update if costs have changed."
+            : "",
         });
       }
     });
