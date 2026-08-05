@@ -1009,18 +1009,18 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     {budgetCategories.map((cat) => (
                       <div key={cat.key} className="space-y-1.5">
                         <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
+                        <div className="flex rounded-md shadow-sm">
+                          <span className="inline-flex items-center px-2 rounded-l-md border border-r-0 border-input bg-muted text-[11px] font-semibold text-muted-foreground select-none whitespace-nowrap">
                             {watchBudgetCurrency}
                           </span>
                           <Input
                             type="number"
                             min="0"
                             step="0.01"
-                            placeholder={cat.placeholder ?? '0.00'}
+                            placeholder="0"
                             value={categoryValues[cat.key] ?? ''}
                             onChange={(e) => setCategoryValues(prev => ({ ...prev, [cat.key]: e.target.value }))}
-                            className="pl-11 h-8 text-sm"
+                            className="h-8 text-sm rounded-l-none"
                           />
                         </div>
                       </div>
