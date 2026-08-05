@@ -11,6 +11,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useProjectChat } from '@/hooks/use-project-chat';
+import { useProjectChatUnread } from '@/hooks/useProjectChatUnread';
 import {
   CheckSquare, Receipt, DollarSign, MessageSquare, ArrowRight,
   Clock, CheckCircle2, AlertCircle, Circle, Loader2, Users,
@@ -85,6 +86,7 @@ interface Props {
 export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, projectBudgetTotal, onOpenChatDrawer, chatDrawerLoading }: Props) {
   const navigate = useNavigate();
   const { openProjectChat, busy: chatBusy } = useProjectChat();
+  const { unreadCount: chatUnread, markAsRead: markChatRead } = useProjectChatUnread(project.id, currentUserId);
   const [tasks, setTasks] = useState<FieldTask[]>([]);
   const [costs, setCosts] = useState<CostSub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,16 +166,26 @@ export function ProjectMyWorkPanel({ project, currentUserId, currentUserName, pr
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px] gap-1.5"
+            className="h-7 text-[11px] gap-1.5 relative"
             disabled={chatDrawerLoading}
-            onClick={() => onOpenChatDrawer
-              ? onOpenChatDrawer()
-              : navigate(`/projects/${project.id}?tab=comments`)}
+            onClick={() => {
+              markChatRead();
+              if (onOpenChatDrawer) {
+                onOpenChatDrawer();
+              } else {
+                navigate(`/projects/${project.id}?tab=comments`);
+              }
+            }}
           >
             {chatDrawerLoading
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <MessageSquare className="h-3.5 w-3.5" />}
             Team Chat
+            {chatUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white leading-none">
+                {chatUnread > 99 ? '99+' : chatUnread}
+              </span>
+            )}
           </Button>
           <Button
             type="button"
