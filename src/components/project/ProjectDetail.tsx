@@ -1819,6 +1819,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             allStages={flow.flowDef}
             customEntries={(project.customFlowStages ?? []) as any}
             completedStageIds={flow.completedStageIds}
+            teamComposition={project.team?.teamComposition || []}
           />
         </TabsContent>
 

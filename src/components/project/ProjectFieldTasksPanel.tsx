@@ -32,8 +32,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO, isBefore, differenceInDays, startOfWeek, isValid } from 'date-fns';
 import {
@@ -54,11 +52,35 @@ import {
 } from '@/hooks/useTaskDependencies';
 import type { CustomStageEntry } from '@/hooks/useProjectFlow';
 import type { FlowStage } from '@/config/projectFlows';
+import type { ProjectTeamMember } from '@/types/project';
 
 export interface TypedDepDraft {
   predecessorId: string;
   depType: DepType;
   lagDays: number;
+}
+
+/** Assignee option derived from the project's teamComposition (internal + external). */
+export interface TeamAssigneeOption {
+  id: string;
+  name: string;
+  role: string;
+  memberType?: 'internal' | 'external';
+}
+
+function teamMembersToAssigneeOptions(members: ProjectTeamMember[] = []): TeamAssigneeOption[] {
+  const options: TeamAssigneeOption[] = [];
+  for (const m of members) {
+    if (!m?.userId || !m?.name) continue;
+    const isExternal = m.memberType === 'external';
+    options.push({
+      id: m.userId,
+      name: m.name,
+      role: m.role || (isExternal ? 'external' : 'member'),
+      memberType: isExternal ? 'external' : 'internal',
+    });
+  }
+  return options.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 const DEP_TYPE_OPTIONS: { value: DepType; label: string }[] = [
@@ -88,23 +110,6 @@ const STATUS_ORDER: FieldTaskStatus[] = ['todo', 'inprogress', 'done', 'cancelle
 const PRIORITY_ORDER: FieldTaskPriority[] = ['critical', 'high', 'medium', 'low'];
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'gantt' | 'by_stage';
-
-// ── Hooks ──────────────────────────────────────────────────────────────────
-
-function useAllProfiles() {
-  return useQuery({
-    queryKey: ['all_approved_profiles'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, role')
-        .eq('status', 'approved')
-        .order('full_name');
-      return (data ?? []) as { id: string; full_name: string; role: string }[];
-    },
-    staleTime: 5 * 60_000,
-  });
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -151,18 +156,18 @@ interface AssigneeSelectorProps {
   value: string | null;
   displayName: string;
   onChange: (id: string | null, name: string) => void;
+  candidates: TeamAssigneeOption[];
 }
 
-function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProps) {
+function AssigneeSelector({ value, displayName, onChange, candidates }: AssigneeSelectorProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const { data: allProfiles = [] } = useAllProfiles();
 
   const filtered = useMemo(() =>
     q.trim()
-      ? allProfiles.filter(p => p.full_name?.toLowerCase().includes(q.toLowerCase()))
-      : allProfiles,
-    [allProfiles, q],
+      ? candidates.filter(p => p.name?.toLowerCase().includes(q.toLowerCase()))
+      : candidates,
+    [candidates, q],
   );
 
   return (
@@ -177,7 +182,7 @@ function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProp
               <span className="truncate">{displayName}</span>
             </span>
           ) : (
-            <span className="text-muted-foreground">Select staff member…</span>
+            <span className="text-muted-foreground">Select team member…</span>
           )}
           <ChevronDown className="h-3.5 w-3.5 opacity-50 flex-shrink-0" />
         </Button>
@@ -203,8 +208,13 @@ function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProp
           </button>
         )}
         <div className="space-y-0.5 max-h-52 overflow-y-auto">
-          {filtered.length === 0 && (
-            <p className="text-xs text-muted-foreground px-2 py-1">No staff found</p>
+          {candidates.length === 0 && (
+            <p className="text-xs text-muted-foreground px-2 py-2">
+              No project team members yet. Add them on the Team tab first.
+            </p>
+          )}
+          {candidates.length > 0 && filtered.length === 0 && (
+            <p className="text-xs text-muted-foreground px-2 py-1">No matching team members</p>
           )}
           {filtered.map(p => (
             <button
@@ -214,14 +224,19 @@ function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProp
                 'w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted text-sm text-left',
                 value === p.id && 'bg-[#1D3461]/10',
               )}
-              onClick={() => { onChange(p.id, p.full_name); setOpen(false); setQ(''); }}
+              onClick={() => { onChange(p.id, p.name); setOpen(false); setQ(''); }}
             >
-              <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                {p.full_name?.charAt(0) ?? '?'}
+              <div className={cn(
+                'h-6 w-6 rounded-full text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0',
+                p.memberType === 'external' ? 'bg-violet-600' : 'bg-[#1D3461]',
+              )}>
+                {p.name?.charAt(0) ?? '?'}
               </div>
               <div className="min-w-0">
-                <p className="font-medium truncate text-xs">{p.full_name}</p>
-                <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                <p className="font-medium truncate text-xs">{p.name}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">
+                  {p.memberType === 'external' ? 'External' : p.role?.replace(/_/g, ' ')}
+                </p>
               </div>
               {value === p.id && <CheckCircle2 className="h-3.5 w-3.5 text-[#1D3461] ml-auto flex-shrink-0" />}
             </button>
@@ -238,27 +253,27 @@ interface CoAssigneePickerProps {
   value: string[];
   excludeId: string | null;
   onChange: (ids: string[]) => void;
+  candidates: TeamAssigneeOption[];
 }
 
-function CoAssigneePicker({ value, excludeId, onChange }: CoAssigneePickerProps) {
+function CoAssigneePicker({ value, excludeId, onChange, candidates }: CoAssigneePickerProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const { data: allProfiles = [] } = useAllProfiles();
 
   const filtered = useMemo(() =>
-    allProfiles.filter(p => {
+    candidates.filter(p => {
       if (p.id === excludeId) return false;
-      if (q.trim()) return p.full_name?.toLowerCase().includes(q.toLowerCase());
+      if (q.trim()) return p.name?.toLowerCase().includes(q.toLowerCase());
       return true;
     }),
-    [allProfiles, q, excludeId],
+    [candidates, q, excludeId],
   );
 
   const toggle = (id: string) => {
     onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id]);
   };
 
-  const getName = (id: string) => allProfiles.find(p => p.id === id)?.full_name ?? id.slice(0, 8);
+  const getName = (id: string) => candidates.find(p => p.id === id)?.name ?? id.slice(0, 8);
 
   return (
     <div className="space-y-1.5">
@@ -301,13 +316,15 @@ function CoAssigneePicker({ value, excludeId, onChange }: CoAssigneePickerProps)
               autoFocus
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="Search staff…"
+              placeholder="Search team…"
               className="w-full h-8 pl-7 pr-2 text-xs border border-input rounded-md bg-background outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
           <div className="max-h-48 overflow-y-auto space-y-0.5">
-            {filtered.length === 0 ? (
-              <p className="text-xs text-muted-foreground px-2 py-1">No staff found</p>
+            {candidates.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2 py-2">No project team members yet</p>
+            ) : filtered.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2 py-1">No matching team members</p>
             ) : filtered.map(p => (
               <button
                 key={p.id}
@@ -318,12 +335,17 @@ function CoAssigneePicker({ value, excludeId, onChange }: CoAssigneePickerProps)
                   value.includes(p.id) && 'bg-[#1D3461]/10',
                 )}
               >
-                <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                  {p.full_name?.charAt(0) ?? '?'}
+                <div className={cn(
+                  'h-6 w-6 rounded-full text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0',
+                  p.memberType === 'external' ? 'bg-violet-600' : 'bg-[#1D3461]',
+                )}>
+                  {p.name?.charAt(0) ?? '?'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate text-xs">{p.full_name}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                  <p className="font-medium truncate text-xs">{p.name}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">
+                    {p.memberType === 'external' ? 'External' : p.role?.replace(/_/g, ' ')}
+                  </p>
                 </div>
                 {value.includes(p.id) && <CheckCircle2 className="h-3.5 w-3.5 text-[#1D3461] flex-shrink-0" />}
               </button>
@@ -489,6 +511,8 @@ interface TaskFormProps {
   currentUserName?: string;
   projectId?: string;
   projectName?: string;
+  /** Project team members available for assignment (internal + external). */
+  teamCandidates?: TeamAssigneeOption[];
 }
 
 function getReachableViaDeps(
@@ -552,7 +576,7 @@ function getDepRelations(
 
 const EMPTY_TYPED_DEPS: TaskDependency[] = [];
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId, currentUserId, currentUserName, projectId = '', projectName = '' }: TaskFormProps) {
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = EMPTY_TYPED_DEPS, allTypedDeps = EMPTY_TYPED_DEPS, completedStageIds, defaultStageId, currentUserId, currentUserName, projectId = '', projectName = '', teamCandidates = [] }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -582,7 +606,6 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       ]),
     ),
   );
-  const { data: allProfiles = [] } = useAllProfiles();
 
   // Attachments — only functional when editing an existing task (initial.id present).
   // For new tasks the hook returns empty state and upload is gated behind a prompt.
@@ -759,6 +782,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       description: description.trim() || undefined,
       priority, status,
       assignedTo: assignedTo || null,
+      assignedToName: assignedTo ? (assigneeName || teamCandidates.find(m => m.id === assignedTo)?.name || null) : null,
       dueDate: dueDate || null,
       startDate: startDate || null,
       stateName: stateName.trim() || null,
@@ -866,6 +890,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                 <AssigneeSelector
                   value={assignedTo}
                   displayName={assigneeName}
+                  candidates={teamCandidates}
                   onChange={(id, name) => { setAssignedTo(id); setAssigneeName(name); }}
                 />
               </div>
@@ -878,6 +903,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                 <CoAssigneePicker
                   value={coAssigneeIds}
                   excludeId={assignedTo}
+                  candidates={teamCandidates}
                   onChange={setCoAssigneeIds}
                 />
               </div>
@@ -1044,8 +1070,8 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                           </div>
                           {/* Rows */}
                           {allAssigneeIds.map((uid, idx) => {
-                            const profile = allProfiles.find(p => p.id === uid);
-                            const name = profile?.full_name ?? (idx === 0 ? assigneeName : uid.slice(0, 8));
+                            const member = teamCandidates.find(p => p.id === uid);
+                            const name = member?.name ?? (idx === 0 ? assigneeName : uid.slice(0, 8));
                             const isMain = uid === assignedTo;
                             const entry = assigneeHours[uid] ?? { allocated: '', actual: '', ratePerHour: '' };
                             const setEntry = (field: 'allocated' | 'actual' | 'ratePerHour', val: string) =>
@@ -1199,8 +1225,8 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                     </div>
                     <div className="space-y-1.5">
                       {allCostAssigneeIds.map(id => {
-                        const profile = allProfiles.find(p => p.id === id);
-                        const name = profile?.full_name ?? id.slice(0, 8);
+                        const member = teamCandidates.find(p => p.id === id);
+                        const name = member?.name ?? (id === assignedTo ? assigneeName : id.slice(0, 8));
                         const e = assigneeHours[id];
                         const hrs  = parseFloat(e?.allocated  || '0') || 0;
                         const rate = parseFloat(e?.ratePerHour || '0') || 0;
@@ -3646,12 +3672,19 @@ interface Props {
   customEntries: CustomStageEntry[];
   /** IDs of stages that are marked complete — blocks adding new tasks */
   completedStageIds?: Set<string>;
+  /** Project team (internal + external) — used for assignee pickers */
+  teamComposition?: ProjectTeamMember[];
 }
 
 export function ProjectFieldTasksPanel({
   projectId, projectName, currentUserId, currentUserName = 'A manager', canEdit, allStages, customEntries,
   completedStageIds = new Set<string>(),
+  teamComposition = [],
 }: Props) {
+  const teamCandidates = useMemo(
+    () => teamMembersToAssigneeOptions(teamComposition),
+    [teamComposition],
+  );
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const { tasks, isLoading, createTask, updateTask, deleteTask, setBaseline, isCreating, isUpdating, isSettingBaseline } =
@@ -4201,7 +4234,7 @@ export function ProjectFieldTasksPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All staff</SelectItem>
+            <SelectItem value="all">All team</SelectItem>
             <SelectItem value="mine">Mine</SelectItem>
           </SelectContent>
         </Select>
@@ -4265,6 +4298,7 @@ export function ProjectFieldTasksPanel({
         currentUserName={currentUserName}
         projectId={projectId}
         projectName={projectName}
+        teamCandidates={teamCandidates}
       />
       <TaskFormDialog
         open={!!editTask}
@@ -4282,6 +4316,7 @@ export function ProjectFieldTasksPanel({
         currentUserName={currentUserName}
         projectId={projectId}
         projectName={projectName}
+        teamCandidates={teamCandidates}
       />
       <TaskDetailDialog
         task={detailTask}
