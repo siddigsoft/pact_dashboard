@@ -16,6 +16,7 @@ import { useNavBadgeCountsContext } from '@/context/NavBadgeCountsContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PendingAction {
   id: string;
@@ -187,6 +188,30 @@ export function NavbarNotificationBell() {
       link = '/cost-approval';
     } else if (link.startsWith('/users?tab=pending-approvals') || link === '/users') {
       link = '/admin-hub?tab=users';
+    } else if (
+      n.relatedEntityType === 'mmp_site_entry' ||
+      n.related_entity_type === 'mmp_site_entry' ||
+      /^\/mmp\/[0-9a-f-]{36}$/i.test(link)
+    ) {
+      // Site-entry notifications historically used /mmp/{siteEntryId}. Resolve parent MMP.
+      const siteId =
+        n.relatedEntityId ||
+        n.related_entity_id ||
+        link.match(/^\/mmp\/([0-9a-f-]{36})$/i)?.[1];
+      if (siteId) {
+        try {
+          const { data } = await supabase
+            .from('mmp_site_entries')
+            .select('id, mmp_file_id')
+            .eq('id', siteId)
+            .maybeSingle();
+          if (data?.mmp_file_id) {
+            link = `/mmp/${data.mmp_file_id}?site=${data.id}`;
+          }
+        } catch {
+          /* keep original link; MMPDetailView also redirects */
+        }
+      }
     }
 
     navigate(link);
