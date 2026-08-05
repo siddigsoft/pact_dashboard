@@ -44,7 +44,6 @@ import {
   Percent,
   FileBarChart2,
   ExternalLink,
-  ClipboardCheck,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -70,7 +69,6 @@ import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 import ProjectChangeLogPanel from './ProjectChangeLogPanel';
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
-import DirectorUpdatePanel from './DirectorUpdatePanel';
 import { ProjectWeeklyDashboard } from './ProjectWeeklyDashboard';
 import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1077,7 +1075,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'field_ops',  label: 'Field Ops',                                    icon: MapPin },
             { value: 'budget',     label: 'Budget',                                       icon: Wallet },
             { value: 'flow',       label: typeConfig.tabLabels.monitoring ?? 'Stages',    icon: GitBranch },
-            { value: 'director_update', label: 'Director Update',                         icon: ClipboardCheck },
             { value: 'field_tasks',label: 'Tasks',                                        icon: CheckSquare },
             { value: 'comments',   label: 'Comments',                                     icon: MessageCircle },
             { value: 'documents',  label: typeConfig.tabLabels.reporting ?? 'Documents',  icon: Paperclip },
@@ -1158,10 +1155,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
           );
         })()}
-
-        <TabsContent value="director_update" className="mt-4">
-          <DirectorUpdatePanel projectId={project.id} />
-        </TabsContent>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
           {/* ── My Work panel (personal assignments on this project) ── */}

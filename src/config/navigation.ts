@@ -3,7 +3,7 @@ import {
   DollarSign, Wallet, BarChart3, Calendar, Settings,
   CheckCircle, Banknote, Bell, Compass, FolderKanban,
   Database, CheckSquare, Inbox, LayoutDashboard,
-  BookOpen, Briefcase, ShieldCheck, Archive
+  BookOpen, Briefcase, ShieldCheck, Archive, ClipboardCheck
 } from 'lucide-react';
 import { AppRole } from '@/types';
 
@@ -144,6 +144,16 @@ export const navigationConfig: NavigationGroup[] = [
         priority: 82,
         roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Project Manager' as AppRole, 'Country Director' as AppRole],
         description: 'Projects, portfolio, surveys and analytics'
+      },
+      {
+        id: 'project-updates',
+        icon: ClipboardCheck,
+        label: 'Project Updates',
+        path: '/project-updates',
+        category: 'primary',
+        priority: 81,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'ICT' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Project Manager' as AppRole, 'Country Director' as AppRole],
+        description: 'Directors’ implementation updates, risk flags and open actions'
       }
     ]
   },

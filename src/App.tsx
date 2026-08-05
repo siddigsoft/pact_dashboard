@@ -46,6 +46,7 @@ const Reports = lazy(() => import('./pages/Reports'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectAnalytics = lazy(() => import('./pages/ProjectAnalytics'));
 const PortfolioDashboard = lazy(() => import('./pages/PortfolioDashboard'));
+const ProjectUpdates = lazy(() => import('./pages/ProjectUpdates'));
 const CreateProject = lazy(() => import('./pages/CreateProject'));
 const CreateProjectActivity = lazy(() => import('./pages/CreateProjectActivity'));
 const ProjectActivityDetail = lazy(() => import('./pages/ProjectActivityDetail'));
@@ -543,6 +544,7 @@ const AppRoutes = () => {
         <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
         <Route path="/team-tasks" element={<PageWrapper><TeamTaskMonitor /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
+        <Route path="/project-updates" element={<PageWrapper><ProjectUpdates /></PageWrapper>} />
         <Route path="/programme-hub" element={<PageWrapper><ProgrammeHub /></PageWrapper>} />
         <Route path="/projects/analytics" element={<Navigate to="/programme-hub?tab=analytics" replace />} />
         <Route path="/portfolio" element={<Navigate to="/programme-hub?tab=portfolio" replace />} />
