@@ -982,6 +982,32 @@ const CostSubmission = () => {
     );
   }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin, isFOM, isSupervisor, isCountryDirector, isFinanceAdmin]);
 
+  /**
+   * Returns true if the given hub has at least one active supervisor assigned
+   * (either as their primary role or via additionalRoles).
+   * Used so FOM can act as T1 for coordinator submissions from unsupervised hubs.
+   */
+  const hubHasSupervisor = useCallback((hubId: string | null | undefined): boolean => {
+    if (!hubId) return false;
+    const normHub = normalizeHubId(hubId);
+    return users.some(u => {
+      const role = (u.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      const isPrimary = role === 'supervisor' || role === 'hubsupervisor';
+      if (isPrimary) {
+        const uNorm = normalizeHubId((u as any).hubId);
+        if (uNorm && normHub && uNorm === normHub) return true;
+      }
+      const addRoles = Array.isArray((u as any).additionalRoles) ? (u as any).additionalRoles : [];
+      return addRoles.some((r: any) => {
+        const rNorm = (r?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+        const isSupRole = rNorm === 'supervisor' || rNorm === 'hubsupervisor';
+        if (!isSupRole) return false;
+        const rHub = normalizeHubId(r?.hub_id);
+        return rHub && normHub && rHub === normHub;
+      });
+    });
+  }, [users]);
+
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     // Admins and Super Admins see everything unfiltered
@@ -1042,30 +1068,29 @@ const CostSubmission = () => {
             || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
             || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
           if (isSupervisorSub) {
-            // Supervisor submissions: hub-scope if FOM has additional supervisor roles
-            if (isScopedFOM) {
-              if (o.hub_id) {
-                return fomAdditionalHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(o.hub_id!) || o.hub_id));
-              }
-              // No hub_id on submission — fall back to state-based matching via submitter's state
-              const submitterUser = users.find(u => u.id === o.submitted_by);
-              const submitterState = submitterUser?.stateId || (submitterUser as any)?.state;
-              if (submitterState) return isStateInAnyHub(submitterState, fomAdditionalHubIds);
-              return false;
-            }
+            // FOM is T1 for ALL supervisor submissions regardless of hub assignment.
+            // (The isScopedFOM concept was incorrectly restricting this — removed.)
             return true;
           }
           if (isCoordSub) {
-            // FOM who is also a Supervisor for a hub must see coordinator submissions from
-            // that hub at T1 (pending Supervisor approval) so they can act as T1 approver.
+            // Resolve the coordinator's effective hub
+            const submitterUser = users.find(u => u.id === o.submitted_by);
+            const effectiveHubId = o.hub_id || (submitterUser as any)?.hubId || null;
+
+            // If the coordinator's hub has NO supervisor assigned, FOM acts as T1
+            // directly (there is nobody else to do the first approval).
+            if (!hubHasSupervisor(effectiveHubId)) return true;
+
+            // FOM who also holds a Supervisor role for a hub sees coordinator submissions
+            // from that hub at T1 (before Supervisor approval) so they can act as T1.
             if (isSupervisor && fomAdditionalHubIds.length > 0) {
-              const submissionHub = o.hub_id ? (normalizeHubId(o.hub_id) || o.hub_id) : null;
+              const submissionHub = effectiveHubId ? (normalizeHubId(effectiveHubId) || effectiveHubId) : null;
               const inSupervisedHub = submissionHub
                 ? fomAdditionalHubIds.some(h => (normalizeHubId(h) || h) === submissionHub)
                 : teamMemberIds.includes(o.submitted_by);
               if (inSupervisedHub) return true;
             }
-            // FOM is T2 — visible AFTER Supervisor (T1) approves, or if already actioned.
+            // Standard case: FOM is T2 — visible AFTER Supervisor (T1) approves, or already actioned.
             return o.tier1_status === 'approved' || o.tier2_approved_by === currentUser?.id;
           }
           // Fallback: any submission this FOM has already actioned at any tier
@@ -1222,33 +1247,34 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (oc.submitted_by === currentUser?.id) return false;   // never approve own request
     if (isSuperAdmin || isAdmin) return true;
-    // Coordinator: T1 = Hub Supervisor.
-    // Primary-role Supervisors qualify directly. A FOM who also holds a Supervisor role
-    // via additional_roles qualifies for their assigned hub(s) only.
+    // Coordinator: T1 = Hub Supervisor (or FOM when the hub has no supervisor).
     if (hasFourTiers(oc)) {
-      const isEffectiveSupervisor = isPrimaryRoleSupervisor || (isFOM && isSupervisor);
-      if (!isEffectiveSupervisor) return false;
+      // Resolve effective hub (submission hub_id, or fall back to submitter's hubId)
+      const submitterUser = users.find(u => u.id === oc.submitted_by);
+      const effectiveHubId = oc.hub_id || (submitterUser as any)?.hubId || null;
+
+      // If this hub has NO supervisor at all, FOM steps in as T1 approver.
+      if (isFOM && !hubHasSupervisor(effectiveHubId)) return true;
+
+      // Primary-role Supervisor: approve submissions from their own hub only.
       if (isPrimaryRoleSupervisor) {
         const myHubId = (currentUser as any)?.hubId;
         if (!myHubId) return false;
         if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
         return oc.hub_id === myHubId;
       }
-      // FOM+Supervisor via additional_roles — hub IDs come from those role entries
-      const supervisedHubIds = getAdditionalSupervisorHubIds(currentUser as any);
-      if (supervisedHubIds.length === 0) return false;
-      if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
-      return supervisedHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(oc.hub_id!) || oc.hub_id));
-    }
-    // Supervisor: T1 = FOM (hub-scoped if FOM has additional supervisor roles)
-    if (hasThreeTiers(oc)) {
-      if (!isFOM) return false;
-      const fomAdditionalHubIds = getAdditionalSupervisorHubIds(currentUser as any);
-      if (fomAdditionalHubIds.length > 0) {
-        // Hub-scoped FOM: only approve submissions from their assigned supervisor hub(s)
-        return oc.hub_id ? fomAdditionalHubIds.includes(oc.hub_id) : false;
+      // FOM who also holds a Supervisor role via additional_roles — hub-scoped T1 approval.
+      if (isFOM && isSupervisor) {
+        const supervisedHubIds = getAdditionalSupervisorHubIds(currentUser as any);
+        if (supervisedHubIds.length === 0) return false;
+        if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
+        return supervisedHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(oc.hub_id!) || oc.hub_id));
       }
-      return true; // Unrestricted FOM approves all supervisor submissions
+      return false;
+    }
+    // Supervisor: T1 = FOM — unrestricted; FOM approves ALL supervisor submissions.
+    if (hasThreeTiers(oc)) {
+      return isFOM;
     }
     // FOM submission: T1 = Country Director
     if (isFomSubmission(oc)) return isCountryDirector;
