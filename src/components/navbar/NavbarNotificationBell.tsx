@@ -71,7 +71,7 @@ export function NavbarNotificationBell() {
           id: 'cost-tier1',
           label: 'Cost submissions awaiting your approval',
           count: counts.pendingCostTier1Hub,
-          url: '/finance/operational-costs?tab=approvals',
+          url: '/cost-approval',
           icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -81,7 +81,7 @@ export function NavbarNotificationBell() {
           id: 'dp-supervisor',
           label: 'Down-payment requests awaiting approval',
           count: counts.pendingDpSupervisor,
-          url: '/finance/down-payments?tab=pending',
+          url: '/down-payment-approval',
           icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -94,7 +94,7 @@ export function NavbarNotificationBell() {
           id: 'pending-users',
           label: 'New user registrations awaiting approval',
           count: counts.pendingUsers,
-          url: '/users?tab=pending-approvals',
+          url: '/admin-hub?tab=users',
           icon: <UserCheck className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -104,7 +104,7 @@ export function NavbarNotificationBell() {
           id: 'cost-tier2',
           label: 'Cost submissions pending final approval',
           count: counts.pendingTier2Cost,
-          url: '/finance/operational-costs?tab=approvals',
+          url: '/cost-approval',
           icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'normal',
         });
@@ -114,7 +114,7 @@ export function NavbarNotificationBell() {
           id: 'dp-admin',
           label: 'Down-payment requests pending admin review',
           count: counts.pendingDpAdmin,
-          url: '/finance/down-payments?tab=pending',
+          url: '/down-payment-approval',
           icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -176,11 +176,21 @@ export function NavbarNotificationBell() {
 
   const handleNotificationClick = async (n: any) => {
     if (!n.isRead) await markNotificationAsRead?.(n.id);
-    const link = n.link || n.action_url;
-    if (link) {
-      navigate(link.startsWith('/') ? link : `/${link}`);
-      setOpen(false);
+    const raw = n.link || n.action_url;
+    if (!raw) return;
+
+    // Normalize known dead deep-links from older notification payloads.
+    let link = String(raw).startsWith('/') ? String(raw) : `/${raw}`;
+    if (link.startsWith('/finance/down-payments')) {
+      link = '/down-payment-approval';
+    } else if (link.startsWith('/finance/operational-costs')) {
+      link = '/cost-approval';
+    } else if (link.startsWith('/users?tab=pending-approvals') || link === '/users') {
+      link = '/admin-hub?tab=users';
     }
+
+    navigate(link);
+    setOpen(false);
   };
 
   const displayBadge = totalBadge > 99 ? '99+' : totalBadge;
