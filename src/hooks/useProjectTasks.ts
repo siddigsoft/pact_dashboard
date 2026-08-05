@@ -63,6 +63,8 @@ export interface CreateFieldTask {
   priority: FieldTaskPriority;
   status?: FieldTaskStatus;
   assignedTo?: string | null;
+  /** Snapshot display name — required for external team members without a profiles row. */
+  assignedToName?: string | null;
   coAssigneeIds?: string[];
   dueDate?: string | null;
   startDate?: string | null;
@@ -231,51 +233,73 @@ export function useProjectTasks(projectId: string) {
         .from('project_field_tasks')
         .select(`
           id, project_id, title, description, priority, status,
-          assigned_to, co_assignee_ids, due_date, start_date, state_name, locality_name,
+          assigned_to, assigned_to_name, co_assignee_ids, due_date, start_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
           estimated_hours, actual_hours, estimated_cost, actual_cost, percent_complete, dependencies, resources, assignee_hours,
           baseline_start, baseline_due, baseline_hours, baseline_cost, baseline_set_at,
-          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role),
           creator:profiles!project_field_tasks_created_by_fkey(full_name)
         `)
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((r: any) => ({
-        id: r.id,
-        projectId: r.project_id,
-        title: r.title,
-        description: r.description,
-        priority: r.priority,
-        status: r.status,
-        assignedTo: r.assigned_to,
-        assignedToName: r.assignee?.full_name ?? null,
-        assignedToRole: r.assignee?.role ?? null,
-        coAssigneeIds: r.co_assignee_ids ?? [],
-        dueDate: r.due_date,
-        startDate: r.start_date,
-        stateName: r.state_name,
-        localityName: r.locality_name,
-        stageId: r.stage_id,
-        notes: r.notes,
-        estimatedHours: r.estimated_hours ?? null,
-        actualHours: r.actual_hours ?? null,
-        estimatedCost: r.estimated_cost ?? null,
-        actualCost: r.actual_cost ?? null,
-        percentComplete: r.percent_complete ?? 0,
-        dependencies: r.dependencies ?? [],
-        resources: (r.resources ?? []) as ResourceLine[],
-        assigneeHours: (r.assignee_hours ?? {}) as Record<string, { allocated: number | null; actual: number | null }>,
-        createdBy: r.created_by,
-        createdByName: r.creator?.full_name ?? null,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-        baselineStart: r.baseline_start ?? null,
-        baselineDue: r.baseline_due ?? null,
-        baselineHours: r.baseline_hours ?? null,
-        baselineCost: r.baseline_cost ?? null,
-        baselineSetAt: r.baseline_set_at ?? null,
-      }));
+
+      // Resolve assignee display names: prefer stored snapshot, then profiles lookup.
+      const assigneeIds = Array.from(
+        new Set(
+          (data ?? [])
+            .map((r: any) => r.assigned_to as string | null)
+            .filter((id): id is string => !!id),
+        ),
+      );
+      const profileNameById = new Map<string, { full_name: string; role: string | null }>();
+      if (assigneeIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .in('id', assigneeIds);
+        for (const p of profiles ?? []) {
+          profileNameById.set(p.id, { full_name: p.full_name, role: p.role });
+        }
+      }
+
+      return (data ?? []).map((r: any) => {
+        const profile = r.assigned_to ? profileNameById.get(r.assigned_to) : undefined;
+        return {
+          id: r.id,
+          projectId: r.project_id,
+          title: r.title,
+          description: r.description,
+          priority: r.priority,
+          status: r.status,
+          assignedTo: r.assigned_to,
+          assignedToName: r.assigned_to_name || profile?.full_name || null,
+          assignedToRole: profile?.role ?? null,
+          coAssigneeIds: r.co_assignee_ids ?? [],
+          dueDate: r.due_date,
+          startDate: r.start_date,
+          stateName: r.state_name,
+          localityName: r.locality_name,
+          stageId: r.stage_id,
+          notes: r.notes,
+          estimatedHours: r.estimated_hours ?? null,
+          actualHours: r.actual_hours ?? null,
+          estimatedCost: r.estimated_cost ?? null,
+          actualCost: r.actual_cost ?? null,
+          percentComplete: r.percent_complete ?? 0,
+          dependencies: r.dependencies ?? [],
+          resources: (r.resources ?? []) as ResourceLine[],
+          assigneeHours: (r.assignee_hours ?? {}) as Record<string, { allocated: number | null; actual: number | null }>,
+          createdBy: r.created_by,
+          createdByName: r.creator?.full_name ?? null,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          baselineStart: r.baseline_start ?? null,
+          baselineDue: r.baseline_due ?? null,
+          baselineHours: r.baseline_hours ?? null,
+          baselineCost: r.baseline_cost ?? null,
+          baselineSetAt: r.baseline_set_at ?? null,
+        };
+      });
     },
     staleTime: 30_000,
     enabled: !!projectId,
@@ -303,6 +327,7 @@ export function useProjectTasks(projectId: string) {
           priority: task.priority,
           status: task.status ?? 'todo',
           assigned_to: task.assignedTo ?? null,
+          assigned_to_name: task.assignedToName ?? null,
           co_assignee_ids: coIds,
           due_date: task.dueDate ?? null,
           start_date: task.startDate ?? null,
@@ -324,19 +349,34 @@ export function useProjectTasks(projectId: string) {
         .single();
       if (error) throw error;
 
+      // Only notify system users (external team members have no profiles / FCM).
       if (task.assignedTo && task.assignedTo !== currentUserId) {
-        notifyAssignee(
-          task.assignedTo,
-          task.title,
-          projectName,
-          projectId,
-          currentUserName,
-          currentUserId,
-          currentUserId, // creator is the person creating
-        ).catch(() => {});
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', task.assignedTo)
+          .maybeSingle();
+        if (profile) {
+          notifyAssignee(
+            task.assignedTo,
+            task.title,
+            projectName,
+            projectId,
+            currentUserName,
+            currentUserId,
+            currentUserId,
+          ).catch(() => {});
+        }
       }
       if (coIds.length > 0) {
-        notifyCoAssignees(coIds, [], currentUserId, task.title, projectName, projectId, currentUserName, currentUserId).catch(() => {});
+        const { data: coProfiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .in('id', coIds);
+        const notifiableCoIds = (coProfiles ?? []).map((p) => p.id);
+        if (notifiableCoIds.length > 0) {
+          notifyCoAssignees(notifiableCoIds, [], currentUserId, task.title, projectName, projectId, currentUserName, currentUserId).catch(() => {});
+        }
       }
       return data;
     },
@@ -367,6 +407,7 @@ export function useProjectTasks(projectId: string) {
       if (patch.priority       !== undefined) updates.priority        = patch.priority;
       if (patch.status         !== undefined) updates.status          = patch.status;
       if (patch.assignedTo     !== undefined) updates.assigned_to     = patch.assignedTo;
+      if (patch.assignedToName !== undefined) updates.assigned_to_name = patch.assignedToName;
       if (patch.coAssigneeIds  !== undefined) updates.co_assignee_ids = (patch.coAssigneeIds ?? []).filter(id => id !== patch.assignedTo);
       if (patch.dueDate        !== undefined) updates.due_date        = patch.dueDate;
       if (patch.startDate      !== undefined) updates.start_date      = patch.startDate;
@@ -399,32 +440,51 @@ export function useProjectTasks(projectId: string) {
       const cached = qc.getQueryData<FieldTask[]>(key);
       const task = cached?.find(t => t.id === id);
 
-      // Notify new primary assignee when reassigned (+ creator)
+      // Notify new primary assignee when reassigned (+ creator) — system users only
       const newAssignee = patch.assignedTo;
       if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName && task) {
-        notifyAssignee(
-          newAssignee,
-          task.title,
-          projectName,
-          projectId,
-          currentUserName,
-          currentUserId,
-          task.createdBy,
-        ).catch(() => {});
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', newAssignee)
+          .maybeSingle();
+        if (profile) {
+          notifyAssignee(
+            newAssignee,
+            task.title,
+            projectName,
+            projectId,
+            currentUserName,
+            currentUserId,
+            task.createdBy,
+          ).catch(() => {});
+        }
       }
 
-      // Notify newly added co-assignees (+ creator)
+      // Notify newly added co-assignees (+ creator) — system users only
       if (patch.coAssigneeIds !== undefined && currentUserId && currentUserName && projectName && task) {
-        notifyCoAssignees(
-          patch.coAssigneeIds,
-          prevCoAssigneeIds ?? task.coAssigneeIds,
-          currentUserId,
-          task.title,
-          projectName,
-          projectId,
-          currentUserName,
-          task.createdBy,
-        ).catch(() => {});
+        const candidateIds = (patch.coAssigneeIds ?? []).filter(
+          (id) => !(prevCoAssigneeIds ?? task.coAssigneeIds).includes(id),
+        );
+        if (candidateIds.length > 0) {
+          const { data: coProfiles } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('id', candidateIds);
+          const notifiable = (coProfiles ?? []).map((p) => p.id);
+          if (notifiable.length > 0) {
+            notifyCoAssignees(
+              notifiable,
+              [],
+              currentUserId,
+              task.title,
+              projectName,
+              projectId,
+              currentUserName,
+              task.createdBy,
+            ).catch(() => {});
+          }
+        }
       }
 
       // Status change → creator + assignees (email)
@@ -565,8 +625,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .from('project_field_tasks')
         .select(`
           id, project_id, title, description, priority, status,
-          assigned_to, co_assignee_ids, due_date, created_at,
-          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name)
+          assigned_to, assigned_to_name, co_assignee_ids, due_date, created_at
         `)
         .eq('assigned_to', userId)
         .neq('status', 'cancelled')
@@ -578,8 +637,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         .from('project_field_tasks')
         .select(`
           id, project_id, title, description, priority, status,
-          assigned_to, co_assignee_ids, due_date, created_at,
-          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name)
+          assigned_to, assigned_to_name, co_assignee_ids, due_date, created_at
         `)
         .contains('co_assignee_ids', [userId])
         .neq('assigned_to', userId)
@@ -612,7 +670,7 @@ export function useMyProjectFieldTasks(userId: string | undefined) {
         priority: r.priority as FieldTaskPriority,
         status: r.status as FieldTaskStatus,
         assignedTo: r.assigned_to,
-        assignedToName: (r.assignee as any)?.full_name ?? null,
+        assignedToName: r.assigned_to_name ?? null,
         coAssigneeIds: r.co_assignee_ids ?? [],
         dueDate: r.due_date,
         createdAt: r.created_at,
@@ -640,8 +698,7 @@ export function useAllProjectFieldTasks() {
         .from('project_field_tasks')
         .select(`
           id, project_id, title, priority, status,
-          assigned_to, co_assignee_ids, due_date, created_at,
-          assignee:profiles!project_field_tasks_assigned_to_fkey(full_name, role)
+          assigned_to, assigned_to_name, co_assignee_ids, due_date, created_at
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -651,20 +708,38 @@ export function useAllProjectFieldTasks() {
         const { data: projects } = await supabase.from('projects').select('id, name').in('id', projectIds);
         for (const p of projects ?? []) projectNameById.set(p.id, p.name);
       }
-      return (data ?? []).map((r: any) => ({
-        id: r.id as string,
-        projectId: r.project_id as string,
-        projectName: projectNameById.get(r.project_id) ?? 'Unknown Project',
-        title: r.title as string,
-        priority: r.priority as FieldTaskPriority,
-        status: r.status as FieldTaskStatus,
-        assignedTo: r.assigned_to as string | null,
-        assignedToName: (r.assignee as any)?.full_name as string ?? null,
-        assignedToRole: (r.assignee as any)?.role as string ?? null,
-        coAssigneeIds: (r.co_assignee_ids ?? []) as string[],
-        dueDate: r.due_date as string | null,
-        createdAt: r.created_at as string,
-      }));
+
+      const assigneeIds = Array.from(
+        new Set((data ?? []).map((r: any) => r.assigned_to).filter(Boolean)),
+      ) as string[];
+      const profileById = new Map<string, { full_name: string; role: string | null }>();
+      if (assigneeIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .in('id', assigneeIds);
+        for (const p of profiles ?? []) {
+          profileById.set(p.id, { full_name: p.full_name, role: p.role });
+        }
+      }
+
+      return (data ?? []).map((r: any) => {
+        const profile = r.assigned_to ? profileById.get(r.assigned_to) : undefined;
+        return {
+          id: r.id as string,
+          projectId: r.project_id as string,
+          projectName: projectNameById.get(r.project_id) ?? 'Unknown Project',
+          title: r.title as string,
+          priority: r.priority as FieldTaskPriority,
+          status: r.status as FieldTaskStatus,
+          assignedTo: r.assigned_to as string | null,
+          assignedToName: (r.assigned_to_name as string | null) || profile?.full_name || null,
+          assignedToRole: profile?.role ?? null,
+          coAssigneeIds: (r.co_assignee_ids ?? []) as string[],
+          dueDate: r.due_date as string | null,
+          createdAt: r.created_at as string,
+        };
+      });
     },
     staleTime: 30_000,
   });
