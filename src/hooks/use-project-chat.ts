@@ -32,6 +32,54 @@ function projectChatKey(projectId: string) {
   return `project:${projectId}`;
 }
 
+/**
+ * Silently provisions a project group chat room immediately after project
+ * creation — no navigation, no UI side-effects, safe to fire-and-forget.
+ *
+ * Idempotent: if the room already exists (pair_key match) it just syncs
+ * any participants that are missing and returns.
+ */
+export async function provisionProjectChat(
+  project: Project,
+  creatorUserId: string,
+): Promise<void> {
+  const memberIds = getTeamMemberIds(project);
+  if (creatorUserId && !memberIds.includes(creatorUserId)) {
+    memberIds.push(creatorUserId);
+  }
+  if (memberIds.length === 0) return;
+
+  const pairKey = projectChatKey(project.id);
+
+  // ── 1. Find or create the room ──
+  let chatId: string | null = null;
+  const existing = await ChatService.getProjectChat(project.id);
+  if (existing) {
+    chatId = existing.id;
+  } else {
+    const newChat = await ChatService.createChat({
+      name: `${project.name} Team`,
+      type: 'group',
+      is_group: true,
+      created_by: creatorUserId,
+      related_entity_id: project.id,
+      related_entity_type: 'project',
+      pair_key: pairKey,
+    });
+    if (!newChat) throw new Error('Failed to create project chat room');
+    chatId = newChat.id;
+  }
+
+  // ── 2. Add any participants not yet in the room ──
+  const existingParticipants = await ChatService.getChatParticipants(chatId);
+  const existingIds = new Set((existingParticipants ?? []).map(p => p.user_id));
+  const toAdd = memberIds.filter(id => !existingIds.has(id));
+
+  await Promise.allSettled(
+    toAdd.map(uid => ChatService.addParticipant(chatId!, uid)),
+  );
+}
+
 export function useProjectChat() {
   const navigate = useNavigate();
   const { toast } = useToast();
