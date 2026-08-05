@@ -72,7 +72,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'programme-hub',       label:'Programme Hub',          path:'/programme-hub',          icon:FolderKanban, group:'Programme Management',
     roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'], note:'Unified hub for Projects, Portfolio & Analytics' },
   { slug:'projects',            label:'Projects',               path:'/projects',               icon:FolderOpen, group:'Programme Management',
-    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'] },
+    roles:['all'], note:'Any authenticated user may be a project team member; edit/write actions are guarded inside ProjectDetail by role' },
   { slug:'portfolio',           label:'Portfolio Dashboard',    path:'/portfolio',              icon:LayoutDashboard, group:'Programme Management',
     roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead'] },
   { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
