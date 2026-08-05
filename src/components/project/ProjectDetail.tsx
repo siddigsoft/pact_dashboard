@@ -60,6 +60,7 @@ import { CurrencySwitcher } from '@/components/currency/CurrencySwitcher';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
+import { useProjectCommentUnread } from '@/hooks/useProjectCommentUnread';
 import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
 import { ProjectMilestonesPanel } from './ProjectMilestonesPanel';
@@ -307,6 +308,19 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [loadingCrmContacts, setLoadingCrmContacts] = useState(false);
   const [milestoneStats, setMilestoneStats] = useState<{ total: number; completed: number; overdue: number } | null>(null);
   const [createBudgetOpen, setCreateBudgetOpen] = useState(false);
+
+  // Unread comment tracking
+  const { unreadCount: commentUnreadCount, markAsRead: markCommentsRead } = useProjectCommentUnread(
+    project.id,
+    currentUser?.id,
+  );
+
+  // Mark comments as read whenever the user is on the Comments tab
+  useEffect(() => {
+    if (activeTab === 'comments') {
+      markCommentsRead();
+    }
+  }, [activeTab, markCommentsRead]);
 
   useEffect(() => {
     if (!project.partnerId) { setPartnerName(null); return; }
@@ -1042,11 +1056,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 {/* Dropdown trigger */}
                 <button
                   onClick={() => setTabDropOpen(v => !v)}
-                  className="flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold border bg-background hover:bg-muted transition-all duration-150 min-w-0 max-w-xs"
+                  className="relative flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-sm font-semibold border bg-background hover:bg-muted transition-all duration-150 min-w-0 max-w-xs"
                 >
                   <CurrentIcon className="h-4 w-4 shrink-0 text-primary" />
                   <span className="truncate">{currentTab.label}</span>
                   <ChevronDown className={`h-4 w-4 shrink-0 ml-auto opacity-50 transition-transform duration-150 ${tabDropOpen ? 'rotate-180' : ''}`} />
+                  {/* Unread comments indicator — visible when user is NOT on the Comments tab */}
+                  {commentUnreadCount > 0 && activeTab !== 'comments' && (
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-background">
+                      {commentUnreadCount > 99 ? '99+' : commentUnreadCount}
+                    </span>
+                  )}
                 </button>
                 {/* Position badge */}
                 <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -1067,6 +1087,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     {projectTabs.map(tab => {
                       const Icon = tab.icon;
                       const isActive = activeTab === tab.value;
+                      const showUnread = tab.value === 'comments' && commentUnreadCount > 0;
                       return (
                         <button
                           key={tab.value}
@@ -1078,7 +1099,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           }`}
                         >
                           <Icon className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-80" />
-                          <span className="leading-tight">{tab.label}</span>
+                          <span className="leading-tight flex-1">{tab.label}</span>
+                          {showUnread && (
+                            <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold leading-none ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-red-500 text-white'}`}>
+                              {commentUnreadCount > 99 ? '99+' : commentUnreadCount}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
