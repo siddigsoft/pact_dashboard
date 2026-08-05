@@ -16,7 +16,11 @@
       "Bash(supabase inspect:*)",
       "Bash(python3:*)",
       "Bash(./node_modules/.bin/tsc --noEmit)",
-      "Bash(npm i:*)"
+      "Bash(npm i:*)",
+      "Bash(python -c ' *)",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; console.log\\(JSON.stringify\\(s,null,1\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   },
   "enableAllProjectMcpServers": true,

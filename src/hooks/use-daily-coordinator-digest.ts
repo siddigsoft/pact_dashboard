@@ -1030,7 +1030,15 @@ export function useDailyCoordinatorDigest() {
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const ranRef = useRef(false);
 
-  const canTrigger = !!currentUser?.id && (
+  // ponytail: client-side digest generation is DISABLED. dispatchAll() fanned a digest
+  // out to EVERY privileged profile on every app load, and sendDigest()'s once-per-day
+  // guard is a racy read-then-insert — together producing 30–90+ duplicate digests per
+  // user per day. The identical digest is generated server-side once daily by the
+  // daily-digest-cron edge function (pg_cron job "daily-digest-7am"), which is the single
+  // source of truth. Flip this to true only if that cron is retired.
+  const CLIENT_DIGEST_ENABLED = false;
+
+  const canTrigger = CLIENT_DIGEST_ENABLED && !!currentUser?.id && (
     isSuperAdmin() ||
     hasAnyRole(['admin', 'fom', 'supervisor', 'hubSupervisor', 'hubsupervisor',
       'coordinator', 'Field Operation Manager (FOM)'])

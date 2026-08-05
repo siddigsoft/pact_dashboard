@@ -1,16 +1,24 @@
 /**
  * Live Dashboard Core Hook
  * Internal implementation - use useLiveDashboard from context instead
+ *
+ * ponytail: was 4 Realtime channels (projects, mmp_files, mmp_site_entries @ ~5k rows,
+ * site_visits) per dashboard viewer — every row change fanned out to every viewer + an
+ * RLS check, purely to bump a "last updated" timestamp (the subscriptions never actually
+ * refetched). At 100 concurrent viewers that's pure server-side cost. Replaced with a
+ * single interval poll that invalidates the dashboard queries — fewer moving parts, no
+ * fan-out, and the data now auto-refreshes (which the subscriptions never did).
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useRealtimeResource } from '@/hooks/useRealtimeResource';
 import { queryClient } from '@/lib/queryClient';
 
 interface LiveDashboardOptions {
   enableToasts?: boolean;
   toastBatchWindow?: number;
+  /** How often to refresh dashboard data. Default 45s. */
+  pollIntervalMs?: number;
 }
 
 const DASHBOARD_TABLES = [
@@ -20,77 +28,54 @@ const DASHBOARD_TABLES = [
   'site_visits',
 ];
 
+const DASHBOARD_QUERY_KEYS = [
+  ['projects'],
+  ['mmp'],
+  ['mmp-files'],
+  ['site-visits'],
+  ['sites'],
+];
+
 export const useLiveDashboardCore = (options: LiveDashboardOptions = {}) => {
-  const { enableToasts = true, toastBatchWindow = 2000 } = options;
+  const { enableToasts = true, pollIntervalMs = 45_000 } = options;
   const { toast } = useToast();
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [totalEvents, setTotalEvents] = useState(0);
   const mountedRef = useRef(true);
 
-  const handleTableChange = useCallback((table: string, eventType: string) => {
-    if (!mountedRef.current) return;
-    
-    console.log(`[LiveDashboard] ${table} change: ${eventType}`);
-    setLastUpdate(new Date());
+  const invalidateDashboard = useCallback(() => {
+    for (const key of DASHBOARD_QUERY_KEYS) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
   }, []);
 
-  const { isSubscribed: projectsSubscribed, eventCount: projectEvents } = useRealtimeResource({
-    configs: { table: 'projects', schema: 'public' },
-    onInsert: () => handleTableChange('projects', 'INSERT'),
-    onUpdate: () => handleTableChange('projects', 'UPDATE'),
-    onDelete: () => handleTableChange('projects', 'DELETE'),
-    enabled: true,
-  });
-
-  const { isSubscribed: mmpFilesSubscribed, eventCount: mmpFileEvents } = useRealtimeResource({
-    configs: { table: 'mmp_files', schema: 'public' },
-    onInsert: () => handleTableChange('mmp_files', 'INSERT'),
-    onUpdate: () => handleTableChange('mmp_files', 'UPDATE'),
-    onDelete: () => handleTableChange('mmp_files', 'DELETE'),
-    enabled: true,
-  });
-
-  const { isSubscribed: siteEntriesSubscribed, eventCount: siteEntryEvents } = useRealtimeResource({
-    configs: { table: 'mmp_site_entries', schema: 'public' },
-    onInsert: () => handleTableChange('mmp_site_entries', 'INSERT'),
-    onUpdate: () => handleTableChange('mmp_site_entries', 'UPDATE'),
-    onDelete: () => handleTableChange('mmp_site_entries', 'DELETE'),
-    enabled: true,
-  });
-
-  const { isSubscribed: visitsSubscribed, eventCount: visitEvents } = useRealtimeResource({
-    configs: { table: 'site_visits', schema: 'public' },
-    onInsert: () => handleTableChange('site_visits', 'INSERT'),
-    onUpdate: () => handleTableChange('site_visits', 'UPDATE'),
-    onDelete: () => handleTableChange('site_visits', 'DELETE'),
-    enabled: true,
-  });
-
-  const isConnected = projectsSubscribed || mmpFilesSubscribed || siteEntriesSubscribed || visitsSubscribed;
-  const totalEvents = projectEvents + mmpFileEvents + siteEntryEvents + visitEvents;
-
+  // Interval poll — skips work when the tab is backgrounded so idle sessions cost nothing.
   useEffect(() => {
     mountedRef.current = true;
-    console.log('[LiveDashboard] Core hook initialized');
-    
+
+    const tick = () => {
+      if (!mountedRef.current) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      invalidateDashboard();
+      setLastUpdate(new Date());
+      setTotalEvents((n) => n + 1);
+    };
+
+    const interval = window.setInterval(tick, pollIntervalMs);
+
     return () => {
       mountedRef.current = false;
-      console.log('[LiveDashboard] Core hook cleanup');
+      window.clearInterval(interval);
     };
-  }, []);
+  }, [pollIntervalMs, invalidateDashboard]);
 
   const forceRefresh = useCallback(async () => {
-    console.log('[LiveDashboard] Force refresh triggered');
-    
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['projects'] }),
-      queryClient.invalidateQueries({ queryKey: ['mmp'] }),
-      queryClient.invalidateQueries({ queryKey: ['mmp-files'] }),
-      queryClient.invalidateQueries({ queryKey: ['site-visits'] }),
-      queryClient.invalidateQueries({ queryKey: ['sites'] }),
-    ]);
-    
+    await Promise.all(
+      DASHBOARD_QUERY_KEYS.map((key) => queryClient.invalidateQueries({ queryKey: key })),
+    );
+
     setLastUpdate(new Date());
-    
+
     if (enableToasts) {
       toast({
         title: 'Data Refreshed',
@@ -101,15 +86,15 @@ export const useLiveDashboardCore = (options: LiveDashboardOptions = {}) => {
   }, [enableToasts, toast]);
 
   return {
-    isConnected,
-    channels: isConnected ? DASHBOARD_TABLES.length : 0,
+    isConnected: true, // polling is always "connected"
+    channels: DASHBOARD_TABLES.length,
     totalEvents,
     lastUpdate,
     forceRefresh,
     subscriptionStatus: {
-      projects: projectsSubscribed,
-      mmp: mmpFilesSubscribed || siteEntriesSubscribed,
-      visits: visitsSubscribed,
+      projects: true,
+      mmp: true,
+      visits: true,
     },
   };
 };

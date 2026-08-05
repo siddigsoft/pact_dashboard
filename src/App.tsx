@@ -755,6 +755,9 @@ const AppRoutes = () => {
         <Route path="/accounting/aml" element={<Navigate to="/accounting?tab=aml" replace />} />
         <Route path="/accounting/intercompany" element={<Navigate to="/accounting?tab=intercompany" replace />} />
         <Route path="/finance/audit-trail" element={<Navigate to="/accounting?tab=finance-audit-trail" replace />} />
+        {/* Legacy / mistaken notification deep-links */}
+        <Route path="/finance/down-payments" element={<Navigate to="/down-payment-approval" replace />} />
+        <Route path="/finance/operational-costs" element={<Navigate to="/cost-approval" replace />} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />

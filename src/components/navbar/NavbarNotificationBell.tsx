@@ -71,7 +71,7 @@ export function NavbarNotificationBell() {
           id: 'cost-tier1',
           label: 'Cost submissions awaiting your approval',
           count: counts.pendingCostTier1Hub,
-          url: '/finance/operational-costs?tab=approvals',
+          url: '/cost-approval',
           icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -81,7 +81,7 @@ export function NavbarNotificationBell() {
           id: 'dp-supervisor',
           label: 'Down-payment requests awaiting approval',
           count: counts.pendingDpSupervisor,
-          url: '/finance/down-payments?tab=pending',
+          url: '/down-payment-approval',
           icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -94,7 +94,7 @@ export function NavbarNotificationBell() {
           id: 'pending-users',
           label: 'New user registrations awaiting approval',
           count: counts.pendingUsers,
-          url: '/users?tab=pending-approvals',
+          url: '/admin-hub?tab=users',
           icon: <UserCheck className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -104,7 +104,7 @@ export function NavbarNotificationBell() {
           id: 'cost-tier2',
           label: 'Cost submissions pending final approval',
           count: counts.pendingTier2Cost,
-          url: '/finance/operational-costs?tab=approvals',
+          url: '/cost-approval',
           icon: <ClipboardCheck className="h-4 w-4" />,
           urgency: 'normal',
         });
@@ -114,7 +114,7 @@ export function NavbarNotificationBell() {
           id: 'dp-admin',
           label: 'Down-payment requests pending admin review',
           count: counts.pendingDpAdmin,
-          url: '/finance/down-payments?tab=pending',
+          url: '/down-payment-approval',
           icon: <CreditCard className="h-4 w-4" />,
           urgency: 'high',
         });
@@ -176,11 +176,21 @@ export function NavbarNotificationBell() {
 
   const handleNotificationClick = async (n: any) => {
     if (!n.isRead) await markNotificationAsRead?.(n.id);
-    const link = n.link || n.action_url;
-    if (link) {
-      navigate(link.startsWith('/') ? link : `/${link}`);
-      setOpen(false);
+    const raw = n.link || n.action_url;
+    if (!raw) return;
+
+    // Normalize known dead deep-links from older notification payloads.
+    let link = String(raw).startsWith('/') ? String(raw) : `/${raw}`;
+    if (link.startsWith('/finance/down-payments')) {
+      link = '/down-payment-approval';
+    } else if (link.startsWith('/finance/operational-costs')) {
+      link = '/cost-approval';
+    } else if (link.startsWith('/users?tab=pending-approvals') || link === '/users') {
+      link = '/admin-hub?tab=users';
     }
+
+    navigate(link);
+    setOpen(false);
   };
 
   const displayBadge = totalBadge > 99 ? '99+' : totalBadge;
@@ -210,18 +220,31 @@ export function NavbarNotificationBell() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        collisionPadding={12}
-        className="w-[min(440px,calc(100vw-24px))] p-0 shadow-xl border border-border/60 rounded-xl overflow-hidden"
+        collisionPadding={16}
+        className={cn(
+          // Must beat Popover default `sm:w-72` / `p-4` or titles stay clipped.
+          'w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] sm:!w-[420px] sm:!max-w-[420px] !p-0',
+          'rounded-xl border border-border/70 bg-background text-foreground shadow-xl overflow-hidden',
+        )}
       >
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b bg-background">
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/60">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Bell className="h-4 w-4 text-primary" />
+            <div className="h-9 w-9 rounded-lg bg-[#1D3461]/10 dark:bg-[#1D3461]/30 flex items-center justify-center shrink-0">
+              <Bell className="h-4 w-4 text-[#1D3461] dark:text-blue-300" />
             </div>
-            <span className="font-semibold text-sm text-foreground truncate">Notifications</span>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-foreground leading-none">Notifications</p>
+              {totalBadge > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+                  {pendingActionsCount > 0 && `${pendingActionsCount > 99 ? '99+' : pendingActionsCount} actions`}
+                  {pendingActionsCount > 0 && unreadCount > 0 && ' · '}
+                  {unreadCount > 0 && `${unreadCount > 99 ? '99+' : unreadCount} unread`}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant="ghost"
               size="icon"
@@ -230,20 +253,20 @@ export function NavbarNotificationBell() {
               title="Refresh"
               data-testid="button-refresh-notifications"
             >
-              <RefreshCw className={cn('h-4 w-4', badgeCountsLoading && 'animate-spin')} />
+              <RefreshCw className={cn('h-3.5 w-3.5', badgeCountsLoading && 'animate-spin')} />
             </Button>
             {unreadCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                className="h-8 px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
                 onClick={markAllAsRead}
                 disabled={loadingNotifs}
                 title="Mark all as read"
                 data-testid="button-mark-all-read"
               >
                 <CheckCheck className="h-3.5 w-3.5 mr-1.5 shrink-0" />
-                Mark all read
+                Mark all
               </Button>
             )}
             <Button
@@ -260,190 +283,206 @@ export function NavbarNotificationBell() {
 
         {/* ── Tabs ────────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-[calc(100%-1.5rem)] mx-3 mt-3 mb-1 grid grid-cols-2 h-10 rounded-lg bg-muted/70 p-1">
-            <TabsTrigger
-              value="actions"
-              className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:shadow-sm"
-              data-testid="tab-pending-actions"
-            >
-              <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
-              <span>Actions</span>
-              {pendingActionsCount > 0 && (
-                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none">
-                  {pendingActionsCount > 99 ? '99+' : pendingActionsCount}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger
-              value="notifications"
-              className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:shadow-sm"
-              data-testid="tab-notifications"
-            >
-              <Inbox className="h-3.5 w-3.5 shrink-0" />
-              <span>Inbox</span>
-              {unreadCount > 0 && (
-                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-none">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
+          <div className="px-4 pt-3 pb-2">
+            <TabsList className="grid w-full grid-cols-2 h-10 rounded-lg bg-muted p-1 gap-1">
+              <TabsTrigger
+                value="actions"
+                className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=inactive]:text-muted-foreground"
+                data-testid="tab-pending-actions"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                Actions
+                {pendingActionsCount > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-red-500/90 text-white text-[10px] font-semibold tabular-nums">
+                    {pendingActionsCount > 99 ? '99+' : pendingActionsCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="notifications"
+                className="h-8 rounded-md text-xs font-medium gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=inactive]:text-muted-foreground"
+                data-testid="tab-notifications"
+              >
+                <Inbox className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                Inbox
+                {unreadCount > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-[#1D3461] text-white text-[10px] font-semibold tabular-nums">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* ── Pending Actions Tab ──────────────────────────────────── */}
-          <TabsContent value="actions" className="m-0 flex flex-col">
-            <ScrollArea className="h-[min(360px,calc(100vh-220px))]">
-              {badgeCountsLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs text-muted-foreground">Loading actions…</p>
-                </div>
-              ) : pendingActions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-                  <div className="h-12 w-12 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
-                    <Check className="h-6 w-6 text-green-500" />
+          <TabsContent value="actions" className="m-0 flex flex-col outline-none">
+            <ScrollArea className="h-[min(400px,calc(100vh-240px))]">
+              <div className="px-2 pb-2">
+                {badgeCountsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-14 gap-3">
+                    <div className="h-6 w-6 border-2 border-[#1D3461] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-muted-foreground">Loading actions…</p>
                   </div>
-                  <p className="text-sm font-medium text-foreground">All caught up!</p>
-                  <p className="text-xs opacity-60">No pending actions right now</p>
-                </div>
-              ) : (
-                <div className="py-1">
-                  {pendingActions.map(action => (
-                    <button
-                      key={action.id}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 active:bg-muted transition-colors text-left group border-b border-border/40 last:border-b-0"
-                      onClick={() => { navigate(action.url); setOpen(false); }}
-                      data-testid={`action-item-${action.id}`}
-                    >
-                      <div className={cn(
-                        'flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center',
-                        action.urgency === 'high'
-                          ? 'bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400'
-                          : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400',
-                      )}>
-                        {action.icon}
-                      </div>
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">
-                          {action.label}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={cn(
-                          'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
+                ) : pendingActions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-14 text-muted-foreground gap-2 px-4">
+                    <div className="h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                      <Check className="h-6 w-6 text-emerald-500" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">All caught up</p>
+                    <p className="text-xs text-center text-muted-foreground">No pending actions right now</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {pendingActions.map(action => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className="w-full flex items-start gap-3 rounded-lg px-3 py-3 hover:bg-muted/70 active:bg-muted transition-colors text-left group"
+                        onClick={() => { navigate(action.url); setOpen(false); }}
+                        data-testid={`action-item-${action.id}`}
+                      >
+                        <div className={cn(
+                          'shrink-0 h-10 w-10 rounded-xl flex items-center justify-center',
                           action.urgency === 'high'
-                            ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+                            ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400'
+                            : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400',
                         )}>
-                          {action.count} pending
-                        </span>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                          {action.icon}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-sm font-medium text-foreground leading-snug">
+                            {action.label}
+                          </p>
+                          <span className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold tabular-nums',
+                            action.urgency === 'high'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+                          )}>
+                            {action.count} pending
+                          </span>
+                        </div>
+                        <ChevronRight className="h-4 w-4 mt-1 text-muted-foreground/50 group-hover:text-foreground shrink-0 transition-colors" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
           </TabsContent>
 
           {/* ── Notifications Tab ────────────────────────────────────── */}
-          <TabsContent value="notifications" className="m-0 flex flex-col">
-            <ScrollArea className="h-[min(360px,calc(100vh-220px))]">
-              {loadingNotifs ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs text-muted-foreground">Loading…</p>
-                </div>
-              ) : recentNotifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                    <Inbox className="h-6 w-6 opacity-40" />
+          <TabsContent value="notifications" className="m-0 flex flex-col outline-none">
+            <ScrollArea className="h-[min(400px,calc(100vh-280px))]">
+              <div className="px-2 pb-2">
+                {loadingNotifs ? (
+                  <div className="flex flex-col items-center justify-center py-14 gap-3">
+                    <div className="h-6 w-6 border-2 border-[#1D3461] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-muted-foreground">Loading…</p>
                   </div>
-                  <p className="text-sm font-medium text-foreground">No notifications yet</p>
-                  <p className="text-xs opacity-60">You're all caught up</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border/50">
-                  {recentNotifications.map((n: any) => (
-                    <div
-                      key={n.id}
-                      className={cn(
-                        "flex items-start gap-3 px-4 py-3 hover:bg-muted/60 active:bg-muted/80 transition-colors cursor-pointer group",
-                        !n.isRead && "bg-blue-50/60 dark:bg-blue-900/10 border-l-2 border-l-blue-400"
-                      )}
-                      onClick={() => handleNotificationClick(n)}
-                      data-testid={`notification-item-${n.id}`}
-                    >
-                      <div className="flex-shrink-0 mt-1">
-                        <div className={cn(
-                          "h-7 w-7 rounded-lg flex items-center justify-center",
-                          !n.isRead ? "bg-blue-50 dark:bg-blue-900/30" : "bg-muted"
-                        )}>
-                          {getPriorityIcon(n)}
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={cn(
-                            "text-sm leading-snug line-clamp-1",
-                            !n.isRead ? "font-semibold text-foreground" : "font-medium text-foreground/80"
-                          )}>
-                            {n.title || n.title_en || n.message || 'Notification'}
-                          </p>
-                          {!n.isRead && (
-                            <span className="flex-shrink-0 h-2 w-2 rounded-full bg-blue-500 mt-1" />
-                          )}
-                        </div>
-                        {(n.message || n.message_en) && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
-                            {n.message || n.message_en}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {formatDistanceToNow(
-                              new Date(n.createdAt || n.created_at || Date.now()),
-                              { addSuffix: true }
-                            )}
-                          </span>
-                          {(n.emailSent || n.email_sent) && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-blue-500 font-medium">
-                              <Mail className="h-2.5 w-2.5" /> Email sent
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {!n.isRead && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 opacity-0 group-hover:opacity-100 transition-all mt-0.5"
-                          onClick={e => { e.stopPropagation(); markNotificationAsRead?.(n.id); }}
-                          title="Mark as read"
-                          data-testid={`button-mark-read-${n.id}`}
-                        >
-                          <Check className="h-3 w-3" />
-                        </Button>
-                      )}
+                ) : recentNotifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-14 text-muted-foreground gap-2 px-4">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                      <Inbox className="h-6 w-6 opacity-40" />
                     </div>
-                  ))}
-                </div>
-              )}
+                    <p className="text-sm font-medium text-foreground">No notifications yet</p>
+                    <p className="text-xs text-center text-muted-foreground">You’re all caught up</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {recentNotifications.map((n: any) => {
+                      const title = n.title || n.title_en || 'Notification';
+                      const body = n.message || n.message_en || '';
+                      const showBody = body && body.trim() !== title.trim();
+                      return (
+                        <div
+                          key={n.id}
+                          role="button"
+                          tabIndex={0}
+                          className={cn(
+                            'relative flex items-start gap-3 rounded-lg px-3 py-3 cursor-pointer transition-colors group',
+                            'hover:bg-muted/70 active:bg-muted',
+                            !n.isRead && 'bg-[#1D3461]/5 dark:bg-[#1D3461]/20',
+                          )}
+                          onClick={() => handleNotificationClick(n)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              void handleNotificationClick(n);
+                            }
+                          }}
+                          data-testid={`notification-item-${n.id}`}
+                        >
+                          {!n.isRead && (
+                            <span className="absolute left-1 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-[#1D3461]" aria-hidden />
+                          )}
+                          <div className={cn(
+                            'shrink-0 h-9 w-9 rounded-lg flex items-center justify-center',
+                            !n.isRead
+                              ? 'bg-[#1D3461]/10 dark:bg-[#1D3461]/40 text-[#1D3461] dark:text-blue-300'
+                              : 'bg-muted text-muted-foreground',
+                          )}>
+                            {getPriorityIcon(n)}
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className={cn(
+                              'text-sm leading-snug break-words',
+                              !n.isRead ? 'font-semibold text-foreground' : 'font-medium text-foreground/85',
+                            )}>
+                              {title}
+                            </p>
+                            {showBody && (
+                              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 break-words">
+                                {body}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <span className="text-[11px] text-muted-foreground tabular-nums">
+                                {formatDistanceToNow(
+                                  new Date(n.createdAt || n.created_at || Date.now()),
+                                  { addSuffix: true },
+                                )}
+                              </span>
+                              {(n.emailSent || n.email_sent) && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-[#1D3461] dark:text-blue-300 font-medium">
+                                  <Mail className="h-3 w-3" /> Email sent
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {!n.isRead && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                              onClick={e => { e.stopPropagation(); markNotificationAsRead?.(n.id); }}
+                              title="Mark as read"
+                              data-testid={`button-mark-read-${n.id}`}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
-            {/* Footer */}
-            <div className="border-t px-4 py-2.5 flex items-center justify-between bg-muted/30">
-              <span className="text-xs text-muted-foreground">
+            <div className="border-t border-border/60 px-4 py-3 flex items-center justify-between gap-3 bg-muted/20">
+              <span className="text-xs text-muted-foreground tabular-nums min-w-0 truncate">
                 {unreadCount > 0
                   ? <span className="font-medium text-foreground">{unreadCount} unread</span>
                   : <span className="font-medium text-emerald-600 dark:text-emerald-400">All read</span>
                 }
                 {recentNotifications.length > 0 && (
-                  <span className="ml-1.5 text-muted-foreground/70">· {recentNotifications.length} shown</span>
+                  <span className="text-muted-foreground/80"> · {recentNotifications.length} shown</span>
                 )}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium"
+                className="h-8 text-xs px-2.5 shrink-0 font-medium text-[#1D3461] dark:text-blue-300 hover:bg-[#1D3461]/10"
                 onClick={() => { navigate('/notifications'); setOpen(false); }}
                 data-testid="link-view-all-notifications"
               >
