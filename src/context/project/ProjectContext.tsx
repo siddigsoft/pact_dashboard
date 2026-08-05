@@ -43,10 +43,16 @@ const ProjectContext = createContext<ProjectContextProps>({
 export const useProjectContext = () => useContext(ProjectContext);
 
 /** Collect the unique set of user IDs referenced by a project's team object. */
+function looksLikeUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 function extractTeamMemberIds(team: Project['team'] | undefined | null): Set<string> {
   const ids = new Set<string>();
   const t = team ?? {};
-  if (t.projectManager) ids.add(t.projectManager);
+  // `projects.team.projectManager` may be stored as a display name in DB.
+  // Notifications expect UUID recipient IDs, so we only include valid UUID-like values.
+  if (looksLikeUuid(t.projectManager)) ids.add(t.projectManager);
   (Array.isArray(t.members) ? t.members : []).forEach((m: any) => m && ids.add(m));
   (Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : []).forEach(
     (m: any) => m?.userId && ids.add(m.userId)
@@ -206,7 +212,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const teamRecipients = (() => {
         const ids = new Set<string>();
         const t = project.team ?? {};
-        if (t.projectManager) ids.add(t.projectManager);
+        if (looksLikeUuid(t.projectManager)) ids.add(t.projectManager);
         (Array.isArray(t.members) ? t.members : []).forEach((m: any) => m && ids.add(m));
         (Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : []).forEach(
           (m: any) => m?.userId && ids.add(m.userId)
@@ -224,20 +230,48 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         severity: 'info',
       }).catch(() => {});
       if (teamRecipients.length > 0) {
-        dispatchNotification({
-          event: 'project_created',
-          recipientIds: teamRecipients,
-          titleEn: `New project: ${createdProject.name}`,
-          titleAr: `مشروع جديد: ${createdProject.name}`,
-          messageEn: `${currentUser?.fullName ?? 'A team member'} created the project "${createdProject.name}". You're listed on the team.`,
-          messageAr: `أنشأ ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مشروع "${createdProject.name}". أنت مدرج ضمن الفريق.`,
-          entityType: 'project',
-          entityId: createdProject.id,
-          actionUrl: `/projects/${createdProject.id}`,
-          priority: 'normal',
-          triggeredBy: currentUser?.id,
-          triggeredByName: currentUser?.fullName ?? undefined,
-        }).catch(() => {});
+        const t = project.team ?? {};
+        const pmRecipientIds = (Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : [])
+          .filter((m: any) => m?.role === 'projectManager' && m?.userId)
+          .map((m: any) => String(m.userId))
+          .filter(looksLikeUuid);
+
+        const pmRecipients = teamRecipients.filter((id) => pmRecipientIds.includes(id));
+        const otherRecipients = teamRecipients.filter((id) => !pmRecipientIds.includes(id));
+
+        if (pmRecipients.length > 0) {
+          dispatchNotification({
+            event: 'project_created',
+            recipientIds: pmRecipients,
+            titleEn: `New project: ${createdProject.name}`,
+            titleAr: `مشروع جديد: ${createdProject.name}`,
+            messageEn: `${currentUser?.fullName ?? 'A team member'} assigned you as the Project Manager for project "${createdProject.name}".`,
+            messageAr: `قام ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} بتعيينك كمسؤول المشروع عن مشروع "${createdProject.name}".`,
+            entityType: 'project',
+            entityId: createdProject.id,
+            actionUrl: `/projects/${createdProject.id}`,
+            priority: 'normal',
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+          }).catch(() => {});
+        }
+
+        if (otherRecipients.length > 0) {
+          dispatchNotification({
+            event: 'project_created',
+            recipientIds: otherRecipients,
+            titleEn: `New project: ${createdProject.name}`,
+            titleAr: `مشروع جديد: ${createdProject.name}`,
+            messageEn: `${currentUser?.fullName ?? 'A team member'} created the project "${createdProject.name}". You're listed on the team.`,
+            messageAr: `أنشأ ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مشروع "${createdProject.name}". أنت مدرج ضمن الفريق.`,
+            entityType: 'project',
+            entityId: createdProject.id,
+            actionUrl: `/projects/${createdProject.id}`,
+            priority: 'normal',
+            triggeredBy: currentUser?.id,
+            triggeredByName: currentUser?.fullName ?? undefined,
+          }).catch(() => {});
+        }
       }
 
       toast({
@@ -450,13 +484,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (newMemberIds.length > 0) {
         newMemberIds.forEach(memberId => {
           const roleLabel = resolveTeamMemberRoleLabel(updatedProject.team, memberId);
+          const isProjectManager = roleLabel === PROJECT_ROLE_LABELS.projectManager;
           dispatchNotification({
             event: 'project_member_added',
             recipientIds: [memberId],
             titleEn: `Added to project: ${projectName}`,
             titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
-            messageEn: `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
-            messageAr: `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
+            messageEn: isProjectManager
+              ? `You have been added as the Project Manager for this project "${projectName}".`
+              : `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
+            messageAr: isProjectManager
+              ? `تمت إضافتك كمسؤول المشروع لهذا المشروع "${projectName}".`
+              : `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
             entityType: 'project',
             entityId: updatedProject.id,
             actionUrl: `/projects/${updatedProject.id}`,
@@ -548,13 +587,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const projectName = existingProject?.name ?? 'a project';
         newMemberIds.forEach(memberId => {
           const roleLabel = resolveTeamMemberRoleLabel(team, memberId);
+          const isProjectManager = roleLabel === PROJECT_ROLE_LABELS.projectManager;
           dispatchNotification({
             event: 'project_member_added',
             recipientIds: [memberId],
             titleEn: `Added to project: ${projectName}`,
             titleAr: `تمت إضافتك إلى مشروع: ${projectName}`,
-            messageEn: `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
-            messageAr: `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
+            messageEn: isProjectManager
+              ? `You have been added as the Project Manager for this project "${projectName}".`
+              : `You have been added to this project as ${roleLabel} by ${currentUser?.fullName ?? 'a team member'} — project "${projectName}".`,
+            messageAr: isProjectManager
+              ? `تمت إضافتك كمسؤول المشروع لهذا المشروع "${projectName}".`
+              : `تمت إضافتك إلى هذا المشروع بصفة ${roleLabel} بواسطة ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} — مشروع "${projectName}".`,
             entityType: 'project',
             entityId: projectId,
             actionUrl: `/projects/${projectId}`,
