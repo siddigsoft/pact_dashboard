@@ -80,6 +80,8 @@ export const getWorkflowMenuGroups = (
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   if (!isHidden('/my-tasks'))
     overviewItems.push({ id: 'my-tasks', title: 'My Tasks', url: '/my-tasks', icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
+  if (!isHidden('/my-projects'))
+    overviewItems.push({ id: 'my-projects', title: 'My Projects', url: '/my-projects', icon: FolderKanban, priority: 2.5, isPinned: isPinned('/my-projects') });
   if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isSupervisor || isCountryDirector))
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
   if (!isHidden('/my-expenses'))

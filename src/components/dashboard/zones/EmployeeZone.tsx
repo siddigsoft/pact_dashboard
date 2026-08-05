@@ -1,19 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import {
   CheckSquare, CalendarOff, Bell, FileText, Folder,
   Sparkles, Calendar, Clock, AlertCircle, TrendingUp,
-  ChevronRight, Briefcase, Star,
+  ChevronRight, Briefcase, Star, FolderKanban, ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, parseISO, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 export function EmployeeZone() {
   const { currentUser, effectiveCurrentUser } = useAppContext();
+  const { userProjects } = useUserProjects();
+  const navigate = useNavigate();
   const userId = currentUser?.id;
   const today = new Date();
+
+  // Show up to 4 active/draft projects the employee is part of
+  const myActiveProjects = userProjects
+    .filter(p => !p.archived && ['active', 'draft', 'onHold'].includes(p.status))
+    .slice(0, 4);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['employee-tasks', userId],
@@ -194,6 +202,39 @@ export function EmployeeZone() {
             })}
           </div>
         </div>
+
+        {/* ── My Projects ──────────────────────────────────────────── */}
+        {myActiveProjects.length > 0 && (
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="px-4 py-2.5 flex items-center justify-between bg-muted/30">
+              <div className="flex items-center gap-2">
+                <FolderKanban className="h-3.5 w-3.5 text-primary" />
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">My Projects</p>
+              </div>
+              <Link to="/my-projects" className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                View all <ChevronRight className="h-2.5 w-2.5" />
+              </Link>
+            </div>
+            <div className="divide-y">
+              {myActiveProjects.map((p: any) => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-muted/20 transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <FolderKanban className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">{p.name}</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">{p.status} · {p.projectCode || p.id.slice(0, 8).toUpperCase()}</p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-50" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Recent notifications ─────────────────────────────────── */}
         <div className="space-y-2">

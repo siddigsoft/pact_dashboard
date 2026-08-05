@@ -154,6 +154,7 @@ const SurveyFill = lazy(() => import('./pages/SurveyFill'));
 const DataQualityPage = lazy(() => import('./pages/DataQualityPage'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksV2'));
+const MyProjectsPage = lazy(() => import('./pages/MyProjects'));
 const TaskDetail = lazy(() => import('./pages/TaskDetail'));
 const TeamTaskMonitor = lazy(() => import('./pages/TeamTaskMonitor'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
@@ -538,6 +539,7 @@ const AppRoutes = () => {
         <Route path="/data-visibility" element={<Navigate to="/analytics?tab=data-visibility" replace />} />
         <Route path="/chat" element={<Navigate to="/communication-hub?tab=chat" replace />} />
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
+        <Route path="/my-projects" element={<PageWrapper><MyProjectsPage /></PageWrapper>} />
         <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
         <Route path="/team-tasks" element={<PageWrapper><TeamTaskMonitor /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
