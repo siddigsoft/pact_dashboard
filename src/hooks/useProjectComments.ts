@@ -18,7 +18,14 @@ interface CommentRow {
   author_id: string;
   content: string;
   created_at: string;
-  profiles: { full_name: string | null } | null;
+  // PostgREST may type a many-to-one embed as an object or a 1-element array.
+  profiles: { full_name: string | null } | { full_name: string | null }[] | null;
+}
+
+function authorNameFromRow(profiles: CommentRow['profiles']): string {
+  if (!profiles) return 'Unknown User';
+  const profile = Array.isArray(profiles) ? profiles[0] : profiles;
+  return profile?.full_name ?? 'Unknown User';
 }
 
 export function useProjectComments(projectId: string) {
@@ -33,23 +40,29 @@ export function useProjectComments(projectId: string) {
     author_id: row.author_id,
     content: row.content,
     created_at: row.created_at,
-    author_name: row.profiles?.full_name ?? 'Unknown User',
+    author_name: authorNameFromRow(row.profiles),
   });
 
   const fetchComments = useCallback(async () => {
+    // Disambiguate profiles FK: table has both author_id and user_id → profiles.
     const { data, error } = await supabase
       .from('project_comments')
-      .select('id, project_id, author_id, content, created_at, profiles(full_name)')
+      .select('id, project_id, author_id, content, created_at, profiles!project_comments_author_id_fkey(full_name)')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Failed to load comments:', error);
+      toast({
+        title: 'Could not load comments',
+        description: error.message,
+        variant: 'destructive',
+      });
     } else {
-      setComments((data as CommentRow[]).map(mapRow));
+      setComments(((data ?? []) as CommentRow[]).map(mapRow));
     }
     setLoading(false);
-  }, [projectId]);
+  }, [projectId, toast]);
 
   useEffect(() => {
     setLoading(true);
@@ -97,6 +110,7 @@ export function useProjectComments(projectId: string) {
       const { error } = await supabase.from('project_comments').insert({
         project_id: projectId,
         author_id: authorId,
+        user_id: authorId,
         content: content.trim(),
       });
 
