@@ -7,6 +7,7 @@ import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, H
 import { supabase } from '@/integrations/supabase/client';
 import { getProjectFlow } from '@/config/projectFlows';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
 import { useUser } from '@/context/user/UserContext';
@@ -975,7 +976,21 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg bg-muted/30 border p-3">
                     {budgetCategories.map((cat) => (
                       <div key={cat.key} className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs font-medium text-muted-foreground leading-none">{cat.label}</label>
+                          {cat.description && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground/50 cursor-help shrink-0" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs">
+                                  {cat.description}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                         <div className="flex rounded-md shadow-sm">
                           <span className="inline-flex items-center px-2 rounded-l-md border border-r-0 border-input bg-muted text-[11px] font-semibold text-muted-foreground select-none whitespace-nowrap">
                             {watchBudgetCurrency}

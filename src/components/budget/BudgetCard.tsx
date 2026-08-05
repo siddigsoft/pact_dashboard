@@ -23,6 +23,25 @@ import { format } from 'date-fns';
 import type { ProjectBudget, MMPBudget } from '@/types/budget';
 import { BUDGET_STATUS_COLORS } from '@/types/budget';
 
+const BUDGET_CAT_LABEL: Record<string, string> = {
+  // Standard 8-category framework
+  personnel_labor_fees: 'Personnel & Labor Fees',
+  transportation_logistics: 'Transportation & Logistics',
+  equipment_supplies: 'Equipment & Supplies',
+  field_operations_activities: 'Field Operations & Activities',
+  internet_communication: 'Internet & Communication',
+  permits_taxes_legal: 'Permits, Taxes & Legal Fees',
+  management_overhead: 'Management & Overhead',
+  contingency_reserve: 'Contingency / Reserve',
+  // Legacy keys (existing saved budgets)
+  transportation_and_visit_fees: 'Transportation & Logistics',
+  permit_fee: 'Permits & Legal Fees',
+  internet_and_communication_fees: 'Internet & Communication',
+  professional_fees: 'Professional Fees',
+  personnel_fees: 'Personnel Fees',
+  management_overhead_legacy: 'Management & Overhead',
+};
+
 const formatCurrency = (cents: number) => {
   return new Intl.NumberFormat('en-SD', {
     style: 'currency',
@@ -249,11 +268,7 @@ export function ProjectBudgetCard({ budget, projectName, onClick }: ProjectBudge
                   {Object.entries(budget.categoryAllocations).map(([key, value]) => {
                     const amount = typeof value === 'number' ? value : 0;
                     if (amount === 0) return null;
-                    const displayName = 
-                      key === 'transportation_and_visit_fees' ? 'Transportation and Visit Fees' :
-                      key === 'permit_fee' ? 'Permit Fee' :
-                      key === 'internet_and_communication_fees' ? 'Internet & Communication Fees' :
-                      key.replace(/_/g, ' ');
+                    const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
                     return (
                       <div key={key} className="flex items-center justify-between">
                         <span className="text-sm text-cyan-200">{displayName}</span>
@@ -466,11 +481,7 @@ export function MMPBudgetCard({ budget, mmpName, onClick }: MMPBudgetCardProps) 
                   {Object.entries(budget.categoryBreakdown).map(([key, value]) => {
                     const amount = typeof value === 'number' ? value : 0;
                     if (amount === 0) return null;
-                    const displayName = 
-                      key === 'transportation_and_visit_fees' ? 'Transportation and Visit Fees' :
-                      key === 'permit_fee' ? 'Permit Fee' :
-                      key === 'internet_and_communication_fees' ? 'Internet & Communication Fees' :
-                      key.replace(/_/g, ' ');
+                    const displayName = BUDGET_CAT_LABEL[key] ?? key.replace(/_/g, ' ');
                     return (
                       <div key={key} className="flex items-center justify-between">
                         <span className="text-sm text-purple-200">{displayName}</span>
