@@ -1,4 +1,5 @@
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry as lazy } from '@/lib/chunk-load-recovery';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ClipboardList, ClipboardCheck, Shield, AlertTriangle,

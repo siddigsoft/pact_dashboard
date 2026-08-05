@@ -1,4 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { ChunkLoadRecoveryUI } from '@/components/ChunkLoadRecoveryUI';
+import { isChunkLoadError, reloadForStaleChunk } from '@/lib/chunk-load-recovery';
 
 // Captured once when the module loads — used to determine whether an error
 // occurred at startup (genuine HMR race) or during normal user interaction.
@@ -83,17 +85,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     }
 
     // Stale deployment: chunk URLs change after a new Vercel/CDN deploy.
-    // One auto-reload is enough — the browser will fetch the new manifest and chunks.
-    const isChunkLoadError = /loading chunk|failed to fetch|dynamically imported module/i.test(msg);
-    if (isChunkLoadError) {
-      const key = 'eb_chunk_reload_ts';
-      const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
-      const now = Date.now();
-      // Allow one reload per 30 seconds — long cooldown to avoid loops if CDN is down
-      if (now - last > 30000) {
-        sessionStorage.setItem(key, String(now));
-        window.location.reload();
-      }
+    if (isChunkLoadError(error)) {
+      reloadForStaleChunk();
     }
   }
 
@@ -112,19 +105,17 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       }
 
       const msg = this.state.error?.message ?? '';
-      const isChunkError = /loading chunk|failed to fetch|dynamically imported module/i.test(msg);
+      const isChunkError = isChunkLoadError(this.state.error);
       const isAuthError = /jwt|auth|session|token|unauthorized|forbidden/i.test(msg);
+
+      if (isChunkError) {
+        return <ChunkLoadRecoveryUI />;
+      }
 
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <div className="max-w-lg w-full bg-card border rounded-lg p-6 text-center shadow-lg">
             <h2 className="text-xl font-semibold text-destructive mb-2">Something went wrong</h2>
-
-            {isChunkError && (
-              <p className="text-muted-foreground text-sm mb-3">
-                A page resource failed to load (stale cache). Click <strong>Refresh</strong> to fix it.
-              </p>
-            )}
             {isAuthError && (
               <p className="text-muted-foreground text-sm mb-3">
                 Your session appears to be invalid or expired. Click <strong>Clear Session</strong> to sign in again.
