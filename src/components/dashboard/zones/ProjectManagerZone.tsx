@@ -78,6 +78,16 @@ interface ProjectData {
   team?: any;
   activities?: any[];
   created_at?: string;
+  custom_flow_stages?: any[];
+}
+
+interface MilestoneItem {
+  projectId: string;
+  projectName: string;
+  stageId: string;
+  stageName: string;
+  dueDate: string | null;
+  status: 'completed' | 'overdue' | 'upcoming';
 }
 
 interface PendingApproval {
@@ -145,6 +155,7 @@ export const ProjectManagerZone: React.FC = () => {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
+  const [completedFlowStages, setCompletedFlowStages] = useState<Set<string>>(new Set());
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -157,7 +168,7 @@ export const ProjectManagerZone: React.FC = () => {
       try {
         let query = supabase
           .from('projects')
-          .select('id, name, project_code, status, start_date, end_date, budget, team, created_at')
+          .select('id, name, project_code, status, start_date, end_date, budget, team, created_at, custom_flow_stages')
           .order('created_at', { ascending: false });
 
         if (!isAdminOrSuperUser && userProjectIds.length > 0) {
@@ -258,6 +269,64 @@ export const ProjectManagerZone: React.FC = () => {
     const interval = setInterval(loadPendingApprovals, 60000);
     return () => clearInterval(interval);
   }, [mmpFiles]);
+
+  // Bulk-load completed stage IDs from project_flow_log for all visible projects
+  useEffect(() => {
+    if (projects.length === 0) return;
+    let cancelled = false;
+    const projectIds = projects.map(p => p.id);
+    supabase
+      .from('project_flow_log')
+      .select('project_id, stage_id')
+      .in('project_id', projectIds)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const keys = new Set(data.map((r: any) => `${r.project_id}:${r.stage_id}`));
+        setCompletedFlowStages(keys);
+      });
+    return () => { cancelled = true; };
+  }, [projects]);
+
+  // Compute milestone items from custom_flow_stages across all projects
+  const milestones = useMemo((): MilestoneItem[] => {
+    const now = new Date();
+    const items: MilestoneItem[] = [];
+    projects.forEach(project => {
+      const stages: any[] = project.custom_flow_stages ?? [];
+      stages.forEach(entry => {
+        if (!entry.isMilestone) return;
+        const key = `${project.id}:${entry.id}`;
+        const isCompleted = completedFlowStages.has(key);
+        const dueDate = entry.dueDate ?? entry.plannedEnd ?? null;
+        let status: MilestoneItem['status'] = 'upcoming';
+        if (isCompleted) {
+          status = 'completed';
+        } else if (dueDate && new Date(dueDate) < now) {
+          status = 'overdue';
+        }
+        items.push({
+          projectId: project.id,
+          projectName: project.name,
+          stageId: entry.id,
+          stageName: entry.customLabel || entry.id,
+          dueDate,
+          status,
+        });
+      });
+    });
+    // Sort: overdue first, then upcoming by date, completed last
+    return items.sort((a, b) => {
+      const order = { overdue: 0, upcoming: 1, completed: 2 };
+      if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  }, [projects, completedFlowStages]);
+
+  const overdueMilestones = milestones.filter(m => m.status === 'overdue').length;
+  const upcomingMilestones = milestones.filter(m => m.status === 'upcoming').length;
 
   const projectStats = useMemo(() => {
     const total = projects.length;
@@ -743,6 +812,100 @@ export const ProjectManagerZone: React.FC = () => {
                       <div className="text-sm text-muted-foreground">Pending Approvals</div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* ── Milestones across all projects ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-5 w-5 text-indigo-600" />
+                      Milestones
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {overdueMilestones > 0 && (
+                        <Badge variant="destructive" data-testid="badge-overdue-milestones">{overdueMilestones} overdue</Badge>
+                      )}
+                      {upcomingMilestones > 0 && (
+                        <Badge variant="outline" data-testid="badge-upcoming-milestones">{upcomingMilestones} upcoming</Badge>
+                      )}
+                    </div>
+                  </CardTitle>
+                  <CardDescription>
+                    Milestone stages across all your projects
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {milestones.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Target className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">No milestones found. Mark a stage as a milestone in a project's Flow tab to track it here.</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Project</TableHead>
+                          <TableHead>Stage / Milestone</TableHead>
+                          <TableHead>Due Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {milestones.slice(0, 20).map(ms => (
+                          <TableRow
+                            key={`${ms.projectId}:${ms.stageId}`}
+                            className={`cursor-pointer hover:bg-muted/50 ${ms.status === 'overdue' ? 'bg-red-500/5' : ''}`}
+                            onClick={() => navigate(`/projects/${ms.projectId}?tab=flow`)}
+                            data-testid={`row-milestone-${ms.projectId}-${ms.stageId}`}
+                          >
+                            <TableCell>
+                              {ms.status === 'completed' && (
+                                <Badge variant="secondary" className="gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                  Completed
+                                </Badge>
+                              )}
+                              {ms.status === 'overdue' && (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Overdue
+                                </Badge>
+                              )}
+                              {ms.status === 'upcoming' && (
+                                <Badge variant="outline" className="gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  Upcoming
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium">{ms.projectName}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <Target className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                                {ms.stageName}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {ms.dueDate ? (
+                                <span className={ms.status === 'overdue' ? 'text-red-600 font-medium' : ''}>
+                                  {safeFormat(ms.dueDate, 'MMM d, yyyy')}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">No date set</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                  {milestones.length > 20 && (
+                    <p className="text-xs text-muted-foreground text-center mt-3">
+                      Showing 20 of {milestones.length} milestones
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
