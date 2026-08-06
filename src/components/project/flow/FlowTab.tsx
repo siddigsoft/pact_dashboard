@@ -93,11 +93,12 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { GanttView } from './GanttView';
+import { ScheduleView } from './ScheduleView';
 import { exportFlowPDF, exportFlowDocx } from './flowExport';
 import { workingDaysBetween, calendarDaysBetween, DEFAULT_WORKING_DAYS } from '@/utils/workingDays';
 import { ProjectCalendarDialog } from '@/components/project/ProjectCalendarDialog';
 
-type ViewMode = 'list' | 'gantt';
+type ViewMode = 'list' | 'gantt' | 'schedule';
 
 interface Props {
   flow: UseProjectFlowReturn;
@@ -1070,6 +1071,13 @@ export function FlowTab({
               >
                 <BarChart2 className="h-3 w-3" /> Gantt
               </Button>
+              <Button
+                size="sm" variant="ghost"
+                className={cn('h-7 px-2.5 rounded-none text-xs gap-1.5 border-l', viewMode === 'schedule' && 'bg-muted')}
+                onClick={() => setViewMode('schedule')}
+              >
+                <List className="h-3 w-3" /> Schedule
+              </Button>
             </div>
             <ExportButton projectId={projectId} projectName={projectName} projectType={projectType} projectCode={projectCode} flow={flow} allDefaultStages={allDefaultStages} customEntries={customFlowStages ?? []} />
             {canEditFlow && (
@@ -1143,6 +1151,20 @@ export function FlowTab({
             </>
           )}
         </div>
+      )}
+
+      {/* ── Schedule View (MS Project table) ──────────────────── */}
+      {viewMode === 'schedule' && (
+        <ScheduleView
+          allDefaultStages={allDefaultStages}
+          groups={groups}
+          stageHistory={stageHistory}
+          customEntries={customFlowStages ?? []}
+          getStageStatus={getStageStatus}
+          projectStart={projectStart}
+          projectEnd={projectEnd}
+          checklistByStage={checklistByStage}
+        />
       )}
 
       {/* ── Gantt View ─────────────────────────────────────────── */}
