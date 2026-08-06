@@ -381,7 +381,7 @@ export function StageChecklist({
                               className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                               value={pending.start}
                               min={stageStart ?? undefined}
-                              max={pending.end || stageEnd ?? undefined}
+                              max={(pending.end || stageEnd) ?? undefined}
                               onChange={e => setPending(p => p ? { ...p, start: e.target.value } : p)}
                             />
                           </label>
@@ -391,7 +391,7 @@ export function StageChecklist({
                               type="date"
                               className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                               value={pending.end}
-                              min={pending.start || stageStart ?? undefined}
+                              min={(pending.start || stageStart) ?? undefined}
                               max={stageEnd ?? undefined}
                               onChange={e => setPending(p => p ? { ...p, end: e.target.value } : p)}
                             />
