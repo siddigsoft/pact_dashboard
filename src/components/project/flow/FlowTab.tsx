@@ -809,31 +809,31 @@ export function FlowTab({
   const pct = activeCount > 0 ? Math.round((completedCount / activeCount) * 100) : 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
       {/* ── KPI stat cards ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-0 shadow-sm bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-0.5">
               <Layers className="h-3.5 w-3.5 text-slate-500" />
               <span className="text-xs text-muted-foreground font-medium">Total Stages</span>
             </div>
-            <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{allDefaultStages.length}</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{allDefaultStages.length}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-0.5">
               <CheckSquare className="h-3.5 w-3.5 text-emerald-600" />
               <span className="text-xs text-muted-foreground font-medium">Completed</span>
             </div>
-            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{completedCount}</p>
+            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{completedCount}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-0.5">
               <Flag className="h-3.5 w-3.5 text-[#1D3461]" />
               <span className="text-xs text-muted-foreground font-medium">
                 {currentStages.length > 1 ? 'Active Stages' : 'Active Stage'}
@@ -855,12 +855,12 @@ export function FlowTab({
           </CardContent>
         </Card>
         <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-0.5">
               <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
               <span className="text-xs text-muted-foreground font-medium">Progress</span>
             </div>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{pct}%</p>
+            <p className="text-xl font-bold text-amber-700 dark:text-amber-400">{pct}%</p>
           </CardContent>
         </Card>
       </div>

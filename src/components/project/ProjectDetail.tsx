@@ -769,7 +769,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const typeConfig = getProjectTypeConfig(project.projectType);
 
   return (
-    <div className="space-y-4 p-3 md:p-4">
+    <div className="space-y-2 p-2 md:p-3">
       {/* Back Navigation */}
       <Button 
         variant="ghost" 
@@ -807,10 +807,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* Hero Summary Card */}
       <Card className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-200 dark:border-blue-800">
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <CardContent className="p-3">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             {/* Left: Project info */}
-            <div className="space-y-2 flex-1 min-w-0">
+            <div className="space-y-1.5 flex-1 min-w-0">
               <div className="flex items-start gap-2 flex-wrap">
                 <h1 className="text-xl font-semibold">{project.name}</h1>
                 {getStatusBadge(project.status)}
@@ -871,10 +871,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
 
               {/* Quick stats row */}
-              <div className="flex flex-wrap gap-4 pt-2">
+              <div className="flex flex-wrap gap-3 pt-1">
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-8 h-8 rounded-md bg-blue-500/20 flex items-center justify-center">
-                    <Target className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center">
+                    <Target className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Activities</p>
@@ -884,8 +884,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 
                 {daysRemaining !== null && (
                   <div className="flex items-center gap-2 text-sm">
-                    <div className={`w-8 h-8 rounded-md flex items-center justify-center ${daysRemaining > 30 ? 'bg-green-500/20' : daysRemaining > 7 ? 'bg-orange-500/20' : 'bg-red-500/20'}`}>
-                      <TrendingUp className={`h-4 w-4 ${daysRemaining > 30 ? 'text-green-600 dark:text-green-400' : daysRemaining > 7 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'}`} />
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center ${daysRemaining > 30 ? 'bg-green-500/20' : daysRemaining > 7 ? 'bg-orange-500/20' : 'bg-red-500/20'}`}>
+                      <TrendingUp className={`h-3.5 w-3.5 ${daysRemaining > 30 ? 'text-green-600 dark:text-green-400' : daysRemaining > 7 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'}`} />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Days Left</p>
@@ -896,8 +896,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                 {budgetSummary && budgetSummary.total != null && (
                   <div className="flex items-center gap-2 text-sm">
-                    <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center">
-                      <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <div className="w-6 h-6 rounded-md bg-green-500/20 flex items-center justify-center">
+                      <DollarSign className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Budget</p>
@@ -929,8 +929,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     : 'bg-orange-500/20';
                   return (
                     <div className="flex items-center gap-2 text-sm">
-                      <div className={`w-8 h-8 rounded-md flex items-center justify-center ${bg}`}>
-                        <Activity className={`h-4 w-4 ${color}`} />
+                      <div className={`w-6 h-6 rounded-md flex items-center justify-center ${bg}`}>
+                        <Activity className={`h-3.5 w-3.5 ${color}`} />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Health</p>
@@ -1044,8 +1044,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* Flow Strip */}
       {flow.activeStages.length > 0 && (
         <Card className="border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10">
-          <CardContent className="px-4 py-2">
-            <div className="flex items-center gap-2 mb-1">
+          <CardContent className="px-3 py-1.5">
+            <div className="flex items-center gap-1.5 mb-0.5">
               <GitBranch className="h-3.5 w-3.5 text-[#1D3461] dark:text-blue-400" />
               <span className="text-xs font-medium text-[#1D3461] dark:text-blue-300">
                 {flow.currentStage?.label ?? 'Initialising'} · Stage {flow.currentStageIndex + 1}/{flow.activeStages.length}
@@ -1092,7 +1092,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           const CurrentIcon = currentTab.icon;
           const idx = projectTabs.findIndex(t => t.value === activeTab);
           return (
-            <div className="relative px-1 py-2 border-b" ref={tabDropRef}>
+            <div className="relative px-1 py-1 border-b" ref={tabDropRef}>
               <div className="flex items-center gap-3">
                 {/* Dropdown trigger */}
                 <button
