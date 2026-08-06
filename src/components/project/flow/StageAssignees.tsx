@@ -335,7 +335,7 @@ export function StageAssignees({
                           className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                           value={assignStart}
                           min={stageStart ?? undefined}
-                          max={assignEnd || stageEnd ?? undefined}
+                          max={(assignEnd || stageEnd) ?? undefined}
                           onChange={e => setAssignStart(e.target.value)}
                         />
                       </label>
@@ -345,7 +345,7 @@ export function StageAssignees({
                           type="date"
                           className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                           value={assignEnd}
-                          min={assignStart || stageStart ?? undefined}
+                          min={(assignStart || stageStart) ?? undefined}
                           max={stageEnd ?? undefined}
                           onChange={e => setAssignEnd(e.target.value)}
                         />
