@@ -381,26 +381,39 @@ function KpiTile({ label, value, sub, icon: Icon, color, urgent, onClick, action
   icon: React.ElementType; color: string; urgent?: boolean;
   onClick?: () => void; actionLabel?: string;
 }) {
+  const valueStr = String(value);
+  const tightValue = valueStr.length >= 5;
   const inner = (
     <div className={cn(
-      'bg-white/10 rounded-xl p-3 border border-white/10 flex flex-col h-full',
+      'bg-white/10 rounded-xl p-3 border border-white/10 flex flex-col h-full min-w-0 overflow-hidden',
       urgent && 'border-red-400/50 bg-red-900/20',
       onClick && 'cursor-pointer hover:bg-white/20 transition-colors group',
     )}>
-      <div className={cn('text-2xl font-bold leading-none', color, urgent && 'text-red-300')}>{value}</div>
-      <div className="text-white/80 text-[11px] font-medium mt-1 flex items-center gap-1">
-        <Icon className="h-3 w-3 flex-shrink-0" />{label}
+      <div
+        className={cn(
+          'font-bold leading-none tabular-nums tracking-tight truncate',
+          tightValue ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl',
+          color,
+          urgent && 'text-red-300',
+        )}
+        title={valueStr}
+      >
+        {value}
       </div>
-      {sub && <div className="text-blue-300/60 text-[10px] mt-0.5">{sub}</div>}
+      <div className="text-white/80 text-[11px] font-medium mt-1 flex items-center gap-1 min-w-0">
+        <Icon className="h-3 w-3 flex-shrink-0" />
+        <span className="truncate">{label}</span>
+      </div>
+      {sub && <div className="text-blue-300/60 text-[10px] mt-0.5 truncate" title={sub}>{sub}</div>}
       {onClick && (
-        <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-1 text-[10px] font-semibold text-white/50 group-hover:text-white/80 transition-colors">
-          <ChevronRight className="h-2.5 w-2.5" />
-          {actionLabel ?? 'View details'}
+        <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-1 text-[10px] font-semibold text-white/50 group-hover:text-white/80 transition-colors min-w-0">
+          <ChevronRight className="h-2.5 w-2.5 flex-shrink-0" />
+          <span className="truncate">{actionLabel ?? 'View details'}</span>
         </div>
       )}
     </div>
   );
-  return onClick ? <button type="button" onClick={onClick} className="text-left w-full h-full">{inner}</button> : inner;
+  return onClick ? <button type="button" onClick={onClick} className="text-left w-full h-full min-w-0">{inner}</button> : inner;
 }
 
 function SectionCard({ icon: Icon, title, action, actionLabel, children, noPad, className }: {
@@ -1977,8 +1990,8 @@ export default function PortfolioDashboard() {
           </div>
         </div>
 
-        {/* 10-tile KPI strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-2.5">
+        {/* KPI strip: 5-up on large screens so values never collide */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
           <KpiTile icon={Briefcase} label="Active Projects" value={kpis.active} sub={`${kpis.totalProjects} total`} color="text-white"
             onClick={() => setActiveTab('portfolio')} actionLabel="View projects" />
           <KpiTile icon={Clock} label="Stalled" value={kpis.stalled} sub={`>${STALL_DAYS}d no advance`} color="text-white" urgent={kpis.stalled > 0}

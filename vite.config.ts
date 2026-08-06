@@ -771,7 +771,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
       "@assets": path.resolve(__dirname, "./src/assets"),
     },
-    dedupe: ['react', 'react-dom'],
+    // use-context-selector must be singleton — duplicate copies make
+    // Provider/consumer see different context objects after HMR.
+    dedupe: ['react', 'react-dom', 'use-context-selector'],
   },
   define: {
     // Explicitly define environment variables for mobile builds

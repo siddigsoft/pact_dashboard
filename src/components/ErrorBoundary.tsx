@@ -64,21 +64,21 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     //   3. "Cannot read properties of null (reading '...')" — context/dispatcher
     //      went null during Vite HMR module swap (e.g. ReactCurrentDispatcher is
     //      null between old and new module loading, causing hook calls to fail)
-    const isHmrRace = /must be used within/i.test(msg) ||
+    const isProviderMismatch = /must be used within/i.test(msg);
+    const isHmrRace = isProviderMismatch ||
                       /cannot access .+ before initialization/i.test(msg) ||
                       /cannot read propert(?:y|ies) of null/i.test(msg);
     if (isHmrRace) {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
       const now = Date.now();
-      // Only auto-reload within the first 15 seconds of the page load.
-      // Genuine HMR provider-race errors occur at startup (module hot-swap
-      // reorders declarations before providers mount). Errors that surface
-      // during normal user interaction — e.g. mid-session file uploads — are
-      // real application bugs that should show the error UI, not silently
-      // reload the page and discard the user's work.
       const pageAge = now - PAGE_LOAD_TIME;
-      if (now - last > 4000 && pageAge < 15000) {
+      // Provider/"must be used within" races happen on mid-session HMR too
+      // (editing a file hot-swaps context modules). Always recover those.
+      // Other HMR races stay limited to the first 15s so real mid-flow bugs
+      // still surface instead of wiping the user's work.
+      const allowReload = isProviderMismatch || pageAge < 15000;
+      if (allowReload && now - last > 4000) {
         sessionStorage.setItem(key, String(now));
         window.location.reload();
       }
@@ -129,7 +129,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
             {msg && (
               <div className="mb-4 p-3 bg-muted rounded text-left text-xs overflow-auto max-h-28">
-                <p className="font-mono text-destructive break-all">{msg}</p>
+                <p className="font-mono text-destructive break-words [overflow-wrap:anywhere]">{msg}</p>
               </div>
             )}
 
