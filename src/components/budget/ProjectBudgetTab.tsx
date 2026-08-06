@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import {
   CheckCircle2, Clock, AlertTriangle, TrendingDown, Wallet, DollarSign,
-  FileDown, FileText, Send, ThumbsUp, Loader2, RefreshCw, Zap,
+  FileDown, FileText, Send, ThumbsUp, Loader2, RefreshCw, Zap, ClipboardList,
 } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 import { exportFormattedExcel } from '@/utils/formattedExcelExport';
@@ -179,11 +179,15 @@ export function ProjectBudgetTab({
   const [approving, setApproving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // OBR (Operational Budget Requests) linked to this project
+  interface OBRSummaryRow { id: string; title: string; period_label: string; status: string; total_amount: number; currency: string; submitted_at: string | null }
+  const [obrRequests, setObrRequests] = useState<OBRSummaryRow[]>([]);
+
   useEffect(() => {
     let alive = true;
     async function load() {
       setLoading(true);
-      const [opsRes, advRes, pfRes] = await Promise.all([
+      const [opsRes, advRes, pfRes, obrRes] = await Promise.all([
         supabase.from('operational_cost_submissions')
           .select('id,expense_category,amount_cents,currency,status,tier1_status,tier2_status,expense_date,description')
           .eq('project_id', project.id),
@@ -193,15 +197,33 @@ export function ProjectBudgetTab({
         supabase.from('pre_fund_requests')
           .select('id,name,amount,currency,available_balance,committed_amount,paid_amount,status,created_at')
           .eq('project_id', project.id),
+        supabase.from('operational_budget_requests' as any)
+          .select('id,title,period_label,status,total_amount,currency,submitted_at')
+          .eq('project_id', project.id)
+          .order('created_at', { ascending: false }),
       ]);
       if (!alive) return;
       setOpsCosts(opsRes.data ?? []);
       setAdvances(advRes.data ?? []);
       setPreFunds(pfRes.data ?? []);
+      setObrRequests((obrRes.data ?? []) as OBRSummaryRow[]);
       setLoading(false);
     }
     load();
     return () => { alive = false; };
+  }, [project.id]);
+
+  // Realtime: refresh OBRs when any budget request for this project changes
+  useEffect(() => {
+    const ch = supabase.channel(`pbt_obr_${project.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operational_budget_requests', filter: `project_id=eq.${project.id}` }, () => {
+        supabase.from('operational_budget_requests' as any)
+          .select('id,title,period_label,status,total_amount,currency,submitted_at')
+          .eq('project_id', project.id).order('created_at', { ascending: false })
+          .then(({ data }) => setObrRequests((data ?? []) as OBRSummaryRow[]));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [project.id]);
 
   /* ── Spending calculations ── */
@@ -686,6 +708,82 @@ export function ProjectBudgetTab({
           </CardContent>
         </Card>
       )}
+
+      {/* ── Operational Budget Requests (OBR) linked to this project ── */}
+      {(() => {
+        const obrApprovedCents  = obrRequests.filter(r => r.status === 'approved').reduce((s, r) => s + (r.total_amount || 0), 0) * 100;
+        const obrPendingCents   = obrRequests.filter(r => r.status === 'submitted').reduce((s, r) => s + (r.total_amount || 0), 0) * 100;
+        const STATUS_OBR: Record<string, { label: string; color: string }> = {
+          draft:     { label: 'Draft',     color: 'bg-slate-100 text-slate-600' },
+          submitted: { label: 'Submitted', color: 'bg-blue-100 text-blue-700' },
+          approved:  { label: 'Approved',  color: 'bg-emerald-100 text-emerald-700' },
+          rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-700' },
+          cancelled: { label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
+        };
+        return (
+          <Card className="border-border/60">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                <ClipboardList className="h-4 w-4 text-[#0F2041] dark:text-blue-400" />
+                Budget Requests (OBR)
+                {obrRequests.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{obrRequests.length}</Badge>
+                )}
+                <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                  <a href="/budget-requests" className="underline hover:text-foreground">Manage →</a>
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              {/* Totals summary */}
+              {obrRequests.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded border bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 px-3 py-2">
+                    <div className="text-muted-foreground">Approved OBRs</div>
+                    <div className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {currency} {(obrApprovedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div className="rounded border bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 px-3 py-2">
+                    <div className="text-muted-foreground">Pending OBRs</div>
+                    <div className="font-bold text-blue-700 dark:text-blue-400">
+                      {currency} {(obrPendingCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {obrRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No budget requests linked to this project yet.{' '}
+                  <a href="/budget-requests" className="underline text-primary">Create one →</a>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {obrRequests.map(r => {
+                    const sc = STATUS_OBR[r.status] ?? STATUS_OBR.draft;
+                    return (
+                      <div key={r.id} className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2 bg-muted/20">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium truncate">{r.title}</span>
+                            <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${sc.color}`}>
+                              {sc.label}
+                            </span>
+                          </div>
+                          {r.period_label && <div className="text-[10px] text-muted-foreground mt-0.5">{r.period_label}</div>}
+                        </div>
+                        <div className="text-xs font-semibold text-right shrink-0 ml-2">
+                          {r.currency} {(r.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ── Budget notes ── */}
       {projectBudget.budgetNotes && (

@@ -149,9 +149,144 @@ function groupByCategory(lines: OBRLine[]): Record<string, { lines: OBRLine[]; s
   }, {} as Record<string, { lines: OBRLine[]; subtotal: number }>);
 }
 
+// ── Project Budget Panel ──────────────────────────────────────────────────────
+
+interface ProjectBudgetInfo {
+  totalBudgetCents: number;
+  spentBudgetCents: number;
+  currency: string;
+  status: string;
+  obrApprovedTotal: number;
+  obrPendingTotal: number;
+}
+
+function ProjectBudgetPanel({ projectId, thisTotalAmount, currency, selfObrId }: {
+  projectId: string;
+  thisTotalAmount: number;
+  currency: string;
+  selfObrId?: string;
+}) {
+  const [info, setInfo]       = useState<ProjectBudgetInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBudgetData = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    const [budgetRes, obrRes] = await Promise.all([
+      supabase.from('project_budgets' as any).select('total_budget_cents,spent_budget_cents,currency,status')
+        .eq('project_id', projectId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('operational_budget_requests' as any).select('id,total_amount,status')
+        .eq('project_id', projectId),
+    ]);
+    const budget = (budgetRes.data ?? [])[0] as any ?? null;
+    const obrs   = ((obrRes.data ?? []) as any[]).filter((o: any) => o.id !== selfObrId);
+    if (!budget) { setInfo(null); setLoading(false); return; }
+    setInfo({
+      totalBudgetCents:  budget.total_budget_cents ?? 0,
+      spentBudgetCents:  budget.spent_budget_cents  ?? 0,
+      currency:          budget.currency ?? currency,
+      status:            budget.status   ?? 'draft',
+      obrApprovedTotal:  obrs.filter((o: any) => o.status === 'approved').reduce((s: number, o: any) => s + (o.total_amount || 0), 0),
+      obrPendingTotal:   obrs.filter((o: any) => o.status === 'submitted').reduce((s: number, o: any) => s + (o.total_amount || 0), 0),
+    });
+    setLoading(false);
+  }, [projectId, selfObrId, currency]);
+
+  useEffect(() => { fetchBudgetData(); }, [fetchBudgetData]);
+
+  // Live subscription — reflects any budget update from the Project page immediately
+  useEffect(() => {
+    if (!projectId) return;
+    const ch = supabase.channel(`obr_proj_budget_${projectId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_budgets', filter: `project_id=eq.${projectId}` }, fetchBudgetData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operational_budget_requests', filter: `project_id=eq.${projectId}` }, fetchBudgetData)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [projectId, fetchBudgetData]);
+
+  if (!projectId) return null;
+  if (loading) return (
+    <div className="rounded-md border px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading project budget…
+    </div>
+  );
+  if (!info) return (
+    <div className="rounded-md border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      No project budget set yet. Add one from the Project's Budget tab — it will appear here in real time.
+    </div>
+  );
+
+  const total       = info.totalBudgetCents / 100;
+  const spent       = info.spentBudgetCents / 100;
+  const obrApproved = info.obrApprovedTotal;
+  const usedTotal   = spent + obrApproved + thisTotalAmount;
+  const remaining   = total - usedTotal;
+  const pct         = total > 0 ? Math.min((usedTotal / total) * 100, 120) : 0;
+  const isOver      = remaining < 0;
+  const bCur        = info.currency;
+  const fmtB        = (n: number) =>
+    `${bCur} ${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  return (
+    <div className={cn('rounded-md border p-3 space-y-2.5',
+      isOver ? 'border-red-200 bg-red-50/40 dark:bg-red-950/20'
+             : 'border-blue-200 bg-blue-50/30 dark:bg-blue-950/20')}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-[#0F2041] dark:text-blue-300 flex items-center gap-1.5">
+          <DollarSign className="h-3.5 w-3.5" /> Project Budget Health
+          <span className="text-[10px] font-normal text-muted-foreground">(live · updates when project budget changes)</span>
+        </span>
+        <Badge variant="outline" className="text-[10px]">{info.status}</Badge>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+        <div><div className="text-muted-foreground">Total Budget</div><div className="font-semibold">{fmtB(total)}</div></div>
+        <div><div className="text-muted-foreground">Actual Spent</div><div className="font-semibold text-orange-600">{fmtB(spent)}</div></div>
+        <div><div className="text-muted-foreground">OBR Approved</div><div className="font-semibold text-blue-600">{fmtB(obrApproved)}</div></div>
+        <div>
+          <div className="text-muted-foreground">{isOver ? 'Over Budget' : 'Remaining'}</div>
+          <div className={cn('font-bold', isOver ? 'text-red-600' : 'text-emerald-600')}>{fmtB(remaining)}</div>
+        </div>
+      </div>
+
+      {/* Stacked utilisation bar */}
+      <div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+          <span>After this request</span>
+          <span className={cn(isOver && 'text-red-600 font-bold')}>{pct.toFixed(1)}%</span>
+        </div>
+        <div className="h-2.5 bg-muted rounded-full overflow-hidden flex">
+          {total > 0 && <>
+            <div className="h-full bg-orange-400" style={{ width: `${Math.min((spent / total) * 100, 100)}%` }} title="Actual Spent" />
+            <div className="h-full bg-blue-400"   style={{ width: `${Math.min((obrApproved / total) * 100, 100)}%` }} title="OBR Approved" />
+            <div className="h-full bg-[#0F2041] opacity-70" style={{ width: `${Math.min((thisTotalAmount / total) * 100, 100)}%` }} title="This Request" />
+          </>}
+        </div>
+        <div className="flex flex-wrap gap-3 mt-1 text-[9px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-orange-400" />Spent</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-blue-400" />OBR Approved</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-[#0F2041] opacity-70" />This Request</span>
+        </div>
+      </div>
+
+      {thisTotalAmount > 0 && (
+        <div className={cn('text-xs px-2 py-1.5 rounded-md',
+          isOver ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                 : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300')}>
+          {isOver
+            ? `⚠️ This request (${fmtB(thisTotalAmount)}) exceeds the available project budget by ${fmtB(-remaining)}.`
+            : `✓ This request (${fmtB(thisTotalAmount)}) leaves ${fmtB(remaining)} remaining in the project budget.`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PR-style Preview Document ────────────────────────────────────────────────
 
-function OBRPreviewDocument({ obr, submitterName, onClose, onSubmit, onExportPDF, onExportExcel, submitting }: {
+function OBRPreviewDocument({ obr, submitterName, onClose, onSubmit, onExportPDF, onExportExcel, submitting, projectBudgetInfo }: {
   obr: Partial<OBR> & { lines: OBRLine[]; currency: string };
   submitterName: string;
   onClose: () => void;
@@ -159,6 +294,7 @@ function OBRPreviewDocument({ obr, submitterName, onClose, onSubmit, onExportPDF
   onExportPDF?: () => void;
   onExportExcel?: () => void;
   submitting?: boolean;
+  projectBudgetInfo?: ProjectBudgetInfo | null;
 }) {
   const grouped = groupByCategory(obr.lines ?? []);
   const total = totalLines(obr.lines ?? []);
@@ -206,6 +342,33 @@ function OBRPreviewDocument({ obr, submitterName, onClose, onSubmit, onExportPDF
             <div className="text-lg font-bold mt-0.5">{Object.keys(grouped).length}</div>
           </div>
         </div>
+
+        {/* Project Budget Context — shows live project budget health when linked */}
+        {projectBudgetInfo && (
+          <div className="rounded-md border border-blue-200 bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-2">
+            <div className="text-xs font-semibold text-[#0F2041] dark:text-blue-300 flex items-center gap-1.5">
+              <DollarSign className="h-3.5 w-3.5" /> Project Budget Context
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+              {[
+                { label: 'Total Budget',  val: (projectBudgetInfo.totalBudgetCents / 100), color: '' },
+                { label: 'Actual Spent',  val: (projectBudgetInfo.spentBudgetCents  / 100), color: 'text-orange-600' },
+                { label: 'OBR Approved', val: projectBudgetInfo.obrApprovedTotal,            color: 'text-blue-600' },
+                { label: 'Remaining',
+                  val: (projectBudgetInfo.totalBudgetCents / 100) - (projectBudgetInfo.spentBudgetCents / 100) - projectBudgetInfo.obrApprovedTotal - total,
+                  color: ((projectBudgetInfo.totalBudgetCents / 100) - (projectBudgetInfo.spentBudgetCents / 100) - projectBudgetInfo.obrApprovedTotal - total) < 0 ? 'text-red-600' : 'text-emerald-600' },
+              ].map(k => (
+                <div key={k.label}>
+                  <div className="text-muted-foreground">{k.label}</div>
+                  <div className={cn('font-semibold', k.color)}>
+                    {projectBudgetInfo.currency} {Math.abs(k.val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    {k.val < 0 && ' (over)'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Line items by category */}
         {Object.entries(grouped).map(([cat, { lines, subtotal }]) => (
@@ -401,6 +564,7 @@ function OBRFormDialog({ open, onClose, onSaved, editing, currentUserId, current
   const [lines, setLines]               = useState<OBRLine[]>([newLine()]);
 
   const [projects, setProjects]         = useState<{ id: string; name: string }[]>([]);
+  const [projectBudgetInfo, setProjectBudgetInfo] = useState<ProjectBudgetInfo | null>(null);
 
   // Populate from editing record
   useEffect(() => {
@@ -527,6 +691,7 @@ function OBRFormDialog({ open, onClose, onSaved, editing, currentUserId, current
             onExportPDF={handleExportPDF}
             onExportExcel={handleExportExcel}
             submitting={submitting}
+            projectBudgetInfo={projectBudgetInfo}
           />
         </DialogContent>
       </Dialog>
@@ -634,6 +799,19 @@ function OBRFormDialog({ open, onClose, onSaved, editing, currentUserId, current
             </p>
           </div>
 
+          {/* Project Budget Panel — live link to project_budgets */}
+          {projectId && projectId !== '__none__' && (
+            <div className="space-y-1.5">
+              <Label className="text-sm">Project Budget Impact</Label>
+              <ProjectBudgetPanel
+                projectId={projectId}
+                thisTotalAmount={total}
+                currency={currency}
+                selfObrId={editing?.id}
+              />
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-1.5">
             <Label htmlFor="obr-notes">Additional Notes (optional)</Label>
@@ -691,6 +869,16 @@ function ApprovalDialog({ obr, tier, open, onClose, onDone, currentUserId, curre
       .eq('id', obr.id);
     setProcessing(null);
     if (error) { toast({ title: 'Action failed', description: error.message, variant: 'destructive' }); return; }
+
+    // On final (tier2) approval → post budget lines to GL and update project_budgets
+    if (tier === 2 && action === 'approve') {
+      const glResult = await postOBRToGL({ ...obr, ...updates });
+      if (glResult.linesCreated > 0) {
+        toast({ title: `GL updated — ${glResult.linesCreated} budget line(s) posted`, description: 'Visible in Accounting → Budget Planning.' });
+      } else if (glResult.error) {
+        toast({ title: 'GL posting skipped', description: glResult.error, variant: 'default' });
+      }
+    }
 
     // Notify submitter
     const msg = action === 'approve'
@@ -1032,6 +1220,86 @@ function exportOBRPDF(obr: OBR & { submitter_name?: string }, submitterName: str
   }
 
   doc.save(`OBR_${obr.title.replace(/\s+/g, '_').slice(0, 40)}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+}
+
+// ── GL posting on OBR tier-2 approval ────────────────────────────────────────
+
+/** Category keywords used to match OBR expense categories to GL account names */
+const CATEGORY_GL_KEYWORDS: Record<string, string[]> = {
+  accommodation:     ['accommodation', 'hotel', 'lodging', 'housing'],
+  meals:             ['meal', 'food', 'catering', 'per diem', 'perdiem'],
+  general_transport: ['transport', 'travel', 'vehicle', 'fuel', 'logistics'],
+  communications:    ['communication', 'internet', 'telephone', 'phone', 'telecom'],
+  supplies:          ['supplies', 'material', 'stationery', 'consumable'],
+  equipment:         ['equipment', 'asset', 'machinery', 'tool'],
+  printing:          ['printing', 'reproduction', 'photocopying'],
+  meetings:          ['meeting', 'event', 'workshop', 'conference', 'seminar'],
+  training:          ['training', 'capacity', 'learning', 'development'],
+  incentives:        ['incentive', 'bonus', 'staff allowance'],
+  permits:           ['permit', 'legal', 'tax', 'license', 'licence'],
+  other:             ['other', 'miscellaneous', 'general'],
+};
+
+async function postOBRToGL(obr: OBR): Promise<{ linesCreated: number; error?: string }> {
+  try {
+    // 1. Group lines by category with subtotals
+    const grouped = groupByCategory(obr.lines ?? []);
+    if (!Object.keys(grouped).length) return { linesCreated: 0, error: 'No line items to post' };
+
+    // 2. Find fiscal period overlapping the OBR period
+    const { data: periods } = await supabase
+      .from('acct_fiscal_periods' as any)
+      .select('id, fiscal_year_id, start_date, end_date')
+      .lte('start_date', obr.period_end)
+      .gte('end_date',   obr.period_start)
+      .limit(1);
+    const period = (periods as any[])?.[0] ?? null;
+    if (!period) return { linesCreated: 0, error: 'No fiscal period covers the OBR date range — GL posting skipped. Map it manually in Budget Planning.' };
+
+    // 3. Fetch expense accounts
+    const { data: accounts } = await supabase
+      .from('acct_accounts' as any)
+      .select('id, code, name_en, account_type')
+      .eq('account_type', 'expense')
+      .order('code');
+    const accts = (accounts as any[]) ?? [];
+    if (!accts.length) return { linesCreated: 0, error: 'No expense GL accounts found — configure Chart of Accounts first.' };
+
+    // 4. For each category, find best-matching account and insert a budget line
+    let created = 0;
+    for (const [cat, { subtotal }] of Object.entries(grouped)) {
+      if (subtotal <= 0) continue;
+      const keywords = CATEGORY_GL_KEYWORDS[cat] ?? [cat];
+      const matched =
+        accts.find(a => keywords.some(kw => (a.name_en as string).toLowerCase().includes(kw))) ??
+        accts.find(a => (a.name_en as string).toLowerCase().includes('other')) ??
+        accts[0];
+      if (!matched) continue;
+
+      // Idempotent — skip if this OBR already has a line for this account+period
+      const { data: existing } = await supabase
+        .from('acct_budget_lines' as any)
+        .select('id')
+        .eq('account_id', matched.id)
+        .eq('period_id',  period.id)
+        .eq('obr_id',     obr.id)
+        .limit(1);
+      if ((existing as any[])?.length) continue;
+
+      const { error: insErr } = await supabase.from('acct_budget_lines' as any).insert({
+        account_id:    matched.id,
+        period_id:     period.id,
+        fiscal_year_id: period.fiscal_year_id,
+        budget_amount: subtotal,
+        obr_id:        obr.id,
+        obr_notes:     `OBR: ${obr.title} — ${categoryLabel(cat)}`,
+      });
+      if (!insErr) created++;
+    }
+    return { linesCreated: created };
+  } catch (e: any) {
+    return { linesCreated: 0, error: e?.message ?? 'Unknown error during GL posting' };
+  }
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
