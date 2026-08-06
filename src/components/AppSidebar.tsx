@@ -470,7 +470,11 @@
     if (!isHidden('/budget-requests')) {
       myMoneyItems.push({ id: 'budget-requests', title: 'Budget Requests', url: '/budget-requests', icon: ClipboardList, priority: 5, isPinned: isPinned('/budget-requests') });
     }
-    if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
+    const myMoneyLabel =
+      (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)
+        ? 'Submissions & Requests'
+        : 'My Submissions';
+    if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: myMoneyLabel, order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
     if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector)) {
