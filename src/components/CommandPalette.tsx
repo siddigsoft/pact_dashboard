@@ -96,6 +96,7 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'My Wallet', url: '/wallet', icon: CreditCard, group: 'My Money', keywords: ['wallet', 'balance', 'money'] },
   { title: 'Cost Submission', url: '/cost-submission', icon: Receipt, group: 'My Money', keywords: ['expense', 'cost', 'submit'] },
   { title: 'Cost Submission Reports', url: '/cost-submission/reports', icon: Receipt, group: 'My Money', keywords: ['expense report'] },
+  { title: 'Budget Requests', url: '/budget-requests', icon: ClipboardList, group: 'My Money', keywords: ['obr', 'operational', 'budget', 'request', 'spend', 'plan', 'forward'] },
 
   // ── Approvals ──────────────────────────────────────────────────────────────
   { title: 'Tier 1 Approvals', url: '/supervisor-approvals', icon: ClipboardCheck, group: 'Approvals', keywords: ['approve', 'supervisor'] },
@@ -123,11 +124,13 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Salary & Retainer Report', url: '/salary-retainer-report', icon: FileBarChart, group: 'HR & People', keywords: ['salary', 'retainer', 'report', 'payroll'] },
 
   // ── Financial Management ───────────────────────────────────────────────────
+  { title: 'Finance Hub', url: '/finance-hub', icon: LayoutDashboard, group: 'Financial Management', keywords: ['finance', 'hub', 'overview'] },
   { title: 'Budget', url: '/budget', icon: DollarSign, group: 'Financial Management', keywords: ['budget', 'money'] },
   { title: 'Wallets Admin', url: '/admin/wallets', icon: CreditCard, group: 'Financial Management', keywords: ['wallet', 'admin'] },
   { title: 'Financial Operations', url: '/financial-operations', icon: TrendingUp, group: 'Financial Management', keywords: ['finance', 'ops'] },
   { title: 'Retainer Management', url: '/retainer-management', icon: Banknote, group: 'Financial Management', keywords: ['retainer', 'payment'] },
   { title: 'Reconciliation Dashboard', url: '/reconciliation-dashboard', icon: ClipboardCheck, group: 'Financial Management', keywords: ['reconcile'] },
+  { title: 'Subscriptions', url: '/finance-hub?tab=subscriptions', icon: Layers, group: 'Financial Management', keywords: ['subscription', 'plan', 'billing', 'renewal'] },
 
   // ── Financial Reports ──────────────────────────────────────────────────────
   { title: 'Wallet Reports', url: '/wallet-reports', icon: BarChart3, group: 'Financial Reports', keywords: ['wallet', 'report'] },
@@ -136,8 +139,11 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Exchange Rates', url: '/exchange-rates', icon: DollarSign, group: 'Financial Reports', keywords: ['currency', 'rate', 'usd', 'sdg'] },
   { title: 'Down-Payment Advance Report', url: '/down-payment-advance-report', icon: FileBarChart, group: 'Financial Reports', keywords: ['down payment', 'advance', 'report'] },
   { title: 'Month-End Summary', url: '/month-end-summary', icon: CalendarCheck, group: 'Financial Reports', keywords: ['month end', 'close', 'summary'] },
+  { title: 'Duplicate Payments Report', url: '/finance-hub?tab=duplicate-payments', icon: FileBarChart, group: 'Financial Reports', keywords: ['duplicate', 'payment', 'report', 'double'] },
+  { title: 'Enumerator Fees Report', url: '/finance-hub?tab=enumerator-fees', icon: Receipt, group: 'Financial Reports', keywords: ['enumerator', 'fees', 'report', 'mmp', 'field'] },
 
   // ── Accounting ─────────────────────────────────────────────────────────────
+  { title: 'Accounting Hub', url: '/accounting', icon: LayoutDashboard, group: 'Accounting', keywords: ['accounting', 'hub', 'overview', 'modules'] },
   { title: 'Finance Dashboard', url: '/accounting/finance-dashboard', icon: LayoutDashboard, group: 'Accounting', keywords: ['finance', 'dashboard', 'accounting'] },
   { title: 'Chart of Accounts', url: '/accounting/coa', icon: Layers, group: 'Accounting', keywords: ['coa', 'chart', 'accounts'] },
   { title: 'Journal Entries', url: '/accounting/journals', icon: BookMarked, group: 'Accounting', keywords: ['journal', 'entries', 'gl', 'posting'] },
@@ -174,6 +180,11 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'GL Bridge Audit', url: '/accounting/gl-audit', icon: Activity, group: 'Accounting', keywords: ['gl', 'bridge', 'audit', 'log', 'coverage'] },
   { title: 'Accounting Search', url: '/accounting/search', icon: Search, group: 'Accounting', keywords: ['search', 'find', 'accounting', 'journal', 'invoice'] },
   { title: 'Accounting Settings', url: '/accounting/settings', icon: Settings, group: 'Accounting', keywords: ['accounting', 'settings', 'config'] },
+  { title: 'Annual Budget', url: '/accounting/annual-budget', icon: PiggyBank, group: 'Accounting', keywords: ['annual', 'budget', 'yearly', 'plan'] },
+  { title: 'Bank Statement Import', url: '/accounting/bank-statement-import', icon: Landmark, group: 'Accounting', keywords: ['bank', 'statement', 'import', 'upload', 'csv'] },
+  { title: 'Intercompany', url: '/accounting/intercompany', icon: ArrowLeftRight, group: 'Accounting', keywords: ['intercompany', 'entity', 'elimination', 'consolidation'] },
+  { title: 'Finance Audit Trail', url: '/accounting/finance-audit-trail', icon: ScrollText, group: 'Accounting', keywords: ['finance', 'audit', 'trail', 'log', 'history'] },
+  { title: 'Analytic Plans', url: '/accounting/analytic-plans', icon: BarChart3, group: 'Accounting', keywords: ['analytic', 'plan', 'cost center', 'dimension', 'allocation'] },
 
   // ── CRM ────────────────────────────────────────────────────────────────────
   { title: 'CRM', url: '/crm', icon: Handshake, group: 'CRM', keywords: ['crm', 'partner', 'donor', 'relationship', 'hub'] },
