@@ -26,12 +26,21 @@ interface Member {
   onLeaveToday: boolean;
 }
 
+/** Roles that see everyone regardless of reporting lines */
+const ADMIN_ROLES = ['superadmin', 'super_admin', 'admin', 'hr_manager', 'hrmanager'];
+function isAdminRole(role: string | null | undefined) {
+  if (!role) return false;
+  return ADMIN_ROLES.includes(role.toLowerCase().replace(/[\s-]/g, '_'));
+}
+
 export default function MyTeam() {
   const { currentUser } = useAppContext();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'direct' | 'all'>('direct');
+
+  const isAdmin = isAdminRole(currentUser?.role);
 
   useEffect(() => { if (currentUser?.id) load(); /* eslint-disable-line */ }, [currentUser?.id]);
 
@@ -41,7 +50,7 @@ export default function MyTeam() {
     const me = currentUser.id;
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, full_name, role, avatar_url, reports_to, departments(name)');
+      .select('id, full_name, role, avatar_url, reports_to, status, departments(name)');
 
     const byId: Record<string, any> = {};
     (profiles ?? []).forEach((p: any) => { byId[p.id] = p; });
@@ -51,14 +60,22 @@ export default function MyTeam() {
     const all = new Set<string>();
     (profiles ?? []).forEach((p: any) => { if (p.reports_to === me) direct.add(p.id); });
 
-    let frontier = new Set(direct);
-    while (frontier.size) {
-      const next = new Set<string>();
-      frontier.forEach(id => all.add(id));
+    if (isAdmin) {
+      // Admins & HR managers see everyone (excluding themselves and inactive).
       (profiles ?? []).forEach((p: any) => {
-        if (p.reports_to && frontier.has(p.reports_to) && !all.has(p.id)) next.add(p.id);
+        if (p.id !== me && p.status !== 'inactive') all.add(p.id);
       });
-      frontier = next;
+    } else {
+      // Regular managers: BFS through reporting chain.
+      let frontier = new Set(direct);
+      while (frontier.size) {
+        const next = new Set<string>();
+        frontier.forEach(id => all.add(id));
+        (profiles ?? []).forEach((p: any) => {
+          if (p.reports_to && frontier.has(p.reports_to) && !all.has(p.id)) next.add(p.id);
+        });
+        frontier = next;
+      }
     }
 
     const ids = Array.from(all);
@@ -171,7 +188,9 @@ export default function MyTeam() {
       ) : visible.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
           {tab === 'direct'
-            ? "You don't have any direct reports yet. Ask HR to set 'reports to' on profiles."
+            ? isAdmin
+              ? 'No employees have a direct reporting line to you. Switch to "All" to see everyone.'
+              : "You don't have any direct reports yet. Ask HR to set 'reports to' on profiles."
             : 'No team members match your search.'}
         </CardContent></Card>
       ) : (

@@ -147,7 +147,7 @@ function buildEmployeeMetrics(profiles: Profile[], tasks: PersonalTask[], projec
   const deptMap: Record<string, string> = {};
   depts.forEach(d => { deptMap[d.id] = d.name; });
 
-  return profiles.map(emp => {
+  return profiles.filter(emp => emp.status !== 'inactive').map(emp => {
     const myTasks = tasks.filter(t => t.user_id === emp.id || t.assigned_to === emp.id);
     const myProjectTasks = projectTasks.filter(t => t.assigned_to === emp.id);
     const allTasks = [...myTasks, ...myProjectTasks.map(t => ({ ...t, user_id: emp.id, description: null, notes: null, assigned_to_name: null, category: null, updated_at: t.created_at } as PersonalTask))];
@@ -194,7 +194,7 @@ function buildEmployeeMetrics(profiles: Profile[], tasks: PersonalTask[], projec
       allTasks: myTasks,
       projectTasksForEmp: myProjectTasks,
     };
-  }).filter(m => m.total > 0);
+  });
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
