@@ -27,11 +27,13 @@ interface Account { id: string; code: string; name_en: string; name_ar: string; 
 interface FiscalYear { id: string; code: string; name_en: string }
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string; period_name: string }
 interface Fund { id: string; code: string; name_en: string }
-interface BudgetLine { id: string; account_id: string; period_id: string | null; fund_id: string | null; fiscal_year_id: string | null; budget_amount: number }
+interface BudgetLine { id: string; account_id: string; period_id: string | null; fund_id: string | null; fiscal_year_id: string | null; budget_amount: number; obr_id: string | null; obr_notes: string | null }
 
 interface Row {
   account_id: string; code: string; name_en: string; name_ar: string; type: string;
   budget: number; budgetLineId: string | null;
+  /** Non-null when this line was auto-posted from an approved Budget Request (OBR) */
+  obrId: string | null; obrNotes: string | null;
 }
 
 const TYPE_LABEL: Record<string, { label: string; color: string }> = {
@@ -115,7 +117,7 @@ export default function AccountingBudgetPlanning() {
   /* ── load budget lines for selected period/fund ── */
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
     if (!pid) return;
-    const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, fiscal_year_id, budget_amount').eq('period_id', pid);
+    const q = supabase.from('acct_budget_lines').select('id, account_id, period_id, fund_id, fiscal_year_id, budget_amount, obr_id, obr_notes').eq('period_id', pid);
     if (fid !== 'all') (q as any).eq('fund_id', fid);
     const { data, error } = await q;
     if (error?.code === '42P01') { setTableExists(false); return; }
@@ -242,6 +244,8 @@ export default function AccountingBudgetPlanning() {
         type: a.account_type,
         budget: budgetMap[a.id]?.budget_amount ?? 0,
         budgetLineId: budgetMap[a.id]?.id ?? null,
+        obrId:    budgetMap[a.id]?.obr_id    ?? null,
+        obrNotes: budgetMap[a.id]?.obr_notes ?? null,
       }));
   }, [accounts, budgetLines, typeFilter, countryFilter, search]);
 
@@ -262,13 +266,47 @@ export default function AccountingBudgetPlanning() {
   const saveEdit = async (row: Row) => {
     const amt = parseFloat(editValue);
     if (isNaN(amt) || amt < 0) { toast({ title: 'Enter a valid amount', variant: 'destructive' }); return; }
+
+    // Block editing OBR-auto-posted lines to prevent double-counting
+    if (row.obrId) {
+      toast({
+        title: 'Cannot edit OBR budget line',
+        description: 'This line was auto-posted from an approved Budget Request. Edit amounts by adjusting the original Budget Request instead.',
+        variant: 'destructive',
+      });
+      setEditingId(null);
+      return;
+    }
+
     setSaving(p => ({ ...p, [row.account_id]: true }));
     const period = periods.find(p => p.id === periodId);
+
     if (row.budgetLineId) {
       const { error } = await supabase.from('acct_budget_lines').update({ budget_amount: amt }).eq('id', row.budgetLineId);
       if (error) toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'Budget updated' }); setEditingId(null); void loadBudgetLines(periodId, fundId); }
     } else {
+      // Before inserting a new manual line, check whether an OBR-sourced line already
+      // exists for this account + period. If one does, block the entry to avoid double-counting.
+      const { data: conflict } = await supabase
+        .from('acct_budget_lines')
+        .select('id, obr_notes')
+        .eq('account_id', row.account_id)
+        .eq('period_id', periodId)
+        .not('obr_id', 'is', null)
+        .limit(1);
+      if ((conflict ?? []).length > 0) {
+        const note = (conflict as any[])[0]?.obr_notes ?? 'a Budget Request';
+        toast({
+          title: 'OBR line already exists for this account / period',
+          description: `A budget line was auto-posted from "${note}". Adding another manual line here would double-count it. Adjust the Budget Request instead.`,
+          variant: 'destructive',
+        });
+        setSaving(p => ({ ...p, [row.account_id]: false }));
+        setEditingId(null);
+        return;
+      }
+
       const { error } = await supabase.from('acct_budget_lines').insert({
         account_id: row.account_id,
         period_id: periodId,
@@ -290,7 +328,7 @@ export default function AccountingBudgetPlanning() {
     const prevPeriod = currentIdx > 0 ? sortedPeriods[currentIdx - 1] : null;
     if (!prevPeriod) { toast({ title: 'No previous period found in this fiscal year', variant: 'destructive' }); return; }
     setCopying(true);
-    const q = supabase.from('acct_budget_lines').select('account_id, fund_id, fiscal_year_id, budget_amount').eq('period_id', prevPeriod.id);
+    const q = supabase.from('acct_budget_lines').select('account_id, fund_id, fiscal_year_id, budget_amount, obr_id').eq('period_id', prevPeriod.id);
     if (fundId !== 'all') (q as any).eq('fund_id', fundId);
     const { data: prevLines, error } = await q;
     if (error || !prevLines?.length) {
@@ -299,8 +337,11 @@ export default function AccountingBudgetPlanning() {
     }
     const currentBudgetMap: Record<string, string> = {};
     for (const bl of budgetLines) currentBudgetMap[bl.account_id] = bl.id;
-    let created = 0, updated = 0;
+    let created = 0, updated = 0, obrSkipped = 0;
     for (const pl of prevLines as any[]) {
+      // Skip lines that were OBR-sourced in the previous period — they will auto-post
+      // again when that period's OBR is approved. Copying them manually would double-count.
+      if (pl.obr_id) { obrSkipped++; continue; }
       if (currentBudgetMap[pl.account_id]) {
         await supabase.from('acct_budget_lines').update({ budget_amount: pl.budget_amount }).eq('id', currentBudgetMap[pl.account_id]);
         updated++;
@@ -314,7 +355,10 @@ export default function AccountingBudgetPlanning() {
         created++;
       }
     }
-    toast({ title: `Copied from ${prevPeriod.period_name}`, description: `${created} created, ${updated} updated` });
+    toast({
+      title: `Copied from ${prevPeriod.period_name}`,
+      description: `${created} created, ${updated} updated${obrSkipped > 0 ? ` · ${obrSkipped} OBR-sourced line(s) skipped (they re-post on OBR approval)` : ''}`,
+    });
     void loadBudgetLines(periodId, fundId);
     setCopying(false);
   };
@@ -363,9 +407,23 @@ export default function AccountingBudgetPlanning() {
 
         const existing = budgetMap[acct.id];
         if (existing) {
+          // Block overwriting OBR-auto-posted lines via CSV import
+          if ((existing as any).obr_id) {
+            skipped++;
+            skippedRows.push(`${code} — skipped: line auto-posted from approved Budget Request (OBR), edit the OBR instead`);
+            continue;
+          }
           const { error } = await supabase.from('acct_budget_lines').update({ budget_amount: amt }).eq('id', existing.id);
           if (!error) updated++; else { skipped++; skippedRows.push(`Update failed: ${code}`); }
         } else {
+          // Block creating a manual line when an OBR line already exists for account + period
+          const { data: obrConflict } = await supabase.from('acct_budget_lines')
+            .select('id').eq('account_id', acct.id).eq('period_id', periodId).not('obr_id', 'is', null).limit(1);
+          if ((obrConflict ?? []).length > 0) {
+            skipped++;
+            skippedRows.push(`${code} — skipped: OBR budget line already exists for this account/period`);
+            continue;
+          }
           const { error } = await supabase.from('acct_budget_lines').insert({
             account_id: acct.id, period_id: periodId,
             fund_id: resolvedFundId,
@@ -652,17 +710,30 @@ export default function AccountingBudgetPlanning() {
                     const isEditing = editingId === row.account_id;
                     const isSaving = saving[row.account_id];
                     return (
-                      <tr key={row.account_id} className={cn('hover:bg-muted/20 transition-colors', row.budget === 0 && ['expense','revenue'].includes(row.type) && 'bg-amber-50/30 dark:bg-amber-950/10')} data-testid={`row-budget-${row.account_id}`}>
+                      <tr key={row.account_id} className={cn('hover:bg-muted/20 transition-colors',
+                          row.obrId ? 'bg-blue-50/30 dark:bg-blue-950/10' :
+                          row.budget === 0 && ['expense','revenue'].includes(row.type) ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''
+                        )} data-testid={`row-budget-${row.account_id}`}>
                         <td className="px-4 py-2.5 font-mono text-xs font-semibold text-blue-600">{row.code}</td>
                         <td className="px-4 py-2.5">
-                          <div className="font-medium text-sm leading-tight">{row.name_en}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-sm leading-tight">{row.name_en}</span>
+                            {row.obrId && (
+                              <span
+                                className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-700 shrink-0"
+                                title={row.obrNotes ?? 'Auto-posted from an approved Budget Request'}
+                              >
+                                OBR
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-muted-foreground" dir="rtl">{row.name_ar}</div>
                         </td>
                         <td className="px-4 py-2.5">
                           <Badge className={cn('text-[10px] px-1.5 py-0 h-4 font-medium border-0', tcfg.color)}>{tcfg.label}</Badge>
                         </td>
                         <td className="px-4 py-2.5 min-w-[180px]">
-                          {isEditing ? (
+                          {isEditing && !row.obrId ? (
                             <div className="flex items-center gap-1">
                               <Input
                                 type="number"
@@ -687,13 +758,14 @@ export default function AccountingBudgetPlanning() {
                               <span className={cn('tabular-nums font-semibold', row.budget === 0 ? 'text-muted-foreground' : 'text-foreground')}>
                                 {row.budget === 0 ? '—' : `$${formatNumber(row.budget)}`}
                               </span>
-                              {row.budget > 0 && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                              {row.budget > 0 && !row.obrId && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                              {row.budget > 0 && row.obrId  && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
                               {row.budget === 0 && ['expense','revenue'].includes(row.type) && <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
                             </div>
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-right">
-                          {canEdit && !isEditing && (
+                          {canEdit && !isEditing && !row.obrId && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -703,6 +775,14 @@ export default function AccountingBudgetPlanning() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
+                          )}
+                          {canEdit && !isEditing && row.obrId && (
+                            <span
+                              className="text-[10px] text-blue-500 dark:text-blue-400 cursor-default select-none"
+                              title={`This line was auto-posted from an approved Budget Request. To change the amount, adjust the Budget Request. Source: ${row.obrNotes ?? 'Budget Request'}`}
+                            >
+                              via OBR
+                            </span>
                           )}
                         </td>
                       </tr>

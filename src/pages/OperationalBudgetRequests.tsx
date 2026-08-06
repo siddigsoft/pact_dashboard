@@ -870,13 +870,19 @@ function ApprovalDialog({ obr, tier, open, onClose, onDone, currentUserId, curre
     setProcessing(null);
     if (error) { toast({ title: 'Action failed', description: error.message, variant: 'destructive' }); return; }
 
-    // On final (tier2) approval → post budget lines to GL and update project_budgets
+    // On final (tier2) approval → post budget lines to GL
     if (tier === 2 && action === 'approve') {
       const glResult = await postOBRToGL({ ...obr, ...updates });
-      if (glResult.linesCreated > 0) {
-        toast({ title: `GL updated — ${glResult.linesCreated} budget line(s) posted`, description: 'Visible in Accounting → Budget Planning.' });
-      } else if (glResult.error) {
-        toast({ title: 'GL posting skipped', description: glResult.error, variant: 'default' });
+      if (glResult.error) {
+        toast({ title: 'GL posting skipped', description: glResult.error });
+      } else if (glResult.linesCreated > 0) {
+        const conflictNote = (glResult.conflictCount ?? 0) > 0
+          ? ` · ⚠️ ${glResult.conflictCount} account(s) already had a manual line — both are now visible in Budget Planning tagged by source.`
+          : '';
+        toast({
+          title: `GL updated — ${glResult.linesCreated} budget line(s) posted`,
+          description: `Visible in Accounting → Budget Planning.${conflictNote}`,
+        });
       }
     }
 
@@ -1266,7 +1272,7 @@ async function postOBRToGL(obr: OBR): Promise<{ linesCreated: number; error?: st
     if (!accts.length) return { linesCreated: 0, error: 'No expense GL accounts found — configure Chart of Accounts first.' };
 
     // 4. For each category, find best-matching account and insert a budget line
-    let created = 0;
+    let created = 0, conflictCount = 0;
     for (const [cat, { subtotal }] of Object.entries(grouped)) {
       if (subtotal <= 0) continue;
       const keywords = CATEGORY_GL_KEYWORDS[cat] ?? [cat];
@@ -1276,7 +1282,7 @@ async function postOBRToGL(obr: OBR): Promise<{ linesCreated: number; error?: st
         accts[0];
       if (!matched) continue;
 
-      // Idempotent — skip if this OBR already has a line for this account+period
+      // Idempotent — skip if this OBR already has a line for this exact account+period+obr combo
       const { data: existing } = await supabase
         .from('acct_budget_lines' as any)
         .select('id')
@@ -1285,6 +1291,21 @@ async function postOBRToGL(obr: OBR): Promise<{ linesCreated: number; error?: st
         .eq('obr_id',     obr.id)
         .limit(1);
       if ((existing as any[])?.length) continue;
+
+      // Conflict check — warn if a manually-entered line already exists for this account+period
+      // (obr_id IS NULL = manually entered). We still post the OBR line as a separate tagged row
+      // so finance can distinguish them, but the count is included in the returned warning message.
+      const { data: manualConflict } = await supabase
+        .from('acct_budget_lines' as any)
+        .select('id')
+        .eq('account_id', matched.id)
+        .eq('period_id',  period.id)
+        .is('obr_id', null)
+        .limit(1);
+      if ((manualConflict as any[])?.length) {
+        // Still post the OBR line (tagged, so distinguishable), but track the conflict
+        conflictCount++;
+      }
 
       const { error: insErr } = await supabase.from('acct_budget_lines' as any).insert({
         account_id:    matched.id,
@@ -1296,9 +1317,9 @@ async function postOBRToGL(obr: OBR): Promise<{ linesCreated: number; error?: st
       });
       if (!insErr) created++;
     }
-    return { linesCreated: created };
+    return { linesCreated: created, conflictCount };
   } catch (e: any) {
-    return { linesCreated: 0, error: e?.message ?? 'Unknown error during GL posting' };
+    return { linesCreated: 0, conflictCount: 0, error: e?.message ?? 'Unknown error during GL posting' };
   }
 }
 
