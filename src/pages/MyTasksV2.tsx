@@ -55,6 +55,7 @@ import {
   type Dependency, type DependencyType, type CreatePersonalTask, type AssignedProjectTask,
 } from '@/hooks/usePersonalTasks';
 import { useMyProjectFieldTasks, type MyFieldTask } from '@/hooks/useProjectTasks';
+import { useMyChecklistTasks, toggleMyChecklistTask, type MyChecklistTask } from '@/hooks/useStageData';
 import type { AppRole } from '@/types/roles';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
@@ -5284,6 +5285,7 @@ export default function MyTasksV2() {
   const { data: projectTasks = [] } = useAssignedProjectTasks(userId);
   const updateProjectTaskStatus = useUpdateProjectTaskStatus();
   const { data: fieldTasks = [] } = useMyProjectFieldTasks(userId);
+  const { data: checklistTasks = [], refetch: refetchChecklist } = useMyChecklistTasks(userId);
 
   // Materialise daily recurring tasks on mount
   useEffect(() => {
@@ -5314,7 +5316,7 @@ export default function MyTasksV2() {
   };
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox' | 'planning'>('planning');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring' | 'field'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring' | 'field' | 'checklist'>('all');
   const searchRef = useRef<HTMLInputElement>(null);
   // Stats
   const stats = useMemo(() => {
@@ -5390,7 +5392,7 @@ export default function MyTasksV2() {
 
   // Category-filtered tasks (on top of status/search filter)
   const categoryFiltered = useMemo(() => {
-    if (categoryFilter === 'field') return []; // field tasks rendered separately
+    if (categoryFilter === 'field' || categoryFilter === 'checklist') return []; // rendered separately
     if (categoryFilter === 'all') return filteredTasks;
     if (categoryFilter === 'personal') return filteredTasks.filter(t => !isRecurringTask(t) && t.category !== 'project-task');
     if (categoryFilter === 'project') return filteredTasks.filter(t => t.category === 'project-task');
@@ -5737,7 +5739,8 @@ export default function MyTasksV2() {
     { key: 'personal' as const,  label: 'Personal',     icon: User,            count: personalTasks.filter(t => t.status !== 'cancelled').length },
     { key: 'project' as const,   label: 'Project',      icon: Briefcase,       count: projectTasks.filter(t => String(t.status) !== 'cancelled').length },
     { key: 'recurring' as const, label: 'Recurring',    icon: RefreshCw,       count: recurringTasks.filter(t => t.status !== 'cancelled').length },
-    { key: 'field' as const,     label: 'Field Tasks',  icon: ClipboardList,   count: fieldTasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'field' as const,      label: 'Field Tasks',  icon: ClipboardList,   count: fieldTasks.filter(t => t.status !== 'cancelled').length },
+    { key: 'checklist' as const,  label: 'Checklist',    icon: CheckSquare,     count: checklistTasks.length },
   ];
 
   return (
@@ -5993,6 +5996,78 @@ export default function MyTasksV2() {
                           </div>
                         </div>
                       )}
+                      {/* Checklist Tasks section — checklist items assigned to this user */}
+                      {(categoryFilter === 'all' || categoryFilter === 'checklist') && checklistTasks.length > 0 && (
+                        <div className="mt-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                              <CheckSquare className="w-3.5 h-3.5 text-amber-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-700">Project Checklist Tasks</p>
+                              <p className="text-[10px] text-slate-400">Checklist items assigned to you</p>
+                            </div>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                              {checklistTasks.length} pending
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {checklistTasks.map((ct: MyChecklistTask) => (
+                              <div
+                                key={ct.id}
+                                className="flex items-center gap-3 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl hover:border-amber-300 transition-all group"
+                                data-testid={`checklist-task-card-${ct.id}`}
+                              >
+                                {/* Tick button */}
+                                <button
+                                  type="button"
+                                  title="Mark complete"
+                                  className="flex-shrink-0 text-muted-foreground hover:text-emerald-600 transition-colors"
+                                  onClick={async () => {
+                                    if (!userId) return;
+                                    try {
+                                      await toggleMyChecklistTask(ct.id, userId);
+                                      refetchChecklist();
+                                    } catch {
+                                      /* silent — user can retry */
+                                    }
+                                  }}
+                                >
+                                  <Square className="h-4 w-4" />
+                                </button>
+                                {/* Text + meta */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-slate-800 truncate">{ct.itemText}</p>
+                                  <p className="text-[10px] text-amber-600 font-medium truncate">{ct.projectName}</p>
+                                </div>
+                                {/* Navigate to the stage */}
+                                <button
+                                  type="button"
+                                  title="Go to project stage"
+                                  className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-400 hover:text-[#1D3461] transition-all shrink-0"
+                                  onClick={() => navigate(`/projects/${ct.projectId}?tab=flow`)}
+                                >
+                                  Open ↗
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Empty state when checklist filter is active */}
+                      {categoryFilter === 'checklist' && checklistTasks.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mb-4">
+                            <CheckSquare className="w-7 h-7 text-amber-400" />
+                          </div>
+                          <p className="text-sm font-semibold text-slate-700 mb-1">No checklist tasks assigned</p>
+                          <p className="text-xs text-slate-400 max-w-xs">
+                            When a PM assigns you a checklist item in a project stage, it will appear here.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Field Tasks section (shown when 'all' or 'field' category is active) */}
                       {(categoryFilter === 'all' || categoryFilter === 'field') && fieldTasks.length > 0 && (
                         <div className="mt-3">

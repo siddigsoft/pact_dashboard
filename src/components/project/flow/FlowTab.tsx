@@ -1724,7 +1724,16 @@ export function FlowTab({
                         />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">
-                        <StageChecklist projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={canEditFlow} />
+                        <StageChecklist
+                          projectId={projectId}
+                          stageId={stage.id}
+                          currentUserId={currentUserId}
+                          currentUserName={currentUser?.fullName}
+                          canEdit={canEditFlow}
+                          teamUserIds={teamUserIds ?? []}
+                          projectName={projectName}
+                          stageName={displayLabel}
+                        />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">
                         <StageAttachments projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={canEditFlow} />

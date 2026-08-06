@@ -27,8 +27,19 @@ export interface StageChecklistItem {
   completed: boolean;
   completedBy: string | null;
   completedAt: string | null;
+  /** User ID this item is assigned to (shows in My Tasks for that person) */
+  assignedTo: string | null;
   createdAt: string;
   sortOrder: number;
+}
+
+export interface MyChecklistTask {
+  id: string;
+  itemText: string;
+  stageId: string;
+  projectId: string;
+  projectName: string;
+  completed: boolean;
 }
 
 export interface DeliverableChecklistItem {
@@ -174,7 +185,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
     queryFn: async (): Promise<StageChecklistItem[]> => {
       const { data, error } = await supabase
         .from('project_stage_checklist')
-        .select('id, item_text, source, deliverable_id, completed, completed_by, completed_at, created_at, sort_order')
+        .select('id, item_text, source, deliverable_id, completed, completed_by, completed_at, assigned_to, created_at, sort_order')
         .eq('project_id', projectId)
         .eq('stage_id', stageId)
         .order('sort_order')
@@ -190,6 +201,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
         completed: r.completed,
         completedBy: r.completed_by,
         completedAt: r.completed_at,
+        assignedTo: r.assigned_to ?? null,
         createdAt: r.created_at,
         sortOrder: r.sort_order,
       }));
@@ -227,6 +239,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
         completed: false,
         completedBy: null,
         completedAt: null,
+        assignedTo: null,
         createdAt: new Date().toISOString(),
         sortOrder: 0,
       };
@@ -279,6 +292,59 @@ export function useStageChecklist(projectId: string, stageId: string) {
     onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
 
+  const assignMutation = useMutation({
+    mutationFn: async ({
+      itemId, assigneeId, assigneeText, assignedById, assignedByName, projName, stageName,
+    }: {
+      itemId: string;
+      assigneeId: string | null;
+      assigneeText: string;
+      assignedById: string;
+      assignedByName: string;
+      projName: string;
+      stageName: string;
+    }) => {
+      const { error } = await supabase
+        .from('project_stage_checklist')
+        .update({ assigned_to: assigneeId })
+        .eq('id', itemId);
+      if (error) throw error;
+      // Notify the newly assigned person (skip if unassigning)
+      if (assigneeId) {
+        supabase.functions.invoke('dispatch-notification', {
+          body: {
+            event_type: 'checklist_item_assigned',
+            entity_type: 'project',
+            entity_id: projectId,
+            priority: 'normal',
+            recipient_ids: [assigneeId],
+            title_en: `Task assigned: ${assigneeText}`,
+            title_ar: `تم تعيين مهمة: ${assigneeText}`,
+            message_en: `${assignedByName} assigned you "${assigneeText}" in stage "${stageName}" — ${projName}`,
+            message_ar: `قام ${assignedByName} بتعيينك لـ "${assigneeText}" في مرحلة "${stageName}" — ${projName}`,
+            triggered_by: assignedById,
+            triggered_by_name: assignedByName,
+            action_url: `/projects/${projectId}?tab=flow`,
+            send_email: true,
+            metadata: { project_name: projName, stage: stageName, item_text: assigneeText },
+          },
+        }).catch(() => {});
+      }
+    },
+    onMutate: async ({ itemId, assigneeId }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
+      qc.setQueryData<StageChecklistItem[]>(key, (curr = []) =>
+        curr.map(item => item.id === itemId ? { ...item, assignedTo: assigneeId } : item),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (item: { id: string; source: 'manual' | 'deliverable'; deliverableId?: string | null }) => {
       if (item.source === 'deliverable' && item.deliverableId) {
@@ -317,8 +383,52 @@ export function useStageChecklist(projectId: string, stageId: string) {
       toggleMutation.mutateAsync({ id, completed, userId }),
     deleteItem: (item: { id: string; source: 'manual' | 'deliverable'; deliverableId?: string | null }) =>
       deleteMutation.mutateAsync(item),
+    assignItem: (
+      itemId: string,
+      assigneeId: string | null,
+      ctx: { assigneeText: string; assignedById: string; assignedByName: string; projName: string; stageName: string },
+    ) => assignMutation.mutateAsync({ itemId, assigneeId, ...ctx }),
     isAdding: addMutation.isPending,
+    isAssigning: assignMutation.isPending,
   };
+}
+
+// ── My Checklist Tasks (for My Tasks view) ─────────────────────────────────
+// Returns all checklist items assigned to the current user that are not yet
+// completed, across every project.
+
+export function useMyChecklistTasks(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['my_checklist_tasks', userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<MyChecklistTask[]> => {
+      const { data, error } = await supabase
+        .from('project_stage_checklist')
+        .select('id, item_text, stage_id, project_id, completed, projects!project_id(name)')
+        .eq('assigned_to', userId!)
+        .eq('completed', false);
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        itemText: r.item_text,
+        stageId: r.stage_id,
+        projectId: r.project_id,
+        projectName: (r.projects as any)?.name ?? 'Project',
+        completed: r.completed,
+      }));
+    },
+    staleTime: 30_000,
+  });
+}
+
+// Simple toggle used from the My Tasks view (no optimistic update needed there —
+// the item disappears on completion).
+export async function toggleMyChecklistTask(itemId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('project_stage_checklist')
+    .update({ completed: true, completed_by: userId, completed_at: new Date().toISOString() })
+    .eq('id', itemId);
+  if (error) throw error;
 }
 
 // ── Deliverables (Overview tab) ─────────────────────────────────────────────
