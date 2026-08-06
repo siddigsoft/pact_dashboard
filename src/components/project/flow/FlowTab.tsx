@@ -94,7 +94,7 @@ import {
 } from '@/components/ui/popover';
 import { GanttView } from './GanttView';
 import { exportFlowPDF, exportFlowDocx } from './flowExport';
-import { workingDaysBetween, DEFAULT_WORKING_DAYS } from '@/utils/workingDays';
+import { workingDaysBetween, calendarDaysBetween, DEFAULT_WORKING_DAYS } from '@/utils/workingDays';
 import { ProjectCalendarDialog } from '@/components/project/ProjectCalendarDialog';
 
 type ViewMode = 'list' | 'gantt';
@@ -891,6 +891,35 @@ export function FlowTab({
   const activeCount = allDefaultStages.filter(s => getStageStatus(s.id) !== 'skipped').length;
   const pct = activeCount > 0 ? Math.round((completedCount / activeCount) * 100) : 0;
 
+  // ── Duration summary ──────────────────────────────────────────────────────
+  const durationSummary = useMemo(() => {
+    // Sum working days for stages that have both plannedStart and plannedEnd
+    let totalScheduledWd = 0;
+    let scheduledStageCount = 0;
+    for (const stage of allDefaultStages) {
+      const entry = (customFlowStages ?? []).find(e => e.id === stage.id);
+      if (entry?.plannedStart && entry?.plannedEnd) {
+        const wd = workingDaysBetween(entry.plannedStart, entry.plannedEnd, localWorkingDays, localCalExceptions);
+        if (wd !== null) {
+          totalScheduledWd += wd;
+          scheduledStageCount++;
+        }
+      }
+    }
+    if (scheduledStageCount === 0) return null;
+
+    const projectSpanDays = calendarDaysBetween(projectStart, projectEnd);
+    // Project span in working days for % calculation
+    const projectSpanWd = projectStart && projectEnd
+      ? workingDaysBetween(projectStart, projectEnd, localWorkingDays, localCalExceptions)
+      : null;
+    const scheduledPct = projectSpanWd && projectSpanWd > 0
+      ? Math.round((totalScheduledWd / projectSpanWd) * 100)
+      : null;
+
+    return { totalScheduledWd, scheduledStageCount, projectSpanDays, scheduledPct };
+  }, [allDefaultStages, customFlowStages, projectStart, projectEnd, localWorkingDays, localCalExceptions]);
+
   return (
     <div className="space-y-3">
 
@@ -1058,6 +1087,50 @@ export function FlowTab({
           <span>{Math.max(0, remainingCount)} remaining</span>
         </div>
       </div>
+
+      {/* ── Duration summary strip ─────────────────────────────── */}
+      {durationSummary && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-[#1D3461]/15 bg-[#0F2041]/[0.04] dark:bg-[#1D3461]/10 px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5 text-[#1D3461]/70 flex-shrink-0" />
+            <span className="text-xs text-muted-foreground">Project span:</span>
+            <span className="text-xs font-semibold text-foreground">
+              {durationSummary.projectSpanDays !== null ? `${durationSummary.projectSpanDays} cal days` : '—'}
+            </span>
+          </div>
+          <div className="w-px h-3.5 bg-border hidden sm:block" />
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-[#1D3461]/70 flex-shrink-0" />
+            <span className="text-xs text-muted-foreground">Scheduled stage days:</span>
+            <span className="text-xs font-semibold text-foreground">
+              {durationSummary.totalScheduledWd} wd
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              ({durationSummary.scheduledStageCount} of {allDefaultStages.length} stages)
+            </span>
+          </div>
+          {durationSummary.scheduledPct !== null && (
+            <>
+              <div className="w-px h-3.5 bg-border hidden sm:block" />
+              <div className="flex items-center gap-1.5">
+                <Percent className="h-3.5 w-3.5 text-[#1D3461]/70 flex-shrink-0" />
+                <span className="text-xs text-muted-foreground">Span scheduled:</span>
+                <span className={cn(
+                  'text-xs font-semibold',
+                  durationSummary.scheduledPct > 100 ? 'text-destructive' :
+                  durationSummary.scheduledPct >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+                  'text-amber-600 dark:text-amber-400',
+                )}>
+                  {durationSummary.scheduledPct}%
+                </span>
+                {durationSummary.scheduledPct > 100 && (
+                  <span className="text-[10px] text-destructive font-medium">over-scheduled</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Gantt View ─────────────────────────────────────────── */}
       {viewMode === 'gantt' && (
