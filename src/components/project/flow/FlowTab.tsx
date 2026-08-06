@@ -329,7 +329,7 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
             return (
               <div key={entry.id} className={cn(
                 'rounded-xl border transition-colors overflow-hidden',
-                entry.skipped ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 opacity-70' : 'bg-white dark:bg-slate-900 border-border',
+                entry.removedFromTemplate ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 opacity-70' : 'bg-white dark:bg-slate-900 border-border',
                 isExpanded && 'border-[#1D3461]/30 shadow-sm',
               )}>
                 {/* Row header */}
@@ -343,7 +343,7 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className={cn('text-sm font-medium truncate', entry.skipped && 'line-through text-muted-foreground')}>
+                      <p className={cn('text-sm font-medium truncate', entry.removedFromTemplate && 'line-through text-muted-foreground')}>
                         {displayLabel}
                         {customStage && (
                           <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 rounded px-1 py-0.5 font-medium" title="Stage added by you">
@@ -394,32 +394,32 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                   </Button>
                   {/* Delete / restore for ALL stages.
                       Custom stages are removed from the list entirely;
-                      template stages are toggled skipped so they are excluded
-                      from the active flow but can be restored via Reset or this button. */}
+                      template stages set removedFromTemplate=true which hides them completely
+                      from the main stage view (unlike runtime-skip which shows them dimmed). */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className={cn(
                       'h-7 w-7 flex-shrink-0 hover:bg-destructive/10',
-                      !customStage && entry.skipped
+                      !customStage && entry.removedFromTemplate
                         ? 'text-amber-500 hover:text-amber-700'
                         : 'text-muted-foreground hover:text-destructive',
                     )}
                     onClick={() =>
                       customStage
                         ? removeCustomStage(entry.id)
-                        : updateEntry(entry.id, { skipped: !entry.skipped })
+                        : updateEntry(entry.id, { removedFromTemplate: !entry.removedFromTemplate })
                     }
                     title={
                       customStage
                         ? 'Delete this added stage'
-                        : entry.skipped
+                        : entry.removedFromTemplate
                         ? 'Restore stage to flow'
                         : 'Remove stage from flow'
                     }
                     data-testid={`button-delete-stage-${entry.id}`}
                   >
-                    {!customStage && entry.skipped
+                    {!customStage && entry.removedFromTemplate
                       ? <RotateCcw className="h-3.5 w-3.5" />
                       : <Trash2 className="h-3.5 w-3.5" />
                     }

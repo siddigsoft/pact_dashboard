@@ -33,6 +33,8 @@ export interface CustomStageEntry {
   dependencies?: string[];
   /** Mark this stage as a project milestone */
   isMilestone?: boolean;
+  /** Removed from flow via Edit Flow trash button — hides from stage list entirely (not the same as runtime-skip) */
+  removedFromTemplate?: boolean;
   /** Manual % complete override (0-100). If null, derived from checklist. */
   percentComplete?: number | null;
 }
@@ -376,17 +378,18 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   };
 
   // displayStages = everything the UI should iterate over (default + user-added),
-  // including skipped ones. Order follows customEntries when present, else default.
+  // including runtime-skipped ones but EXCLUDING stages removed in Edit Flow.
+  // Order follows customEntries when present, else default.
   const displayStages: FlowStage[] = hasCustom
-    ? customEntries.map(resolveStageForEntry)
+    ? customEntries.filter(ce => !ce.removedFromTemplate).map(resolveStageForEntry)
     : allDefaultStages;
 
   // effectiveStages = displayStages minus skipped (used for grouping / pointer math)
   const effectiveStages: FlowStage[] = hasCustom
-    ? customEntries.filter(ce => !ce.skipped).map(resolveStageForEntry)
+    ? customEntries.filter(ce => !ce.skipped && !ce.removedFromTemplate).map(resolveStageForEntry)
     : allDefaultStages;
 
-  const skippedIds = new Set(customEntries.filter(e => e.skipped).map(e => e.id));
+  const skippedIds = new Set(customEntries.filter(e => e.skipped && !e.removedFromTemplate).map(e => e.id));
 
   const historyQuery = useQuery({
     queryKey: ['project_flow_log', project.id],
