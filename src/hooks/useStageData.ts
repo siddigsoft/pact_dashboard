@@ -192,12 +192,46 @@ export function useStageChecklist(projectId: string, stageId: string) {
 
   const addMutation = useMutation({
     mutationFn: async ({ text, userId }: { text: string; userId?: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('project_stage_checklist')
-        .insert({ project_id: projectId, stage_id: stageId, item_text: text, created_by: userId });
+        .insert({ project_id: projectId, stage_id: stageId, item_text: text, created_by: userId })
+        .select('id, item_text, completed, completed_by, completed_at, created_at, sort_order')
+        .single();
       if (error) throw error;
+      return {
+        id: data.id,
+        itemText: data.item_text,
+        completed: data.completed,
+        completedBy: data.completed_by,
+        completedAt: data.completed_at,
+        createdAt: data.created_at,
+        sortOrder: data.sort_order,
+      } as StageChecklistItem;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onMutate: async ({ text }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
+      const optimistic: StageChecklistItem = {
+        id: `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        itemText: text,
+        completed: false,
+        completedBy: null,
+        completedAt: null,
+        createdAt: new Date().toISOString(),
+        sortOrder: 0,
+      };
+      qc.setQueryData<StageChecklistItem[]>(key, [...previous, optimistic]);
+      return { previous, optimisticId: optimistic.id };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSuccess: (saved, _vars, ctx) => {
+      qc.setQueryData<StageChecklistItem[]>(key, (curr = []) =>
+        curr.map(item => (item.id === ctx?.optimisticId ? saved : item)),
+      );
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const toggleMutation = useMutation({
@@ -212,7 +246,27 @@ export function useStageChecklist(projectId: string, stageId: string) {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onMutate: async ({ id, completed, userId }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
+      qc.setQueryData<StageChecklistItem[]>(key, (curr = []) =>
+        curr.map(item =>
+          item.id === id
+            ? {
+                ...item,
+                completed,
+                completedBy: completed ? (userId ?? null) : null,
+                completedAt: completed ? new Date().toISOString() : null,
+              }
+            : item,
+        ),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const deleteMutation = useMutation({
@@ -220,7 +274,16 @@ export function useStageChecklist(projectId: string, stageId: string) {
       const { error } = await supabase.from('project_stage_checklist').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
+      qc.setQueryData<StageChecklistItem[]>(key, previous.filter(item => item.id !== id));
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const items = query.data ?? [];

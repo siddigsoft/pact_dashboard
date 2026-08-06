@@ -25,10 +25,11 @@ export function StageChecklist({ projectId, stageId, currentUserId, canEdit }: P
   const handleAdd = async () => {
     const text = newText.trim();
     if (!text) return;
+    setNewText('');
     try {
       await addItem(text, currentUserId);
-      setNewText('');
     } catch {
+      setNewText(text);
       toast({ title: 'Failed to add item', variant: 'destructive' });
     }
   };
