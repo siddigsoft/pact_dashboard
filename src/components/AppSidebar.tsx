@@ -12,6 +12,7 @@
     Link2,
     Database,
     ClipboardList,
+    Copy,
     LogOut,
     LayoutDashboard,
     ChevronUp,
@@ -154,6 +155,8 @@
     'finance-accounting-p2p',
     'finance-accounting-controls',
     'finance-accounting-advanced',
+    'finance-hub-operations',
+    'finance-hub-reports',
     'finance-reports',
     'finance-management',
     'admin',
@@ -490,12 +493,31 @@
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
-    // ── Finance Hub (replaces Financial Management + Financial Reports) ──────
-    const finHubItems: MenuGroup['items'] = [];
-    if (!isHidden('/finance-hub') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector)) {
-      finHubItems.push({ id: 'finance-hub', title: "Finance Hub", url: "/finance-hub", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') });
+    // ── Finance Hub — 2 sections mirroring FinanceHub page ───────────────────
+    const finHubAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector;
+    if (finHubAccess && !isHidden('/finance-hub')) {
+      // ── 1. Operations ─────────────────────────────────────────────────────
+      const fhOpsItems: MenuGroup['items'] = [];
+      fhOpsItems.push({ id: 'finance-hub-home',         title: 'Finance Hub',          url: '/finance-hub',                        icon: LayoutDashboard, priority: 1, isPinned: isPinned('/finance-hub') });
+      fhOpsItems.push({ id: 'finance-hub-budget',       title: 'Budget',               url: '/finance-hub?tab=budget',             icon: DollarSign,      priority: 2, isPinned: isPinned('/finance-hub?tab=budget') });
+      fhOpsItems.push({ id: 'finance-hub-fin-ops',      title: 'Financial Operations', url: '/finance-hub?tab=financial-ops',      icon: Activity,        priority: 3, isPinned: isPinned('/finance-hub?tab=financial-ops') });
+      fhOpsItems.push({ id: 'finance-hub-wallets',      title: 'Wallets Admin',        url: '/finance-hub?tab=admin-wallets',      icon: CreditCard,      priority: 4, isPinned: isPinned('/finance-hub?tab=admin-wallets') });
+      fhOpsItems.push({ id: 'finance-hub-recon',        title: 'Reconciliation',       url: '/finance-hub?tab=reconciliation',     icon: RefreshCw,       priority: 5, isPinned: isPinned('/finance-hub?tab=reconciliation') });
+      fhOpsItems.push({ id: 'finance-hub-subscriptions',title: 'Subscriptions',        url: '/finance-hub?tab=subscriptions',      icon: Layers,          priority: 6, isPinned: isPinned('/finance-hub?tab=subscriptions') });
+      groups.push({ id: 'finance-hub-operations', label: 'Finance Hub', order: 5.3, items: fhOpsItems, parentGroup: 'finance' } as any);
+
+      // ── 2. Reports ────────────────────────────────────────────────────────
+      const fhReportItems: MenuGroup['items'] = [];
+      fhReportItems.push({ id: 'finance-hub-wallet-rpt',    title: 'Wallet Reports',            url: '/finance-hub?tab=wallet-reports',      icon: BarChart3,     priority: 1, isPinned: isPinned('/finance-hub?tab=wallet-reports') });
+      fhReportItems.push({ id: 'finance-hub-advance-rpt',   title: 'Transport Advance Report',  url: '/finance-hub?tab=advance-report',      icon: ClipboardList, priority: 2, isPinned: isPinned('/finance-hub?tab=advance-report') });
+      fhReportItems.push({ id: 'finance-hub-dup-payments',  title: 'Duplicate Payments',        url: '/finance-hub?tab=duplicate-payments',  icon: Copy,          priority: 3, isPinned: isPinned('/finance-hub?tab=duplicate-payments') });
+      fhReportItems.push({ id: 'finance-hub-cost-pred',     title: 'Cost Predictions',          url: '/finance-hub?tab=cost-predictions',    icon: TrendingUp,    priority: 4, isPinned: isPinned('/finance-hub?tab=cost-predictions') });
+      fhReportItems.push({ id: 'finance-hub-fx',            title: 'Exchange Rates',            url: '/finance-hub?tab=exchange-rates',      icon: ArrowLeftRight,priority: 5, isPinned: isPinned('/finance-hub?tab=exchange-rates') });
+      fhReportItems.push({ id: 'finance-hub-salary-rpt',    title: 'Salary & Retainer Report',  url: '/finance-hub?tab=salary-retainer',     icon: Users,         priority: 6, isPinned: isPinned('/finance-hub?tab=salary-retainer') });
+      fhReportItems.push({ id: 'finance-hub-month-end',     title: 'Month-End Summary',         url: '/finance-hub?tab=month-end',           icon: CalendarCheck, priority: 7, isPinned: isPinned('/finance-hub?tab=month-end') });
+      fhReportItems.push({ id: 'finance-hub-enum-fees',     title: 'Enumerator Fees Report',    url: '/finance-hub?tab=enumerator-fees',     icon: Receipt,       priority: 8, isPinned: isPinned('/finance-hub?tab=enumerator-fees') });
+      groups.push({ id: 'finance-hub-reports', label: 'Finance Reports', order: 5.31, items: fhReportItems, parentGroup: 'finance' } as any);
     }
-    if (finHubItems.length) groups.push({ id: 'finance-management', label: "Finance Hub", order: 5.3, items: finHubItems, parentGroup: 'finance' } as any);
 
     // ── Pre-Funding module ────────────────────────────────────────────
     const preFundItems: MenuGroup['items'] = [];
