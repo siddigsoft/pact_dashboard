@@ -86,7 +86,7 @@ import type { FlowStage, StageActionIcon } from '@/config/projectFlows';
 import { StageAssignees } from './StageAssignees';
 import { StageChecklist } from './StageChecklist';
 import { StageAttachments } from './StageAttachments';
-import { useAllStageAssignees } from '@/hooks/useStageData';
+import { useAllStageAssignees, useAllStageChecklist } from '@/hooks/useStageData';
 import {
   Popover,
   PopoverContent,
@@ -671,6 +671,19 @@ export function FlowTab({
   // Load ALL stage assignees for this project in one query
   const { data: allAssignees = [] } = useAllStageAssignees(projectId);
 
+  // Load ALL stage checklist items for this project in one query (used by Gantt sub-bars)
+  const { data: allChecklistItems = [] } = useAllStageChecklist(projectId);
+
+  // Map: stageId → checklist items[] (for Gantt sub-bars)
+  const checklistByStage = useMemo(() => {
+    const map: Record<string, typeof allChecklistItems> = {};
+    allChecklistItems.forEach(item => {
+      if (!map[item.stageId]) map[item.stageId] = [];
+      map[item.stageId].push(item);
+    });
+    return map;
+  }, [allChecklistItems]);
+
   // Map: stageId → assignees[]
   const assigneesByStage = useMemo(() => {
     const map: Record<string, typeof allAssignees> = {};
@@ -1143,6 +1156,7 @@ export function FlowTab({
           projectStart={projectStart}
           projectEnd={projectEnd}
           onEditFlow={canEditFlow ? () => setEditOpen(true) : undefined}
+          checklistByStage={checklistByStage}
         />
       )}
 

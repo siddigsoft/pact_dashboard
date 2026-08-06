@@ -70,6 +70,46 @@ export interface StageAttachment {
   createdAt: string;
 }
 
+// ── All Checklist Items (single query for whole project) ───────────────────
+
+export interface AllStageChecklistItem extends StageChecklistItem {
+  stageId: string;
+}
+
+export function useAllStageChecklist(projectId: string) {
+  return useQuery({
+    queryKey: ['all_stage_checklist', projectId],
+    queryFn: async (): Promise<AllStageChecklistItem[]> => {
+      const { data, error } = await supabase
+        .from('project_stage_checklist')
+        .select('id, stage_id, item_text, source, deliverable_id, completed, completed_by, completed_at, assigned_to, planned_start, planned_end, created_at, sort_order')
+        .eq('project_id', projectId)
+        .order('sort_order')
+        .order('created_at');
+      if (error) throw error;
+      return (data ?? [])
+        .filter((r: any) => !String(r.item_text ?? '').startsWith('__deleted_deliverable__:'))
+        .map((r: any) => ({
+          id: r.id,
+          stageId: r.stage_id,
+          itemText: r.item_text,
+          source: (r.source ?? 'manual') as 'manual' | 'deliverable',
+          deliverableId: r.deliverable_id ?? null,
+          completed: r.completed,
+          completedBy: r.completed_by ?? null,
+          completedAt: r.completed_at ?? null,
+          assignedTo: r.assigned_to ?? null,
+          plannedStart: r.planned_start ?? null,
+          plannedEnd: r.planned_end ?? null,
+          createdAt: r.created_at,
+          sortOrder: r.sort_order,
+        }));
+    },
+    staleTime: 30_000,
+    enabled: !!projectId,
+  });
+}
+
 // ── All Assignees (single query for whole project) ─────────────────────────
 
 export interface AllStageAssignee extends StageAssignee {
