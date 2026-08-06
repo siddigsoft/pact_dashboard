@@ -555,7 +555,7 @@
       if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Financial Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
       if (!isHidden('/accounting/fiscal-years'))       coreItems.push({ id: 'accounting-fiscal-yrs',  title: 'Fiscal Years',         url: '/accounting?tab=fiscal-years',         icon: Calendar,        priority: 7,  isPinned: isPinned('/accounting?tab=fiscal-years') });
       if (!isHidden('/accounting/search'))             coreItems.push({ id: 'accounting-search',      title: 'Quick Search',         url: '/accounting?tab=search',               icon: Search,          priority: 8,  isPinned: isPinned('/accounting?tab=search') });
-      if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'finance' } as any);
+      if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'accounting' } as any);
 
       // ── 2. Financial Operations ─────────────────────────────────────────────
       const finOpsItems: MenuGroup['items'] = [];
@@ -568,7 +568,7 @@
       if (!isHidden('/accounting/fixed-assets'))       finOpsItems.push({ id: 'accounting-fixed-assets',  title: 'Fixed Assets',         url: '/accounting?tab=fixed-assets',         icon: Package,     priority: 7,  isPinned: isPinned('/accounting?tab=fixed-assets') });
       if (!isHidden('/accounting/gl-bridge'))          finOpsItems.push({ id: 'accounting-gl-bridge',     title: 'GL Bridge Engine',     url: '/accounting?tab=gl-bridge',            icon: Zap,         priority: 8,  isPinned: isPinned('/accounting?tab=gl-bridge') });
       if (!isHidden('/accounting/bank-statement-import')) finOpsItems.push({ id: 'accounting-bank-import', title: 'Bank Statement Import', url: '/accounting?tab=bank-statement-import', icon: Landmark,  priority: 9,  isPinned: isPinned('/accounting?tab=bank-statement-import') });
-      if (finOpsItems.length) groups.push({ id: 'finance-accounting-ops', label: 'Financial Operations', order: 5.51, items: finOpsItems, parentGroup: 'finance' } as any);
+      if (finOpsItems.length) groups.push({ id: 'finance-accounting-ops', label: 'Financial Operations', order: 5.51, items: finOpsItems, parentGroup: 'accounting' } as any);
 
       // ── 3. Procurement & P2P ────────────────────────────────────────────────
       const p2pItems: MenuGroup['items'] = [];
@@ -580,7 +580,7 @@
       if (!isHidden('/accounting/cheque-register'))          p2pItems.push({ id: 'accounting-cheque',       title: 'Cheque Register',         url: '/accounting?tab=cheque-register',       icon: CreditCard,   priority: 6, isPinned: isPinned('/accounting?tab=cheque-register') });
       if (!isHidden('/accounting/ap-aging'))                 p2pItems.push({ id: 'accounting-ap-aging',     title: 'AP Aging',                url: '/accounting?tab=ap-aging',              icon: Clock,        priority: 7, isPinned: isPinned('/accounting?tab=ap-aging') });
       if (!isHidden('/accounting/expense-reports'))          p2pItems.push({ id: 'accounting-exp-reports',  title: 'Expense Reports',         url: '/accounting?tab=expense-reports',       icon: Receipt,      priority: 8, isPinned: isPinned('/accounting?tab=expense-reports') });
-      if (p2pItems.length) groups.push({ id: 'finance-accounting-p2p', label: 'Procurement & P2P', order: 5.52, items: p2pItems, parentGroup: 'finance' } as any);
+      if (p2pItems.length) groups.push({ id: 'finance-accounting-p2p', label: 'Procurement & P2P', order: 5.52, items: p2pItems, parentGroup: 'accounting' } as any);
 
       // ── 4. Controls & Compliance ────────────────────────────────────────────
       const controlsItems: MenuGroup['items'] = [];
@@ -593,7 +593,7 @@
       if (acctAuditAccess && !isHidden('/accounting/donor-reports')) controlsItems.push({ id: 'accounting-donor', title: 'Donor Fund Reports', url: '/accounting?tab=donor-reports',  icon: Heart,          priority: 7, isPinned: isPinned('/accounting?tab=donor-reports') });
       if (!isHidden('/accounting/sod'))                 controlsItems.push({ id: 'accounting-sod',           title: 'Segregation of Duties',url: '/accounting?tab=sod',                  icon: ShieldCheck,    priority: 8, isPinned: isPinned('/accounting?tab=sod') });
       if (!isHidden('/accounting/aml'))                 controlsItems.push({ id: 'accounting-aml',           title: 'AML & Compliance',     url: '/accounting?tab=aml',                  icon: ShieldAlert,    priority: 9, isPinned: isPinned('/accounting?tab=aml') });
-      if (controlsItems.length) groups.push({ id: 'finance-accounting-controls', label: 'Controls & Compliance', order: 5.53, items: controlsItems, parentGroup: 'finance' } as any);
+      if (controlsItems.length) groups.push({ id: 'finance-accounting-controls', label: 'Controls & Compliance', order: 5.53, items: controlsItems, parentGroup: 'accounting' } as any);
 
       // ── 5. Advanced & Reporting ─────────────────────────────────────────────
       const advancedItems: MenuGroup['items'] = [];
@@ -604,7 +604,7 @@
       if (!isHidden('/accounting/finance-audit-trail'))advancedItems.push({ id: 'accounting-audit-trail', title: 'Finance Audit Trail',  url: '/accounting?tab=finance-audit-trail',  icon: ScrollText,  priority: 5, isPinned: isPinned('/accounting?tab=finance-audit-trail') });
       if (!isHidden('/accounting/intercompany'))       advancedItems.push({ id: 'accounting-intercompany',title: 'Intercompany',         url: '/accounting?tab=intercompany',         icon: ArrowLeftRight, priority: 6, isPinned: isPinned('/accounting?tab=intercompany') });
       if (!isHidden('/accounting/settings'))           advancedItems.push({ id: 'accounting-settings',    title: 'Accounting Settings',  url: '/accounting?tab=settings',             icon: Settings,    priority: 7, isPinned: isPinned('/accounting?tab=settings') });
-      if (advancedItems.length) groups.push({ id: 'finance-accounting-advanced', label: 'Advanced & Reporting', order: 5.54, items: advancedItems, parentGroup: 'finance' } as any);
+      if (advancedItems.length) groups.push({ id: 'finance-accounting-advanced', label: 'Advanced & Reporting', order: 5.54, items: advancedItems, parentGroup: 'accounting' } as any);
     }
 
     // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
@@ -1251,6 +1251,7 @@
 
           {(() => {
             const financeSubGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => g.parentGroup === 'finance');
+            const accountingSubGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => g.parentGroup === 'accounting');
             const regularGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => !g.parentGroup);
             const allGroupsSorted = [...regularGroups].sort((a, b) => a.order - b.order);
 
@@ -1422,6 +1423,35 @@
               );
             };
 
+            const renderSubGroups = (subGroups: typeof financeSubGroups) =>
+              subGroups.sort((a, b) => a.order - b.order).map(subGroup => {
+                const isSubCollapsed = collapsedGroups.has(subGroup.id);
+                return (
+                  <Collapsible key={subGroup.id} open={!isSubCollapsed}>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full h-7 px-3 text-[11px] font-medium text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleGroupCollapse(subGroup.id)}
+                        data-testid={`group-label-${subGroup.id}`}
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-3 w-3 shrink-0 transition-transform duration-200",
+                            isSubCollapsed && "-rotate-90"
+                          )}
+                        />
+                        <span className="flex-1 truncate text-left">{subGroup.label}</span>
+                        <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      {renderMenuItems(subGroup.items, true)}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              });
+
             const renderFinanceSection = (testIdSuffix = '') => {
               const isFinanceCollapsed = collapsedGroups.has('finance-parent');
               return (
@@ -1429,52 +1459,44 @@
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
                     <CollapsibleTrigger asChild>
                       <SidebarGroupLabel
-                        className={cn(
-                          SIDEBAR_GROUP_LABEL,
-                          "text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30"
-                        )}
+                        className={cn(SIDEBAR_GROUP_LABEL, "text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30")}
                         onClick={() => toggleGroupCollapse('finance-parent')}
                         data-testid={`group-label-finance-parent${testIdSuffix}`}
                       >
-                        <ChevronDown
-                          className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                            isFinanceCollapsed && "-rotate-90"
-                          )}
-                        />
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isFinanceCollapsed && "-rotate-90")} />
                         <Banknote className="h-3.5 w-3.5 shrink-0" />
                         <span className="flex-1 truncate">Payments & Finance</span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
-                          const isSubCollapsed = collapsedGroups.has(subGroup.id);
-                          return (
-                            <Collapsible key={subGroup.id} open={!isSubCollapsed}>
-                              <CollapsibleTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="w-full h-7 px-3 text-[11px] font-medium text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
-                                  onClick={() => toggleGroupCollapse(subGroup.id)}
-                                  data-testid={`group-label-${subGroup.id}`}
-                                >
-                                  <ChevronDown
-                                    className={cn(
-                                      "h-3 w-3 shrink-0 transition-transform duration-200",
-                                      isSubCollapsed && "-rotate-90"
-                                    )}
-                                  />
-                                  <span className="flex-1 truncate text-left">{subGroup.label}</span>
-                                  <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
-                                </button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                {renderMenuItems(subGroup.items, true)}
-                              </CollapsibleContent>
-                            </Collapsible>
-                          );
-                        })}
+                        {renderSubGroups(financeSubGroups)}
+                      </SidebarGroupContent>
+                    </CollapsibleContent>
+                  </SidebarGroup>
+                </Collapsible>
+              );
+            };
+
+            const renderAccountingSection = (testIdSuffix = '') => {
+              const isAcctCollapsed = collapsedGroups.has('accounting-parent');
+              return (
+                <Collapsible key={`accounting-parent${testIdSuffix}`} open={!isAcctCollapsed}>
+                  <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
+                    <CollapsibleTrigger asChild>
+                      <SidebarGroupLabel
+                        className={cn(SIDEBAR_GROUP_LABEL, "text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30")}
+                        onClick={() => toggleGroupCollapse('accounting-parent')}
+                        data-testid={`group-label-accounting-parent${testIdSuffix}`}
+                      >
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isAcctCollapsed && "-rotate-90")} />
+                        <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1 truncate">Accounting</span>
+                      </SidebarGroupLabel>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarGroupContent className="space-y-1 pt-0.5">
+                        {renderSubGroups(accountingSubGroups)}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
@@ -1484,11 +1506,16 @@
 
             const rendered: JSX.Element[] = [];
             let financeInserted = false;
+            let accountingInserted = false;
 
             for (const group of allGroupsSorted) {
               if (!financeInserted && group.order > 5 && financeSubGroups.length > 0) {
                 financeInserted = true;
                 rendered.push(renderFinanceSection());
+              }
+              if (financeInserted && !accountingInserted && accountingSubGroups.length > 0) {
+                accountingInserted = true;
+                rendered.push(renderAccountingSection());
               }
 
               const isCollapsed = collapsedGroups.has(group.id);
@@ -1529,6 +1556,9 @@
 
             if (!financeInserted && financeSubGroups.length > 0) {
               rendered.push(renderFinanceSection('-end'));
+            }
+            if (!accountingInserted && accountingSubGroups.length > 0) {
+              rendered.push(renderAccountingSection('-end'));
             }
 
             return rendered;
