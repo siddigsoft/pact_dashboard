@@ -400,7 +400,20 @@ export function useProjectDeliverablesChecklist(
         .eq('id', id);
       if (error) throw error;
     },
+    // Optimistic update — checkbox flips instantly; DB write reconciles in background
+    onMutate: async ({ id, completed }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<DeliverableChecklistItem[]>(key) ?? [];
+      qc.setQueryData<DeliverableChecklistItem[]>(key, (curr = []) =>
+        curr.map(item => (item.id === id ? { ...item, completed } : item)),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx: any) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
     onSuccess: (_data, variables) => {
+      // Invalidate to confirm; UI is already updated via onMutate
       qc.invalidateQueries({ queryKey: key });
       const item = (query.data ?? []).find(i => i.id === variables.id);
       if (item) {

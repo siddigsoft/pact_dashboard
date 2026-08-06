@@ -374,21 +374,56 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                     <Label htmlFor={`skip-${entry.id}`} className="text-xs text-muted-foreground cursor-pointer">Skip</Label>
                     <Switch id={`skip-${entry.id}`} checked={entry.skipped ?? false} onCheckedChange={() => updateEntry(entry.id, { skipped: !entry.skipped })} />
                   </div>
+                  {/* Quick milestone toggle — one click, no expand needed */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      'h-7 w-7 flex-shrink-0 transition-colors',
+                      entry.isMilestone
+                        ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
+                        : 'text-muted-foreground/40 hover:text-amber-500 hover:bg-amber-50',
+                    )}
+                    onClick={() => updateEntry(entry.id, { isMilestone: !entry.isMilestone })}
+                    title={entry.isMilestone ? 'Remove milestone flag' : 'Mark as Milestone'}
+                  >
+                    <Diamond className={cn('h-3.5 w-3.5', entry.isMilestone && 'fill-amber-400')} />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => toggleEditExpand(entry.id)} title="Edit details">
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
-                  {customStage && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => removeCustomStage(entry.id)}
-                      title="Delete this added stage"
-                      data-testid={`button-delete-stage-${entry.id}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
+                  {/* Delete / restore for ALL stages.
+                      Custom stages are removed from the list entirely;
+                      template stages are toggled skipped so they are excluded
+                      from the active flow but can be restored via Reset or this button. */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      'h-7 w-7 flex-shrink-0 hover:bg-destructive/10',
+                      !customStage && entry.skipped
+                        ? 'text-amber-500 hover:text-amber-700'
+                        : 'text-muted-foreground hover:text-destructive',
+                    )}
+                    onClick={() =>
+                      customStage
+                        ? removeCustomStage(entry.id)
+                        : updateEntry(entry.id, { skipped: !entry.skipped })
+                    }
+                    title={
+                      customStage
+                        ? 'Delete this added stage'
+                        : entry.skipped
+                        ? 'Restore stage to flow'
+                        : 'Remove stage from flow'
+                    }
+                    data-testid={`button-delete-stage-${entry.id}`}
+                  >
+                    {!customStage && entry.skipped
+                      ? <RotateCcw className="h-3.5 w-3.5" />
+                      : <Trash2 className="h-3.5 w-3.5" />
+                    }
+                  </Button>
                 </div>
 
                 {/* Expanded editor */}
@@ -739,6 +774,28 @@ export function FlowTab({
       toast({ title: 'Failed to save progress', description: err.message, variant: 'destructive' });
     } finally {
       setPercentSaving(null);
+    }
+  };
+
+  // Toggle isMilestone for a specific stage inline (no dialog needed)
+  const [milestoneSaving, setMilestoneSaving] = useState<string | null>(null);
+  const saveMilestoneForStage = async (stageId: string, isMilestone: boolean) => {
+    setMilestoneSaving(stageId);
+    try {
+      const existing = (customFlowStages ?? []) as CustomStageEntry[];
+      const base: CustomStageEntry[] = existing.length > 0
+        ? existing
+        : allDefaultStages.map(s => ({ id: s.id }));
+      const hasEntry = base.some(e => e.id === stageId);
+      const updated: CustomStageEntry[] = hasEntry
+        ? base.map(e => e.id === stageId ? { ...e, isMilestone } : e)
+        : [...base, { id: stageId, isMilestone }];
+      await updateCustomStages(updated);
+      toast({ title: isMilestone ? '🔷 Stage marked as Milestone' : 'Milestone removed', description: isMilestone ? 'Team will be notified when this stage is completed.' : undefined });
+    } catch (err: any) {
+      toast({ title: 'Failed to update milestone', description: err.message, variant: 'destructive' });
+    } finally {
+      setMilestoneSaving(null);
     }
   };
 
@@ -1232,6 +1289,20 @@ export function FlowTab({
                               {status === 'skipped' ? 'Unskip Stage' : 'Skip Stage'}
                             </DropdownMenuItem>
                           )}
+                          {/* Milestone toggle — available on any non-completed stage */}
+                          {status !== 'completed' && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                saveMilestoneForStage(stage.id, !isMilestone);
+                              }}
+                              disabled={milestoneSaving === stage.id}
+                              data-testid={`menu-stage-milestone-${stage.id}`}
+                            >
+                              <Diamond className={cn('h-3.5 w-3.5 mr-2', isMilestone ? 'text-amber-500 fill-amber-400' : 'text-amber-500')} />
+                              {isMilestone ? 'Remove Milestone Flag' : 'Mark as Milestone'}
+                            </DropdownMenuItem>
+                          )}
                           {status === 'completed' && (
                             <DropdownMenuItem
                               onClick={(e) => {
@@ -1261,6 +1332,29 @@ export function FlowTab({
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-5 border-t border-border/50">
                     {displayDesc && <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>}
+
+                    {/* ── Milestone info banner ── */}
+                    {isMilestone && status !== 'completed' && (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-900/10 dark:border-amber-800 px-3 py-2.5">
+                        <Diamond className="h-4 w-4 text-amber-500 fill-amber-400 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-0.5 text-xs">
+                          <p className="font-semibold text-amber-800 dark:text-amber-300">This is a Milestone stage</p>
+                          <p className="text-amber-700/80 dark:text-amber-400">
+                            Complete all checklist items and work below, then click
+                            {' '}<strong>Complete Milestone</strong> at the bottom of this card — the team will be notified automatically.
+                            To remove the milestone flag, use the <strong>⋮ menu → Remove Milestone Flag</strong>.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hint for editors: how to set a milestone on this stage */}
+                    {!isMilestone && canEditFlow && status !== 'completed' && status !== 'skipped' && (
+                      <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
+                        <Diamond className="h-3 w-3 text-amber-400 flex-shrink-0" />
+                        To mark this stage as a project milestone, click the <strong>⋮ menu → Mark as Milestone</strong>, or use <strong>Edit Flow</strong> and click the diamond icon on this stage row.
+                      </p>
+                    )}
 
                     {/* ── Inline stage dates ── */}
                     {canEditFlow && (
