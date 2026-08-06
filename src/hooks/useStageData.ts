@@ -4,6 +4,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+const DELIVERABLE_TOMBSTONE_PREFIX = '__deleted_deliverable__:';
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface StageAssignee {
@@ -20,6 +22,8 @@ export interface StageAssignee {
 export interface StageChecklistItem {
   id: string;
   itemText: string;
+  source: 'manual' | 'deliverable';
+  deliverableId?: string | null;
   completed: boolean;
   completedBy: string | null;
   completedAt: string | null;
@@ -170,15 +174,19 @@ export function useStageChecklist(projectId: string, stageId: string) {
     queryFn: async (): Promise<StageChecklistItem[]> => {
       const { data, error } = await supabase
         .from('project_stage_checklist')
-        .select('id, item_text, completed, completed_by, completed_at, created_at, sort_order')
+        .select('id, item_text, source, deliverable_id, completed, completed_by, completed_at, created_at, sort_order')
         .eq('project_id', projectId)
         .eq('stage_id', stageId)
         .order('sort_order')
         .order('created_at');
       if (error) throw error;
-      return (data ?? []).map((r: any) => ({
+      return (data ?? [])
+        .filter((r: any) => !String(r.item_text ?? '').startsWith(DELIVERABLE_TOMBSTONE_PREFIX))
+        .map((r: any) => ({
         id: r.id,
         itemText: r.item_text,
+        source: (r.source ?? 'manual') as 'manual' | 'deliverable',
+        deliverableId: r.deliverable_id ?? null,
         completed: r.completed,
         completedBy: r.completed_by,
         completedAt: r.completed_at,
@@ -195,12 +203,13 @@ export function useStageChecklist(projectId: string, stageId: string) {
       const { data, error } = await supabase
         .from('project_stage_checklist')
         .insert({ project_id: projectId, stage_id: stageId, item_text: text, created_by: userId })
-        .select('id, item_text, completed, completed_by, completed_at, created_at, sort_order')
+        .select('id, item_text, source, completed, completed_by, completed_at, created_at, sort_order')
         .single();
       if (error) throw error;
       return {
         id: data.id,
         itemText: data.item_text,
+        source: (data.source ?? 'manual') as 'manual' | 'deliverable',
         completed: data.completed,
         completedBy: data.completed_by,
         completedAt: data.completed_at,
@@ -214,6 +223,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
       const optimistic: StageChecklistItem = {
         id: `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         itemText: text,
+        source: 'manual',
         completed: false,
         completedBy: null,
         completedAt: null,
@@ -270,14 +280,22 @@ export function useStageChecklist(projectId: string, stageId: string) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('project_stage_checklist').delete().eq('id', id);
+    mutationFn: async (item: { id: string; source: 'manual' | 'deliverable'; deliverableId?: string | null }) => {
+      if (item.source === 'deliverable' && item.deliverableId) {
+        const { error } = await supabase
+          .from('project_stage_checklist')
+          .update({ item_text: `${DELIVERABLE_TOMBSTONE_PREFIX}${item.deliverableId}` })
+          .eq('id', item.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from('project_stage_checklist').delete().eq('id', item.id);
       if (error) throw error;
     },
-    onMutate: async (id: string) => {
+    onMutate: async (item: { id: string }) => {
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
-      qc.setQueryData<StageChecklistItem[]>(key, previous.filter(item => item.id !== id));
+      qc.setQueryData<StageChecklistItem[]>(key, previous.filter(entry => entry.id !== item.id));
       return { previous };
     },
     onError: (_err, _vars, ctx) => {
@@ -297,7 +315,8 @@ export function useStageChecklist(projectId: string, stageId: string) {
     addItem: (text: string, userId?: string) => addMutation.mutateAsync({ text, userId }),
     toggleItem: (id: string, completed: boolean, userId?: string) =>
       toggleMutation.mutateAsync({ id, completed, userId }),
-    deleteItem: (id: string) => deleteMutation.mutateAsync(id),
+    deleteItem: (item: { id: string; source: 'manual' | 'deliverable'; deliverableId?: string | null }) =>
+      deleteMutation.mutateAsync(item),
     isAdding: addMutation.isPending,
   };
 }
@@ -347,7 +366,12 @@ export function useProjectDeliverablesChecklist(
         }
       }
 
-      return deliverableDefs.map(d => {
+      return deliverableDefs
+        .filter(d => {
+          const row: any = existingByDeliverableId.get(d.id);
+          return !String(row?.item_text ?? '').startsWith(DELIVERABLE_TOMBSTONE_PREFIX);
+        })
+        .map(d => {
         const row: any = existingByDeliverableId.get(d.id);
         return {
           id: row?.id ?? d.id,

@@ -42,9 +42,9 @@ export function StageChecklist({ projectId, stageId, currentUserId, canEdit }: P
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (item: { id: string; source: 'manual' | 'deliverable'; deliverableId?: string | null }) => {
     try {
-      await deleteItem(id);
+      await deleteItem(item);
     } catch {
       toast({ title: 'Failed to delete item', variant: 'destructive' });
     }
@@ -122,8 +122,9 @@ export function StageChecklist({ projectId, stageId, currentUserId, canEdit }: P
             {canEdit && (
               <button
                 type="button"
-                onClick={() => handleDelete(item.id)}
+                onClick={() => handleDelete(item)}
                 className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                title={item.source === 'deliverable' ? 'Hide default deliverable' : 'Delete custom item'}
               >
                 <Trash2 className="h-3 w-3" />
               </button>
