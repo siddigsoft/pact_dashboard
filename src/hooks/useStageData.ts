@@ -17,6 +17,10 @@ export interface StageAssignee {
   assignedAt: string;
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
+  /** Work-period start within this stage (ISO date) */
+  startDate: string | null;
+  /** Work-period end within this stage (ISO date) */
+  endDate: string | null;
 }
 
 export interface StageChecklistItem {
@@ -29,6 +33,10 @@ export interface StageChecklistItem {
   completedAt: string | null;
   /** User ID this item is assigned to (shows in My Tasks for that person) */
   assignedTo: string | null;
+  /** Planned start date for this checklist task (ISO date, constrained to stage period) */
+  plannedStart: string | null;
+  /** Planned end / due date for this checklist task (ISO date) */
+  plannedEnd: string | null;
   createdAt: string;
   sortOrder: number;
 }
@@ -74,7 +82,7 @@ export function useAllStageAssignees(projectId: string) {
     queryFn: async (): Promise<AllStageAssignee[]> => {
       const { data, error } = await supabase
         .from('project_stage_assignees')
-        .select('id, user_id, stage_id, assigned_at, acknowledged_at, acknowledged_by, profiles:user_id(full_name, role, avatar_url)')
+        .select('id, user_id, stage_id, assigned_at, acknowledged_at, acknowledged_by, start_date, end_date, profiles:user_id(full_name, role, avatar_url)')
         .eq('project_id', projectId)
         .order('assigned_at');
       if (error) throw error;
@@ -88,6 +96,8 @@ export function useAllStageAssignees(projectId: string) {
         assignedAt: r.assigned_at,
         acknowledgedAt: r.acknowledged_at ?? null,
         acknowledgedBy: r.acknowledged_by ?? null,
+        startDate: r.start_date ?? null,
+        endDate: r.end_date ?? null,
       }));
     },
     staleTime: 30_000,
@@ -106,7 +116,7 @@ export function useStageAssignees(projectId: string, stageId: string) {
     queryFn: async (): Promise<StageAssignee[]> => {
       const { data, error } = await supabase
         .from('project_stage_assignees')
-        .select('id, user_id, assigned_at, acknowledged_at, acknowledged_by, profiles:user_id(full_name, role, avatar_url)')
+        .select('id, user_id, assigned_at, acknowledged_at, acknowledged_by, start_date, end_date, profiles:user_id(full_name, role, avatar_url)')
         .eq('project_id', projectId)
         .eq('stage_id', stageId)
         .order('assigned_at');
@@ -120,6 +130,8 @@ export function useStageAssignees(projectId: string, stageId: string) {
         assignedAt: r.assigned_at,
         acknowledgedAt: r.acknowledged_at ?? null,
         acknowledgedBy: r.acknowledged_by ?? null,
+        startDate: r.start_date ?? null,
+        endDate: r.end_date ?? null,
       }));
     },
     staleTime: 30_000,
@@ -127,10 +139,16 @@ export function useStageAssignees(projectId: string, stageId: string) {
   });
 
   const addMutation = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async ({ userId, startDate, endDate }: { userId: string; startDate?: string | null; endDate?: string | null }) => {
       const { error } = await supabase
         .from('project_stage_assignees')
-        .insert({ project_id: projectId, stage_id: stageId, user_id: userId });
+        .insert({
+          project_id: projectId,
+          stage_id: stageId,
+          user_id: userId,
+          start_date: startDate ?? null,
+          end_date: endDate ?? null,
+        });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
@@ -164,7 +182,8 @@ export function useStageAssignees(projectId: string, stageId: string) {
   return {
     assignees: query.data ?? [],
     isLoading: query.isLoading,
-    addAssignee: (userId: string) => addMutation.mutateAsync(userId),
+    addAssignee: (userId: string, startDate?: string | null, endDate?: string | null) =>
+      addMutation.mutateAsync({ userId, startDate, endDate }),
     removeAssignee: (id: string) => removeMutation.mutateAsync(id),
     acknowledgeAssignment: (assigneeId: string, userId: string) =>
       acknowledgeMutation.mutateAsync({ assigneeId, userId }),
@@ -185,7 +204,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
     queryFn: async (): Promise<StageChecklistItem[]> => {
       const { data, error } = await supabase
         .from('project_stage_checklist')
-        .select('id, item_text, source, deliverable_id, completed, completed_by, completed_at, assigned_to, created_at, sort_order')
+        .select('id, item_text, source, deliverable_id, completed, completed_by, completed_at, assigned_to, planned_start, planned_end, created_at, sort_order')
         .eq('project_id', projectId)
         .eq('stage_id', stageId)
         .order('sort_order')
@@ -202,6 +221,8 @@ export function useStageChecklist(projectId: string, stageId: string) {
         completedBy: r.completed_by,
         completedAt: r.completed_at,
         assignedTo: r.assigned_to ?? null,
+        plannedStart: r.planned_start ?? null,
+        plannedEnd: r.planned_end ?? null,
         createdAt: r.created_at,
         sortOrder: r.sort_order,
       }));
@@ -295,6 +316,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
   const assignMutation = useMutation({
     mutationFn: async ({
       itemId, assigneeId, assigneeText, assignedById, assignedByName, projName, stageName,
+      plannedStart, plannedEnd,
     }: {
       itemId: string;
       assigneeId: string | null;
@@ -303,10 +325,16 @@ export function useStageChecklist(projectId: string, stageId: string) {
       assignedByName: string;
       projName: string;
       stageName: string;
+      plannedStart?: string | null;
+      plannedEnd?: string | null;
     }) => {
       const { error } = await supabase
         .from('project_stage_checklist')
-        .update({ assigned_to: assigneeId })
+        .update({
+          assigned_to: assigneeId,
+          planned_start: plannedStart ?? null,
+          planned_end: plannedEnd ?? null,
+        })
         .eq('id', itemId);
       if (error) throw error;
       // Notify the newly assigned person (skip if unassigning)
@@ -331,11 +359,14 @@ export function useStageChecklist(projectId: string, stageId: string) {
         }).catch(() => {});
       }
     },
-    onMutate: async ({ itemId, assigneeId }) => {
+    onMutate: async ({ itemId, assigneeId, plannedStart, plannedEnd }) => {
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData<StageChecklistItem[]>(key) ?? [];
       qc.setQueryData<StageChecklistItem[]>(key, (curr = []) =>
-        curr.map(item => item.id === itemId ? { ...item, assignedTo: assigneeId } : item),
+        curr.map(item => item.id === itemId
+          ? { ...item, assignedTo: assigneeId, plannedStart: plannedStart ?? item.plannedStart, plannedEnd: plannedEnd ?? item.plannedEnd }
+          : item,
+        ),
       );
       return { previous };
     },
@@ -386,7 +417,7 @@ export function useStageChecklist(projectId: string, stageId: string) {
     assignItem: (
       itemId: string,
       assigneeId: string | null,
-      ctx: { assigneeText: string; assignedById: string; assignedByName: string; projName: string; stageName: string },
+      ctx: { assigneeText: string; assignedById: string; assignedByName: string; projName: string; stageName: string; plannedStart?: string | null; plannedEnd?: string | null },
     ) => assignMutation.mutateAsync({ itemId, assigneeId, ...ctx }),
     isAdding: addMutation.isPending,
     isAssigning: assignMutation.isPending,

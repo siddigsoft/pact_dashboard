@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import {
@@ -52,6 +54,7 @@ import {
   Undo2,
   PlayCircle,
   Sparkles,
+  CalendarDays,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -91,6 +94,8 @@ import {
 } from '@/components/ui/popover';
 import { GanttView } from './GanttView';
 import { exportFlowPDF, exportFlowDocx } from './flowExport';
+import { workingDaysBetween, DEFAULT_WORKING_DAYS } from '@/utils/workingDays';
+import { ProjectCalendarDialog } from '@/components/project/ProjectCalendarDialog';
 
 type ViewMode = 'list' | 'gantt';
 
@@ -642,6 +647,27 @@ export function FlowTab({
     }
   };
 
+  // Project calendar settings (working days + exceptions)
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [localWorkingDays, setLocalWorkingDays] = useState<number[]>(DEFAULT_WORKING_DAYS);
+  const [localCalExceptions, setLocalCalExceptions] = useState<string[]>([]);
+  useQuery({
+    queryKey: ['project_calendar', projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('working_days, calendar_exceptions')
+        .eq('id', projectId)
+        .single();
+      if (data) {
+        setLocalWorkingDays((data as any).working_days ?? DEFAULT_WORKING_DAYS);
+        setLocalCalExceptions(((data as any).calendar_exceptions as string[] | null) ?? []);
+      }
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+
   // Load ALL stage assignees for this project in one query
   const { data: allAssignees = [] } = useAllStageAssignees(projectId);
 
@@ -1005,9 +1031,20 @@ export function FlowTab({
             </div>
             <ExportButton projectId={projectId} projectName={projectName} projectType={projectType} projectCode={projectCode} flow={flow} allDefaultStages={allDefaultStages} customEntries={customFlowStages ?? []} />
             {canEditFlow && (
-              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} className="h-7 text-xs px-3 shrink-0" data-testid="button-edit-flow">
-                <Settings2 className="h-3 w-3 mr-1.5" /> Edit Flow
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCalendarOpen(true)}
+                  className="h-7 text-xs px-3 shrink-0"
+                  title="Configure working days and holidays for this project"
+                >
+                  <CalendarDays className="h-3 w-3 mr-1.5" /> Calendar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} className="h-7 text-xs px-3 shrink-0" data-testid="button-edit-flow">
+                  <Settings2 className="h-3 w-3 mr-1.5" /> Edit Flow
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -1165,7 +1202,7 @@ export function FlowTab({
 
                       {/* Date row */}
                       {(plannedStart || plannedEnd || dueDate) && (
-                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground flex-wrap">
                           {plannedStart && (
                             <span className="flex items-center gap-0.5">
                               <Calendar className="h-2.5 w-2.5" />
@@ -1178,6 +1215,18 @@ export function FlowTab({
                               <Clock className="h-2.5 w-2.5" /> Due {fmtDate(dueDate)}
                             </span>
                           )}
+                          {/* Working-day duration badge */}
+                          {plannedStart && plannedEnd && (() => {
+                            const wd = workingDaysBetween(plannedStart, plannedEnd, localWorkingDays, localCalExceptions);
+                            return wd !== null ? (
+                              <span
+                                className="flex items-center gap-0.5 bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 rounded-full px-1.5 py-0 font-medium"
+                                title="Working days in this stage"
+                              >
+                                <CalendarDays className="h-2.5 w-2.5" />{wd} wd
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                       )}
 
@@ -1721,6 +1770,10 @@ export function FlowTab({
                           assignedByName={currentUser?.fullName ?? 'A manager'}
                           canEdit={canEditFlow}
                           notifyUserIds={teamUserIds ?? []}
+                          stageStart={plannedStart ?? undefined}
+                          stageEnd={plannedEnd ?? undefined}
+                          workingDays={localWorkingDays}
+                          calendarExceptions={localCalExceptions}
                         />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">
@@ -1733,6 +1786,10 @@ export function FlowTab({
                           teamUserIds={teamUserIds ?? []}
                           projectName={projectName}
                           stageName={displayLabel}
+                          stageStart={plannedStart ?? undefined}
+                          stageEnd={plannedEnd ?? undefined}
+                          workingDays={localWorkingDays}
+                          calendarExceptions={localCalExceptions}
                         />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">
@@ -1831,6 +1888,18 @@ export function FlowTab({
           })}
         </div>
       )}
+
+      {/* ── Project Calendar Dialog ──────────────────────────────── */}
+      <ProjectCalendarDialog
+        open={calendarOpen}
+        onOpenChange={setCalendarOpen}
+        projectId={projectId}
+        projectName={projectName}
+        onSaved={(wd, exc) => {
+          setLocalWorkingDays(wd);
+          setLocalCalExceptions(exc);
+        }}
+      />
 
       {/* ── Edit Flow Dialog ─────────────────────────────────────── */}
       <EditFlowDialog

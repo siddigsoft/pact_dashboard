@@ -92,6 +92,7 @@ defaultBucketID = "replit-objstore-005adaa9-1cce-4c34-9d82-43b2125a4ea5"
 
 [userenv.shared]
 VITE_FIREBASE_PROJECT_ID = "tpm-workflow"
+VITE_SUPABASE_URL = "VITE_SUPABASE_URL=https://abznugnirnlrqnnfkein.supabase.co"
 
 [postMerge]
 path = "scripts/post-merge.sh"
