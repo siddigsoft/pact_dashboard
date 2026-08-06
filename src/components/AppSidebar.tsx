@@ -515,8 +515,8 @@
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
     // ── Accounting module — 5 sections mirroring AccountingHub ───────────────
-    const acctAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
-    const acctAuditAccess = acctAccess || isAuditor;
+    const acctAccess = isSuperAdmin || isAdmin;
+    const acctAuditAccess = acctAccess;
 
     if (acctAccess) {
       // ── 1. Core Ledger ──────────────────────────────────────────────────────
