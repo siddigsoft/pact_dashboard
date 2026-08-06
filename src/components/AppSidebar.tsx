@@ -45,7 +45,7 @@
     MessageSquare,
     Bell,
     FileText,
-    Map,
+    Map as MapIcon,
     ScrollText,
     Mail,
     Smartphone,
@@ -229,7 +229,7 @@
     MessageSquare,
     Bell,
     FileText,
-    Map,
+    Map: MapIcon,
     ScrollText,
     Mail,
     Banknote,
@@ -446,7 +446,7 @@
     // â”€â”€ 5. Coordination & Oversight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const coordinationItems: MenuGroup['items'] = [];
     if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
-      coordinationItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 1, isPinned: isPinned('/supervisor/sites') });
+      coordinationItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: MapIcon, priority: 1, isPinned: isPinned('/supervisor/sites') });
     }
     if (!isHidden('/coordinator/sites') && canSeePath('/coordinator/sites', defaultRole)) {
       coordinationItems.push({ id: 'site-verification', title: "Site Verification", url: "/coordinator/sites", icon: CheckCircle, priority: 2, isPinned: isPinned('/coordinator/sites') });
