@@ -149,6 +149,11 @@
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
     'super-admin',
     'finance-accounting',
+    'finance-accounting-core',
+    'finance-accounting-ops',
+    'finance-accounting-p2p',
+    'finance-accounting-controls',
+    'finance-accounting-advanced',
     'finance-reports',
     'finance-management',
     'admin',
@@ -509,15 +514,72 @@
     }
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
-    // ── Accounting module ────────────────────────────────────────────
-    const acctItems: MenuGroup['items'] = [];
-    if (isSuperAdmin) {
-      if (!isHidden('/accounting')) acctItems.push({ id: 'accounting-hub', title: 'Accounting Hub', url: '/accounting', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/accounting') });
-      if (!isHidden('/accounting/journals')) acctItems.push({ id: 'accounting-journals', title: 'Journal Entries', url: '/accounting/journals', icon: Receipt, priority: 2, isPinned: isPinned('/accounting/journals') });
-      if (!isHidden('/accounting/bank-recon')) acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3, isPinned: isPinned('/accounting/bank-recon') });
-      if (!isHidden('/accounting/search')) acctItems.push({ id: 'accounting-search', title: 'Quick Search', url: '/accounting/search', icon: Search, priority: 4, isPinned: isPinned('/accounting/search') });
+    // ── Accounting module — 5 sections mirroring AccountingHub ───────────────
+    const acctAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
+    const acctAuditAccess = acctAccess || isAuditor;
+
+    if (acctAccess) {
+      // ── 1. Core Ledger ──────────────────────────────────────────────────────
+      const coreItems: MenuGroup['items'] = [];
+      if (!isHidden('/accounting'))                    coreItems.push({ id: 'accounting-hub',         title: 'Accounting Hub',       url: '/accounting',                          icon: LayoutDashboard, priority: 1,  isPinned: isPinned('/accounting') });
+      if (!isHidden('/accounting/journals'))           coreItems.push({ id: 'accounting-journals',    title: 'Journal Entries',      url: '/accounting?tab=journals',             icon: Receipt,         priority: 2,  isPinned: isPinned('/accounting?tab=journals') });
+      if (!isHidden('/accounting/coa'))                coreItems.push({ id: 'accounting-coa',         title: 'Chart of Accounts',    url: '/accounting?tab=coa',                  icon: BarChart3,       priority: 3,  isPinned: isPinned('/accounting?tab=coa') });
+      if (!isHidden('/accounting/trial-balance'))      coreItems.push({ id: 'accounting-trial-bal',   title: 'Trial Balance',        url: '/accounting?tab=trial-balance',        icon: TrendingUp,      priority: 4,  isPinned: isPinned('/accounting?tab=trial-balance') });
+      if (!isHidden('/accounting/ledger'))             coreItems.push({ id: 'accounting-ledger',      title: 'General Ledger',       url: '/accounting?tab=ledger',               icon: BookOpen,        priority: 5,  isPinned: isPinned('/accounting?tab=ledger') });
+      if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Financial Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
+      if (!isHidden('/accounting/fiscal-years'))       coreItems.push({ id: 'accounting-fiscal-yrs',  title: 'Fiscal Years',         url: '/accounting?tab=fiscal-years',         icon: Calendar,        priority: 7,  isPinned: isPinned('/accounting?tab=fiscal-years') });
+      if (!isHidden('/accounting/search'))             coreItems.push({ id: 'accounting-search',      title: 'Quick Search',         url: '/accounting?tab=search',               icon: Search,          priority: 8,  isPinned: isPinned('/accounting?tab=search') });
+      if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'finance' } as any);
+
+      // ── 2. Financial Operations ─────────────────────────────────────────────
+      const finOpsItems: MenuGroup['items'] = [];
+      if (!isHidden('/accounting/bank-recon'))         finOpsItems.push({ id: 'accounting-bank-recon',    title: 'Bank Reconciliation',  url: '/accounting?tab=bank-recon',           icon: Landmark,    priority: 1,  isPinned: isPinned('/accounting?tab=bank-recon') });
+      if (!isHidden('/accounting/budget-planning'))    finOpsItems.push({ id: 'accounting-budget-plan',   title: 'Budget Planning',      url: '/accounting?tab=budget-planning',      icon: PiggyBank,   priority: 2,  isPinned: isPinned('/accounting?tab=budget-planning') });
+      if (!isHidden('/accounting/budget-variance'))    finOpsItems.push({ id: 'accounting-budget-var',    title: 'Budget vs Actual',     url: '/accounting?tab=budget-variance',      icon: BarChart3,   priority: 3,  isPinned: isPinned('/accounting?tab=budget-variance') });
+      if (!isHidden('/accounting/annual-budget'))      finOpsItems.push({ id: 'accounting-annual-bud',    title: 'Annual Budget',        url: '/accounting?tab=annual-budget',        icon: PiggyBank,   priority: 4,  isPinned: isPinned('/accounting?tab=annual-budget') });
+      if (!isHidden('/accounting/cash-flow'))          finOpsItems.push({ id: 'accounting-cash-flow',     title: 'Cash Flow',            url: '/accounting?tab=cash-flow',            icon: TrendingUp,  priority: 5,  isPinned: isPinned('/accounting?tab=cash-flow') });
+      if (!isHidden('/accounting/cash-flow-forecast')) finOpsItems.push({ id: 'accounting-cashflow-fc',  title: 'Cash Flow Forecast',   url: '/accounting?tab=cash-flow-forecast',   icon: TrendingUp,  priority: 6,  isPinned: isPinned('/accounting?tab=cash-flow-forecast') });
+      if (!isHidden('/accounting/fixed-assets'))       finOpsItems.push({ id: 'accounting-fixed-assets',  title: 'Fixed Assets',         url: '/accounting?tab=fixed-assets',         icon: Package,     priority: 7,  isPinned: isPinned('/accounting?tab=fixed-assets') });
+      if (!isHidden('/accounting/gl-bridge'))          finOpsItems.push({ id: 'accounting-gl-bridge',     title: 'GL Bridge Engine',     url: '/accounting?tab=gl-bridge',            icon: Zap,         priority: 8,  isPinned: isPinned('/accounting?tab=gl-bridge') });
+      if (!isHidden('/accounting/bank-statement-import')) finOpsItems.push({ id: 'accounting-bank-import', title: 'Bank Statement Import', url: '/accounting?tab=bank-statement-import', icon: Landmark,  priority: 9,  isPinned: isPinned('/accounting?tab=bank-statement-import') });
+      if (finOpsItems.length) groups.push({ id: 'finance-accounting-ops', label: 'Financial Operations', order: 5.51, items: finOpsItems, parentGroup: 'finance' } as any);
+
+      // ── 3. Procurement & P2P ────────────────────────────────────────────────
+      const p2pItems: MenuGroup['items'] = [];
+      if (!isHidden('/accounting/vendors'))                 p2pItems.push({ id: 'accounting-vendors',      title: 'Vendor Registry',         url: '/accounting?tab=vendors',               icon: Building2,    priority: 1, isPinned: isPinned('/accounting?tab=vendors') });
+      if (!isHidden('/accounting/purchase-requisitions'))   p2pItems.push({ id: 'accounting-pr',           title: 'Purchase Requisitions',   url: '/accounting?tab=purchase-requisitions', icon: Receipt,      priority: 2, isPinned: isPinned('/accounting?tab=purchase-requisitions') });
+      if (!isHidden('/accounting/purchase-orders'))         p2pItems.push({ id: 'accounting-po',           title: 'Purchase Orders',         url: '/accounting?tab=purchase-orders',       icon: ShoppingCart, priority: 3, isPinned: isPinned('/accounting?tab=purchase-orders') });
+      if (!isHidden('/accounting/grn'))                     p2pItems.push({ id: 'accounting-grn',          title: 'Goods Receipt Notes',     url: '/accounting?tab=grn',                   icon: Package,      priority: 4, isPinned: isPinned('/accounting?tab=grn') });
+      if (!isHidden('/accounting/ap-invoices'))              p2pItems.push({ id: 'accounting-ap-inv',       title: 'AP Invoices',             url: '/accounting?tab=ap-invoices',           icon: FileText,     priority: 5, isPinned: isPinned('/accounting?tab=ap-invoices') });
+      if (!isHidden('/accounting/cheque-register'))          p2pItems.push({ id: 'accounting-cheque',       title: 'Cheque Register',         url: '/accounting?tab=cheque-register',       icon: CreditCard,   priority: 6, isPinned: isPinned('/accounting?tab=cheque-register') });
+      if (!isHidden('/accounting/ap-aging'))                 p2pItems.push({ id: 'accounting-ap-aging',     title: 'AP Aging',                url: '/accounting?tab=ap-aging',              icon: Clock,        priority: 7, isPinned: isPinned('/accounting?tab=ap-aging') });
+      if (!isHidden('/accounting/expense-reports'))          p2pItems.push({ id: 'accounting-exp-reports',  title: 'Expense Reports',         url: '/accounting?tab=expense-reports',       icon: Receipt,      priority: 8, isPinned: isPinned('/accounting?tab=expense-reports') });
+      if (p2pItems.length) groups.push({ id: 'finance-accounting-p2p', label: 'Procurement & P2P', order: 5.52, items: p2pItems, parentGroup: 'finance' } as any);
+
+      // ── 4. Controls & Compliance ────────────────────────────────────────────
+      const controlsItems: MenuGroup['items'] = [];
+      if (!isHidden('/accounting/period-close'))        controlsItems.push({ id: 'accounting-period-close', title: 'Period Close',         url: '/accounting?tab=period-close',         icon: Lock,           priority: 1, isPinned: isPinned('/accounting?tab=period-close') });
+      if (!isHidden('/accounting/budget-encumbrance'))  controlsItems.push({ id: 'accounting-encumbrance',  title: 'Budget Encumbrance',   url: '/accounting?tab=budget-encumbrance',   icon: Wallet,         priority: 2, isPinned: isPinned('/accounting?tab=budget-encumbrance') });
+      if (!isHidden('/accounting/funds'))               controlsItems.push({ id: 'accounting-funds',         title: 'Funds',                url: '/accounting?tab=funds',                icon: Landmark,       priority: 3, isPinned: isPinned('/accounting?tab=funds') });
+      if (!isHidden('/accounting/multi-currency'))      controlsItems.push({ id: 'accounting-multi-curr',   title: 'Multi-Currency',        url: '/accounting?tab=multi-currency',       icon: ArrowLeftRight, priority: 4, isPinned: isPinned('/accounting?tab=multi-currency') });
+      if (!isHidden('/accounting/tax'))                 controlsItems.push({ id: 'accounting-tax',           title: 'Tax Management',       url: '/accounting?tab=tax',                  icon: Receipt,        priority: 5, isPinned: isPinned('/accounting?tab=tax') });
+      if (!isHidden('/accounting/analytic-plans'))      controlsItems.push({ id: 'accounting-analytic',      title: 'Analytic Plans',       url: '/accounting?tab=analytic-plans',       icon: BarChart3,      priority: 6, isPinned: isPinned('/accounting?tab=analytic-plans') });
+      if (acctAuditAccess && !isHidden('/accounting/donor-reports')) controlsItems.push({ id: 'accounting-donor', title: 'Donor Fund Reports', url: '/accounting?tab=donor-reports',  icon: Heart,          priority: 7, isPinned: isPinned('/accounting?tab=donor-reports') });
+      if (!isHidden('/accounting/sod'))                 controlsItems.push({ id: 'accounting-sod',           title: 'Segregation of Duties',url: '/accounting?tab=sod',                  icon: ShieldCheck,    priority: 8, isPinned: isPinned('/accounting?tab=sod') });
+      if (!isHidden('/accounting/aml'))                 controlsItems.push({ id: 'accounting-aml',           title: 'AML & Compliance',     url: '/accounting?tab=aml',                  icon: ShieldAlert,    priority: 9, isPinned: isPinned('/accounting?tab=aml') });
+      if (controlsItems.length) groups.push({ id: 'finance-accounting-controls', label: 'Controls & Compliance', order: 5.53, items: controlsItems, parentGroup: 'finance' } as any);
+
+      // ── 5. Advanced & Reporting ─────────────────────────────────────────────
+      const advancedItems: MenuGroup['items'] = [];
+      if (!isHidden('/accounting/grants'))             advancedItems.push({ id: 'accounting-grants',       title: 'Grant Tracking',       url: '/accounting?tab=grants',               icon: Award,       priority: 1, isPinned: isPinned('/accounting?tab=grants') });
+      if (!isHidden('/accounting/cost-allocation'))    advancedItems.push({ id: 'accounting-cost-alloc',  title: 'Cost Allocation',      url: '/accounting?tab=cost-allocation',      icon: Zap,         priority: 2, isPinned: isPinned('/accounting?tab=cost-allocation') });
+      if (!isHidden('/accounting/consolidation'))      advancedItems.push({ id: 'accounting-consolidate', title: 'Consolidation',        url: '/accounting?tab=consolidation',        icon: Building2,   priority: 3, isPinned: isPinned('/accounting?tab=consolidation') });
+      if (!isHidden('/accounting/gl-audit'))           advancedItems.push({ id: 'accounting-gl-audit',    title: 'GL Bridge Audit',      url: '/accounting?tab=gl-audit',             icon: Activity,    priority: 4, isPinned: isPinned('/accounting?tab=gl-audit') });
+      if (!isHidden('/accounting/finance-audit-trail'))advancedItems.push({ id: 'accounting-audit-trail', title: 'Finance Audit Trail',  url: '/accounting?tab=finance-audit-trail',  icon: ScrollText,  priority: 5, isPinned: isPinned('/accounting?tab=finance-audit-trail') });
+      if (!isHidden('/accounting/intercompany'))       advancedItems.push({ id: 'accounting-intercompany',title: 'Intercompany',         url: '/accounting?tab=intercompany',         icon: ArrowLeftRight, priority: 6, isPinned: isPinned('/accounting?tab=intercompany') });
+      if (!isHidden('/accounting/settings'))           advancedItems.push({ id: 'accounting-settings',    title: 'Accounting Settings',  url: '/accounting?tab=settings',             icon: Settings,    priority: 7, isPinned: isPinned('/accounting?tab=settings') });
+      if (advancedItems.length) groups.push({ id: 'finance-accounting-advanced', label: 'Advanced & Reporting', order: 5.54, items: advancedItems, parentGroup: 'finance' } as any);
     }
-    if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);
 
     // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
     const hrItems: MenuGroup['items'] = [];
