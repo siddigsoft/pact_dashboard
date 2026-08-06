@@ -373,9 +373,46 @@
     const isCountryDirector = hasRole('countryDirector');
     const isSeniorManagement = hasRole('seniorManagement');
     const isEmployee = hasRole('employee');
+    const isSMT =
+      /^(smt)$/i.test(defaultRole.trim()) ||
+      roles.some(r => /^(smt)$/i.test(String(r)));
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
+
+    // SMT: hard allowlist — project pages only (no other hubs)
+    if (isSMT) {
+      const groups: MenuGroup[] = [];
+      const personal: MenuGroup['items'] = [];
+      if (!isHidden('/dashboard'))
+        personal.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
+      if (!isHidden('/my-tasks'))
+        personal.push({ id: 'my-tasks', title: 'My Tasks', url: '/my-tasks', icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
+      if (!isHidden('/my-projects'))
+        personal.push({ id: 'my-projects', title: 'My Projects', url: '/my-projects', icon: FolderKanban, priority: 3, isPinned: isPinned('/my-projects') });
+      if (personal.length)
+        groups.push({ id: 'workspace-personal', label: 'Personal', order: 1.1, items: personal, parentGroup: 'workspace' } as any);
+
+      const tools: MenuGroup['items'] = [];
+      if (!isHidden('/calendar'))
+        tools.push({ id: 'calendar', title: 'Calendar', url: '/calendar', icon: Calendar, priority: 1, isPinned: isPinned('/calendar') });
+      if (!isHidden('/notifications'))
+        tools.push({ id: 'notifications', title: 'Notifications', url: '/notifications', icon: Bell, priority: 2, isPinned: isPinned('/notifications') });
+      if (tools.length)
+        groups.push({ id: 'workspace-tools', label: 'Tools', order: 1.3, items: tools, parentGroup: 'workspace' } as any);
+
+      const programme: MenuGroup['items'] = [];
+      if (!isHidden('/programme-hub'))
+        programme.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
+      if (!isHidden('/projects'))
+        programme.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderOpen, priority: 2, isPinned: isPinned('/projects') });
+      if (!isHidden('/portfolio') && !isHidden('/programme-hub'))
+        programme.push({ id: 'portfolio', title: 'Portfolio', url: '/programme-hub?tab=portfolio', icon: LayoutDashboard, priority: 3, isPinned: isPinned('/programme-hub?tab=portfolio') });
+      if (programme.length)
+        groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: programme, parentGroup: 'programme' } as any);
+
+      return groups;
+    }
 
     const groups: MenuGroup[] = [];
 
@@ -1029,6 +1066,21 @@
     // reference every render, making menuGroups and the useEffect(menuGroups)
     // fire on every render, creating a continuous sidebar flicker.
     const menuGroups = useMemo(() => {
+      const effectiveRole = viewAs ? viewAs.role : currentUser?.role;
+      const smtCandidates = [
+        effectiveRole,
+        ...(roles || []),
+        ...extraRoles,
+        ...((currentUser?.additionalRoles as any[]) || []).map((r: any) => r?.role ?? r?.name ?? r?.roleName),
+      ];
+      const isSMTUser = smtCandidates.some(r => /^(smt)$/i.test(String(r ?? '').trim()));
+      const SMT_ALLOW = new Set([
+        '/dashboard', '/my-tasks', '/my-projects', '/calendar', '/notifications',
+        '/programme-hub', '/projects', '/portfolio', '/programme-hub?tab=portfolio',
+      ]);
+      const isSmtAllowedUrl = (url: string) =>
+        SMT_ALLOW.has(url) || SMT_ALLOW.has(url.split('?')[0]);
+
       const rawMenuGroups = currentUser
         ? getWorkflowMenuGroups(
             viewAs ? [viewAs.role as AppRole] : [...(roles || []), ...extraRoles],
@@ -1040,50 +1092,61 @@
             isFundHolder
           )
         : [];
-      if (Object.keys(pageOverrideMap).length === 0) return rawMenuGroups;
 
-      // Deep-clone the groups array so we don't mutate the cached result.
-      const groups: typeof rawMenuGroups = rawMenuGroups.map(g => ({ ...g, items: [...g.items] }));
+      // Deep-clone so we never mutate the cached builder result.
+      let groups: typeof rawMenuGroups = rawMenuGroups.map(g => ({ ...g, items: [...g.items] }));
 
-      // Helper: find or create a group by id
-      const getOrCreateGroup = (groupId: string, label: string, order: number) => {
-        let g = groups.find(x => x.id === groupId);
-        if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
-        return g;
-      };
+      if (Object.keys(pageOverrideMap).length > 0) {
+        // Helper: find or create a group by id
+        const getOrCreateGroup = (groupId: string, label: string, order: number) => {
+          let g = groups.find(x => x.id === groupId);
+          if (!g) { g = { id: groupId, label, order, items: [] }; groups.push(g); }
+          return g;
+        };
 
-      for (const [slug, isBlocked] of Object.entries(pageOverrideMap)) {
-        const pageDef = PAGE_DEFS.find(p => p.slug === slug);
-        if (!pageDef) continue;
+        for (const [slug, isBlocked] of Object.entries(pageOverrideMap)) {
+          const pageDef = PAGE_DEFS.find(p => p.slug === slug);
+          if (!pageDef) continue;
+          // SMT: never inject pages outside the project allowlist
+          if (isSMTUser && !isBlocked && !isSmtAllowedUrl(pageDef.path)) continue;
 
-        if (isBlocked) {
-          // Remove this item from whichever group contains it
-          groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
-        } else {
-          // Ensure this item exists in its group (add if missing)
-          const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
-          const alreadyExists = groups.some(g => g.items.some(item => item.url === pageDef.path));
-          if (!alreadyExists) {
-            const group = getOrCreateGroup(sidebarGroupId, pageDef.group, 99);
-            group.items.push({
-              id: pageDef.slug,
-              title: pageDef.label,
-              url: pageDef.path,
-              icon: pageDef.icon,
-              priority: 99,
-            });
+          if (isBlocked) {
+            // Remove this item from whichever group contains it
+            groups.forEach(g => { g.items = g.items.filter(item => item.url !== pageDef.path); });
+          } else {
+            // Ensure this item exists in its group (add if missing)
+            const sidebarGroupId = PAGEDEF_GROUP_TO_SIDEBAR[pageDef.group] ?? 'admin';
+            const alreadyExists = groups.some(g => g.items.some(item => item.url === pageDef.path));
+            if (!alreadyExists) {
+              const group = getOrCreateGroup(sidebarGroupId, pageDef.group, 99);
+              group.items.push({
+                id: pageDef.slug,
+                title: pageDef.label,
+                url: pageDef.path,
+                icon: pageDef.icon,
+                priority: 99,
+              });
+            }
           }
         }
+
+        // Re-sort groups and items by order/priority
+        groups.sort((a, b) => a.order - b.order);
+        groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
       }
 
-      // Re-sort groups and items by order/priority
-      groups.sort((a, b) => a.order - b.order);
-      groups.forEach(g => g.items.sort((a, b) => a.priority - b.priority));
+      // SMT final hard filter — only the allowlisted project pages, no leaks
+      if (isSMTUser) {
+        groups = groups
+          .map(g => ({ ...g, items: g.items.filter(item => isSmtAllowedUrl(item.url)) }))
+          .filter(g => g.items.length > 0);
+      }
+
       return groups.filter(g => g.items.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // viewAs MUST be in the dep array — switching between two non-SA roles doesn't
     // change isSuperAdmin (stays false), so without viewAs the sidebar never re-renders.
-    }, [currentUser?.id, currentUser?.role, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, viewAs]);
+    }, [currentUser?.id, currentUser?.role, currentUser?.additionalRoles, roles, extraRoles, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess, isFundHolder, pageOverrideMap, viewAs]);
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {

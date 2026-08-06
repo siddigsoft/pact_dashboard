@@ -3,6 +3,7 @@ import {
   CreditCard,
   Receipt,
   FolderKanban,
+  FolderOpen,
   Database,
   CheckCircle,
   Calendar,
@@ -78,25 +79,56 @@ export const getWorkflowMenuGroups = (
   const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
   const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
 
+  // SMT: hard allowlist — project pages only
+  if (isSMT) {
+    const groups: MenuGroup[] = [];
+    const overview: MenuGroup['items'] = [];
+    if (!isHidden('/dashboard'))
+      overview.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
+    if (!isHidden('/my-tasks'))
+      overview.push({ id: 'my-tasks', title: 'My Tasks', url: '/my-tasks', icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
+    if (!isHidden('/my-projects'))
+      overview.push({ id: 'my-projects', title: 'My Projects', url: '/my-projects', icon: FolderKanban, priority: 3, isPinned: isPinned('/my-projects') });
+    if (overview.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overview });
+
+    const tools: MenuGroup['items'] = [];
+    if (!isHidden('/calendar'))
+      tools.push({ id: 'calendar', title: 'Calendar', url: '/calendar', icon: Calendar, priority: 1, isPinned: isPinned('/calendar') });
+    if (!isHidden('/notifications'))
+      tools.push({ id: 'notifications', title: 'Notifications', url: '/notifications', icon: Bell, priority: 2, isPinned: isPinned('/notifications') });
+    if (tools.length) groups.push({ id: 'communication', label: 'Tools', order: 1.5, items: tools });
+
+    const planning: MenuGroup['items'] = [];
+    if (!isHidden('/programme-hub'))
+      planning.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
+    if (!isHidden('/projects'))
+      planning.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderOpen, priority: 2, isPinned: isPinned('/projects') });
+    if (!isHidden('/portfolio') && !isHidden('/programme-hub'))
+      planning.push({ id: 'portfolio', title: 'Portfolio', url: '/programme-hub?tab=portfolio', icon: LayoutDashboard, priority: 3, isPinned: isPinned('/programme-hub?tab=portfolio') });
+    if (planning.length) groups.push({ id: 'planning', label: 'Planning & Setup', order: 2, items: planning });
+
+    return groups;
+  }
+
   const groups: MenuGroup[] = [];
 
   // 1. Overview / Workspace
   const overviewItems: MenuGroup['items'] = [];
-  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || isSMT || perms.dashboard))
+  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || perms.dashboard))
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   if (!isHidden('/my-tasks'))
     overviewItems.push({ id: 'my-tasks', title: 'My Tasks', url: '/my-tasks', icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
   if (!isHidden('/my-projects'))
     overviewItems.push({ id: 'my-projects', title: 'My Projects', url: '/my-projects', icon: FolderKanban, priority: 2.5, isPinned: isPinned('/my-projects') });
-  if (!isHidden('/cost-submission') && !isSMT && (isDataCollector || isAdmin || isCoordinator || isSupervisor || isCountryDirector))
+  if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isSupervisor || isCountryDirector))
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
-  if (!isHidden('/my-expenses') && !isSMT)
+  if (!isHidden('/my-expenses'))
     overviewItems.push({ id: 'my-expenses', title: 'My Expenses', url: '/my-expenses', icon: CreditCard, priority: 4, isPinned: isPinned('/my-expenses') });
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
 
   // 2. Communication Hub
   const communicationItems: MenuGroup['items'] = [];
-  if (!isHidden('/communication-hub') && !isSMT)
+  if (!isHidden('/communication-hub'))
     communicationItems.push({ id: 'communication-hub', title: 'Communication', url: '/communication-hub', icon: MessageSquare, priority: 1, isPinned: isPinned('/communication-hub') });
   if (!isHidden('/notifications'))
     communicationItems.push({ id: 'notifications', title: 'Notifications', url: '/notifications', icon: Bell, priority: 2, isPinned: isPinned('/notifications') });
@@ -104,10 +136,10 @@ export const getWorkflowMenuGroups = (
 
   // 3. Programme Management
   const planningItems: MenuGroup['items'] = [];
-  const canSeeProgrammeHub = isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || isFOM || isSuperAdmin || isSMT || perms.projects;
+  const canSeeProgrammeHub = isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || isFOM || isSuperAdmin || perms.projects;
   if (canSeeProgrammeHub && !isHidden('/programme-hub'))
     planningItems.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
-  if (!isHidden('/mmp') && !isSMT && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isSeniorManagement)) {
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isSeniorManagement)) {
     const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
@@ -115,7 +147,7 @@ export const getWorkflowMenuGroups = (
 
   // 4. Field Operations Hub
   const fieldOpsItems: MenuGroup['items'] = [];
-  const canSeeFieldOps = !isSMT && (isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isSuperAdmin || perms.siteVisits || perms.fieldTeam);
+  const canSeeFieldOps = isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isSuperAdmin || perms.siteVisits || perms.fieldTeam;
   if (canSeeFieldOps && !isHidden('/field-ops'))
     fieldOpsItems.push({ id: 'field-ops-hub', title: 'Field Ops Hub', url: '/field-ops', icon: Compass, priority: 1, isPinned: isPinned('/field-ops') });
   if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: 'Field Operations', order: 3, items: fieldOpsItems });
