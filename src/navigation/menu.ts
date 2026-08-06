@@ -135,6 +135,8 @@ export const getWorkflowMenuGroups = (
   // Pre-Funding: restricted to finance/admin roles only (matches PreFundingRoute guard in App.tsx)
   if (!isHidden('/pre-funding') && (isAdmin || isSuperAdmin || isFinancialAdmin))
     financeItems.push({ id: 'pre-funding', title: 'Pre-Funding', url: '/pre-funding', icon: Banknote, priority: 5, isPinned: isPinned('/pre-funding') });
+  if (!isHidden('/budget-requests'))
+    financeItems.push({ id: 'budget-requests', title: 'Budget Requests', url: '/budget-requests', icon: ClipboardList, priority: 6, isPinned: isPinned('/budget-requests') });
   if (financeItems.length) groups.push({ id: 'finance', label: 'Finance', order: 5, items: financeItems });
 
   // 7. Analytics Hub

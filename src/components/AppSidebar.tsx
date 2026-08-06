@@ -459,6 +459,9 @@
     if (!isHidden('/my-expenses')) {
       myMoneyItems.push({ id: 'my-expenses', title: "My Expenses", url: "/my-expenses", icon: Receipt, priority: 4, isPinned: isPinned('/my-expenses') });
     }
+    if (!isHidden('/budget-requests')) {
+      myMoneyItems.push({ id: 'budget-requests', title: 'Budget Requests', url: '/budget-requests', icon: ClipboardList, priority: 5, isPinned: isPinned('/budget-requests') });
+    }
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];

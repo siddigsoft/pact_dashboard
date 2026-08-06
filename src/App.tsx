@@ -236,6 +236,7 @@ const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
 const MyExpenses = lazy(() => import('./pages/MyExpenses'));
+const OperationalBudgetRequests = lazy(() => import('./pages/OperationalBudgetRequests'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const Offboarding = lazy(() => import('./pages/Offboarding'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
@@ -763,6 +764,7 @@ const AppRoutes = () => {
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />
+        <Route path="/budget-requests" element={<PageWrapper><OperationalBudgetRequests /></PageWrapper>} />
         <Route path="/attendance" element={<Navigate to="/hr?tab=attendance" replace />} />
         <Route path="/offboarding" element={<Navigate to="/hr?tab=offboarding" replace />} />
       </Route>
