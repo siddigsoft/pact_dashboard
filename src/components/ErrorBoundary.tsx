@@ -64,21 +64,17 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     //   3. "Cannot read properties of null (reading '...')" — context/dispatcher
     //      went null during Vite HMR module swap (e.g. ReactCurrentDispatcher is
     //      null between old and new module loading, causing hook calls to fail)
-    const isProviderMismatch = /must be used within/i.test(msg);
-    const isHmrRace = isProviderMismatch ||
+    // These three patterns are almost always Vite HMR / duplicate-React identity
+    // races (dispatcher null, context module swap, TDZ after hot-swap). They
+    // happen mid-session when files are edited — always recover with debounce.
+    const isHmrRace = /must be used within/i.test(msg) ||
                       /cannot access .+ before initialization/i.test(msg) ||
                       /cannot read propert(?:y|ies) of null/i.test(msg);
     if (isHmrRace) {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
       const now = Date.now();
-      const pageAge = now - PAGE_LOAD_TIME;
-      // Provider/"must be used within" races happen on mid-session HMR too
-      // (editing a file hot-swaps context modules). Always recover those.
-      // Other HMR races stay limited to the first 15s so real mid-flow bugs
-      // still surface instead of wiping the user's work.
-      const allowReload = isProviderMismatch || pageAge < 15000;
-      if (allowReload && now - last > 4000) {
+      if (now - last > 4000) {
         sessionStorage.setItem(key, String(now));
         window.location.reload();
       }
