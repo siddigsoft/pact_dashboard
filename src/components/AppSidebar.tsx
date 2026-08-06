@@ -1504,6 +1504,21 @@
               );
             };
 
+            const GROUP_ICONS: Record<string, React.ElementType> = {
+              'workspace':            LayoutDashboard,
+              'programme-management': FolderKanban,
+              'communication':        MessageSquare,
+              'field-ops':            Activity,
+              'coordination':         Network,
+              'hr-people':            Users,
+              'crm':                  Handshake,
+              'surveys':              ClipboardList,
+              'analytics':            BarChart3,
+              'admin':                Settings,
+              'help':                 HelpCircle,
+              'super-admin':          ShieldCheck,
+            };
+
             const rendered: JSX.Element[] = [];
             let financeInserted = false;
             let accountingInserted = false;
@@ -1540,6 +1555,7 @@
                             isCollapsed && "-rotate-90"
                           )}
                         />
+                        {GROUP_ICONS[group.id] && (() => { const Icon = GROUP_ICONS[group.id]; return <Icon className="h-3.5 w-3.5 shrink-0" />; })()}
                         <span className="flex-1 truncate">{group.label}</span>
                         <span className="text-[10px] font-normal tabular-nums opacity-50">{group.items.length}</span>
                       </SidebarGroupLabel>
