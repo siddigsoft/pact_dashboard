@@ -148,6 +148,10 @@
 
   /** Groups with many links â€” collapsed by default to reduce visual clutter */
   const DENSE_COLLAPSED_BY_DEFAULT = new Set([
+    // section parents
+    'workspace-parent', 'programme-parent', 'comms-parent', 'fieldops-parent',
+    'coordination-parent', 'hr-parent', 'crm-parent', 'surveys-parent',
+    'analytics-parent', 'admin-parent', 'help-parent', 'superadmin-parent',
     'super-admin',
     'finance-accounting',
     'finance-accounting-core',
@@ -236,20 +240,20 @@
 
   /** Maps PAGE_DEFS group label â†’ AppSidebar MenuGroup id */
   const PAGEDEF_GROUP_TO_SIDEBAR: Record<string, string> = {
-    'My Workspace':          'workspace',
-    'Communication':         'communication',
-    'Programme Management':  'programme-management',
-    'Field Operations':      'field-ops',
-    'Coordination':          'coordination',
+    'My Workspace':          'workspace-parent',
+    'Communication':         'comms-parent',
+    'Programme Management':  'programme-parent',
+    'Field Operations':      'fieldops-parent',
+    'Coordination':          'coordination-parent',
     'Finance':               'finance-parent',
-    'HR & People':           'hr-people',
-    'Surveys':               'surveys',
-    'Analytics & Reports':   'analytics',
-    'Accounting':            'accounting',
-    'Administration':        'admin',
-    'Super Admin':           'super-admin',
-    'Audit & Security':      'admin',
-    'CRM':                   'crm',
+    'HR & People':           'hr-parent',
+    'Surveys':               'surveys-parent',
+    'Analytics & Reports':   'analytics-parent',
+    'Accounting':            'accounting-parent',
+    'Administration':        'admin-parent',
+    'Super Admin':           'superadmin-parent',
+    'Audit & Security':      'admin-parent',
+    'CRM':                   'crm-parent',
   };
 
   interface FavoriteItem {
@@ -400,14 +404,19 @@
     if (!isHidden('/workspace')) {
       workspaceItems.push({ id: 'workspace-hub', title: "Workspace Hub", url: "/workspace", icon: FolderOpen, priority: 5, isPinned: isPinned('/workspace') });
     }
-    if (workspaceItems.length) groups.push({ id: 'workspace', label: "My Workspace", order: 1, items: workspaceItems });
+    const wsPersonal = workspaceItems.filter(i => ['dashboard','my-tasks','my-projects'].includes(i.id));
+    const wsTeam     = workspaceItems.filter(i => ['team-tasks','my-team'].includes(i.id));
+    const wsTools    = workspaceItems.filter(i => ['calendar','notifications','workspace-hub'].includes(i.id));
+    if (wsPersonal.length) groups.push({ id: 'workspace-personal', label: 'Personal',  order: 1.1, items: wsPersonal, parentGroup: 'workspace' } as any);
+    if (wsTeam.length)     groups.push({ id: 'workspace-team',     label: 'Team',       order: 1.2, items: wsTeam,     parentGroup: 'workspace' } as any);
+    if (wsTools.length)    groups.push({ id: 'workspace-tools',    label: 'Tools',      order: 1.3, items: wsTools,    parentGroup: 'workspace' } as any);
 
     // â”€â”€ 2. Communication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const communicationItems: MenuGroup['items'] = [];
     if (!isHidden('/communication-hub')) {
       communicationItems.push({ id: 'communication-hub', title: "Communication", url: "/communication-hub", icon: MessageSquare, priority: 1, isPinned: isPinned('/communication-hub') });
     }
-    if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
+    if (communicationItems.length) groups.push({ id: 'comms-channels', label: 'Channels', order: 3.1, items: communicationItems, parentGroup: 'comms' } as any);
 
     // â”€â”€ 2. Programme Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const planningItems: MenuGroup['items'] = [];
@@ -423,7 +432,7 @@
     if (canSeeFieldDataHub && !isHidden('/field-data')) {
       planningItems.push({ id: 'field-data-hub', title: "Field Data Hub", url: "/field-data", icon: Layers, priority: 3, isPinned: isPinned('/field-data') });
     }
-    if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
+    if (planningItems.length) groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: planningItems, parentGroup: 'programme' } as any);
 
     // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // ── Field Ops Hub (replaces 9 flat items) ─────────────────────────────────
@@ -432,7 +441,7 @@
     if (canSeeFieldOps && !isHidden('/field-ops')) {
       fieldOpsItems.push({ id: 'field-ops-hub', title: "Field Ops Hub", url: "/field-ops", icon: Compass, priority: 1, isPinned: isPinned('/field-ops') });
     }
-    if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 4, items: fieldOpsItems });
+    if (fieldOpsItems.length) groups.push({ id: 'fieldops-ops', label: 'Operations', order: 4.1, items: fieldOpsItems, parentGroup: 'fieldops' } as any);
 
     // â”€â”€ 5. Coordination & Oversight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const coordinationItems: MenuGroup['items'] = [];
@@ -451,7 +460,10 @@
     if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin)) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
-    if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
+    const coordSiteItems  = coordinationItems.filter(i => ['supervisor-site-management','site-verification','sites-for-verification','mmp-cycle-close'].includes(i.id));
+    const coordAdminItems = coordinationItems.filter(i => ['staff-directory'].includes(i.id));
+    if (coordSiteItems.length)  groups.push({ id: 'coord-sites', label: 'Site Management', order: 4.51, items: coordSiteItems,  parentGroup: 'coordination' } as any);
+    if (coordAdminItems.length) groups.push({ id: 'coord-admin', label: 'Administration',  order: 4.52, items: coordAdminItems, parentGroup: 'coordination' } as any);
 
     // â”€â”€ 6. Payments & Finance (sub-groups) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const myMoneyItems: MenuGroup['items'] = [];
@@ -631,7 +643,10 @@
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 5, isPinned: false });
     }
-    if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
+    const hrAdminItems = hrItems.filter(i => ['employees','hr-hub'].includes(i.id));
+    const hrSelfItems  = hrItems.filter(i => ['my-payslip','leave-requests','timesheet'].includes(i.id));
+    if (hrAdminItems.length) groups.push({ id: 'hr-admin',        label: 'People Management', order: 5.61, items: hrAdminItems, parentGroup: 'hr' } as any);
+    if (hrSelfItems.length)  groups.push({ id: 'hr-self-service', label: 'My HR',             order: 5.62, items: hrSelfItems,  parentGroup: 'hr' } as any);
 
     // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
@@ -639,7 +654,7 @@
     if (hasCrmAccess && !isHidden('/crm')) {
       crmItems.push({ id: 'crm-hub', title: 'CRM', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
     }
-    if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
+    if (crmItems.length) groups.push({ id: 'crm-hub-group', label: 'Hub', order: 5.81, items: crmItems, parentGroup: 'crm' } as any);
 
     // â”€â”€ Surveys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!isHidden('/surveys')) {
@@ -648,7 +663,7 @@
       ];
       if (isSuperAdmin || isAdmin)
         surveyItems.push({ id: 'data-quality', title: 'Data Quality Control', url: '/data-quality', icon: ShieldCheck, priority: 2, isPinned: isPinned('/data-quality') });
-      groups.push({ id: 'surveys', label: 'Surveys', order: 5.9, items: surveyItems });
+      groups.push({ id: 'surveys-hub-group', label: 'Data Collection', order: 5.91, items: surveyItems, parentGroup: 'surveys' } as any);
     }
 
     // â”€â”€ 9. Analytics & Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -658,7 +673,7 @@
     if (canSeeAnalytics && !isHidden('/analytics')) {
       analyticsItems.push({ id: 'analytics-hub', title: "Analytics Hub", url: "/analytics", icon: BarChart3, priority: 1, isPinned: isPinned('/analytics') });
     }
-    if (analyticsItems.length) groups.push({ id: 'analytics', label: "Analytics & Reports", order: 6, items: analyticsItems });
+    if (analyticsItems.length) groups.push({ id: 'analytics-hub-group', label: 'Analytics', order: 6.1, items: analyticsItems, parentGroup: 'analytics' } as any);
 
     // â”€â”€ 10. Administration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // ── Admin Hub (replaces 12 flat items) ────────────────────────────────────
@@ -667,7 +682,7 @@
     if (canSeeAdmin && !isHidden('/admin-hub')) {
       adminItems.push({ id: 'admin-hub', title: "Admin Hub", url: "/admin-hub", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/admin-hub') });
     }
-    if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 7, items: adminItems });
+    if (adminItems.length) groups.push({ id: 'admin-hub-group', label: 'Hub', order: 7.1, items: adminItems, parentGroup: 'admin' } as any);
 
     // â”€â”€ 11. Help & Support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const helpItems: MenuGroup['items'] = [];
@@ -686,7 +701,10 @@
     if (!isHidden('/mobile-support-tickets') && (isSuperAdmin || isAdmin)) {
       helpItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 4, isPinned: isPinned('/mobile-support-tickets') });
     }
-    if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 8, items: helpItems });
+    const helpDocItems     = helpItems.filter(i => ['changelog','documentation','mobile-documentation'].includes(i.id));
+    const helpSupportItems = helpItems.filter(i => ['helpline','mobile-support-tickets'].includes(i.id));
+    if (helpDocItems.length)     groups.push({ id: 'help-docs',    label: 'Documentation', order: 8.1, items: helpDocItems,     parentGroup: 'help' } as any);
+    if (helpSupportItems.length) groups.push({ id: 'help-support', label: 'Support',       order: 8.2, items: helpSupportItems, parentGroup: 'help' } as any);
 
     // â”€â”€ 12. Super Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // ── Super Admin Hub (replaces 14 flat items) ──────────────────────────────
@@ -701,7 +719,7 @@
       if (!isHidden('/system-diagrams')) {
         superAdminItems.push({ id: 'system-diagrams', title: "System Diagrams", url: "/system-diagrams", icon: Network, priority: 2, isPinned: isPinned('/system-diagrams') });
       }
-      if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 9, items: superAdminItems });
+      if (superAdminItems.length) groups.push({ id: 'superadmin-hub-group', label: 'System', order: 9.1, items: superAdminItems, parentGroup: 'superadmin' } as any);
     }
 
     groups.forEach(group => {
@@ -1087,7 +1105,7 @@
         if (group.items.some(item => isNavPathActive(pathname, search, item.url))) {
           toExpand.add(group.id);
           if ((group as { parentGroup?: string }).parentGroup) {
-            toExpand.add((group as { parentGroup?: string }).parentGroup!);
+            toExpand.add(`${(group as { parentGroup?: string }).parentGroup!}-parent`);
           }
         }
       });
@@ -1250,10 +1268,37 @@
           )}
 
           {(() => {
-            const financeSubGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => g.parentGroup === 'finance');
-            const accountingSubGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => g.parentGroup === 'accounting');
-            const regularGroups = menuGroups.filter((g: MenuGroup & { parentGroup?: string }) => !g.parentGroup);
-            const allGroupsSorted = [...regularGroups].sort((a, b) => a.order - b.order);
+            // ── Section config: parentGroup value → display config ──────────────
+            type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string };
+            const SECTION_CFG: Record<string, SectionCfg> = {
+              'workspace':     { label: 'My Workspace',            Icon: LayoutDashboard, labelClass: 'text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30' },
+              'programme':     { label: 'Programme Management',    Icon: FolderKanban,    labelClass: 'text-purple-600 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30' },
+              'comms':         { label: 'Communication',           Icon: MessageSquare,   labelClass: 'text-sky-600 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30' },
+              'fieldops':      { label: 'Field Operations',        Icon: Activity,        labelClass: 'text-orange-600 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30' },
+              'coordination':  { label: 'Coordination & Oversight',Icon: Network,         labelClass: 'text-teal-600 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30' },
+              'finance':       { label: 'Payments & Finance',      Icon: Banknote,        labelClass: 'text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30' },
+              'accounting':    { label: 'Accounting',              Icon: BookOpen,        labelClass: 'text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30' },
+              'hr':            { label: 'HR & People',             Icon: Users,           labelClass: 'text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/30' },
+              'crm':           { label: 'CRM',                     Icon: Handshake,       labelClass: 'text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30' },
+              'surveys':       { label: 'Surveys',                 Icon: ClipboardList,   labelClass: 'text-cyan-600 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30' },
+              'analytics':     { label: 'Analytics & Reports',     Icon: BarChart3,       labelClass: 'text-violet-600 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30' },
+              'admin':         { label: 'Administration',          Icon: Settings,        labelClass: 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60' },
+              'help':          { label: 'Help & Support',          Icon: HelpCircle,      labelClass: 'text-lime-600 dark:text-lime-300 hover:bg-lime-50 dark:hover:bg-lime-900/30' },
+              'superadmin':    { label: 'Super Admin',             Icon: ShieldCheck,     labelClass: 'text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30' },
+            };
+
+            // Group sub-groups by parentGroup; track min order for sorting sections
+            type SubGroup = MenuGroup & { parentGroup?: string };
+            const sectionMap = new Map<string, SubGroup[]>();
+            (menuGroups as SubGroup[]).forEach(g => {
+              const pg = g.parentGroup ?? '__ungrouped__';
+              if (!sectionMap.has(pg)) sectionMap.set(pg, []);
+              sectionMap.get(pg)!.push(g);
+            });
+            const minOrder = (sgs: SubGroup[]) => Math.min(...sgs.map(g => g.order));
+            const sortedSections = Array.from(sectionMap.entries())
+              .filter(([key]) => key !== '__ungrouped__')
+              .sort(([, a], [, b]) => minOrder(a) - minOrder(b));
 
             const NavCountBadge = ({ count, className, testId }: { count: number; className: string; testId: string }) =>
               count > 0 ? (
@@ -1452,25 +1497,30 @@
                 );
               });
 
-            const renderFinanceSection = (testIdSuffix = '') => {
-              const isFinanceCollapsed = collapsedGroups.has('finance-parent');
+            // ── Generic section renderer (works for all sections) ──────────────
+            const renderSection = (parentGroupId: string, subGroups: SubGroup[], keySuffix = '') => {
+              const cfg = SECTION_CFG[parentGroupId];
+              if (!cfg || subGroups.length === 0) return null;
+              const parentKey = `${parentGroupId}-parent`;
+              const isCollapsed = collapsedGroups.has(parentKey);
+              const { label, Icon, labelClass } = cfg;
               return (
-                <Collapsible key={`finance-parent${testIdSuffix}`} open={!isFinanceCollapsed}>
+                <Collapsible key={`${parentKey}${keySuffix}`} open={!isCollapsed}>
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
                     <CollapsibleTrigger asChild>
                       <SidebarGroupLabel
-                        className={cn(SIDEBAR_GROUP_LABEL, "text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30")}
-                        onClick={() => toggleGroupCollapse('finance-parent')}
-                        data-testid={`group-label-finance-parent${testIdSuffix}`}
+                        className={cn(SIDEBAR_GROUP_LABEL, labelClass)}
+                        onClick={() => toggleGroupCollapse(parentKey)}
+                        data-testid={`group-label-${parentKey}${keySuffix}`}
                       >
-                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isFinanceCollapsed && "-rotate-90")} />
-                        <Banknote className="h-3.5 w-3.5 shrink-0" />
-                        <span className="flex-1 truncate">Payments & Finance</span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isCollapsed && "-rotate-90")} />
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1 truncate">{label}</span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {renderSubGroups(financeSubGroups)}
+                        {renderSubGroups(subGroups)}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
@@ -1478,106 +1528,10 @@
               );
             };
 
-            const renderAccountingSection = (testIdSuffix = '') => {
-              const isAcctCollapsed = collapsedGroups.has('accounting-parent');
-              return (
-                <Collapsible key={`accounting-parent${testIdSuffix}`} open={!isAcctCollapsed}>
-                  <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
-                    <CollapsibleTrigger asChild>
-                      <SidebarGroupLabel
-                        className={cn(SIDEBAR_GROUP_LABEL, "text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30")}
-                        onClick={() => toggleGroupCollapse('accounting-parent')}
-                        data-testid={`group-label-accounting-parent${testIdSuffix}`}
-                      >
-                        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isAcctCollapsed && "-rotate-90")} />
-                        <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                        <span className="flex-1 truncate">Accounting</span>
-                      </SidebarGroupLabel>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {renderSubGroups(accountingSubGroups)}
-                      </SidebarGroupContent>
-                    </CollapsibleContent>
-                  </SidebarGroup>
-                </Collapsible>
-              );
-            };
-
-            const GROUP_ICONS: Record<string, React.ElementType> = {
-              'workspace':            LayoutDashboard,
-              'programme-management': FolderKanban,
-              'communication':        MessageSquare,
-              'field-ops':            Activity,
-              'coordination':         Network,
-              'hr-people':            Users,
-              'crm':                  Handshake,
-              'surveys':              ClipboardList,
-              'analytics':            BarChart3,
-              'admin':                Settings,
-              'help':                 HelpCircle,
-              'super-admin':          ShieldCheck,
-            };
-
-            const rendered: JSX.Element[] = [];
-            let financeInserted = false;
-            let accountingInserted = false;
-
-            for (const group of allGroupsSorted) {
-              if (!financeInserted && group.order > 5 && financeSubGroups.length > 0) {
-                financeInserted = true;
-                rendered.push(renderFinanceSection());
-              }
-              if (financeInserted && !accountingInserted && accountingSubGroups.length > 0) {
-                accountingInserted = true;
-                rendered.push(renderAccountingSection());
-              }
-
-              const isCollapsed = collapsedGroups.has(group.id);
-              const hasActiveItem = group.items.some(item => isNavPathActive(pathname, search, item.url));
-
-              rendered.push(
-                <Collapsible key={group.id} open={!isCollapsed}>
-                  <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
-                    <CollapsibleTrigger asChild>
-                      <SidebarGroupLabel
-                        className={cn(
-                          SIDEBAR_GROUP_LABEL,
-                          "text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-gray-800",
-                          hasActiveItem && "text-slate-700 dark:text-slate-200"
-                        )}
-                        onClick={() => toggleGroupCollapse(group.id)}
-                        data-testid={`group-label-${group.id}`}
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                            isCollapsed && "-rotate-90"
-                          )}
-                        />
-                        {GROUP_ICONS[group.id] && (() => { const Icon = GROUP_ICONS[group.id]; return <Icon className="h-3.5 w-3.5 shrink-0" />; })()}
-                        <span className="flex-1 truncate">{group.label}</span>
-                        <span className="text-[10px] font-normal tabular-nums opacity-50">{group.items.length}</span>
-                      </SidebarGroupLabel>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarGroupContent className="pt-0.5 pb-1">
-                        {renderMenuItems(group.items)}
-                      </SidebarGroupContent>
-                    </CollapsibleContent>
-                  </SidebarGroup>
-                </Collapsible>
-              );
-            }
-
-            if (!financeInserted && financeSubGroups.length > 0) {
-              rendered.push(renderFinanceSection('-end'));
-            }
-            if (!accountingInserted && accountingSubGroups.length > 0) {
-              rendered.push(renderAccountingSection('-end'));
-            }
-
-            return rendered;
+            // ── Render all sections in order ────────────────────────────────────
+            return sortedSections.map(([parentGroupId, subGroups]) =>
+              renderSection(parentGroupId, subGroups)
+            ).filter(Boolean);
           })()}
         </SidebarContent>
 
