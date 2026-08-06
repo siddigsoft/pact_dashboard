@@ -10,6 +10,7 @@ export type RoleCode =
   | 'superAdmin'
   | 'admin'
   | 'countryDirector'
+  | 'seniorManagement'
   | 'ict'
   | 'fom'
   | 'financialAdmin'
@@ -30,6 +31,7 @@ export type RoleLabel =
   | 'Super Admin'
   | 'Admin'
   | 'Country Director'
+  | 'Senior Management'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
   | 'Financial Admin'
@@ -78,6 +80,13 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     legacy: ['CountryDirector', 'countryDirector', 'country_director', 'Country Director'],
     description: 'Senior leadership with full read access across all hubs and high-level approval authority.',
     affects: 'Portfolio Dashboard, Finance approvals, Monitoring, MMP Management, all operational reports.',
+  },
+  seniorManagement: {
+    code: 'seniorManagement',
+    label: 'Senior Management',
+    legacy: ['SeniorManagement', 'seniorManagement', 'senior_management', 'Senior Management', 'Senior / Executive Management'],
+    description: 'Executive and strategic management oversight. Full read and high-level approval authority across all modules. No system or developer settings.',
+    affects: 'Executive Dashboards, Portfolio, all Financial reports & approvals, HR metrics, Operations overview, CRM, Reports.',
   },
   ict: {
     code: 'ict',

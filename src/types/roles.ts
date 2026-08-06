@@ -3,6 +3,7 @@ export type AppRole =
   | 'SuperAdmin'
   | 'Admin'
   | 'CountryDirector'
+  | 'SeniorManagement'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
@@ -282,6 +283,60 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'crm', action: 'export' },
     { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'create' },
     { resource: 'reports', action: 'delete' }, { resource: 'reports', action: 'export' },
+  ],
+
+  // ── Senior / Executive Management ────────────────────────────────────────
+  // Executive read + high-level approval across all modules.
+  // No system settings, role management, or dev/backend access.
+  SeniorManagement: [
+    // Dashboards & portfolio
+    { resource: 'portfolio', action: 'read' }, { resource: 'portfolio', action: 'export' },
+    { resource: 'analytics', action: 'read' }, { resource: 'analytics', action: 'export' },
+    { resource: 'projects', action: 'read' }, { resource: 'projects', action: 'approve' },
+    { resource: 'projects', action: 'export' },
+    // Finance — full read + executive approval
+    { resource: 'finances', action: 'read' }, { resource: 'finances', action: 'approve' },
+    { resource: 'finances', action: 'export' },
+    { resource: 'cost_submissions', action: 'read' }, { resource: 'cost_submissions', action: 'approve' },
+    { resource: 'cost_submissions', action: 'export' },
+    { resource: 'down_payments', action: 'read' }, { resource: 'down_payments', action: 'approve' },
+    { resource: 'down_payments', action: 'export' },
+    { resource: 'pre_funding', action: 'read' }, { resource: 'pre_funding', action: 'approve' },
+    { resource: 'pre_funding', action: 'export' },
+    { resource: 'wallets', action: 'read' }, { resource: 'wallets', action: 'approve' },
+    { resource: 'wallets', action: 'export' },
+    { resource: 'accounting', action: 'read' }, { resource: 'accounting', action: 'export' },
+    { resource: 'procurement', action: 'read' }, { resource: 'procurement', action: 'approve' },
+    { resource: 'procurement', action: 'export' },
+    { resource: 'fixed_assets', action: 'read' }, { resource: 'fixed_assets', action: 'export' },
+    { resource: 'transactions', action: 'read' },
+    // Operations — read
+    { resource: 'mmp', action: 'read' }, { resource: 'mmp', action: 'export' },
+    { resource: 'site_visits', action: 'read' }, { resource: 'site_visits', action: 'export' },
+    { resource: 'hub_operations', action: 'read' },
+    { resource: 'coverage_map', action: 'read' },
+    { resource: 'safety', action: 'read' },
+    { resource: 'incidents', action: 'read' },
+    // HR — read + metrics
+    { resource: 'hr', action: 'read' }, { resource: 'hr', action: 'export' },
+    { resource: 'hr_analytics', action: 'read' }, { resource: 'hr_analytics', action: 'export' },
+    { resource: 'payroll', action: 'read' }, { resource: 'payroll', action: 'export' },
+    { resource: 'leave', action: 'read' }, { resource: 'leave', action: 'approve' },
+    { resource: 'benefits', action: 'read' }, { resource: 'benefits', action: 'export' },
+    { resource: 'succession', action: 'read' }, { resource: 'succession', action: 'approve' },
+    { resource: 'pulse_surveys', action: 'read' },
+    // Users — read only (for org chart / directory)
+    { resource: 'users', action: 'read' },
+    // Reports / CRM / tools
+    { resource: 'reports', action: 'read' }, { resource: 'reports', action: 'create' },
+    { resource: 'reports', action: 'export' },
+    { resource: 'crm', action: 'read' }, { resource: 'crm', action: 'export' },
+    { resource: 'tasks', action: 'read' }, { resource: 'tasks', action: 'create' },
+    { resource: 'tasks', action: 'update' }, { resource: 'tasks', action: 'assign' },
+    { resource: 'notifications', action: 'read' },
+    { resource: 'calendar', action: 'read' }, { resource: 'calendar', action: 'create' },
+    { resource: 'signatures', action: 'read' },
+    { resource: 'audit_logs', action: 'read' },
   ],
 
   // ── Country Director ─────────────────────────────────────────────────────

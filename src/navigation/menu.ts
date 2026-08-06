@@ -66,6 +66,7 @@ export const getWorkflowMenuGroups = (
   const isSupervisor = hasRole('supervisor');
   const isProjectManager = hasRole('projectManager');
   const isCountryDirector = hasRole('countryDirector');
+  const isSeniorManagement = hasRole('seniorManagement');
   const isHR = hasRole('hr');
   const isAuditor = hasRole('auditor');
 
@@ -76,7 +77,7 @@ export const getWorkflowMenuGroups = (
 
   // 1. Overview / Workspace
   const overviewItems: MenuGroup['items'] = [];
-  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || perms.dashboard))
+  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || perms.dashboard))
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   if (!isHidden('/my-tasks'))
     overviewItems.push({ id: 'my-tasks', title: 'My Tasks', url: '/my-tasks', icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
@@ -98,10 +99,10 @@ export const getWorkflowMenuGroups = (
 
   // 3. Programme Management
   const planningItems: MenuGroup['items'] = [];
-  const canSeeProgrammeHub = isAdmin || isICT || isProjectManager || isCountryDirector || isFOM || isSuperAdmin || perms.projects;
+  const canSeeProgrammeHub = isAdmin || isICT || isProjectManager || isCountryDirector || isSeniorManagement || isFOM || isSuperAdmin || perms.projects;
   if (canSeeProgrammeHub && !isHidden('/programme-hub'))
     planningItems.push({ id: 'programme-hub', title: 'Programme Hub', url: '/programme-hub', icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
-  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector)) {
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isSeniorManagement)) {
     const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
@@ -126,9 +127,9 @@ export const getWorkflowMenuGroups = (
   const financeItems: MenuGroup['items'] = [];
   if (!isHidden('/wallet') && (isFinancialAdmin || isFOM || isSupervisor || isDataCollector || isCoordinator))
     financeItems.push({ id: 'my-wallet', title: 'My Wallet', url: '/wallet', icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
-  if (!isHidden('/approvals') && (isAdmin || isSuperAdmin || isFinancialAdmin || isFOM || isSupervisor))
+  if (!isHidden('/approvals') && (isAdmin || isSuperAdmin || isFinancialAdmin || isFOM || isSupervisor || isSeniorManagement))
     financeItems.push({ id: 'approvals-hub', title: 'Approvals Hub', url: '/approvals', icon: Inbox, priority: 2, isPinned: isPinned('/approvals') });
-  if (!isHidden('/finance-hub') && (isAdmin || isSuperAdmin || isFinancialAdmin || isAuditor || isFOM || isCountryDirector))
+  if (!isHidden('/finance-hub') && (isAdmin || isSuperAdmin || isFinancialAdmin || isAuditor || isFOM || isCountryDirector || isSeniorManagement))
     financeItems.push({ id: 'finance-hub', title: 'Finance Hub', url: '/finance-hub', icon: DollarSign, priority: 3, isPinned: isPinned('/finance-hub') });
   if (!isHidden('/accounting') && (isAdmin || isSuperAdmin || isFinancialAdmin))
     financeItems.push({ id: 'accounting-hub', title: 'Accounting', url: '/accounting', icon: BookOpen, priority: 4, isPinned: isPinned('/accounting') });
@@ -141,14 +142,14 @@ export const getWorkflowMenuGroups = (
 
   // 7. Analytics Hub
   const dataItems: MenuGroup['items'] = [];
-  const canSeeAnalytics = isAdmin || isSuperAdmin || isICT || isFinancialAdmin || isAuditor || isFOM || isProjectManager || isCountryDirector || perms.reports;
+  const canSeeAnalytics = isAdmin || isSuperAdmin || isICT || isFinancialAdmin || isAuditor || isFOM || isProjectManager || isCountryDirector || isSeniorManagement || perms.reports;
   if (canSeeAnalytics && !isHidden('/analytics'))
     dataItems.push({ id: 'analytics-hub', title: 'Analytics Hub', url: '/analytics', icon: BarChart3, priority: 1, isPinned: isPinned('/analytics') });
   if (dataItems.length) groups.push({ id: 'reports', label: 'Analytics & Reports', order: 5.5, items: dataItems });
 
   // 8. HR Hub
   const hrItems: MenuGroup['items'] = [];
-  if (!isHidden('/hr') && (isAdmin || isSuperAdmin || isFinancialAdmin))
+  if (!isHidden('/hr') && (isAdmin || isSuperAdmin || isFinancialAdmin || isSeniorManagement))
     hrItems.push({ id: 'hr-hub', title: 'HR Hub', url: '/hr', icon: Briefcase, priority: 1, isPinned: isPinned('/hr') });
   if (hrItems.length) groups.push({ id: 'hr', label: 'HR & People', order: 5.6, items: hrItems });
 
@@ -164,7 +165,7 @@ export const getWorkflowMenuGroups = (
 
   // 10. CRM
   const crmItems: MenuGroup['items'] = [];
-  if (!isHidden('/crm') && (isAdmin || isSuperAdmin || isFOM || isProjectManager || isCountryDirector))
+  if (!isHidden('/crm') && (isAdmin || isSuperAdmin || isFOM || isProjectManager || isCountryDirector || isSeniorManagement))
     crmItems.push({ id: 'crm-hub', title: 'CRM', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
   if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 

@@ -371,6 +371,7 @@
     const isDataTeam = hasRole('dataTeam');
     const isProjectManager = hasRole('projectManager');
     const isCountryDirector = hasRole('countryDirector');
+    const isSeniorManagement = hasRole('seniorManagement');
     const isEmployee = hasRole('employee');
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
@@ -380,7 +381,7 @@
 
     // â”€â”€ 1. My Workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const workspaceItems: MenuGroup['items'] = [];
-    if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || isEmployee || perms.dashboard)) {
+    if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || isEmployee || isSeniorManagement || perms.dashboard)) {
       workspaceItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
     }
     if (!isHidden('/my-tasks')) {
@@ -420,15 +421,15 @@
 
     // â”€â”€ 2. Programme Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const planningItems: MenuGroup['items'] = [];
-    const canSeeProgrammeHub = isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager || isCountryDirector || isDataTeam || perms.projects;
+    const canSeeProgrammeHub = isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager || isCountryDirector || isSeniorManagement || isDataTeam || perms.projects;
     if (canSeeProgrammeHub && !isHidden('/programme-hub')) {
       planningItems.push({ id: 'programme-hub', title: "Programme Hub", url: "/programme-hub", icon: FolderKanban, priority: 1, isPinned: isPinned('/programme-hub') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager)) {
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector || isProjectManager || isSeniorManagement)) {
       const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
-    const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector;
+    const canSeeFieldDataHub = isSuperAdmin || isAdmin || isICT || isFOM || isDataTeam || isProjectManager || isCountryDirector || isSeniorManagement;
     if (canSeeFieldDataHub && !isHidden('/field-data')) {
       planningItems.push({ id: 'field-data-hub', title: "Field Data Hub", url: "/field-data", icon: Layers, priority: 3, isPinned: isPinned('/field-data') });
     }
@@ -489,7 +490,7 @@
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: myMoneyLabel, order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
-    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector)) {
+    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM || isCountryDirector || isSeniorManagement)) {
       approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
     }
     if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
@@ -498,7 +499,7 @@
     if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
       approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
     }
-    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector)) {
+    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector || isSeniorManagement)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
     if (!isHidden('/enumerator-fees-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
@@ -510,7 +511,7 @@
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
     // ── Finance Hub — 2 sections mirroring FinanceHub page ───────────────────
-    const finHubAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector;
+    const finHubAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM || isCountryDirector || isSeniorManagement;
     if (finHubAccess && !isHidden('/finance-hub')) {
       // ── 1. Operations ─────────────────────────────────────────────────────
       const fhOpsItems: MenuGroup['items'] = [];
@@ -621,7 +622,7 @@
 
     // â”€â”€ 7. HR & People â€” logical flow: Employees â†’ Payroll â†’ Retainer â†’ Leave â†’ Analytics â†’ My Payslip â”€â”€
     const hrItems: MenuGroup['items'] = [];
-    const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
+    const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin || isSeniorManagement;
     const hrStrictAccess = isSuperAdmin || isAdmin;
     // 1. Employees — admin & super admin only
     if (!isHidden('/employees') && hrStrictAccess) {
@@ -650,7 +651,7 @@
 
     // â”€â”€ 8. CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const crmItems: MenuGroup['items'] = [];
-    const hasCrmAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector;
+    const hasCrmAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector || isSeniorManagement;
     if (hasCrmAccess && !isHidden('/crm')) {
       crmItems.push({ id: 'crm-hub', title: 'CRM', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
     }
@@ -669,7 +670,7 @@
     // â”€â”€ 9. Analytics & Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // ── Analytics Hub (replaces 8 flat items) ─────────────────────────────────
     const analyticsItems: MenuGroup['items'] = [];
-    const canSeeAnalytics = isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor || isDataTeam || isFOM || isCountryDirector || perms.reports || perms.dataVisibility || perms.archive;
+    const canSeeAnalytics = isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor || isDataTeam || isFOM || isCountryDirector || isSeniorManagement || perms.reports || perms.dataVisibility || perms.archive;
     if (canSeeAnalytics && !isHidden('/analytics')) {
       analyticsItems.push({ id: 'analytics-hub', title: "Analytics Hub", url: "/analytics", icon: BarChart3, priority: 1, isPinned: isPinned('/analytics') });
     }
