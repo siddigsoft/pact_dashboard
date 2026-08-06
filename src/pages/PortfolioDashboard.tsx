@@ -70,6 +70,22 @@ interface TaskRow { id: string; title: string; status: string; priority: string 
 interface ProjectFieldTaskRow { id: string; project_id: string; title: string; status: string; priority: string | null; assigned_to: string | null; due_date: string | null; created_at: string; updated_at: string | null; }
 interface TimesheetRow { id: string; user_id: string; week_start: string; status: string; total_hours: number | null; }
 interface SubscriptionRow { id: string; name: string; status: string; monthly_cost_cents: number | null; renewal_date: string | null; }
+interface DirectorUpdateRow {
+  id: string; project_id: string; reporting_period: string; cycle_end: string;
+  overall_progress: number | null; overall_progress_override: number | null;
+  risk_flag: 'green' | 'yellow' | 'orange' | 'red' | null;
+  main_challenge: string | null; support_needed: string | null; responsible_unit: string | null;
+}
+type RiskFlag = NonNullable<DirectorUpdateRow['risk_flag']>;
+const RISK_FLAG_DOT: Record<RiskFlag, string> = {
+  green: 'bg-emerald-500', yellow: 'bg-amber-400', orange: 'bg-orange-500', red: 'bg-red-500',
+};
+const RISK_FLAG_SOFT: Record<RiskFlag, string> = {
+  green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+  yellow: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+  orange: 'bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300',
+  red: 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300',
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & helpers
@@ -174,7 +190,11 @@ function getBudget(p: ProjectRow, budgetMap: Record<string, BudgetRow>): { total
   if (jb?.total != null) return { total: jb.total * 100, spent: 0 };
   return { total: 0, spent: 0 };
 }
-function getHealth(p: ProjectRow, lastAdvanced: Record<string, string>): HealthSignal {
+function getHealth(p: ProjectRow, lastAdvanced: Record<string, string>, riskFlag?: RiskFlag | null): HealthSignal {
+  // Validated director risk flag is the portfolio source of truth when present
+  if (riskFlag === 'red') return 'stalled';
+  if (riskFlag === 'orange' || riskFlag === 'yellow') return 'at-risk';
+  if (riskFlag === 'green') return 'on-track';
   if (p.status === 'completed' || p.status === 'cancelled') return 'completed';
   if (p.status === 'draft') return 'draft';
   const last = lastAdvanced[p.id];
@@ -277,6 +297,8 @@ async function fetchAll() {
     { data: timesheetsRaw },
     { data: subscriptionsRaw },
     { data: projectFieldTasksRaw },
+    { data: directorUpdatesRaw },
+    { data: openActionsRaw },
   ] = await Promise.all([
     supabase.rpc('get_projects_for_analytics'),
     supabase.from('project_budgets').select('project_id, total_budget_cents, allocated_budget_cents, spent_budget_cents, remaining_budget_cents'),
@@ -299,6 +321,13 @@ async function fetchAll() {
     supabase.from('timesheets').select('id, user_id, week_start, status, total_hours').order('week_start', { ascending: false }).limit(500),
     supabase.from('organizational_subscriptions').select('id, name, status, monthly_cost_cents, renewal_date').limit(200),
     supabase.from('project_field_tasks').select('id, project_id, title, status, priority, assigned_to, due_date, created_at, updated_at').limit(500),
+    supabase.from('project_director_updates')
+      .select('id, project_id, reporting_period, cycle_end, overall_progress, overall_progress_override, risk_flag, main_challenge, support_needed, responsible_unit')
+      .eq('status', 'validated')
+      .order('cycle_end', { ascending: false }),
+    supabase.from('project_update_actions')
+      .select('project_id, status')
+      .in('status', ['pending', 'in_progress', 'escalated']),
   ]);
 
   const latestAdvanced: Record<string, string> = {};
@@ -306,11 +335,23 @@ async function fetchAll() {
     if (!latestAdvanced[row.project_id]) latestAdvanced[row.project_id] = row.advanced_at;
   }
 
+  // Latest validated director update per project (rows already ordered by cycle_end desc)
+  const latestDirectorByProject: Record<string, DirectorUpdateRow> = {};
+  for (const row of (directorUpdatesRaw ?? []) as DirectorUpdateRow[]) {
+    if (!latestDirectorByProject[row.project_id]) latestDirectorByProject[row.project_id] = row;
+  }
+  const openActionCountByProject: Record<string, number> = {};
+  for (const row of (openActionsRaw ?? []) as { project_id: string; status: string }[]) {
+    openActionCountByProject[row.project_id] = (openActionCountByProject[row.project_id] ?? 0) + 1;
+  }
+
   return {
     projects: (projectsRaw ?? []) as ProjectRow[],
     budgets: (budgetsRaw ?? []) as BudgetRow[],
     milestones: (milestonesRaw ?? []) as MilestoneRow[],
     latestAdvanced,
+    latestDirectorByProject,
+    openActionCountByProject,
     mmps: (mmpRaw ?? []) as MmpRow[],
     siteEntries: (siteEntriesRaw ?? []) as SiteEntryRow[],
     costSubs: (costSubsRaw ?? []) as CostSubRow[],
@@ -655,6 +696,8 @@ export default function PortfolioDashboard() {
   const projects = d?.projects ?? [];
   const milestones = d?.milestones ?? [];
   const latestAdvanced = d?.latestAdvanced ?? {};
+  const latestDirectorByProject = d?.latestDirectorByProject ?? {};
+  const openActionCountByProject = d?.openActionCountByProject ?? {};
 
   const budgetMap = useMemo(() => {
     const m: Record<string, BudgetRow> = {};
@@ -669,7 +712,9 @@ export default function PortfolioDashboard() {
       const budget = getBudget(p, budgetMap);
       const burnPct = budget.total > 0 ? Math.round((budget.spent / budget.total) * 100) : 0;
       const flow = getFlowProgress(p);
-      const health = getHealth(p, latestAdvanced);
+      const director = latestDirectorByProject[p.id] ?? null;
+      const openActions = openActionCountByProject[p.id] ?? 0;
+      const health = getHealth(p, latestAdvanced, director?.risk_flag);
       const rag = getRAGStatus(p, budgetMap, latestAdvanced);
       const overdueMilestones = milestones.filter(m =>
         m.project_id === p.id && m.status !== 'completed' && m.due_date && isBefore(parseISO(m.due_date), new Date())
@@ -683,8 +728,11 @@ export default function PortfolioDashboard() {
       const _msScore      = overdueMilestones === 0 ? 20 : Math.max(0, 20 - overdueMilestones * 5);
       const _ragScore     = rag.overall === 'green' ? 20 : rag.overall === 'amber' ? 10 : rag.overall === 'grey' ? 15 : 0;
       const healthScore   = Math.min(100, _flowScore + _budgetScore + _msScore + _ragScore);
-      return { ...p, budget, burnPct, flow, health, rag, overdueMilestones, nextMilestone, healthScore };
-    }), [projects, budgetMap, milestones, latestAdvanced]);
+      const directorProgress = director
+        ? Number(director.overall_progress_override ?? director.overall_progress ?? 0)
+        : null;
+      return { ...p, budget, burnPct, flow, health, rag, overdueMilestones, nextMilestone, healthScore, director, openActions, directorProgress };
+    }), [projects, budgetMap, milestones, latestAdvanced, latestDirectorByProject, openActionCountByProject]);
 
   // ── Executive View: Filtered dataset ─────────────────────────────────────
 
@@ -3410,6 +3458,83 @@ export default function PortfolioDashboard() {
 
           {/* ═══════════════ PORTFOLIO / PROJECTS ═══════════════ */}
           <TabsContent value="portfolio" className="mt-4 space-y-4">
+            {/* Director updates — validated source for risk / progress / open actions */}
+            {(() => {
+              const withUpdate = enriched.filter(p => p.director);
+              const flagCounts = { green: 0, yellow: 0, orange: 0, red: 0 };
+              for (const p of withUpdate) {
+                const f = p.director?.risk_flag;
+                if (f) flagCounts[f]++;
+              }
+              const needEscalation = withUpdate.filter(p => p.director?.risk_flag === 'orange' || p.director?.risk_flag === 'red');
+              return (
+                <SectionCard
+                  icon={ClipboardList}
+                  title="Latest Director Updates"
+                  action={() => navigate('/project-updates')}
+                  actionLabel="Open updates"
+                >
+                  <div className="flex flex-wrap gap-4 text-sm mb-3">
+                    <span className="text-muted-foreground"><b className="text-foreground tabular-nums">{withUpdate.length}</b> reporting</span>
+                    {(Object.keys(flagCounts) as RiskFlag[]).map(f => (
+                      <span key={f} className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <span className={cn('h-2 w-2 rounded-full', RISK_FLAG_DOT[f])} />
+                        <b className="text-foreground tabular-nums">{flagCounts[f]}</b> {f}
+                      </span>
+                    ))}
+                    {needEscalation.length > 0 && (
+                      <span className="text-orange-700 dark:text-orange-300 font-medium">
+                        {needEscalation.length} need escalation
+                      </span>
+                    )}
+                  </div>
+                  {withUpdate.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No validated director updates yet this portfolio.</p>
+                  ) : (
+                    <div className="rounded-lg border divide-y overflow-hidden">
+                      {withUpdate
+                        .slice()
+                        .sort((a, b) => {
+                          const order: RiskFlag[] = ['red', 'orange', 'yellow', 'green'];
+                          return order.indexOf(a.director!.risk_flag ?? 'green') - order.indexOf(b.director!.risk_flag ?? 'green');
+                        })
+                        .map(p => {
+                          const flag = p.director!.risk_flag;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => navigate(`/project-updates`)}
+                              className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-muted/40 transition"
+                            >
+                              <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', flag ? RISK_FLAG_DOT[flag] : 'bg-muted-foreground/30')} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium truncate">{p.name}</div>
+                                <div className="text-[11px] text-muted-foreground truncate">
+                                  {p.director!.reporting_period}
+                                  {p.director!.main_challenge ? ` · ${p.director!.main_challenge}` : ''}
+                                </div>
+                              </div>
+                              <span className="text-sm tabular-nums font-semibold shrink-0">
+                                {p.directorProgress != null ? `${Math.round(p.directorProgress)}%` : '—'}
+                              </span>
+                              {flag && (
+                                <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0', RISK_FLAG_SOFT[flag])}>
+                                  {flag}
+                                </span>
+                              )}
+                              <span className="text-[11px] text-muted-foreground shrink-0 w-16 text-right">
+                                {p.openActions > 0 ? `${p.openActions} open` : '—'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+                </SectionCard>
+              );
+            })()}
+
             {/* Filters */}
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -3449,6 +3574,11 @@ export default function PortfolioDashboard() {
                           <div className="flex items-center gap-1 mt-0.5">
                             <span className="text-[10px] text-muted-foreground font-mono">{p.project_code}</span>
                             <Badge className={cn('text-[9px] px-1', sCfg.badge)}>{sCfg.label}</Badge>
+                            {p.director?.risk_flag && (
+                              <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-semibold capitalize', RISK_FLAG_SOFT[p.director.risk_flag])}>
+                                {p.director.risk_flag}
+                              </span>
+                            )}
                             {p.overdueMilestones > 0 && <Badge className="text-[9px] px-1 bg-red-100 text-red-700">{p.overdueMilestones} overdue</Badge>}
                           </div>
                         </div>

@@ -590,6 +590,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [stageId,       setStageId]       = useState(initial?.stageId ?? defaultStageId ?? '');
   const [notes,         setNotes]         = useState(initial?.notes ?? '');
   const [estHours,      setEstHours]      = useState<string>(initial?.estimatedHours?.toString() ?? '');
+  const [weight,        setWeight]        = useState<string>(initial?.weight != null ? String(initial.weight) : '');
   const [actHours,      setActHours]      = useState<string>(initial?.actualHours?.toString() ?? '');
   const [estCost,       setEstCost]       = useState<string>(initial?.estimatedCost?.toString() ?? '');
   const [actCost,       setActCost]       = useState<string>(initial?.actualCost?.toString() ?? '');
@@ -671,6 +672,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setStageId(initial?.stageId ?? defaultStageId ?? '');
       setNotes(initial?.notes ?? '');
       setEstHours(initial?.estimatedHours?.toString() ?? '');
+      setWeight(initial?.weight != null ? String(initial.weight) : '');
       setActHours(initial?.actualHours?.toString() ?? '');
       // Compute labour cost from stored assigneeHours so we can derive non-labour cost
       const initLabourCost = Object.values(initial?.assigneeHours ?? {}).reduce(
@@ -790,6 +792,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       stageId: stageId || null,
       notes: notes.trim() || undefined,
       estimatedHours: allocEstTotal ?? (estHours ? parseFloat(estHours) : null),
+      weight: weight.trim() === '' ? null : Number(weight),
       actualHours:    allocActTotal  ?? (actHours ? parseFloat(actHours) : null),
       estimatedCost:  totalEstCost > 0 ? totalEstCost : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
@@ -1162,6 +1165,18 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                         </div>
                       </div>
                     )}
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Activity weight</Label>
+                      <Input
+                        type="number" min="0" step="0.01"
+                        placeholder="Blank = use hours / equal share"
+                        value={weight}
+                        onChange={e => setWeight(e.target.value)}
+                        className="h-9 text-sm max-w-[220px]"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Used by Director Updates for weighted progress. Leave blank to fall back to estimated hours.</p>
+                    </div>
 
                     {/* ── Progress summary (always shown when any hours exist) ── */}
                     {(displayEst !== null || displayAct !== null) && (
