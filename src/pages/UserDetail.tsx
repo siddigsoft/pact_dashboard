@@ -28,6 +28,7 @@ import RoleBadge from "@/components/user/RoleBadge";
 import ManageClassificationDialog, { ClassificationFormData } from "@/components/admin/ManageClassificationDialog";
 import { useClassification } from "@/context/classification/ClassificationContext";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
@@ -490,6 +491,9 @@ const UserDetail: FC = () => {
 
   // Classification management
   const { canManageFinances, isSuperAdmin } = useAuthorization();
+  const { roles: allDbRoles } = useRoleManagement();
+  // Custom DB roles not in the built-in list — these are created via Role Management UI
+  const customDbRoles = allDbRoles.filter(r => r.name && !normalizeRole(r.name));
   const isSA = isSuperAdmin();
   const { getUserClassification, getClassificationHistory, assignClassification, refreshUserClassifications } = useClassification();
   const [classificationDialogOpen, setClassificationDialogOpen] = useState(false);
@@ -2142,6 +2146,9 @@ const UserDetail: FC = () => {
                         {availableRoles.map(role => (
                           <option key={role} value={role}>{toRoleLabel(role) || role}</option>
                         ))}
+                        {customDbRoles.map(r => (
+                          <option key={r.id} value={r.name}>{r.display_name || r.name}</option>
+                        ))}
                       </select>
                       {editForm.role && (() => {
                         const hint = getRoleHint(editForm.role);
@@ -3349,6 +3356,9 @@ const UserDetail: FC = () => {
                           {availableRoles.map(role => (
                             <option key={role} value={role}>{toRoleLabel(role) || role}</option>
                           ))}
+                          {customDbRoles.map(r => (
+                            <option key={r.id} value={r.name}>{r.display_name || r.name}</option>
+                          ))}
                         </select>
                         {editForm.role && (() => {
                           const hint = getRoleHint(editForm.role);
@@ -3493,6 +3503,9 @@ ALTER TABLE public.profiles
                                       .map(r => (
                                         <option key={r} value={r}>{toRoleLabel(r) || r}</option>
                                       ))}
+                                    {customDbRoles.map(r => (
+                                      <option key={r.id} value={r.name}>{r.display_name || r.name}</option>
+                                    ))}
                                   </select>
                                 </div>
                                 <div className="space-y-1.5">

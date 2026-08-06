@@ -170,7 +170,7 @@ const Users = () => {
     const custom = urs.find(ur => ur && !!ur.role_id);
     if (custom?.role_id) {
       const r = allRoles.find(rr => rr.id === custom.role_id);
-      return r?.display_name || r?.name || 'custom';
+      return r?.display_name || r?.name || toDisplayLabel(user.role || '');
     }
     return toDisplayLabel(user.role || 'unknown');
   };
@@ -1545,6 +1545,13 @@ const Users = () => {
                       {toDisplayLabel(roleCode)}
                     </SelectItem>
                   ))}
+                  {allRoles
+                    .filter(r => r.name && !normalizeRole(r.name))
+                    .map(r => (
+                      <SelectItem key={r.id} value={r.name}>
+                        {r.display_name || r.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {activateWithRoleDialog.selectedRole && activateWithRoleDialog.user?.role &&
