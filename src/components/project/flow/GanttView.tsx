@@ -179,6 +179,15 @@ export function GanttView({
     };
   };
 
+  /** Returns the % left offset for a milestone point marker (dueDate ?? plannedEnd). */
+  const getMilestonePointLeft = (gs: GanttStage): string | null => {
+    const anchorStr = gs.entry?.dueDate ?? gs.entry?.plannedEnd ?? null;
+    if (!anchorStr) return null;
+    const anchor = parseISO(anchorStr);
+    const pct = Math.max(0, Math.min(100, (differenceInDays(anchor, min) / totalDays) * 100));
+    return `${pct.toFixed(2)}%`;
+  };
+
   const isOverdue = (gs: GanttStage) => {
     const end = gs.entry?.plannedEnd ? parseISO(gs.entry.plannedEnd) : null;
     const due = gs.entry?.dueDate    ? parseISO(gs.entry.dueDate)    : null;
@@ -407,26 +416,44 @@ export function GanttView({
                     );
                   })}
 
-                  {/* Stage bar — milestone shows as diamond shape */}
-                  {barStyle && (
-                    gs.isMilestone && gs.status !== 'completed' && gs.status !== 'skipped' ? (
-                      /* Milestone: rotated diamond centred on bar midpoint */
+                  {/* Stage bar — milestone shows as single-point diamond marker at due/planned-end date */}
+                  {gs.isMilestone && gs.status !== 'completed' && gs.status !== 'skipped' ? (() => {
+                    const milestoneLeft = getMilestonePointLeft(gs);
+                    if (!milestoneLeft) return null;
+                    const anchorDate = gs.entry?.dueDate ?? gs.entry?.plannedEnd;
+                    const tooltipText = [
+                      displayLabel,
+                      anchorDate ? `Due: ${format(parseISO(anchorDate), 'dd MMM yyyy')}` : null,
+                      `Status: ${gs.status.charAt(0).toUpperCase() + gs.status.slice(1)}`,
+                    ].filter(Boolean).join(' · ');
+                    return (
                       <div
-                        className="absolute flex items-center justify-center"
-                        style={{
-                          left: barStyle.left,
-                          width: barStyle.width,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          zIndex: 8,
-                        }}
+                        className="absolute"
+                        title={tooltipText}
+                        style={{ left: milestoneLeft, top: '50%', transform: 'translateX(-50%) translateY(-50%)', zIndex: 8 }}
                       >
                         <div className={cn(
                           'w-5 h-5 rotate-45 border-2 shadow-sm flex-shrink-0',
                           gs.isBlocked ? 'border-orange-400 bg-orange-200' : 'border-amber-600 bg-amber-400',
-                        )} title={displayLabel} />
+                        )} />
+                        {/* Hover tooltip */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap bg-popover border border-border rounded-md shadow-md px-2.5 py-1.5 z-30 text-left min-w-max">
+                          <p className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            <Diamond className="h-3 w-3 text-amber-500 fill-amber-400" />
+                            {displayLabel}
+                          </p>
+                          {anchorDate && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              Due: {format(parseISO(anchorDate), 'dd MMM yyyy')}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground">
+                            Status: {gs.status.charAt(0).toUpperCase() + gs.status.slice(1)}
+                          </p>
+                        </div>
                       </div>
-                    ) : (
+                    );
+                  })() : barStyle ? (
                       <div
                         className="absolute h-7 rounded-md flex items-center px-2 overflow-hidden group/bar cursor-default"
                         style={{ left: barStyle.left, width: barStyle.width, minWidth: '6px' }}
@@ -464,11 +491,11 @@ export function GanttView({
                           {entry?.percentComplete !== null && entry?.percentComplete !== undefined && gs.status !== 'completed' && ` (${entry.percentComplete}%)`}
                         </span>
                       </div>
-                    )
-                  )}
+                    ) : null
+                  }
 
-                  {/* Hover: dates */}
-                  {barStyle && entry?.plannedStart && entry?.plannedEnd && (
+                  {/* Hover: dates — only for regular bars; milestones use their own inline tooltip */}
+                  {!gs.isMilestone && barStyle && entry?.plannedStart && entry?.plannedEnd && (
                     <div
                       className="absolute bottom-1 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-muted-foreground whitespace-nowrap z-20 pointer-events-none"
                       style={{ left: barStyle.left }}
