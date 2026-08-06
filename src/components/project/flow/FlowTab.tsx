@@ -414,7 +414,7 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
 
                     <div className="space-y-1">
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</Label>
-                      <Textarea placeholder={stageDef.description ?? ''} value={entry.customDescription ?? ''} onChange={e => updateEntry(entry.id, { customDescription: e.target.value })} rows={2} className="text-sm resize-none" />
+                      <Textarea placeholder="Override stage description (optional)" value={entry.customDescription ?? ''} onChange={e => updateEntry(entry.id, { customDescription: e.target.value })} rows={2} className="text-sm resize-none" />
                     </div>
 
                     {/* Date fields */}
@@ -524,15 +524,20 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                           <Plus className="h-3 w-3 mr-1" /> Add
                         </Button>
                       </div>
-                      {(entry.customOutputs ?? []).map((output, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          <span className="text-muted-foreground/40 text-sm">+</span>
-                          <Input value={output} onChange={e => updateOutput(entry.id, oi, e.target.value)} placeholder="Custom output item..." className="h-7 text-xs flex-1" />
-                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeOutput(entry.id, oi)}>
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+                      {(entry.customOutputs ?? []).map((output, oi) => {
+                        // Never show sentinel markers (~~rm~~:) in the edit form —
+                        // they are internal markers for removed default outputs
+                        if (output.startsWith('~~rm~~:')) return null;
+                        return (
+                          <div key={oi} className="flex items-center gap-2">
+                            <span className="text-muted-foreground/40 text-sm">+</span>
+                            <Input value={output} onChange={e => updateOutput(entry.id, oi, e.target.value)} placeholder="Custom output item..." className="h-7 text-xs flex-1" />
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeOutput(entry.id, oi)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1378,7 +1383,8 @@ export function FlowTab({
                       // Sentinel prefix used to mark a removed default output
                       const RM = '~~rm~~:';
                       const editing = outputsState[stage.id];
-                      const allDefaultItems: string[] = stage.keyOutputs ?? [];
+                      // Strip any sentinel strings that leaked into keyOutputs
+                      const allDefaultItems: string[] = (stage.keyOutputs ?? []).filter(o => !o.startsWith(RM));
 
                       // Sentinels stored in customOutputs mark defaults the user removed
                       const rawCustom = entry?.customOutputs ?? [];

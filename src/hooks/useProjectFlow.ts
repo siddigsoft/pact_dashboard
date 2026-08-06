@@ -391,7 +391,8 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const historyQuery = useQuery({
     queryKey: ['project_flow_log', project.id],
     queryFn: () => fetchFlowLog(project.id),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000,   // 2 min — flow history rarely changes mid-session
+    gcTime:   5 * 60 * 1000,
   });
 
   const stageHistory = historyQuery.data ?? [];
