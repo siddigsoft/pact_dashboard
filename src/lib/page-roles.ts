@@ -32,12 +32,30 @@ const ROLE_ALIASES: Record<string, string> = {
   project_manager: 'projectManager',
   pm: 'projectManager',
   country_director: 'countryDirector',
+  senior_operations_lead: 'seniorOperationsLead',
+  smt: 'SMT',
 };
+
+/** Built-in role codes that receive blanket access to pages marked `roles: ['all']`. */
+const SYSTEM_ROLE_CODES = new Set([
+  'superAdmin', 'admin', 'ict', 'fom', 'financialAdmin', 'auditor',
+  'supervisor', 'coordinator', 'dataCollector', 'dataTeam', 'reviewer',
+  'projectManager', 'countryDirector', 'seniorOperationsLead', 'seniorManagement',
+  'employee', 'hr', 'hrManager',
+]);
 
 export function normalizeRoleCode(role: string | null | undefined): string {
   if (!role) return '';
   const k = role.toLowerCase().replace(/[\s-]/g, '_');
   return ROLE_ALIASES[k] ?? role;
+}
+
+function isSystemRole(code: string): boolean {
+  return SYSTEM_ROLE_CODES.has(code);
+}
+
+function roleMatches(pageRole: string, userRole: string): boolean {
+  return pageRole.toLowerCase() === userRole.toLowerCase();
 }
 
 /** Path → slug lookup so callers that key off URL (sidebar) can use the same gate. */
@@ -81,31 +99,66 @@ export function getPageLabel(slug: string): string {
   return PAGE_DEFS.find(p => p.slug === slug)?.label ?? slug;
 }
 
-/** Pure check against PAGE_DEFS; does not consult overrides table. */
-export function canSeePage(slug: string, role: string | null | undefined): boolean {
+/**
+ * Pure check against PAGE_DEFS (or an optional roles override from
+ * page_role_configs). Custom / non-system roles (e.g. SMT) do NOT inherit
+ * blanket `all` access — they must be listed explicitly on each page.
+ */
+export function canSeePage(
+  slug: string,
+  role: string | null | undefined,
+  effectiveRoles?: string[],
+): boolean {
   const def = PAGE_DEFS.find(p => p.slug === slug);
   if (!def) return true; // Unknown page → don't hide (sidebar may still gate it)
   const r = normalizeRoleCode(role);
-  if (def.roles.includes('all')) return true;
-  // Negation rule: '!dataCollector' = visible to every role except dataCollector
-  for (const rule of def.roles) {
+  if (!r || r.toLowerCase() === 'custom') return false;
+  if (r === 'superAdmin') return true;
+
+  const roles = effectiveRoles ?? def.roles;
+  const system = isSystemRole(r);
+
+  // Negation rules first
+  for (const rule of roles) {
     if (rule.startsWith('!')) {
       const banned = rule.slice(1);
-      if (r === banned) return false;
+      if (roleMatches(banned, r)) return false;
     }
   }
-  if (def.roles.some(x => !x.startsWith('!') && x === r)) return true;
-  // If only negation rules exist and the role didn't match any, allow.
-  return def.roles.every(x => x.startsWith('!'));
+
+  // Explicit grant
+  if (roles.some(x => !x.startsWith('!') && roleMatches(x, r))) return true;
+
+  // Blanket "all" only for built-in system roles
+  if (system && roles.includes('all')) return true;
+
+  // If only negation rules exist and the (system) role didn't match any, allow.
+  if (system && roles.length > 0 && roles.every(x => x.startsWith('!'))) return true;
+
+  return false;
 }
 
-/** Async variant that layers per-user page_access_overrides on top. */
+/** Async variant that layers page_role_configs + per-user page_access_overrides. */
 export async function canSeePageWithOverrides(
   slug: string,
   role: string | null | undefined,
   userId: string | null | undefined,
 ): Promise<boolean> {
-  const baseline = canSeePage(slug, role);
+  let effectiveRoles: string[] | undefined;
+  try {
+    const { data: cfg } = await supabase
+      .from('page_role_configs')
+      .select('roles')
+      .eq('page_slug', slug)
+      .maybeSingle();
+    if (cfg?.roles && Array.isArray(cfg.roles) && cfg.roles.length > 0) {
+      effectiveRoles = cfg.roles as string[];
+    }
+  } catch {
+    // ignore — fall back to PAGE_DEFS
+  }
+
+  const baseline = canSeePage(slug, role, effectiveRoles);
   if (!userId) return baseline;
   try {
     const { data } = await supabase

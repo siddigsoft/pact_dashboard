@@ -186,18 +186,14 @@ const RoleManagement = () => {
     const ok = await assignRoleToUser(data);
     if (!ok) return;
 
-    if (selectedRole.is_system_role) {
+    // Persist the role name on profiles so page access (PAGE_DEFS / canSeePage)
+    // can resolve custom roles like SMT instead of the opaque 'custom' marker.
+    {
       const { error: profErr } = await supabase
         .from('profiles')
         .update({ role: selectedRole.name })
         .eq('id', data.user_id);
       if (profErr) console.warn('profiles.role update failed (RLS?):', profErr);
-    } else {
-      const { error: profErr } = await supabase
-        .from('profiles')
-        .update({ role: 'custom' })
-        .eq('id', data.user_id);
-      if (profErr) console.warn('profiles.role neutral update failed (RLS?):', profErr);
     }
 
     await fetchUserRoles();

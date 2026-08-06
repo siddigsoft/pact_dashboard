@@ -44,13 +44,13 @@ interface PageDef {
 export const PAGE_DEFS: PageDef[] = [
   // ── My Workspace ──────────────────────────────────────────────────────────
   { slug:'dashboard',           label:'Dashboard',              path:'/dashboard',              icon:LayoutDashboard, group:'My Workspace',
-    roles:['all'] },
+    roles:['all', 'SMT'] },
   { slug:'my-tasks',            label:'My Tasks',               path:'/my-tasks',               icon:CheckSquare, group:'My Workspace',
-    roles:['all'] },
+    roles:['all', 'SMT'] },
   { slug:'calendar',            label:'Calendar',               path:'/calendar',               icon:Calendar, group:'My Workspace',
-    roles:['!dataCollector'] },
+    roles:['!dataCollector', 'SMT'] },
   { slug:'notifications',       label:'Notifications',          path:'/notifications',          icon:Bell, group:'My Workspace',
-    roles:['all'] },
+    roles:['all', 'SMT'] },
   { slug:'workspace',           label:'Workspace Hub',          path:'/workspace',              icon:FolderOpen, group:'My Workspace',
     roles:['all'] },
   { slug:'search',              label:'Global Search',          path:'/search',                 icon:Search, group:'My Workspace',
@@ -70,11 +70,11 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Programme Management ──────────────────────────────────────────────────
   { slug:'programme-hub',       label:'Programme Hub',          path:'/programme-hub',          icon:FolderKanban, group:'Programme Management',
-    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead'], note:'Unified hub for Projects, Portfolio & Analytics' },
+    roles:['superAdmin','admin','fom','projectManager','countryDirector','seniorOperationsLead','SMT'], note:'Unified hub for Projects, Portfolio & Analytics' },
   { slug:'projects',            label:'Projects',               path:'/projects',               icon:FolderOpen, group:'Programme Management',
-    roles:['all'], note:'Any authenticated user may be a project team member; edit/write actions are guarded inside ProjectDetail by role' },
+    roles:['all', 'SMT'], note:'Any authenticated user may be a project team member; edit/write actions are guarded inside ProjectDetail by role' },
   { slug:'portfolio',           label:'Portfolio Dashboard',    path:'/portfolio',              icon:LayoutDashboard, group:'Programme Management',
-    roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead'] },
+    roles:['superAdmin','admin','fom','countryDirector','projectManager','seniorOperationsLead','SMT'] },
   { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
     roles:['superAdmin','admin','ict','dataTeam','fom','coordinator','supervisor','dataCollector','countryDirector','projectManager','seniorOperationsLead'] },
   { slug:'mmp-full-report',     label:'MMP Full Report',        path:'/mmp#full-report',        icon:BarChart2, group:'Programme Management',
@@ -390,6 +390,7 @@ export const ROLE_LABELS: Record<string, string> = {
   coordinator: 'Coordinator', dataCollector: 'Data Collector', dataTeam: 'Data Team',
   reviewer: 'Reviewer', projectManager: 'Project Manager', countryDirector: 'Country Director',
   seniorOperationsLead: 'Senior Ops Lead',
+  SMT: 'SMT',
   '!dataCollector': 'All except DC',
 };
 
@@ -433,9 +434,17 @@ export function hasDefaultAccess(page: PageDef, rawRole: string | null, effectiv
   if (!code) return false;
   if (code === 'superAdmin') return true;
   const roles = effectiveRoles ?? page.roles;
-  if (roles.includes('all')) return true;
-  if (roles.includes('!dataCollector')) return code !== 'dataCollector';
-  return roles.includes(code);
+  // Explicit listing always wins (case-insensitive) — needed for custom roles like SMT
+  if (roles.some(r => !r.startsWith('!') && r.toLowerCase() === code.toLowerCase())) return true;
+  // Built-in system roles inherit `all`; custom roles do not
+  const systemCodes = new Set([
+    'superAdmin', 'admin', 'ict', 'fom', 'financialAdmin', 'auditor',
+    'supervisor', 'coordinator', 'dataCollector', 'dataTeam', 'reviewer',
+    'projectManager', 'countryDirector', 'seniorOperationsLead', 'seniorManagement',
+  ]);
+  if (systemCodes.has(code) && roles.includes('all')) return true;
+  if (roles.includes('!dataCollector')) return code !== 'dataCollector' && systemCodes.has(code);
+  return false;
 }
 
 function initials(name: string | null) {
