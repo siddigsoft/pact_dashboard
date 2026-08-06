@@ -348,9 +348,18 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
           .update({ role: assignData.role })
           .eq('id', assignData.user_id);
       } else if (assignData.role_id) {
+        // Custom roles: avoid ON CONFLICT (user_id, role_id) — live DB only has a
+        // partial unique index, which Postgres rejects as an ON CONFLICT target.
+        // Clear existing rows for this user, then insert the new assignment.
+        const { error: clearErr } = await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', assignData.user_id);
+        if (clearErr) throw clearErr;
+
         const { error: insErr } = await supabase
           .from('user_roles')
-          .upsert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
+          .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
         if (insErr) throw insErr;
       } else {
         throw new Error('Either role or role_id must be provided');
