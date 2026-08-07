@@ -59,6 +59,8 @@ CREATE POLICY "projects_select"
 
 -- ── project_team_members (break self-reference) ─────────────────────────────
 DROP POLICY IF EXISTS "project_team_members_select" ON public.project_team_members;
+DROP POLICY IF EXISTS "Team members see own membership" ON public.project_team_members;
+DROP POLICY IF EXISTS "Project FOM sees their project team" ON public.project_team_members;
 CREATE POLICY "project_team_members_select"
   ON public.project_team_members FOR SELECT
   TO authenticated
