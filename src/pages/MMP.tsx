@@ -5559,9 +5559,9 @@ const MMP = () => {
                     <>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
-                        <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
+                        <Badge variant="secondary">{applyGlobalFilters(approvedCostedSiteEntries).length} entries</Badge>
                       </div>
-                      {canAssign && approvedCostedSiteEntries.length > 0 && (
+                      {canAssign && applyGlobalFilters(approvedCostedSiteEntries).length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
                             variant="default"
@@ -5581,8 +5581,8 @@ const MMP = () => {
                               setDispatchType('state');
                               setDispatchDialogOpen(true);
                             }}
-                            disabled={approvedCostedSiteEntries.length < 2}
-                            title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
+                            disabled={applyGlobalFilters(approvedCostedSiteEntries).length < 2}
+                            title={applyGlobalFilters(approvedCostedSiteEntries).length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
                             By State
                           </Button>
@@ -5593,8 +5593,8 @@ const MMP = () => {
                               setDispatchType('locality');
                               setDispatchDialogOpen(true);
                             }}
-                            disabled={approvedCostedSiteEntries.length < 2}
-                            title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
+                            disabled={applyGlobalFilters(approvedCostedSiteEntries).length < 2}
+                            title={applyGlobalFilters(approvedCostedSiteEntries).length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
                             By Locality
                           </Button>
@@ -6729,7 +6729,7 @@ const MMP = () => {
           <DispatchSitesDialog
             open={dispatchDialogOpen}
             onOpenChange={setDispatchDialogOpen}
-            siteEntries={approvedCostedSiteEntries}
+            siteEntries={applyGlobalFilters(approvedCostedSiteEntries)}
             dispatchType={dispatchType}
             onDispatched={async () => {
               await refreshMMPFiles();

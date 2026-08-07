@@ -11,10 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Upload, FileSpreadsheet, PlusCircle, Trash2, Pencil, XCircle,
   Loader2, Download, CheckCircle2, Users, AlertTriangle, RefreshCw,
-  FolderOpen, Activity
+  FolderOpen, Activity, Calculator, Info
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,6 +48,8 @@ interface ProjectActivity {
   custom_type_label?: string | null;
 }
 
+type FeeMode = 'flat' | 'per_hh';
+
 interface AdhocRow {
   siteName: string;
   siteCode: string;
@@ -53,7 +57,9 @@ interface AdhocRow {
   locality: string;
   phoneNumber: string;
   transportFee: string;
-  enumeratorFee: string;
+  feeMode: FeeMode;
+  enumeratorFee: string;       // flat total OR calculated (rate × HH)
+  enumeratorFeeRate: string;   // rate per HH (per_hh mode only)
   assignToId: string;
   assignToName: string;
   dueDate: string;
@@ -86,6 +92,8 @@ interface ExistingEntry {
   phone_number?: string;
   transport_fee?: number;
   enumerator_fee?: number;
+  fee_mode?: FeeMode;
+  enumerator_fee_rate?: number;
   visit_date?: string;
   created_at?: string;
   dispatched_at?: string;
@@ -118,10 +126,19 @@ const ADHOC_BUCKET_VALUE = '__adhoc_bucket__';
 
 const emptyRow = (): AdhocRow => ({
   siteName: '', siteCode: '', state: '', locality: '',
-  phoneNumber: '', transportFee: '', enumeratorFee: '', assignToId: '', assignToName: '', dueDate: '',
+  phoneNumber: '', transportFee: '', feeMode: 'flat', enumeratorFee: '', enumeratorFeeRate: '',
+  assignToId: '', assignToName: '', dueDate: '',
   activityId: '', activityName: '', activityType: '',
   hhTarget: '', hhCompleted: '', beneficiaries: '', pdmQuestionnaires: '', maleCount: '', femaleCount: '',
 });
+
+/** Calculate enumerator fee for per-HH mode. Uses HH Completed if available, else HH Target. */
+const calcPerHhFee = (rate: string, hhCompleted: string, hhTarget: string): string => {
+  const r = parseFloat(rate);
+  const hh = parseFloat(hhCompleted) || parseFloat(hhTarget) || 0;
+  if (!r || !hh) return '';
+  return String(Math.round(r * hh * 100) / 100);
+};
 
 const validateRow = (row: AdhocRow): string[] => {
   const errors: string[] = [];
@@ -188,7 +205,9 @@ interface ColumnMap {
   siteCode: string;
   phoneNumber: string;
   transportFee: string;
+  feeMode: string;
   enumeratorFee: string;
+  enumeratorFeeRate: string;
   assignTo: string;
   dueDate: string;
   activity: string;
@@ -201,22 +220,24 @@ interface ColumnMap {
 }
 
 const COL_ALIASES: Record<keyof ColumnMap, string[]> = {
-  siteName:         ['site name','sitename','name','trdname','tradername','trader name','school name','market name','distribution point','site','market','location name','beneficiary site','pdm site','retailer name','retailer','trader'],
-  state:            ['state','location','admin1name','admin1 name','province','governorate','region','wilaya'],
-  locality:         ['locality','location','admin2name','admin2 name','district','county','sub-district','sub district','mahalia','locality name'],
-  siteCode:         ['site code','sitecode','code','id','site id','trdid','school code','pdm code','retailer code','site_code'],
-  phoneNumber:      ['phone number','phone','mobile','tel','telephone','contact number','contact'],
-  transportFee:     ['transport fee','transportfee','transport','transport cost','travel fee','travel cost'],
-  enumeratorFee:    ['enumerator fee','enumeratorfee','fee','monitor fee','enumerator fee (sdg)','enum fee','data collector fee'],
-  assignTo:         ['assign to','assignto','enumerator','monitor','data collector','collector','assigned to','assigned_to'],
-  dueDate:          ['due date','duedate','due','visit date','collection date','survey date','date'],
-  activity:         ['activity','activity name','activity type','activityname','activitytype','main activity','tpm activity'],
-  hhTarget:         ['hh target','hhtarget','target hhs','target households','planned hhs','hh planned','hhs to interview','target_hh'],
-  hhCompleted:      ['hh completed','hhcompleted','actual hhs','actual households','completed hhs','hhs interviewed','hh_completed'],
-  beneficiaries:    ['beneficiaries','total beneficiaries','beneficiary count','beneficiaries reached'],
-  pdmQuestionnaires:['pdm questionnaires','pdm count','questionnaires','pdm forms','pdm_questionnaires'],
-  maleCount:        ['male','male count','males','male hhs','male_count'],
-  femaleCount:      ['female','female count','females','female hhs','female_count'],
+  siteName:          ['site name','sitename','name','trdname','tradername','trader name','school name','market name','distribution point','site','market','location name','beneficiary site','pdm site','retailer name','retailer','trader'],
+  state:             ['state','location','admin1name','admin1 name','province','governorate','region','wilaya'],
+  locality:          ['locality','location','admin2name','admin2 name','district','county','sub-district','sub district','mahalia','locality name'],
+  siteCode:          ['site code','sitecode','code','id','site id','trdid','school code','pdm code','retailer code','site_code'],
+  phoneNumber:       ['phone number','phone','mobile','tel','telephone','contact number','contact'],
+  transportFee:      ['transport fee','transportfee','transport','transport cost','travel fee','travel cost'],
+  feeMode:           ['fee mode','feemode','payment mode','fee type','fee_mode'],
+  enumeratorFee:     ['enumerator fee','enumeratorfee','fee','monitor fee','enumerator fee (sdg)','enum fee','data collector fee','flat fee'],
+  enumeratorFeeRate: ['rate per hh','rate/hh','hh rate','per hh rate','enumerator rate','enum rate','fee rate','rate_per_hh'],
+  assignTo:          ['assign to','assignto','enumerator','monitor','data collector','collector','assigned to','assigned_to'],
+  dueDate:           ['due date','duedate','due','visit date','collection date','survey date','date'],
+  activity:          ['activity','activity name','activity type','activityname','activitytype','main activity','tpm activity'],
+  hhTarget:          ['hh target','hhtarget','target hhs','target households','planned hhs','hh planned','hhs to interview','target_hh'],
+  hhCompleted:       ['hh completed','hhcompleted','actual hhs','actual households','completed hhs','hhs interviewed','hh_completed'],
+  beneficiaries:     ['beneficiaries','total beneficiaries','beneficiary count','beneficiaries reached'],
+  pdmQuestionnaires: ['pdm questionnaires','pdm count','questionnaires','pdm forms','pdm_questionnaires'],
+  maleCount:         ['male','male count','males','male hhs','male_count'],
+  femaleCount:       ['female','female count','females','female hhs','female_count'],
 };
 
 const autoDetectColumn = (headers: string[], field: keyof ColumnMap): string => {
@@ -468,6 +489,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           assignedToName: e.accepted_by
             ? (namesMap[e.accepted_by] || e.accepted_by)
             : (ad.assigned_to ? (namesMap[ad.assigned_to] || ad.assigned_to) : undefined),
+          fee_mode: (ad.fee_mode as FeeMode) || 'flat',
+          enumerator_fee_rate: ad.enumerator_fee_rate ? Number(ad.enumerator_fee_rate) : undefined,
           activity_name: ad.activity_name || ad.main_activity || undefined,
           activity_type: ad.activity_type || undefined,
           hh_target: ad.hh_target ? Number(ad.hh_target) : undefined,
@@ -539,6 +562,15 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const stateRaw = get(row, map.state);
       const localityRaw = get(row, map.locality);
       const activityRaw = get(row, map.activity);
+      const feeModeRaw = get(row, map.feeMode).toLowerCase();
+      const feeMode: FeeMode = feeModeRaw === 'per_hh' || feeModeRaw === 'per hh' || feeModeRaw === 'perhh' ? 'per_hh' : 'flat';
+      const hhTarget = get(row, map.hhTarget);
+      const hhCompleted = get(row, map.hhCompleted);
+      const enumeratorFeeRate = get(row, map.enumeratorFeeRate);
+      const flatFee = get(row, map.enumeratorFee);
+      const enumeratorFee = feeMode === 'per_hh'
+        ? calcPerHhFee(enumeratorFeeRate, hhCompleted, hhTarget)
+        : flatFee;
       const matchedCollector = collectors.find(c =>
         (c.full_name || '').toLowerCase() === assignToName.toLowerCase() ||
         (c.email || '').toLowerCase() === assignToName.toLowerCase()
@@ -551,15 +583,17 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         locality:          localityRaw || stateRaw,
         phoneNumber:       get(row, map.phoneNumber),
         transportFee:      get(row, map.transportFee),
-        enumeratorFee:     get(row, map.enumeratorFee),
+        feeMode,
+        enumeratorFee,
+        enumeratorFeeRate,
         assignToId:        matchedCollector?.id || '',
         assignToName:      assignToName || (matchedCollector ? (matchedCollector.full_name || '') : ''),
         dueDate:           get(row, map.dueDate),
         activityId:        '',
         activityName:      activityRaw,
         activityType:      '',
-        hhTarget:          get(row, map.hhTarget),
-        hhCompleted:       get(row, map.hhCompleted),
+        hhTarget,
+        hhCompleted,
         beneficiaries:     get(row, map.beneficiaries),
         pdmQuestionnaires: get(row, map.pdmQuestionnaires),
         maleCount:         get(row, map.maleCount),
@@ -629,12 +663,20 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([[
-      'Site Name', 'Site Code', 'State', 'Locality', 'Phone Number',
-      'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date',
-      'Activity', 'HH Target', 'HH Completed', 'Beneficiaries',
-      'PDM Questionnaires', 'Male', 'Female',
-    ]]);
+    const ws = XLSX.utils.aoa_to_sheet([
+      [
+        'Site Name', 'Site Code', 'State', 'Locality', 'Phone Number',
+        'Transport Fee', 'Fee Mode', 'Enumerator Fee', 'Rate per HH', 'Assign To', 'Due Date',
+        'Activity', 'HH Target', 'HH Completed', 'Beneficiaries',
+        'PDM Questionnaires', 'Male', 'Female',
+      ],
+      [
+        // Example row with tooltip hints
+        '', '', '', '', '',
+        '', 'flat (or per_hh)', '', '(if Fee Mode=per_hh)', '', '',
+        '', '', '', '', '', '', '',
+      ],
+    ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ad-hoc Sites Template');
     XLSX.writeFile(wb, 'adhoc-sites-template.xlsx');
@@ -682,6 +724,12 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const entries = validRows.map(row => {
         const hasAssignee = !!row.assignToId;
         if (hasAssignee) assigned++; else open++;
+        // For per-HH mode, (re)calculate the fee from rate × HH;
+        // completed takes priority over target during planning.
+        const isPerHh = row.feeMode === 'per_hh';
+        const calculatedFee = isPerHh
+          ? calcPerHhFee(row.enumeratorFeeRate, row.hhCompleted, row.hhTarget)
+          : row.enumeratorFee;
         return {
           mmp_file_id: mmpFileId,
           site_name: row.siteName.trim(),
@@ -689,7 +737,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           state: row.state.trim(),
           locality: row.locality.trim() || row.state.trim(),
           transport_fee: row.transportFee ? Number(row.transportFee) : null,
-          enumerator_fee: row.enumeratorFee ? Number(row.enumeratorFee) : null,
+          enumerator_fee: calculatedFee ? Number(calculatedFee) : null,
           accepted_by: null,
           status: 'pending',
           visit_date: row.dueDate || null,
@@ -698,6 +746,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             assigned_to: row.assignToId || null,
             phone_number_raw: row.phoneNumber || null,
             phone_numbers: normalizePhoneNumbers(row.phoneNumber || ''),
+            fee_mode: row.feeMode,
+            enumerator_fee_rate: isPerHh && row.enumeratorFeeRate ? Number(row.enumeratorFeeRate) : null,
+            enumerator_fee_basis: isPerHh ? (row.hhCompleted ? 'hh_completed' : 'hh_target') : null,
             activity_id: row.activityId || null,
             activity_name: row.activityName || null,
             activity_type: row.activityType || null,
@@ -774,6 +825,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     setEditForm({
       transport_fee: entry.transport_fee,
       enumerator_fee: entry.enumerator_fee,
+      fee_mode: entry.fee_mode || 'flat',
+      enumerator_fee_rate: entry.enumerator_fee_rate,
       preferred_assignee_id: entry.preferred_assignee_id,
       phone_number: entry.phone_number,
       visit_date: entry.visit_date,
@@ -787,6 +840,22 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       activity_type: entry.activity_type,
     });
     setCollectorSearch(entry.assignedToName || '');
+  };
+
+  /** Recalculate enumerator_fee for per-HH entries using current HH Completed (or Target as fallback) */
+  const recalcPerHhFee = () => {
+    const rate = String(editForm.enumerator_fee_rate || '');
+    const completed = String(editForm.hh_completed ?? '');
+    const target = String(editForm.hh_target ?? '');
+    const calc = calcPerHhFee(rate, completed, target);
+    if (calc) {
+      setEditForm(f => ({
+        ...f,
+        enumerator_fee: Number(calc),
+        enumerator_fee_basis: completed ? 'hh_completed' : 'hh_target',
+      } as any));
+      toast({ title: 'Fee recalculated', description: `SDG ${calc} = ${rate} × ${completed || target} HH` });
+    }
   };
 
   const saveEdit = async () => {
@@ -805,6 +874,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         assigned_to: editForm.preferred_assignee_id || null,
         phone_number_raw: editForm.phone_number || null,
         phone_numbers: normalizePhoneNumbers(String(editForm.phone_number || '')),
+        fee_mode: (editForm as any).fee_mode || 'flat',
+        enumerator_fee_rate: (editForm as any).enumerator_fee_rate ?? null,
+        enumerator_fee_basis: (editForm as any).enumerator_fee_basis ?? null,
         activity_name: editForm.activity_name || null,
         activity_type: editForm.activity_type || null,
         hh_target: editForm.hh_target ?? null,
@@ -994,11 +1066,57 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                     <Input className="h-8 text-xs" type="number" min="0" placeholder="0" value={formRow.transportFee}
                       onChange={e => setFormRow(r => ({ ...r, transportFee: e.target.value }))} />
                   </div>
-                  {/* Enumerator Fee */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Enumerator Fee (SDG)</Label>
-                    <Input className="h-8 text-xs" type="number" min="0" placeholder="0" value={formRow.enumeratorFee}
-                      onChange={e => setFormRow(r => ({ ...r, enumeratorFee: e.target.value }))} />
+                  {/* Fee Mode toggle + conditional fee fields */}
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      Enumerator Fee
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[200px] text-xs">
+                            <strong>Flat:</strong> fixed amount per site.<br />
+                            <strong>Per HH:</strong> Rate × HH collected. Fee auto-calculates from HH Target (estimate) and updates when HH Completed is entered.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[11px] ${formRow.feeMode === 'flat' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>Flat</span>
+                      <Switch
+                        checked={formRow.feeMode === 'per_hh'}
+                        onCheckedChange={checked => setFormRow(r => ({
+                          ...r,
+                          feeMode: checked ? 'per_hh' : 'flat',
+                          enumeratorFee: checked ? calcPerHhFee(r.enumeratorFeeRate, r.hhCompleted, r.hhTarget) : r.enumeratorFee,
+                        }))}
+                      />
+                      <span className={`text-[11px] flex items-center gap-0.5 ${formRow.feeMode === 'per_hh' ? 'text-teal-600 dark:text-teal-400 font-medium' : 'text-muted-foreground'}`}>
+                        <Calculator className="h-3 w-3" /> Per HH
+                      </span>
+                    </div>
+                    {formRow.feeMode === 'flat' ? (
+                      <Input className="h-8 text-xs" type="number" min="0" placeholder="0"
+                        value={formRow.enumeratorFee}
+                        onChange={e => setFormRow(r => ({ ...r, enumeratorFee: e.target.value }))} />
+                    ) : (
+                      <div className="space-y-1">
+                        <Input className="h-8 text-xs" type="number" min="0" placeholder="Rate per HH (SDG)"
+                          value={formRow.enumeratorFeeRate}
+                          onChange={e => setFormRow(r => {
+                            const rate = e.target.value;
+                            return { ...r, enumeratorFeeRate: rate, enumeratorFee: calcPerHhFee(rate, r.hhCompleted, r.hhTarget) };
+                          })} />
+                        {formRow.enumeratorFeeRate && (
+                          <p className="text-[10px] text-teal-600 dark:text-teal-400">
+                            ≈ SDG {formRow.enumeratorFee || '0'}
+                            {' '}({formRow.enumeratorFeeRate} × {formRow.hhCompleted || formRow.hhTarget || '0'} HH
+                            {!formRow.hhCompleted && formRow.hhTarget ? ' — estimate' : ''})
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {/* Assign To */}
                   <div className="space-y-1 relative">
@@ -1084,19 +1202,27 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                       )}
                     </div>
 
-                    {/* HH Target */}
+                    {/* HH Target — also drives per-HH estimate */}
                     <div className="space-y-1">
                       <Label className="text-xs">HH Target</Label>
                       <Input className="h-8 text-xs" type="number" min="0" placeholder="0"
                         value={formRow.hhTarget}
-                        onChange={e => setFormRow(r => ({ ...r, hhTarget: e.target.value }))} />
+                        onChange={e => setFormRow(r => {
+                          const hhTarget = e.target.value;
+                          const fee = r.feeMode === 'per_hh' ? calcPerHhFee(r.enumeratorFeeRate, r.hhCompleted, hhTarget) : r.enumeratorFee;
+                          return { ...r, hhTarget, enumeratorFee: fee };
+                        })} />
                     </div>
-                    {/* HH Completed */}
+                    {/* HH Completed — overrides target for per-HH calculation */}
                     <div className="space-y-1">
                       <Label className="text-xs">HH Completed</Label>
                       <Input className="h-8 text-xs" type="number" min="0" placeholder="0 (after visit)"
                         value={formRow.hhCompleted}
-                        onChange={e => setFormRow(r => ({ ...r, hhCompleted: e.target.value }))} />
+                        onChange={e => setFormRow(r => {
+                          const hhCompleted = e.target.value;
+                          const fee = r.feeMode === 'per_hh' ? calcPerHhFee(r.enumeratorFeeRate, hhCompleted, r.hhTarget) : r.enumeratorFee;
+                          return { ...r, hhCompleted, enumeratorFee: fee };
+                        })} />
                     </div>
                     {/* Beneficiaries */}
                     <div className="space-y-1">
@@ -1301,7 +1427,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
-                    {['Site Name', 'MMP', 'Activity', 'State', 'Status', 'HH Target', 'HH Done', 'Beneficiaries', 'M / F', 'Assigned To', 'Visit Date', ''].map(h => (
+                    {['Site Name', 'MMP', 'Activity', 'State', 'Status', 'HH Target', 'HH Done', 'Enum. Fee', 'Beneficiaries', 'M / F', 'Assigned To', 'Visit Date', ''].map(h => (
                       <th key={h} className="px-2 py-2 text-left text-muted-foreground font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1328,6 +1454,27 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                         </td>
                         <td className="px-2 py-2 text-muted-foreground text-right">{entry.hh_target ?? '—'}</td>
                         <td className="px-2 py-2 text-muted-foreground text-right">{entry.hh_completed ?? '—'}</td>
+                        <td className="px-2 py-2 whitespace-nowrap">
+                          {entry.enumerator_fee != null ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-muted-foreground">{entry.enumerator_fee.toLocaleString()}</span>
+                              {entry.fee_mode === 'per_hh' && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center gap-0.5 text-[9px] bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 px-1 py-0.5 rounded cursor-help">
+                                        <Calculator className="h-2.5 w-2.5" />×HH
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                      Per-HH · Rate: {entry.enumerator_fee_rate ?? '?'} SDG/HH
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </span>
+                          ) : '—'}
+                        </td>
                         <td className="px-2 py-2 text-muted-foreground text-right">{entry.beneficiaries ?? '—'}</td>
                         <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                           {(entry.male_count != null || entry.female_count != null)
@@ -1381,9 +1528,11 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               { field: 'locality' as keyof ColumnMap,         label: 'Locality',            required: false },
               { field: 'siteCode' as keyof ColumnMap,         label: 'Site Code',           required: false },
               { field: 'phoneNumber' as keyof ColumnMap,      label: 'Phone Number',        required: false },
-              { field: 'transportFee' as keyof ColumnMap,     label: 'Transport Fee',       required: false },
-              { field: 'enumeratorFee' as keyof ColumnMap,    label: 'Enumerator Fee',      required: false },
-              { field: 'assignTo' as keyof ColumnMap,         label: 'Assign To',           required: false },
+              { field: 'transportFee' as keyof ColumnMap,      label: 'Transport Fee',         required: false },
+              { field: 'feeMode' as keyof ColumnMap,          label: 'Fee Mode (flat/per_hh)',required: false },
+              { field: 'enumeratorFee' as keyof ColumnMap,    label: 'Enumerator Fee (flat)', required: false },
+              { field: 'enumeratorFeeRate' as keyof ColumnMap,label: 'Rate per HH (per_hh)',  required: false },
+              { field: 'assignTo' as keyof ColumnMap,         label: 'Assign To',             required: false },
               { field: 'dueDate' as keyof ColumnMap,          label: 'Due Date',            required: false },
               { field: 'activity' as keyof ColumnMap,         label: 'Activity',            required: false },
               { field: 'hhTarget' as keyof ColumnMap,         label: 'HH Target',           required: false },
@@ -1448,10 +1597,47 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                   onChange={e => setEditForm(f => ({ ...f, transport_fee: e.target.value ? Number(e.target.value) : undefined }))} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Enumerator Fee (SDG)</Label>
-                <Input type="number" min="0" className="h-8 text-xs"
-                  value={editForm.enumerator_fee ?? ''}
-                  onChange={e => setEditForm(f => ({ ...f, enumerator_fee: e.target.value ? Number(e.target.value) : undefined }))} />
+                <Label className="text-xs flex items-center gap-1.5">
+                  Enumerator Fee
+                  <span className="flex items-center gap-1 ml-auto">
+                    <span className={`text-[10px] ${(editForm as any).fee_mode !== 'per_hh' ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>Flat</span>
+                    <Switch
+                      checked={(editForm as any).fee_mode === 'per_hh'}
+                      onCheckedChange={checked => setEditForm(f => ({ ...f, fee_mode: checked ? 'per_hh' : 'flat' } as any))}
+                    />
+                    <span className={`text-[10px] flex items-center gap-0.5 ${(editForm as any).fee_mode === 'per_hh' ? 'font-semibold text-teal-600 dark:text-teal-400' : 'text-muted-foreground'}`}>
+                      <Calculator className="h-3 w-3" />Per HH
+                    </span>
+                  </span>
+                </Label>
+                {(editForm as any).fee_mode === 'per_hh' ? (
+                  <div className="space-y-1">
+                    <Input type="number" min="0" className="h-8 text-xs" placeholder="Rate per HH (SDG)"
+                      value={(editForm as any).enumerator_fee_rate ?? ''}
+                      onChange={e => setEditForm(f => ({ ...f, enumerator_fee_rate: e.target.value ? Number(e.target.value) : undefined } as any))} />
+                    <div className="flex items-center gap-1.5">
+                      <Input type="number" min="0" className="h-8 text-xs flex-1" placeholder="Calculated total"
+                        value={editForm.enumerator_fee ?? ''}
+                        onChange={e => setEditForm(f => ({ ...f, enumerator_fee: e.target.value ? Number(e.target.value) : undefined }))} />
+                      <Button type="button" size="sm" variant="outline" className="h-8 text-xs shrink-0 gap-1 text-teal-600 border-teal-300"
+                        onClick={recalcPerHhFee}>
+                        <Calculator className="h-3 w-3" /> Recalc
+                      </Button>
+                    </div>
+                    {(editForm as any).enumerator_fee_rate && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                        {editForm.hh_completed
+                          ? `Using actual HH Completed (${editForm.hh_completed})`
+                          : `Using HH Target (${editForm.hh_target ?? '?'}) — estimate`}
+                        . Click Recalc after updating HH.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <Input type="number" min="0" className="h-8 text-xs"
+                    value={editForm.enumerator_fee ?? ''}
+                    onChange={e => setEditForm(f => ({ ...f, enumerator_fee: e.target.value ? Number(e.target.value) : undefined }))} />
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Phone Number</Label>
