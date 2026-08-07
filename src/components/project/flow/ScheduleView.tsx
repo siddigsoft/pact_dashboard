@@ -158,12 +158,14 @@ export function ScheduleView({
         isMilestone: entry?.isMilestone ?? false,
         percentComplete: entry?.percentComplete ?? (status === 'completed' ? 100 : 0),
         displayLabel: entry?.customLabel || stage.label,
+        sectionLabel: entry?.sectionLabel ?? null,
       };
     });
   }, [allDefaultStages, customEntries, getStageStatus, groups, completedIds, stageHistory, checklistByStage, today]);
 
-  // Track which group index we rendered last to show a phase header
+  // Track which group/section we rendered last to show phase and section headers
   let lastGroupIdx = -1;
+  let lastSectionKey = '';
 
   return (
     <div className="rounded-xl border overflow-hidden text-sm">
@@ -195,7 +197,15 @@ export function ScheduleView({
       <div className="divide-y divide-border/40">
         {rows.map((row, rowIdx) => {
           const showGroupHeader = row.groupIdx !== lastGroupIdx;
-          if (showGroupHeader) lastGroupIdx = row.groupIdx;
+          if (showGroupHeader) {
+            lastGroupIdx = row.groupIdx;
+            lastSectionKey = '';
+          }
+          const currSectionKey = `${row.groupIdx}::${row.sectionLabel ?? ''}`;
+          const showSectionHeader = !!row.sectionLabel && currSectionKey !== lastSectionKey;
+          if (showSectionHeader) lastSectionKey = currSectionKey;
+          const indented = !!row.sectionLabel;
+
           const hasItems = row.items.length > 0;
           const isExpanded = expanded.has(row.stage.id);
 
@@ -223,6 +233,24 @@ export function ScheduleView({
                 </div>
               )}
 
+              {/* ── Section / Sub-group header ── */}
+              {showSectionHeader && (
+                <div
+                  className="grid bg-violet-50/60 dark:bg-violet-900/10 border-b border-violet-200/40 dark:border-violet-800/30"
+                  style={{ gridTemplateColumns: '2.5rem 1fr 5rem 7rem 7rem 6.5rem 7rem 5.5rem' }}
+                >
+                  <div className="px-2 py-1 text-center border-r">
+                    <span className="text-[9px] font-mono text-violet-400">§</span>
+                  </div>
+                  <div className="col-span-7 px-3 py-1 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">
+                      {row.sectionLabel}
+                    </span>
+                    <span className="text-[9px] text-violet-400 font-medium uppercase tracking-wide">Section</span>
+                  </div>
+                </div>
+              )}
+
               {/* ── Stage row ── */}
               <div
                 className={cn(
@@ -237,7 +265,7 @@ export function ScheduleView({
                 </div>
 
                 {/* Task Name */}
-                <div className="px-3 py-2.5 flex items-start gap-1.5 border-r min-w-0">
+                <div className={cn('py-2.5 flex items-start gap-1.5 border-r min-w-0', indented ? 'pl-6 pr-3' : 'px-3')}>
                   {/* Status icon */}
                   <div className="mt-0.5 flex-shrink-0">
                     {row.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}

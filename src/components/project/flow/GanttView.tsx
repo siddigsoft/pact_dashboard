@@ -23,6 +23,8 @@ interface GanttStage {
   isMilestone: boolean;
   isBlocked: boolean;
   blockedByLabels: string[];
+  /** Optional sub-group label within a phase (MS Project section concept) */
+  sectionLabel?: string | null;
 }
 
 interface Props {
@@ -182,6 +184,7 @@ export function GanttView({
         isMilestone,
         isBlocked: blockedByLabels.length > 0,
         blockedByLabels,
+        sectionLabel: entry?.sectionLabel ?? null,
       };
     });
   }, [allDefaultStages, customEntries, getStageStatus, groups, completedIds]);
@@ -308,7 +311,14 @@ export function GanttView({
 
         {/* Stage rows */}
         <div className="divide-y divide-border/40">
-          {resolvedStages.map((gs, idx) => {
+          {(() => {
+            let lastSectionKey = '';
+            return resolvedStages.map((gs, idx) => {
+            const currSectionKey = `${gs.groupIdx}::${gs.sectionLabel ?? ''}`;
+            const showSectionHeader = !!gs.sectionLabel && currSectionKey !== lastSectionKey;
+            if (showSectionHeader) lastSectionKey = currSectionKey;
+            const indentedBar = !!gs.sectionLabel;
+
             const colorKey = gs.isBlocked ? 'blocked' : gs.isMilestone && gs.status !== 'completed' ? 'milestone' : gs.status;
             const colors = STATUS_COLORS[colorKey] ?? STATUS_COLORS['upcoming'];
             const barStyle = getBarStyle(gs);
@@ -343,6 +353,25 @@ export function GanttView({
 
             return (
               <div key={gs.stage.id}>
+                {/* ── Section / Sub-group header row ── */}
+                {showSectionHeader && (
+                  <div className="flex border-b border-violet-200/50 dark:border-violet-800/30 bg-violet-50/50 dark:bg-violet-900/10">
+                    <div className="w-52 flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-r border-violet-200/50">
+                      <span className="text-violet-400 text-[10px] font-bold">§</span>
+                      <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 truncate">
+                        {gs.sectionLabel}
+                      </span>
+                    </div>
+                    <div className="flex-1 relative overflow-hidden py-1.5 px-2">
+                      {months.map((month, mi) => {
+                        const leftPct = (Math.max(0, differenceInDays(startOfMonth(month), min)) / totalDays) * 100;
+                        return (
+                          <div key={mi} className="absolute top-0 bottom-0 w-px bg-border/15" style={{ left: `${leftPct.toFixed(2)}%` }} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {/* ── Stage row ── */}
                 <div
                   className={cn(

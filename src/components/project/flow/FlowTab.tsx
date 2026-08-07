@@ -453,6 +453,20 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                       </div>
                     </div>
 
+                    {/* Section label */}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        <span className="text-violet-500 font-bold">§</span> Section / Sub-group Label
+                      </Label>
+                      <Input
+                        placeholder="e.g. Literature Review (blank = no sub-group)"
+                        value={entry.sectionLabel ?? ''}
+                        onChange={e => updateEntry(entry.id, { sectionLabel: e.target.value || null })}
+                        className="h-8 text-sm"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Stages sharing the same section name appear under a bold sub-header in Schedule &amp; Gantt views</p>
+                    </div>
+
                     <div className="space-y-1">
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</Label>
                       <Textarea placeholder="Override stage description (optional)" value={entry.customDescription ?? ''} onChange={e => updateEntry(entry.id, { customDescription: e.target.value })} rows={2} className="text-sm resize-none" />

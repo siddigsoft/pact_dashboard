@@ -37,6 +37,8 @@ export interface CustomStageEntry {
   removedFromTemplate?: boolean;
   /** Manual % complete override (0-100). If null, derived from checklist. */
   percentComplete?: number | null;
+  /** Optional section name — stages sharing a sectionLabel within the same parallel group appear under a bold sub-group header row (MS Project "summary task" concept) */
+  sectionLabel?: string | null;
 }
 
 export type StageStatusAction = 'mark-complete' | 'set-current' | 'toggle-skip' | 'reopen';
