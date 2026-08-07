@@ -192,10 +192,16 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
 
       if (type === 'xlsx') {
         // ── Excel export: List + Gantt data ──────────────────────────────
+        // Filter tombstone markers before building checklist rows.
+        // __deleted_deliverable__: items are internal soft-delete sentinels stored
+        // in project_stage_checklist — they must never appear in any export.
+        const CHECKLIST_SKIP_PREFIXES = ['__deleted_deliverable__:', '~~rm~~:'];
         const checklistByStage: Record<string, { item_text: string; completed: boolean }[]> = {};
         (checklistRes.data ?? []).forEach((r: any) => {
+          const text: string = r.item_text ?? '';
+          if (CHECKLIST_SKIP_PREFIXES.some(p => text.startsWith(p))) return;
           if (!checklistByStage[r.stage_id]) checklistByStage[r.stage_id] = [];
-          checklistByStage[r.stage_id].push({ item_text: r.item_text, completed: r.completed });
+          checklistByStage[r.stage_id].push({ item_text: text, completed: r.completed });
         });
 
         const fmtD = (iso?: string | null) => iso ? format(parseISO(iso), 'dd MMM yyyy') : '—';
