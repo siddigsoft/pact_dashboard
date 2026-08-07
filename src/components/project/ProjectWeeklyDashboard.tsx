@@ -718,7 +718,7 @@ export function ProjectWeeklyDashboard({ project, currentFlowStageId }: Props) {
       <div className="bg-gradient-to-r from-[#0F2041] to-[#1a3560] px-5 py-3 flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <BarChart2 className="h-4 w-4 text-indigo-300 flex-shrink-0" />
-          <span className="text-white font-bold text-sm tracking-tight">Project Dashboard</span>
+          <span className="text-white font-bold text-sm tracking-tight truncate max-w-[280px]" title={project.name}>{project.name} Dashboard</span>
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusMeta.color}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
             {statusMeta.label}
