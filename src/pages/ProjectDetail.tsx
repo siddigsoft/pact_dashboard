@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
+import { PageLoader } from '@/components/ui/page-loader';
 
 const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -95,17 +96,7 @@ const ProjectDetailPage = () => {
   };
 
   if ((!authReady || loading) && !project) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-[spin_3s_linear_infinite]"></div>
-            <div className="absolute inset-[6px] rounded-full border-4 border-t-primary animate-[spin_2s_linear_infinite]"></div>
-          </div>
-          <p className="text-muted-foreground animate-pulse">Loading project details...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader className="min-h-[60vh]" label="Loading project details…" />;
   }
 
   if (error) {

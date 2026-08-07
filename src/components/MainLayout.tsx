@@ -20,6 +20,7 @@ import { PageAccessModal } from "@/components/access/PageAccessModal";
 import { PageAccessDenied } from "@/components/access/PageAccessDenied";
 import { usePageAccessGuard } from "@/hooks/usePageAccessGuard";
 import { Shield } from "lucide-react";
+import { PageLoader } from "@/components/ui/page-loader";
 
 // Map current pathname to a PAGE_DEFS slug
 function pathToSlug(pathname: string): string | null {
@@ -73,10 +74,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   if (!authReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
+        <PageLoader />
       </div>
     );
   }
@@ -102,9 +100,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
               <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5">
                 <div className="w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
                   {showAccessSpinner ? (
-                    <div className="flex items-center justify-center min-h-[60vh]">
-                      <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                    </div>
+                    <PageLoader className="min-h-[60vh]" />
                   ) : pageIsBlocked && !accessCheckTimedOut ? (
                     <PageAccessDenied pageLabel={pageLabel} reason="blocked" />
                   ) : (

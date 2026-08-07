@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface LineItem { name: string; amount: number; type: 'fixed' | 'percent'; }
@@ -2394,12 +2395,7 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
     ], `pact-ytd-${thisYear}.xlsx`);
   };
 
-  if (isLoading) return (
-    <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
-      <Loader2 className="h-7 w-7 animate-spin opacity-30" />
-      <span className="text-sm">Loading year-to-date data…</span>
-    </div>
-  );
+  if (isLoading) return <PageLoader compact label="Loading year-to-date data…" />;
 
   if (yearRuns.length === 0) return (
     <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
@@ -4359,11 +4355,7 @@ function PayslipsTab({ runs, loading, employees }: {
     toast({ title: `Generating ${runItems.length} payslips…` });
   };
 
-  if (loading) return (
-    <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
-      <Loader2 className="h-6 w-6 animate-spin opacity-30" /><span className="text-sm">Loading…</span>
-    </div>
-  );
+  if (loading) return <PageLoader compact />;
 
   if (!runs.length) return (
     <div className="py-24 text-center space-y-4">

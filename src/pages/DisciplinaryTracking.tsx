@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface Case {
   id: string; user_id: string; case_type: 'disciplinary' | 'grievance'; category: string | null;
@@ -155,7 +156,7 @@ export default function DisciplinaryTracking() {
       </CardContent></Card>
     );
   }
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return <PageLoader compact />;
   if (missingTable) {
     return (
       <Card className="border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/10">

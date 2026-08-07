@@ -4,6 +4,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { format } from 'date-fns';
 import { Download } from 'lucide-react';
 import { exportToExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
 
 /* ── helpers ── */
 function pct(n: number, d: number) { return d > 0 ? Math.round(n / d * 100) : 0; }
@@ -109,11 +110,7 @@ function TrackerView() {
     exportToExcel(rowsForExport, 'Staff Onboarding Tracker', `staff-onboarding-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
-  if (loading) return (
-    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
-      Loading staff onboarding data…
-    </div>
-  );
+  if (loading) return <PageLoader label="Loading staff onboarding data…" />;
 
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", background: '#f5f7fa', minHeight: '100vh', padding: '32px 24px 80px' }}>

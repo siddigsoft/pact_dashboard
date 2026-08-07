@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, Search, ChevronRight, ChevronDown, User, Building2, ChevronsDownUp, ChevronsUpDown, AlertTriangle, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface Profile {
   id: string; full_name: string | null; role: string | null; reports_to: string | null;
@@ -178,7 +179,7 @@ export default function OrgChart() {
   function expandAll() { const all: string[] = []; collectIds(forest, all); setExpanded(new Set(all)); }
   function collapseAll() { setExpanded(new Set()); }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return <PageLoader compact />;
 
   return (
     <div className="space-y-4" data-testid="page-org-chart">

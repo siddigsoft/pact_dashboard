@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { format, isWithinInterval, parseISO } from 'date-fns';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface Plan {
   id: string; name: string;
@@ -355,7 +356,7 @@ export default function BenefitsAdministration() {
     ], `Benefit_Cost_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return <PageLoader compact />;
 
   if (missingTable) {
     return (

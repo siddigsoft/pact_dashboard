@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PersonalTask {
@@ -1122,12 +1123,7 @@ function MyPayslipsTab({ userId }: { userId: string }) {
     toast({ title: `Payslip downloaded for ${run.period_label}` });
   };
 
-  if (isLoading) return (
-    <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
-      <Loader2 className="h-7 w-7 animate-spin opacity-30" />
-      <span className="text-sm">Loading your payslips…</span>
-    </div>
-  );
+  if (isLoading) return <PageLoader compact label="Loading your payslips…" />;
 
   if (myItems.length === 0) return (
     <div className="py-20 text-center space-y-3">
