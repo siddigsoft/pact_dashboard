@@ -132,7 +132,12 @@ export default function ProjectProfessionalFeesTab({
     if (!editingUserId) return;
     const hasInstallments = dlgInstallments.length > 0 && dlgScheduleType !== 'lump_sum';
     const derivedStatus   = hasInstallments ? derivePaymentStatus(dlgInstallments) : dlgPayStatus;
-    const derivedPaid     = hasInstallments ? totalPaidFromInstallments(dlgInstallments) : parseFloat(dlgAmountPaid || '0');
+    // When lump-sum and status is manually set to "paid" but amount was left at 0,
+    // treat the full fee amount as paid so the paid/outstanding columns stay consistent.
+    const rawManualPaid = parseFloat(dlgAmountPaid || '0');
+    const derivedPaid = hasInstallments
+      ? totalPaidFromInstallments(dlgInstallments)
+      : (dlgPayStatus === 'paid' && rawManualPaid === 0 ? dlgEstTotal : rawManualPaid);
     const updated = localComposition.map(m => {
       if (m.userId !== editingUserId) return m;
       return {
@@ -432,7 +437,19 @@ export default function ProjectProfessionalFeesTab({
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Payment Status</Label>
-                      <Select value={dlgPayStatus} onValueChange={v => setDlgPayStatus(v as typeof dlgPayStatus)}>
+                      <Select
+                        value={dlgPayStatus}
+                        onValueChange={v => {
+                          const next = v as typeof dlgPayStatus;
+                          setDlgPayStatus(next);
+                          // Auto-fill the amount when marking fully paid and field is still zero
+                          if (next === 'paid' && (!dlgAmountPaid || parseFloat(dlgAmountPaid) === 0)) {
+                            setDlgAmountPaid(dlgEstTotal > 0 ? dlgEstTotal.toFixed(2) : '');
+                          }
+                          // Clear amount when reverting to unpaid
+                          if (next === 'unpaid') setDlgAmountPaid('0');
+                        }}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unpaid">Unpaid</SelectItem>
