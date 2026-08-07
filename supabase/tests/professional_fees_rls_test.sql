@@ -258,6 +258,75 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 5. Roll back every test row — production data is never committed
+-- 5. Anon-role privilege check
+--
+-- Verify that the anon role has been explicitly stripped of EXECUTE on this
+-- function.  We use has_function_privilege() rather than SET ROLE anon (which
+-- would silently succeed in a service-role session) so the assertion is
+-- portable across Supabase environments.
+--
+-- Expected result: has_function_privilege returns FALSE for both anon and
+-- PUBLIC, confirming that unauthenticated visitors cannot call the function
+-- via the Supabase anon key.
+-- ---------------------------------------------------------------------------
+
+DO $$
+DECLARE
+  v_anon_can_execute   BOOLEAN;
+  v_pub_can_execute    BOOLEAN;
+BEGIN
+  -- Check anon role directly.
+  SELECT has_function_privilege('anon', 'get_project_professional_fees(uuid)', 'execute')
+    INTO v_anon_can_execute;
+
+  IF v_anon_can_execute THEN
+    RAISE EXCEPTION
+      'FAIL [anon privilege]: anon role has EXECUTE on get_project_professional_fees — REVOKE did not take effect';
+  END IF;
+  RAISE NOTICE 'PASS [anon privilege]: anon role does NOT have EXECUTE on get_project_professional_fees';
+
+  -- Check PUBLIC pseudo-role (inherited privilege path for the anon key).
+  SELECT has_function_privilege('PUBLIC', 'get_project_professional_fees(uuid)', 'execute')
+    INTO v_pub_can_execute;
+
+  IF v_pub_can_execute THEN
+    RAISE EXCEPTION
+      'FAIL [PUBLIC privilege]: PUBLIC has EXECUTE on get_project_professional_fees — REVOKE FROM PUBLIC did not take effect';
+  END IF;
+  RAISE NOTICE 'PASS [PUBLIC privilege]: PUBLIC does NOT have EXECUTE on get_project_professional_fees';
+
+  -- Also confirm the function is not executable by the unauthenticated path
+  -- via SET ROLE anon + exception capture.
+  BEGIN
+    SET LOCAL ROLE anon;
+    -- Attempting to call the function as the anon role should raise
+    -- insufficient_privilege (42501).  Pass NULL::uuid to match the
+    -- declared signature; a "function does not exist" error would be
+    -- a resolution failure, not a privilege failure.
+    PERFORM public.get_project_professional_fees(NULL::uuid);
+    -- If we reach this line the REVOKE is missing.
+    RAISE EXCEPTION
+      'FAIL [anon execute]: anon role was able to execute get_project_professional_fees without error';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'PASS [anon execute]: calling as anon role raised insufficient_privilege as expected';
+    WHEN OTHERS THEN
+      -- Any other error (e.g. relation not found) still proves the function
+      -- did not return data; re-raise only if it is NOT a privilege error.
+      IF SQLERRM NOT ILIKE '%permission denied%' THEN
+        RAISE;
+      END IF;
+      RAISE NOTICE 'PASS [anon execute]: calling as anon role denied (%)' , SQLERRM;
+  END;
+
+  -- Restore the original role for the ROLLBACK to work cleanly.
+  RESET ROLE;
+
+  RAISE NOTICE '✅  Anon-privilege gate confirmed.';
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 6. Roll back every test row — production data is never committed
 -- ---------------------------------------------------------------------------
 ROLLBACK;
