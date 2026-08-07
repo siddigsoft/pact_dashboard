@@ -354,35 +354,39 @@ export function useProjectTasks(projectId: string) {
         .single();
       if (error) throw error;
 
-      // Only notify system users (external team members have no profiles / FCM).
-      if (task.assignedTo && task.assignedTo !== currentUserId) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', task.assignedTo)
-          .maybeSingle();
-        if (profile) {
-          notifyAssignee(
-            task.assignedTo,
-            task.title,
-            projectName,
-            projectId,
-            currentUserName,
-            currentUserId,
-            currentUserId,
-          ).catch(() => {});
+      // Notifications are fire-and-forget — profile lookups + dispatch must not
+      // hold the create button hostage. Only system users get notified
+      // (external team members have no profiles / FCM).
+      void (async () => {
+        if (task.assignedTo && task.assignedTo !== currentUserId) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', task.assignedTo)
+            .maybeSingle();
+          if (profile) {
+            notifyAssignee(
+              task.assignedTo,
+              task.title,
+              projectName,
+              projectId,
+              currentUserName,
+              currentUserId,
+              currentUserId,
+            ).catch(() => {});
+          }
         }
-      }
-      if (coIds.length > 0) {
-        const { data: coProfiles } = await supabase
-          .from('profiles')
-          .select('id')
-          .in('id', coIds);
-        const notifiableCoIds = (coProfiles ?? []).map((p) => p.id);
-        if (notifiableCoIds.length > 0) {
-          notifyCoAssignees(notifiableCoIds, [], currentUserId, task.title, projectName, projectId, currentUserName, currentUserId).catch(() => {});
+        if (coIds.length > 0) {
+          const { data: coProfiles } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('id', coIds);
+          const notifiableCoIds = (coProfiles ?? []).map((p) => p.id);
+          if (notifiableCoIds.length > 0) {
+            notifyCoAssignees(notifiableCoIds, [], currentUserId, task.title, projectName, projectId, currentUserName, currentUserId).catch(() => {});
+          }
         }
-      }
+      })().catch(() => {});
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
@@ -446,6 +450,9 @@ export function useProjectTasks(projectId: string) {
       const cached = qc.getQueryData<FieldTask[]>(key);
       const task = cached?.find(t => t.id === id);
 
+      // Everything below is notification fan-out — fire-and-forget so the
+      // save button resolves as soon as the row is written.
+      void (async () => {
       // Notify new primary assignee when reassigned (+ creator) — system users only
       const newAssignee = patch.assignedTo;
       if (newAssignee && newAssignee !== prevAssignee && newAssignee !== currentUserId && currentUserName && projectName && task) {
@@ -567,6 +574,7 @@ export function useProjectTasks(projectId: string) {
           }).catch(() => {});
         }
       }
+      })().catch(() => {});
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });

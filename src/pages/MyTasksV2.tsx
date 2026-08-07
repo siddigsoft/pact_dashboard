@@ -61,6 +61,7 @@ import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
 import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
 import type { RewardDeduction } from '@/utils/rewardCalc';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -3722,11 +3723,7 @@ function PlanningCompanion({
 
   const firstName = currentUserFullName?.split(' ')[0] ?? 'there';
 
-  if (isLoading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <Loader2 className="w-8 h-8 animate-spin text-[#1D3461]/40" />
-    </div>
-  );
+  if (isLoading) return <PageLoader className="flex-1" label="Loading tasks…" />;
 
   return (
     <div className="flex-1 overflow-auto min-h-0 bg-slate-50 dark:bg-slate-900">

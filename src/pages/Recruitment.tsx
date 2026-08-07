@@ -27,6 +27,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { exportToExcel } from '@/utils/report-export';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -796,11 +797,7 @@ export default function Recruitment() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
+  if (loading) return <PageLoader compact />;
   if (missingTable) return (
     <Card className="border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/10">
       <CardContent className="py-10 text-center text-sm text-amber-700 dark:text-amber-400">

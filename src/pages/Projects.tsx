@@ -29,7 +29,7 @@ import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useUser } from '@/context/UserContext';
+import { useUser } from '@/context/user/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { PROJECT_TEMPLATES } from '@/config/projectTypeConfig';

@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, CartesianGrid } from 'recharts';
 import { exportMultiSheetExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
 
 const PayrollPanel         = lazy(() => import('./Payroll'));
 const RetainerPanel        = lazy(() => import('./RetainerManagement'));
@@ -1148,12 +1149,7 @@ function LeaveTrendsChart() {
     staleTime: 120_000,
   });
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-48 text-muted-foreground gap-2 text-sm">
-      <div className="h-5 w-5 rounded-full border-2 border-[#1D3461] border-t-transparent animate-spin" />
-      Loading leave data…
-    </div>
-  );
+  if (isLoading) return <PageLoader compact label="Loading leave data…" />;
 
   if (!data?.chartData.length) return (
     <div className="flex items-center justify-center h-32 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
@@ -1880,7 +1876,7 @@ function OrgChartView() {
       (p.role ?? '').toLowerCase().includes(q));
   }, [visiblePeople, searchQ]);
 
-  if (isLoading) return <div className="py-20 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>;
+  if (isLoading) return <PageLoader compact />;
 
   const withManagerCount = visiblePeople.filter(p => p.reports_to && personMap[p.reports_to]).length;
 

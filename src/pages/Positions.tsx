@@ -21,6 +21,7 @@ import {
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface Position {
   id: string;
@@ -483,7 +484,7 @@ function PositionTable({ visible, profileMap, deptMap, isAdmin, loading, onEdit,
   isAdmin: boolean; loading: boolean; onEdit: (p: Position) => void; onDelete: (p: Position) => void;
   showSuccession: boolean;
 }) {
-  if (loading) return <div className="py-20 flex justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>;
+  if (loading) return <PageLoader compact />;
   if (visible.length === 0) return (
     <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No positions match your filters.</CardContent></Card>
   );

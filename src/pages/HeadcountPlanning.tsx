@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { exportToExcel } from '@/utils/report-export';
 import { format } from 'date-fns';
+import { PageLoader } from '@/components/ui/page-loader';
 
 interface Plan {
   id: string; department_id: string | null; position_title: string; fiscal_year: number; quarter: number | null;
@@ -138,7 +139,7 @@ export default function HeadcountPlanning() {
   }
 
   if (!isAdmin) return <Card className="border-dashed"><CardContent className="py-16 text-center text-sm text-muted-foreground">Headcount planning is restricted to HR, admin, and finance roles.</CardContent></Card>;
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return <PageLoader compact />;
   if (missingTable) {
     return (
       <Card className="border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/10">

@@ -35,6 +35,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatDurationFromMs, medianMs } from '@/utils/duration';
 import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
+import { PageLoader } from '@/components/ui/page-loader';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1929,14 +1930,7 @@ export default function PortfolioDashboard() {
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center space-y-3">
-        <Loader2 className="h-10 w-10 animate-spin text-[#1D3461] mx-auto" />
-        <p className="text-sm text-muted-foreground">Loading portfolio data from all modules…</p>
-      </div>
-    </div>
-  );
+  if (isLoading) return <PageLoader label="Loading portfolio data from all modules…" />;
 
   if (isError) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MoonIcon, SunIcon, Settings, LogOut, UserIcon } from 'lucide-react';
+import { MoonIcon, SunIcon, Settings, LogOut, UserIcon, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/context/user/UserContext';
@@ -17,46 +17,15 @@ import { useViewAs } from '@/context/ViewAsContext';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import NavBrand from './navbar/NavBrand';
-import { GlobalSearch } from './navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
 import { useFocusReconnect } from '@/hooks/useFocusReconnect';
 import { CommandPalette } from '@/components/CommandPalette';
-
-const featureList = [
-        { name: 'Dashboard', path: '/dashboard' },
-        { name: 'Projects', path: '/projects' },
-        { name: 'Create Project', path: '/projects/create' },
-        { name: 'Project Archive', path: '/archive' },
-        { name: 'MMP Management', path: '/mmp' },
-        { name: 'Upload MMP', path: '/mmp/upload' },
-        { name: 'Site Visits', path: '/site-visits' },
-        { name: 'Schedule Site Visit', path: '/site-visits/schedule' },
-        { name: 'Site Visit Calendar', path: '/calendar' },
-        { name: 'User Management', path: '/users' },
-        { name: 'Register User', path: '/register' },
-        { name: 'Role Management', path: '/role-management' },
-        { name: 'Finance', path: '/finance' },
-        { name: 'Reports', path: '/reports' },
-        { name: 'Notifications', path: '/notifications' },
-        { name: 'Chat', path: '/chat' },
-        { name: 'Settings', path: '/settings' },
-        { name: 'Field Team', path: '/field-team' },
-        { name: 'Data Visibility', path: '/data-visibility' },
-        { name: 'Pending Approvals', path: '/users?tab=pending-approvals' },
-        { name: 'Approved Users', path: '/users?tab=approved-users' },
-        { name: 'Coordinator Dashboard', path: '/coordinator-dashboard' },
-        { name: 'Supervisor Dashboard', path: '/supervisor-dashboard' },
-        // ...add more as your app grows
-];
 
 const Navbar = () => {
         const { setTheme, theme } = useTheme();
         const navigate = useNavigate();
         const { currentUser, logout } = useUser();
         const { viewAs } = useViewAs();
-        const [globalSearch, setGlobalSearch] = useState('');
-        const [showDropdown, setShowDropdown] = useState(false);
 
         // Resolve the displayed role label from user_roles (currentUser.roles) first,
         // falling back to profiles.role only when no user_roles entries exist.
@@ -98,93 +67,69 @@ const Navbar = () => {
         // Auto-reconnect when window regains focus
         useFocusReconnect();
 
-        const filteredFeatures = globalSearch
-                ? featureList.filter(f =>
-                                f.name.toLowerCase().includes(globalSearch.trim().toLowerCase())
-                        )
-                : [];
-
         const handleLogout = useCallback(async () => {
                 await logout();
                 navigate('/auth');
         }, [logout, navigate]);
 
-        const handleGlobalSearch = (e: React.FormEvent) => {
-                e.preventDefault();
-                if (globalSearch.trim()) {
-                        navigate(`/search?q=${encodeURIComponent(globalSearch.trim())}`);
-                        setShowDropdown(false);
-                        setGlobalSearch('');
-                }
-        };
-
-        const handleFeatureClick = (path: string) => {
-                setShowDropdown(false);
-                setGlobalSearch('');
-                navigate(path);
-        };
-
         return (
-                <div className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
-                        <div className="grid h-12 grid-cols-[auto,1fr,auto] items-center px-3 lg:px-4 gap-3">
-                                {/* Brand */}
-                                <div className="flex items-center shrink-0">
-                                        <NavBrand />
-                                </div>
-
-                                {/* Search — center, grows */}
-                                <div className="w-full max-w-xl justify-self-center">
-                                        <div className="mx-auto w-full max-w-lg">
+                <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
+                                {/* Search — centred in the available space */}
+                                <div className="flex flex-1 justify-center min-w-0">
+                                        <div className="w-full max-w-md">
                                                 <CommandPalette />
                                         </div>
                                 </div>
 
-                                {/* Right actions — grouped with dividers */}
-                                <div className="flex items-center gap-1.5 justify-self-end">
-                                        {/* Realtime status dot */}
+                                {/* Right actions */}
+                                <div className="flex shrink-0 items-center gap-1">
                                         <RealtimeActivityIndicator variant="pulse" size="sm" showTooltip={true} />
 
-                                        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
+                                        <div className="mx-1.5 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-                                        {/* Theme toggle */}
                                         <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                                                className="h-8 w-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                                className="h-9 w-9 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                                                 title="Toggle theme"
                                         >
                                                 {theme === 'dark' ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
                                                 <span className="sr-only">Toggle theme</span>
                                         </Button>
 
-                                        {/* Chat */}
                                         <ChatNotificationIndicator />
 
-                                        {/* Notifications */}
                                         <ErrorBoundary fallback={null}>
                                           <NavbarNotificationBell />
                                         </ErrorBoundary>
 
-                                        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
+                                        <div className="mx-1.5 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-                                        {/* User Menu */}
+                                        {/* User menu */}
                                         <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="sm" className="h-8 flex items-center gap-2 px-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                                                        <Button variant="ghost" className="h-9 flex items-center gap-2 rounded-lg px-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
                                                                 <Avatar className="h-7 w-7">
                                                                         <AvatarImage src={currentUser?.avatar || undefined} alt="User" />
-                                                                        <AvatarFallback className="bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 text-xs font-semibold">
+                                                                        <AvatarFallback className="bg-blue-100 text-xs font-semibold text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">
                                                                                 {currentUser?.name?.charAt(0) || 'U'}
                                                                         </AvatarFallback>
                                                                 </Avatar>
-                                                                <span className="font-medium text-sm text-gray-700 dark:text-gray-300 hidden md:inline-block max-w-[120px] truncate">
-                                                                        {currentUser?.name || 'User'}
+                                                                <span className="hidden max-w-[140px] flex-col items-start leading-tight md:flex">
+                                                                        <span className="w-full truncate text-left text-[13px] font-medium text-slate-700 dark:text-slate-200">
+                                                                                {currentUser?.name || 'User'}
+                                                                        </span>
+                                                                        <span className="w-full truncate text-left text-[10px] text-slate-400 dark:text-slate-500">
+                                                                                {resolvedRoleLabel}
+                                                                        </span>
                                                                 </span>
+                                                                <ChevronDown className="hidden h-3.5 w-3.5 text-slate-400 md:block" />
                                                         </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-56">
-                                                        <DropdownMenuLabel className="text-xs text-gray-500">
+                                                        <DropdownMenuLabel className="text-xs text-slate-500">
                                                                 {resolvedRoleLabel}
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
@@ -205,7 +150,7 @@ const Navbar = () => {
                                         </DropdownMenu>
                                 </div>
                         </div>
-                </div>
+                </header>
   );
 };
 

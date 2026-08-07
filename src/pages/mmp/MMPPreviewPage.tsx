@@ -4,6 +4,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { PageLoader } from '@/components/ui/page-loader';
 
 const MMPPreviewPage: FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,7 +33,7 @@ const MMPPreviewPage: FC = () => {
     navigate(`/mmp/${mmp.id}/view`);
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageLoader />;
   if (!mmp) return <div>MMP not found.</div>;
 
   return (

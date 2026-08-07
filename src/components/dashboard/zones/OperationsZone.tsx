@@ -107,16 +107,12 @@ export const OperationsZone: React.FC = () => {
     if (!isFinancialUser) return;
     const fetchPendingReclaims = async () => {
       try {
-        const { data } = await supabase
+        const { count } = await supabase
           .from('down_payment_requests')
-          .select('id, metadata')
-          .neq('status', 'cancelled');
-        if (!data) return;
-        const count = data.filter((r: any) => {
-          try { return JSON.parse(typeof r.metadata === 'string' ? r.metadata : JSON.stringify(r.metadata))?.manual_reconciliation_required === true; }
-          catch { return r.metadata?.manual_reconciliation_required === true; }
-        }).length;
-        setPendingReclaimCount(count);
+          .select('id', { count: 'exact', head: true })
+          .neq('status', 'cancelled')
+          .eq('metadata->>manual_reconciliation_required', 'true');
+        setPendingReclaimCount(count || 0);
       } catch { /* non-critical */ }
     };
     fetchPendingReclaims();

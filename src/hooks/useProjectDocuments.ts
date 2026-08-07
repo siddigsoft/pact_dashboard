@@ -133,20 +133,20 @@ export function useProjectDocuments(projectId: string) {
           throw dbError;
         }
 
-        // Mirror into Workspace: Projects / {project} / {uploader} / file (non-fatal)
-        try {
-          await mirrorProjectDocumentToWorkspace({
-            projectId,
-            uploaderId,
-            file,
-            label: label.trim(),
-          });
-        } catch (mirrorErr: unknown) {
+        // Mirror into Workspace: Projects / {project} / {uploader} / file.
+        // Fire-and-forget — it re-uploads the same bytes to a second bucket,
+        // so awaiting it doubled the time the Upload button spins.
+        mirrorProjectDocumentToWorkspace({
+          projectId,
+          uploaderId,
+          file,
+          label: label.trim(),
+        }).catch((mirrorErr: unknown) => {
           console.warn(
             '[projectDocuments] workspace mirror failed:',
             mirrorErr instanceof Error ? mirrorErr.message : mirrorErr,
           );
-        }
+        });
 
         await fetchDocuments();
         toast({ title: 'Document uploaded' });

@@ -78,6 +78,8 @@ export interface UseProjectFlowReturn {
   setStageStatus: (stageId: string, action: StageStatusAction) => Promise<void>;
   getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
   isStageCompleted: (stageId: string) => boolean;
+  /** Stage IDs that appear in the flow history (completed). */
+  completedStageIds: Set<string>;
   /**
    * Returns labels of incomplete dependency stages that are blocking this stage.
    * Empty array = not blocked.
@@ -482,6 +484,16 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     [currentStages, completedStageIds, skippedIds],
   );
 
+  // Patch this project in the cached projects list so the UI updates instantly.
+  // NOTE: invalidations below use exact:true — the activities cache keys are
+  // children of ['projects'], so a broad invalidate refetches every mounted
+  // per-project activities query for no reason.
+  const patchProjectInCache = (patch: Partial<Project>) => {
+    queryClient.setQueryData<Project[]>(['projects'], (old) =>
+      old ? old.map(p => (p.id === project.id ? { ...p, ...patch } : p)) : old,
+    );
+  };
+
   // Complete a single stage (handles parallel groups)
   const completeStageMutation = useMutation({
     mutationFn: async ({ stageId, notes }: { stageId: string; notes: string }) => {
@@ -556,11 +568,12 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       const nowCompletedIds = new Set([...completedStageIds, stageId]);
       const allGroupDone = currentGroupSafe.every(s => nowCompletedIds.has(s.id));
 
+      let advancedToStageId: string | undefined;
       if (allGroupDone && !isLastGroup) {
         // Advance to the first stage of the next group
         const nextGroup = groups[currentGroupIdx + 1];
         const nextStage = nextGroup?.[0];
-        if (!nextStage) return;
+        if (!nextStage) return undefined;
 
         const { error: updateError } = await supabase.rpc('update_project_flow_stage', {
           p_id: project.id,
@@ -568,6 +581,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           p_custom_stages: project.customFlowStages ?? null,
         });
         if (updateError) throw new Error(updateError.message);
+        advancedToStageId = nextStage.id;
 
         sendStageNotifications(
           project.id,
@@ -592,10 +606,12 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           true,
         ).catch(() => {});
       }
+      return advancedToStageId;
     },
-    onSuccess: () => {
+    onSuccess: (advancedToStageId) => {
+      if (advancedToStageId) patchProjectInCache({ currentFlowStage: advancedToStageId });
       queryClient.invalidateQueries({ queryKey: ['project_flow_log', project.id] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'], exact: true });
     },
   });
 
@@ -607,8 +623,9 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
         .rpc('update_project_custom_stages', { p_id: project.id, p_custom_stages: customStages });
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    onSuccess: (_data, customStages) => {
+      patchProjectInCache({ customFlowStages: customStages });
+      queryClient.invalidateQueries({ queryKey: ['projects'], exact: true });
     },
   });
 
@@ -672,6 +689,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
             p_custom_stages: project.customFlowStages ?? null,
           });
           if (advanceError) throw new Error(advanceError.message);
+          return { currentFlowStage: nextGroup[0].id };
         }
         return;
       }
@@ -683,7 +701,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           p_custom_stages: project.customFlowStages ?? null,
         });
         if (error) throw new Error(error.message);
-        return;
+        return { currentFlowStage: stageId };
       }
 
       if (action === 'toggle-skip') {
@@ -696,7 +714,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           p_custom_stages: merged,
         });
         if (error) throw new Error(error.message);
-        return;
+        return { customFlowStages: merged };
       }
 
       if (action === 'reopen') {
@@ -711,9 +729,10 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
         return;
       }
     },
-    onSuccess: () => {
+    onSuccess: (cachePatch) => {
+      if (cachePatch) patchProjectInCache(cachePatch as Partial<Project>);
       queryClient.invalidateQueries({ queryKey: ['project_flow_log', project.id] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'], exact: true });
     },
   });
 

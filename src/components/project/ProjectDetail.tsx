@@ -45,8 +45,6 @@ import {
   FileBarChart2,
   ExternalLink,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { dispatchNotification } from '@/lib/notify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -102,6 +100,8 @@ import ProjectCostTab from './ProjectCostTab';
 import ProjectProfessionalFeesTab from './ProjectProfessionalFeesTab';
 import ProjectFieldOpsTab from './ProjectFieldOpsTab';
 import { useProjectFlow } from '@/hooks/useProjectFlow';
+import { useAllStageChecklist } from '@/hooks/useStageData';
+import { exportProjectReportPdf } from '@/utils/projectReportPdf';
 import { FlowStrip } from './flow/FlowStrip';
 import { FlowTab } from './flow/FlowTab';
 
@@ -279,6 +279,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     return () => document.removeEventListener('mousedown', h);
   }, []);
   const flow = useProjectFlow(project);
+  const { data: allChecklistItems = [] } = useAllStageChecklist(project.id);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const { currentUser } = useUser();
 
@@ -441,13 +442,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         });
         if (error) throw error;
         await logAuditEvent({
-          module: 'projects',
+          module: 'project',
           action: 'archive',
           entityType: 'project',
           entityId: project.id,
           entityName: project.name,
           description: `Project "${project.name}" closed. Server-enforced immutable close record written.${isSaOverride ? ' (Super Admin finance gate override)' : ''}`,
-          severity: 'medium',
+          severity: 'warning',
         });
         toast({ title: 'Project Closed', description: `"${project.name}" has been closed and archived.` });
         // Notify all team members about the closure
@@ -480,13 +481,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         });
         if (error) throw error;
         await logAuditEvent({
-          module: 'projects',
+          module: 'project',
           action: 'restore',
           entityType: 'project',
           entityId: project.id,
           entityName: project.name,
           description: `Super Admin reopened project "${project.name}". Server-side role check enforced.`,
-          severity: 'high',
+          severity: 'critical',
         });
         toast({ title: 'Project Reopened', description: `"${project.name}" has been restored.` });
         // Notify all team members about the reopen
@@ -525,7 +526,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const handleProjectCloseOverride = useCallback(async (justification: string) => {
     const auditId = await logAuditEvent({
-      module: 'projects',
+      module: 'project',
       action: 'bypass',
       entityType: 'project',
       entityId: project.id,
@@ -553,113 +554,38 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   // PDF export
   const handleExportPdf = useCallback(() => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const PAGE_W = 210;
-    let y = 15;
-
-    // Header
-    doc.setFillColor(15, 32, 65);
-    doc.rect(0, 0, PAGE_W, 28, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PACT Command Center', 14, 11);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Project Report', 14, 19);
-    doc.text(`Exported: ${format(new Date(), 'PPP')}`, PAGE_W - 14, 19, { align: 'right' });
-    y = 36;
-
-    // Project title
-    doc.setTextColor(15, 32, 65);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(project.name, 14, y);
-    y += 6;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Code: ${project.projectCode}  |  Type: ${project.projectType}  |  Status: ${project.status}`, 14, y);
-    y += 10;
-
-    // Details table
-    const details: string[][] = [
-      ['Project Manager', project.team?.projectManager || '—'],
-      ['Start Date', project.startDate ? format(parseISO(project.startDate), 'PPP') : '—'],
-      ['End Date', project.endDate ? format(parseISO(project.endDate), 'PPP') : '—'],
-      ['Location', [project.location?.region, project.location?.state].filter(Boolean).join(', ') || '—'],
-    ];
+    let budgetLabel: string | null = null;
     if (project.budget) {
       const b = project.budget as any;
       const total = b.totalBudgetCents != null ? b.totalBudgetCents / 100 : b.total;
-      details.push(['Budget', `${b.currency || 'SDG'} ${Number(total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`]);
-    }
-    autoTable(doc, {
-      startY: y,
-      head: [['Field', 'Value']],
-      body: details,
-      theme: 'striped',
-      headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
-      styles: { fontSize: 9, cellPadding: 3 },
-      margin: { left: 14, right: 14 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 8;
-
-    // Flow stages
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 32, 65);
-    doc.text('Flow Stage Progress', 14, y);
-    y += 4;
-    const stageRows = flow.activeStages.map((s, idx) => {
-      const status = flow.getStageStatus(s.id);
-      const histEntry = flow.stageHistory.find(h => h.stageId === s.id);
-      return [
-        `${idx + 1}. ${s.label}`,
-        status.charAt(0).toUpperCase() + status.slice(1),
-        histEntry ? format(parseISO(histEntry.advancedAt), 'PP') : '—',
-        histEntry?.notes || '—',
-      ];
-    });
-    autoTable(doc, {
-      startY: y,
-      head: [['Stage', 'Status', 'Completed', 'Notes']],
-      body: stageRows,
-      theme: 'striped',
-      headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      columnStyles: { 0: { cellWidth: 65 }, 1: { cellWidth: 22 }, 2: { cellWidth: 30 } },
-      margin: { left: 14, right: 14 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 8;
-
-    // Activities
-    if (project.activities.length) {
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(15, 32, 65);
-      doc.text('Activities', 14, y);
-      y += 4;
-      const actRows = project.activities.map(a => [
-        a.name,
-        a.status || '—',
-        a.startDate ? format(parseISO(a.startDate), 'PP') : '—',
-        a.endDate ? format(parseISO(a.endDate), 'PP') : '—',
-        a.assignedTo || '—',
-      ]);
-      autoTable(doc, {
-        startY: y,
-        head: [['Activity', 'Status', 'Start', 'End', 'Assigned To']],
-        body: actRows,
-        theme: 'striped',
-        headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 2.5 },
-        margin: { left: 14, right: 14 },
-      });
+      budgetLabel = `${b.currency || 'SDG'} ${Number(total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     }
 
-    doc.save(`project-${project.projectCode}-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-  }, [project, flow]);
+    exportProjectReportPdf({
+      name: project.name,
+      projectCode: project.projectCode,
+      projectType: project.projectType,
+      status: project.status,
+      projectManager: project.team?.projectManager || null,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      location: [project.location?.region, project.location?.state].filter(Boolean).join(', ') || null,
+      budgetLabel,
+      stages: flow.flowDef,
+      customEntries: (project.customFlowStages ?? []) as any,
+      stageHistory: flow.stageHistory,
+      getStageStatus: flow.getStageStatus,
+      checklist: allChecklistItems,
+      activities: project.activities.map(a => ({
+        name: a.name,
+        status: a.status,
+        startDate: a.startDate,
+        endDate: a.endDate,
+        assignedTo: a.assignedTo,
+        progress: (a as any).progress ?? null,
+      })),
+    });
+  }, [project, flow, allChecklistItems]);
 
   // Active statuses for workload calculation (non-terminal statuses)
   const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
@@ -999,7 +925,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleArchiveToggle}
+                  onClick={() => handleArchiveToggle()}
                   disabled={isArchiving}
                   data-testid="button-archive-project"
                 >
@@ -1977,7 +1903,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <TabsContent value="risks" className="mt-4">
           <ProjectRisksPanel
             projectId={project.id}
-            canEdit={!project.archived && canArchive}
           />
         </TabsContent>
 
