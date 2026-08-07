@@ -173,9 +173,10 @@ const STATUS_CFG = {
 
 // ── Export button ──────────────────────────────────────────────────────────
 
-function ExportButton({ projectId, projectName, projectType, projectCode, flow, allDefaultStages, customEntries }: {
+function ExportButton({ projectId, projectName, projectType, projectCode, flow, allDefaultStages, customEntries, viewMode }: {
   projectId: string; projectName: string; projectType: string; projectCode?: string;
   flow: UseProjectFlowReturn; allDefaultStages: FlowStage[]; customEntries: CustomStageEntry[];
+  viewMode: 'list' | 'gantt' | 'schedule';
 }) {
   const { toast } = useToast();
   const [exporting, setExporting] = useState<'pdf' | 'docx' | 'xlsx' | null>(null);
@@ -272,13 +273,21 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
           ['Skipped', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'skipped').length],
         ];
 
+        const VIEW_LABEL: Record<typeof viewMode, string> = {
+          list:     'List View',
+          gantt:    'Gantt View',
+          schedule: 'Schedule View',
+        };
+        const viewLabel = VIEW_LABEL[viewMode];
+        const slugBase = (projectCode ?? projectName.replace(/\s+/g, '-').toLowerCase());
+
         await exportStandardExcel({
           reportTitle: projectName,
-          subtitleLine: `Project Schedule — ${projectType}${projectCode ? ` · ${projectCode}` : ''}`,
+          subtitleLine: `${viewLabel} — ${projectType}${projectCode ? ` · ${projectCode}` : ''}`,
           metaLine: `Exported ${format(new Date(), 'dd MMM yyyy HH:mm')}`,
-          filenamePrefix: `project-schedule-${projectCode ?? projectName.replace(/\s+/g, '-').toLowerCase()}`,
+          filenamePrefix: `project-${viewMode}-${slugBase}`,
           mainSheet: {
-            sheetName: 'Project Schedule',
+            sheetName: viewLabel,
             headers: ['ID', 'Task Name', '% Done', 'Duration', 'Start', 'Finish', 'Predecessors', 'Status'],
             rows,
             colWidths: { 0: 8, 1: 42, 2: 10, 3: 12, 4: 16, 5: 16, 6: 28, 7: 14 },
@@ -289,7 +298,7 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
             colWidths: [28, 14],
           },
         });
-        toast({ title: 'Excel exported successfully' });
+        toast({ title: `${viewLabel} exported to Excel` });
         return;
       }
 
@@ -319,9 +328,10 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
           Export
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem onClick={() => doExport('xlsx')}>
-          <Download className="h-3.5 w-3.5 mr-2 text-emerald-600" />Export Excel (.xlsx)
+          <Download className="h-3.5 w-3.5 mr-2 text-emerald-600" />
+          Export {viewMode === 'gantt' ? 'Gantt' : viewMode === 'schedule' ? 'Schedule' : 'List'} View (.xlsx)
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => doExport('pdf')}>
@@ -1239,7 +1249,7 @@ export function FlowTab({
                 <List className="h-3 w-3" /> Schedule
               </Button>
             </div>
-            <ExportButton projectId={projectId} projectName={projectName} projectType={projectType} projectCode={projectCode} flow={flow} allDefaultStages={allDefaultStages} customEntries={customFlowStages ?? []} />
+            <ExportButton projectId={projectId} projectName={projectName} projectType={projectType} projectCode={projectCode} flow={flow} allDefaultStages={allDefaultStages} customEntries={customFlowStages ?? []} viewMode={viewMode} />
             {canEditFlow && (
               <>
                 <Button
