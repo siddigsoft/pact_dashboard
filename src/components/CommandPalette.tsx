@@ -265,12 +265,12 @@ export function CommandPalette() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground bg-muted/50 border border-border rounded-lg hover:bg-muted transition-colors cursor-pointer"
+        className="flex h-8 w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-400 shadow-[0_1px_2px_rgb(15_23_42/0.06)] transition-colors hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
         data-testid="button-command-palette"
       >
-        <Search className="h-4 w-4" />
-        <span className="hidden sm:inline">Search pages...</span>
-        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+        <Search className="h-3.5 w-3.5 shrink-0" />
+        <span className="hidden flex-1 text-left sm:inline">Search</span>
+        <kbd className="hidden h-5 items-center rounded border border-slate-200 bg-slate-50 px-1.5 font-mono text-[10px] text-slate-400 md:inline-flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
           /
         </kbd>
       </button>

@@ -226,15 +226,15 @@ export function NavbarNotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-8 w-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="relative h-9 w-9 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           data-testid="button-notification-bell"
           aria-label="Notifications"
         >
           <Bell className="h-4 w-4" />
           {totalBadge > 0 && (
             <span className={cn(
-              "absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full text-[9px] font-bold text-white leading-none",
-              hasUrgent ? "bg-red-500 animate-pulse" : "bg-primary"
+              "absolute top-0.5 right-0 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full text-[9px] font-bold text-white leading-none ring-2 ring-white dark:ring-slate-950",
+              hasUrgent ? "bg-red-500" : "bg-primary"
             )}>
               {displayBadge}
             </span>

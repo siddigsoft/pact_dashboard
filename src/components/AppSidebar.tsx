@@ -112,8 +112,6 @@
     SidebarMenuSubButton,
     SidebarSeparator,
     SidebarTrigger,
-    SidebarRail,
-    SidebarResizeHandle,
     useSidebar
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
@@ -171,11 +169,17 @@
 
   const SIDEBAR_GROUP_SHELL = "py-1 px-2";
   const SIDEBAR_GROUP_LABEL =
-    "h-8 px-2.5 text-[11px] tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
+    "min-h-8 h-auto py-1 px-2.5 text-[11px] leading-snug tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
+  // One neutral treatment for every section header. Colour in the sidebar is
+  // reserved for state (active item, badges) — a different hue per section
+  // reads as decoration, not information.
+  const SIDEBAR_SECTION_LABEL =
+    "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60";
+  // min-h + h-auto so long labels wrap to a second line instead of truncating
   const SIDEBAR_NAV_ITEM =
-    "h-9 rounded-lg text-[13px] font-medium transition-all duration-200";
+    "min-h-9 h-auto py-1.5 rounded-lg text-[13px] font-medium leading-snug transition-all duration-200";
   const SIDEBAR_NAV_SUB_ITEM =
-    "h-8 rounded-md text-[12px] font-medium transition-all duration-200";
+    "min-h-8 h-auto py-1 rounded-md text-[12px] font-medium leading-snug transition-all duration-200";
 
   const isNavPathActive = (pathname: string, search: string, url: string) => {
     const [base, query] = url.split('?');
@@ -315,7 +319,7 @@
                   : "text-amber-600 dark:text-amber-400"
               )}
             />
-            <span className="truncate flex-1 min-w-0">{item.title}</span>
+            <span className="flex-1 min-w-0">{item.title}</span>
           </Link>
         </SidebarMenuButton>
         <SidebarMenuAction
@@ -1264,14 +1268,15 @@
       <>
         <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
 
-        <SidebarHeader className="border-b border-slate-200/70 px-3 py-3">
-          <div className="flex h-10 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+        {/* h-14 matches the Navbar exactly so the two bottom hairlines read as one strip */}
+        <SidebarHeader className="border-b border-slate-200/70 px-3 py-0">
+          <div className="flex h-14 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate group-data-[collapsible=icon]:hidden">
               PACT
             </span>
             <SidebarTrigger
-              className="ml-auto h-7 w-7 shrink-0 rounded-md group-data-[collapsible=icon]:hidden"
+              className="ml-auto h-7 w-7 shrink-0 rounded-md text-slate-500 hover:text-slate-700 dark:text-slate-400 group-data-[collapsible=icon]:hidden"
               data-testid="button-sidebar-trigger"
             />
           </div>
@@ -1283,10 +1288,7 @@
               <SidebarGroup className={cn(SIDEBAR_GROUP_SHELL, "pb-2")}>
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel
-                    className={cn(
-                      SIDEBAR_GROUP_LABEL,
-                      "text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                    )}
+                    className={cn(SIDEBAR_GROUP_LABEL, SIDEBAR_SECTION_LABEL)}
                     onClick={() => {
                       const next = !isFavoritesCollapsed;
                       setIsFavoritesCollapsed(next);
@@ -1335,20 +1337,20 @@
             // ── Section config: parentGroup value → display config ──────────────
             type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string };
             const SECTION_CFG: Record<string, SectionCfg> = {
-              'workspace':     { label: 'My Workspace',            Icon: LayoutDashboard, labelClass: 'text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30' },
-              'programme':     { label: 'Programme Management',    Icon: FolderKanban,    labelClass: 'text-purple-600 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30' },
-              'comms':         { label: 'Communication',           Icon: MessageSquare,   labelClass: 'text-sky-600 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30' },
-              'fieldops':      { label: 'Field Operations',        Icon: Activity,        labelClass: 'text-orange-600 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30' },
-              'coordination':  { label: 'Coordination & Oversight',Icon: Network,         labelClass: 'text-teal-600 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30' },
-              'finance':       { label: 'Payments & Finance',      Icon: Banknote,        labelClass: 'text-green-600 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30' },
-              'accounting':    { label: 'Accounting',              Icon: BookOpen,        labelClass: 'text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30' },
-              'hr':            { label: 'HR & People',             Icon: Users,           labelClass: 'text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/30' },
-              'crm':           { label: 'CRM',                     Icon: Handshake,       labelClass: 'text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30' },
-              'surveys':       { label: 'Surveys',                 Icon: ClipboardList,   labelClass: 'text-cyan-600 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30' },
-              'analytics':     { label: 'Analytics & Reports',     Icon: BarChart3,       labelClass: 'text-violet-600 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30' },
-              'admin':         { label: 'Administration',          Icon: Settings,        labelClass: 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60' },
-              'help':          { label: 'Help & Support',          Icon: HelpCircle,      labelClass: 'text-lime-600 dark:text-lime-300 hover:bg-lime-50 dark:hover:bg-lime-900/30' },
-              'superadmin':    { label: 'Super Admin',             Icon: ShieldCheck,     labelClass: 'text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30' },
+              'workspace':     { label: 'My Workspace',            Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL },
+              'programme':     { label: 'Programme Management',    Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL },
+              'comms':         { label: 'Communication',           Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL },
+              'fieldops':      { label: 'Field Operations',        Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL },
+              'coordination':  { label: 'Coordination & Oversight',Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL },
+              'finance':       { label: 'Payments & Finance',      Icon: Banknote,        labelClass: SIDEBAR_SECTION_LABEL },
+              'accounting':    { label: 'Accounting',              Icon: BookOpen,        labelClass: SIDEBAR_SECTION_LABEL },
+              'hr':            { label: 'HR & People',             Icon: Users,           labelClass: SIDEBAR_SECTION_LABEL },
+              'crm':           { label: 'CRM',                     Icon: Handshake,       labelClass: SIDEBAR_SECTION_LABEL },
+              'surveys':       { label: 'Surveys',                 Icon: ClipboardList,   labelClass: SIDEBAR_SECTION_LABEL },
+              'analytics':     { label: 'Analytics & Reports',     Icon: BarChart3,       labelClass: SIDEBAR_SECTION_LABEL },
+              'admin':         { label: 'Administration',          Icon: Settings,        labelClass: SIDEBAR_SECTION_LABEL },
+              'help':          { label: 'Help & Support',          Icon: HelpCircle,      labelClass: SIDEBAR_SECTION_LABEL },
+              'superadmin':    { label: 'Super Admin',             Icon: ShieldCheck,     labelClass: SIDEBAR_SECTION_LABEL },
             };
 
             // Group sub-groups by parentGroup; track min order for sorting sections
@@ -1377,38 +1379,42 @@
                 </span>
               ) : null;
 
+            // Two-tier badge vocabulary: red = a queue waiting on the user's
+            // action, blue = informational unread count. One hue per meaning.
+            const BADGE_ACTION = "bg-red-500";
+            const BADGE_INFO = "bg-blue-600";
             const renderItemBadge = (itemId: string) => {
               switch (itemId) {
                 case 'approvals-hub':
-                  return <NavCountBadge count={approvalsHubCount} className="bg-red-500" testId="badge-approvals-hub-count" />;
+                  return <NavCountBadge count={approvalsHubCount} className={BADGE_ACTION} testId="badge-approvals-hub-count" />;
                 case 'advance-requests-report':
                 case 'reconciliation-dashboard':
-                  return <NavCountBadge count={pendingReclaimCount} className="bg-orange-500" testId={`badge-${itemId}-count`} />;
+                  return <NavCountBadge count={pendingReclaimCount} className={BADGE_ACTION} testId={`badge-${itemId}-count`} />;
                 case 'cost-submission':
                 case 'supervisor-approvals':
-                  return <NavCountBadge count={pendingCostApprovalCount} className="bg-red-500" testId={`badge-${itemId}-count`} />;
+                  return <NavCountBadge count={pendingCostApprovalCount} className={BADGE_ACTION} testId={`badge-${itemId}-count`} />;
                 case 'down-payment-approval':
-                  return <NavCountBadge count={pendingDownPaymentCount} className="bg-amber-500" testId="badge-down-payment-count" />;
+                  return <NavCountBadge count={pendingDownPaymentCount} className={BADGE_ACTION} testId="badge-down-payment-count" />;
                 case 'mmp-management':
-                  return <NavCountBadge count={pendingMmpCount} className="bg-blue-600" testId="badge-mmp-count" />;
+                  return <NavCountBadge count={pendingMmpCount} className={BADGE_ACTION} testId="badge-mmp-count" />;
                 case 'site-verification':
                 case 'sites-for-verification':
-                  return <NavCountBadge count={pendingVerificationCount} className="bg-red-500" testId="badge-site-verification-count" />;
+                  return <NavCountBadge count={pendingVerificationCount} className={BADGE_ACTION} testId="badge-site-verification-count" />;
                 case 'withdrawal-approval':
-                  return <NavCountBadge count={pendingTier2CostCount} className="bg-amber-600" testId="badge-tier2-approval-count" />;
+                  return <NavCountBadge count={pendingTier2CostCount} className={BADGE_ACTION} testId="badge-tier2-approval-count" />;
                 case 'finance-approval':
-                  return <NavCountBadge count={pendingFinanceCount} className="bg-indigo-500" testId="badge-finance-approval-count" />;
+                  return <NavCountBadge count={pendingFinanceCount} className={BADGE_ACTION} testId="badge-finance-approval-count" />;
                 case 'notifications':
-                  return <NavCountBadge count={unreadNotifCount} className="bg-blue-500" testId="badge-notifications-unread-count" />;
+                  return <NavCountBadge count={unreadNotifCount} className={BADGE_INFO} testId="badge-notifications-unread-count" />;
                 case 'incident-reports':
                 case 'safety-hub':
-                  return <NavCountBadge count={openIncidentCount} className="bg-red-600" testId="badge-incident-count" />;
+                  return <NavCountBadge count={openIncidentCount} className={BADGE_ACTION} testId="badge-incident-count" />;
                 case 'my-wallet':
-                  return <NavCountBadge count={pendingWalletCount} className="bg-green-600" testId="badge-wallet-pending-count" />;
+                  return <NavCountBadge count={pendingWalletCount} className={BADGE_ACTION} testId="badge-wallet-pending-count" />;
                 case 'my-tasks':
-                  return <NavCountBadge count={myTasksOverdueCount} className="bg-red-500" testId="badge-my-tasks-overdue-count" />;
+                  return <NavCountBadge count={myTasksOverdueCount} className={BADGE_ACTION} testId="badge-my-tasks-overdue-count" />;
                 case 'changelog':
-                  return <NavCountBadge count={changelogUnreadCount} className="bg-blue-600" testId="badge-changelog-unread-count" />;
+                  return <NavCountBadge count={changelogUnreadCount} className={BADGE_INFO} testId="badge-changelog-unread-count" />;
                 default:
                   return null;
               }
@@ -1441,7 +1447,7 @@
                                     : "text-slate-500 dark:text-slate-400"
                                 )}
                               />
-                              <span className="truncate flex-1">{item.title}</span>
+                              <span className="flex-1">{item.title}</span>
                               {renderItemBadge(item.id)}
                             </Link>
                           </SidebarMenuSubButton>
@@ -1502,7 +1508,7 @@
                                   : "text-slate-500 dark:text-slate-400"
                               )}
                             />
-                            <span className="truncate flex-1">{item.title}</span>
+                            <span className="flex-1">{item.title}</span>
                             {renderItemBadge(item.id)}
                           </Link>
                         </SidebarMenuButton>
@@ -1540,7 +1546,7 @@
                     <CollapsibleTrigger asChild>
                       <button
                         type="button"
-                        className="w-full h-7 px-3 text-[11px] font-medium text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
+                        className="w-full min-h-7 py-1 px-3 text-[11px] font-medium leading-snug text-muted-foreground cursor-pointer flex items-center gap-2 rounded-md hover:bg-muted/50 transition-colors"
                         onClick={() => toggleGroupCollapse(subGroup.id)}
                         data-testid={`group-label-${subGroup.id}`}
                       >
@@ -1550,7 +1556,7 @@
                             isSubCollapsed && "-rotate-90"
                           )}
                         />
-                        <span className="flex-1 truncate text-left">{subGroup.label}</span>
+                        <span className="flex-1 text-left">{subGroup.label}</span>
                         <span className="text-[10px] tabular-nums opacity-50">{subGroup.items.length}</span>
                       </button>
                     </CollapsibleTrigger>
@@ -1579,7 +1585,7 @@
                       >
                         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isCollapsed && "-rotate-90")} />
                         <Icon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="flex-1 truncate">{label}</span>
+                        <span className="flex-1">{label}</span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -1702,8 +1708,6 @@
           )}
         </SidebarFooter>
 
-        <SidebarRail />
-        <SidebarResizeHandle />
       </Sidebar>
 
       {isSidebarCollapsed && (
