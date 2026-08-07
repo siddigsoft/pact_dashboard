@@ -50,14 +50,7 @@ const ProjectDetailPage = () => {
     } else {
       setProject(foundProject);
     }
-    // Only toast "not found" when we are certain the data is loaded
-    if (!foundProject && authReady && !loading && projects.length > 0) {
-      toast({
-        title: "Project Not Found",
-        description: "The requested project could not be found.",
-        variant: "destructive",
-      });
-    }
+    // No toast — the in-page "Project Not Found" banner + countdown handles this clearly.
   }, [id, projects, loading, authReady, activities]);
 
   const handleEdit = () => {

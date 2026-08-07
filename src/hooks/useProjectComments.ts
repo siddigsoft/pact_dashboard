@@ -74,7 +74,16 @@ export function useProjectComments(projectId: string) {
       data = ((fallback.data ?? []) as any[]).map(r => ({ ...r, parent_id: null }));
     } else if (withParent.error) {
       console.error('Failed to load comments:', withParent.error);
-      toast({ title: 'Could not load comments', description: withParent.error.message, variant: 'destructive' });
+      const isRlsRecursion =
+        withParent.error.message?.includes('infinite recursion') ||
+        withParent.error.message?.includes('project_team_members');
+      toast({
+        title: 'Could not load comments',
+        description: isRlsRecursion
+          ? 'A database policy fix is required. Ask your admin to run migration 20260807_fix_ptm_rls_recursion_v3.sql in Supabase Studio.'
+          : withParent.error.message,
+        variant: 'destructive',
+      });
       setLoading(false);
       return;
     } else {
