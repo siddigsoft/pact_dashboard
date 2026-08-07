@@ -22,11 +22,13 @@
 --
 -- Membership scenarios
 -- --------------------
---   User A  – restricted role (employee), named as projectManagerId on project α
---   User B  – restricted role (fom),      listed in teamComposition of project α
---   User C  – restricted role (hr),       has active row in project_team_members for α
---   User D  – restricted role (employee), NOT a member of any test project
---   User E  – privileged role (Admin),    full visibility
+--   User A  – restricted role (employee),         named as projectManagerId on project α
+--   User B  – restricted role (fom),              listed in teamComposition of project α
+--   User C  – restricted role (hr),               has active row in project_team_members for α
+--   User D  – restricted role (employee),         NOT a member of any test project
+--   User E  – privileged role (Admin),            full visibility
+--   User F  – restricted role (countryDirector),  has active row in project_team_members for α
+--   User G  – restricted role (countryDirector),  NOT a member of any test project
 --
 -- How to run
 -- ----------
@@ -67,11 +69,13 @@ $$ LANGUAGE plpgsql;
 -- ---------------------------------------------------------------------------
 -- 1. Test-user UUIDs
 --
---   e2e00001-…-0001  → User A  employee  (projectManagerId on project α)
---   e2e00002-…-0002  → User B  fom       (teamComposition member of project α)
---   e2e00003-…-0003  → User C  hr        (project_team_members row on project α)
---   e2e00004-…-0004  → User D  employee  (NOT a member of any test project)
---   e2e00005-…-0005  → User E  Admin     (privileged — sees everything)
+--   e2e00001-…-0001  → User A  employee        (projectManagerId on project α)
+--   e2e00002-…-0002  → User B  fom             (teamComposition member of project α)
+--   e2e00003-…-0003  → User C  hr              (project_team_members row on project α)
+--   e2e00004-…-0004  → User D  employee        (NOT a member of any test project)
+--   e2e00005-…-0005  → User E  Admin           (privileged — sees everything)
+--   e2e00006-…-0006  → User F  countryDirector (project_team_members row on project α)
+--   e2e00007-…-0007  → User G  countryDirector (NOT a member of any test project)
 --
 -- Test-project UUIDs:
 --   e2eaaaaa-…-0001  → Project α  (User A, B, C are members)
@@ -88,16 +92,20 @@ VALUES
   ('e2e00002-0000-4000-8000-000000000002'::uuid, 'authenticated', 'e2e_user_b@test.internal', '', now(), now(), 'authenticated'),
   ('e2e00003-0000-4000-8000-000000000003'::uuid, 'authenticated', 'e2e_user_c@test.internal', '', now(), now(), 'authenticated'),
   ('e2e00004-0000-4000-8000-000000000004'::uuid, 'authenticated', 'e2e_user_d@test.internal', '', now(), now(), 'authenticated'),
-  ('e2e00005-0000-4000-8000-000000000005'::uuid, 'authenticated', 'e2e_user_e@test.internal', '', now(), now(), 'authenticated')
+  ('e2e00005-0000-4000-8000-000000000005'::uuid, 'authenticated', 'e2e_user_e@test.internal', '', now(), now(), 'authenticated'),
+  ('e2e00006-0000-4000-8000-000000000006'::uuid, 'authenticated', 'e2e_user_f@test.internal', '', now(), now(), 'authenticated'),
+  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'authenticated', 'e2e_user_g@test.internal', '', now(), now(), 'authenticated')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO profiles (id, email, full_name, role)
 VALUES
-  ('e2e00001-0000-4000-8000-000000000001'::uuid, 'e2e_user_a@test.internal', 'E2E User A (employee, PM)',        'employee'),
-  ('e2e00002-0000-4000-8000-000000000002'::uuid, 'e2e_user_b@test.internal', 'E2E User B (fom, teamComp)',       'fom'),
-  ('e2e00003-0000-4000-8000-000000000003'::uuid, 'e2e_user_c@test.internal', 'E2E User C (hr, ptm)',             'hr'),
-  ('e2e00004-0000-4000-8000-000000000004'::uuid, 'e2e_user_d@test.internal', 'E2E User D (employee, non-member)','employee'),
-  ('e2e00005-0000-4000-8000-000000000005'::uuid, 'e2e_user_e@test.internal', 'E2E User E (Admin)',               'Admin')
+  ('e2e00001-0000-4000-8000-000000000001'::uuid, 'e2e_user_a@test.internal', 'E2E User A (employee, PM)',                  'employee'),
+  ('e2e00002-0000-4000-8000-000000000002'::uuid, 'e2e_user_b@test.internal', 'E2E User B (fom, teamComp)',                 'fom'),
+  ('e2e00003-0000-4000-8000-000000000003'::uuid, 'e2e_user_c@test.internal', 'E2E User C (hr, ptm)',                       'hr'),
+  ('e2e00004-0000-4000-8000-000000000004'::uuid, 'e2e_user_d@test.internal', 'E2E User D (employee, non-member)',          'employee'),
+  ('e2e00005-0000-4000-8000-000000000005'::uuid, 'e2e_user_e@test.internal', 'E2E User E (Admin)',                         'Admin'),
+  ('e2e00006-0000-4000-8000-000000000006'::uuid, 'e2e_user_f@test.internal', 'E2E User F (countryDirector, ptm)',          'countryDirector'),
+  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'e2e_user_g@test.internal', 'E2E User G (countryDirector, non-member)',   'countryDirector')
 ON CONFLICT (id) DO UPDATE
   SET full_name = EXCLUDED.full_name,
       role      = EXCLUDED.role;
@@ -147,6 +155,17 @@ INSERT INTO project_team_members (project_id, user_id, project_role, is_active)
 VALUES (
   'e2eaaaaa-0000-4000-8000-000000000001'::uuid,
   'e2e00003-0000-4000-8000-000000000003'::uuid,
+  'project_viewer',
+  TRUE
+)
+ON CONFLICT DO NOTHING;
+
+-- Give User F (countryDirector) an active explicit membership row on project α.
+-- User G (countryDirector) intentionally receives NO membership row anywhere.
+INSERT INTO project_team_members (project_id, user_id, project_role, is_active)
+VALUES (
+  'e2eaaaaa-0000-4000-8000-000000000001'::uuid,
+  'e2e00006-0000-4000-8000-000000000006'::uuid,
   'project_viewer',
   TRUE
 )
@@ -323,6 +342,111 @@ BEGIN
     );
   PERFORM pg_temp.assert_eq('[table RLS] employee (non-member) sees ZERO rows', v_count, 0);
 
+  -- ── 1d. User F (countryDirector, ptm of α) sees only α ───────────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00006-0000-4000-8000-000000000006')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__')
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id    = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[table RLS] countryDirector (ptm of α) sees only α', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE name = '__e2e_rls_test_beta__'
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id    = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[table RLS] countryDirector (ptm of α) — ZERO rows from β', v_count, 0);
+
+  -- ── 1e. User G (countryDirector, non-member) sees ZERO rows ──────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__')
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id    = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[table RLS] countryDirector (non-member) sees ZERO rows', v_count, 0);
+
 
   ---------------------------------------------------------------------------
   -- ══ PATH 2: get_all_projects() ══
@@ -403,6 +527,38 @@ BEGIN
   WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
   PERFORM pg_temp.assert_eq('[get_all_projects] employee (non-member) sees ZERO rows', v_count, 0);
 
+  -- ── 2f. User F (countryDirector, ptm of α) sees only α ───────────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00006-0000-4000-8000-000000000006')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_all_projects()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_all_projects] countryDirector (ptm of α) sees 1 row total', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_all_projects()) AS row
+  WHERE row->>'name' = '__e2e_rls_test_alpha__';
+  PERFORM pg_temp.assert_eq('[get_all_projects] countryDirector (ptm of α) — row is α', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_all_projects()) AS row
+  WHERE row->>'name' = '__e2e_rls_test_beta__';
+  PERFORM pg_temp.assert_eq('[get_all_projects] countryDirector (ptm of α) — ZERO rows from β', v_count, 0);
+
+  -- ── 2g. User G (countryDirector, non-member) sees ZERO rows ──────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_all_projects()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_all_projects] countryDirector (non-member) sees ZERO rows', v_count, 0);
+
 
   ---------------------------------------------------------------------------
   -- ══ PATH 3: get_projects_for_analytics() ══
@@ -478,6 +634,33 @@ BEGIN
   WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
   PERFORM pg_temp.assert_eq('[get_projects_for_analytics] employee (non-member) sees ZERO rows', v_count, 0);
 
+  -- ── 3f. User F (countryDirector, ptm of α) sees only α ───────────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00006-0000-4000-8000-000000000006')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_projects_for_analytics()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_projects_for_analytics] countryDirector (ptm of α) sees 1 row', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_projects_for_analytics()) AS row
+  WHERE row->>'name' = '__e2e_rls_test_beta__';
+  PERFORM pg_temp.assert_eq('[get_projects_for_analytics] countryDirector (ptm of α) — ZERO rows from β', v_count, 0);
+
+  -- ── 3g. User G (countryDirector, non-member) sees ZERO rows ──────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_projects_for_analytics()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_projects_for_analytics] countryDirector (non-member) sees ZERO rows', v_count, 0);
+
 
   ---------------------------------------------------------------------------
   -- ══ PATH 4: get_project_professional_fees() ══
@@ -549,6 +732,33 @@ BEGIN
   FROM get_project_professional_fees()
   WHERE project_name = '__e2e_rls_test_beta__';
   PERFORM pg_temp.assert_eq('[get_project_professional_fees] hr (ptm of α) — ZERO rows from β', v_count, 0);
+
+  -- ── 4f. User G (countryDirector, non-member) sees ZERO fee rows ──────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM get_project_professional_fees()
+  WHERE project_name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_project_professional_fees] countryDirector (non-member) sees ZERO rows', v_count, 0);
+
+  -- ── 4g. User F (countryDirector, ptm of α) sees α fee ────────────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00006-0000-4000-8000-000000000006')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM get_project_professional_fees()
+  WHERE project_name = '__e2e_rls_test_alpha__';
+  PERFORM pg_temp.assert_eq('[get_project_professional_fees] countryDirector (ptm of α) sees α fee', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM get_project_professional_fees()
+  WHERE project_name = '__e2e_rls_test_beta__';
+  PERFORM pg_temp.assert_eq('[get_project_professional_fees] countryDirector (ptm of α) — ZERO rows from β', v_count, 0);
 
   ---------------------------------------------------------------------------
   RAISE NOTICE '✅  All end-to-end projects RLS tests passed.';
