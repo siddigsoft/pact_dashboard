@@ -284,41 +284,35 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
             console.error('[MMP Delete] Exception deleting site photos:', photoError);
           }
 
-          // 4.5. Defensively nullify NO-ACTION FK columns before deleting site entries.
+          // 4.5. Clear FK references that would block site-entry and MMP deletion.
           //
-          // Migration 20260803_mmp_fk_set_null_on_delete.sql converts these to SET NULL
-          // at the DB level, but that migration must be run manually in Supabase SQL Editor.
-          // This pre-clearing step is kept as a belt-and-suspenders guard so the delete
-          // works whether or not the migration has been applied yet.
+          // We call the SECURITY DEFINER RPC prepare_mmp_delete() which runs as the
+          // DB owner and bypasses RLS on site_visits / site_visit_costs.  This is
+          // necessary because client-side UPDATE calls on those tables are blocked by
+          // RLS for the authenticated user, leaving FK refs alive and causing the
+          // final mmp_files delete (step 7) to fail with a FK violation.
           //
-          //   a) site_visit_costs.mmp_site_entry_id → mmp_site_entries  (blocks step 5)
-          //   b) site_visits.mmp_site_entry_id       → mmp_site_entries  (blocks step 5)
-          //   c) site_visits.mmp_id                  → mmp_files         (blocks step 7)
-          //
-          // down_payment_requests.mmp_site_entry_id is already SET NULL in the DB — skip.
+          // The RPC is defined in migration 20260807_prepare_mmp_delete_rpc.sql.
+          // If the RPC doesn't exist yet (migration not run), we fall back to the
+          // old client-side approach as a best-effort guard.
           try {
-            const { data: entryIds } = await supabase
-              .from('mmp_site_entries')
-              .select('id')
-              .eq('mmp_file_id', id);
+            const { data: rpcResult, error: rpcError } = await supabase
+              .rpc('prepare_mmp_delete', { p_mmp_id: id });
 
-            const ids = (entryIds ?? []).map((e: any) => e.id as string).filter(Boolean);
-            console.log('[MMP Delete] Pre-clearing FK refs for', ids.length, 'site entries');
-
-            await Promise.allSettled([
-              // (a) site_visit_costs.mmp_site_entry_id
-              ids.length > 0
-                ? supabase.from('site_visit_costs' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
-                : Promise.resolve(),
-              // (b) site_visits.mmp_site_entry_id
-              ids.length > 0
-                ? supabase.from('site_visits' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids)
-                : Promise.resolve(),
-              // (c) site_visits.mmp_id
-              supabase.from('site_visits' as any).update({ mmp_id: null } as any).eq('mmp_id', id),
-            ]);
-
-            console.log('[MMP Delete] FK pre-clear complete — delete chain unblocked');
+            if (rpcError) {
+              console.warn('[MMP Delete] prepare_mmp_delete RPC failed, falling back to client-side pre-clear:', rpcError.message);
+              // Fallback: client-side best-effort (may be blocked by RLS)
+              const { data: entryIds } = await supabase
+                .from('mmp_site_entries').select('id').eq('mmp_file_id', id);
+              const ids = (entryIds ?? []).map((e: any) => e.id as string).filter(Boolean);
+              await Promise.allSettled([
+                ids.length > 0 ? supabase.from('site_visit_costs' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids) : Promise.resolve(),
+                ids.length > 0 ? supabase.from('site_visits' as any).update({ mmp_site_entry_id: null }).in('mmp_site_entry_id', ids) : Promise.resolve(),
+                supabase.from('site_visits' as any).update({ mmp_id: null } as any).eq('mmp_id', id),
+              ]);
+            } else {
+              console.log('[MMP Delete] FK pre-clear via RPC complete:', rpcResult);
+            }
           } catch (fkClearErr) {
             console.warn('[MMP Delete] FK pre-clear failed (continuing anyway):', fkClearErr);
           }

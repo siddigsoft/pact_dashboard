@@ -276,13 +276,9 @@ const MMPDetailView = () => {
             description: "The MMP file has been permanently deleted.",
           });
           navigate("/mmp");
-        } else {
-          toast({
-            title: "Deletion Failed",
-            description: "Could not delete from database. Please check permissions/RLS and try again.",
-            variant: "destructive"
-          });
         }
+        // If ok === false, deleteMMPFile already displayed the specific
+        // reason (e.g. "Blocked: linked advance requests"). No second toast.
       } catch (error) {
         console.error("Failed to delete MMP:", error);
         toast({

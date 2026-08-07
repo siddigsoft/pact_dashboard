@@ -794,8 +794,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           if (!open) { setConfirmId(null); setDeleteStage(0); setDeleteConfirmText(''); }
         }}
       >
-        <DialogContent className="max-w-lg w-full">
-          <DialogHeader className="pb-2">
+        <DialogContent className="max-w-lg w-full max-h-[90vh] flex flex-col">
+          <DialogHeader className="pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               Remove MMP
@@ -805,8 +805,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Option cards */}
-          <div className="space-y-3 py-2">
+          {/* Option cards — scrollable when content overflows */}
+          <div className="space-y-3 py-2 overflow-y-auto flex-1 pr-1">
             {/* Archive option */}
             <div className="rounded-lg border-2 border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800 p-4">
               <div className="flex items-start gap-3">
