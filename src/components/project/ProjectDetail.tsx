@@ -375,6 +375,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [loadingCrmContacts, setLoadingCrmContacts] = useState(false);
   const [milestoneStats, setMilestoneStats] = useState<{ total: number; completed: number; overdue: number } | null>(null);
   const [createBudgetOpen, setCreateBudgetOpen] = useState(false);
+  const [deleteActivityId, setDeleteActivityId] = useState<string | null>(null);
+  const [deletingActivity, setDeletingActivity] = useState(false);
 
   // Unread comment tracking
   const { unreadCount: commentUnreadCount, markAsRead: markCommentsRead } = useProjectCommentUnread(
@@ -447,6 +449,22 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const isStalled = stalledDays !== null && stalledDays >= 14 && project.status === 'active';
 
   // Archive / unarchive handler
+  const handleDeleteActivity = useCallback(async () => {
+    if (!deleteActivityId) return;
+    setDeletingActivity(true);
+    try {
+      const { error } = await supabase.from('project_activities').delete().eq('id', deleteActivityId);
+      if (error) throw error;
+      updateProjectCache({ ...project, activities: project.activities.filter(a => a.id !== deleteActivityId) });
+      toast({ title: 'Activity deleted' });
+    } catch (err: any) {
+      toast({ title: 'Delete failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setDeletingActivity(false);
+      setDeleteActivityId(null);
+    }
+  }, [deleteActivityId, project, updateProjectCache]);
+
   const handleArchiveToggle = useCallback(async (overrideJustification?: string) => {
     if (project.archived && !isSuperAdminUser) {
       toast({ title: 'Access Denied', description: 'Only Super Admins can unarchive closed projects.', variant: 'destructive' });
@@ -1443,9 +1461,20 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             )}
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5 shrink-0" onClick={() => navigate(`/projects/${project.id}/activities/${activity.id}`)}>
-                          View
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5" onClick={() => navigate(`/projects/${project.id}/activities/${activity.id}`)}>
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteActivityId(activity.id)}
+                            title="Delete activity"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1466,6 +1495,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </Button>
             </div>
           )}
+
+          {/* Delete activity confirmation */}
+          <AlertDialog open={!!deleteActivityId} onOpenChange={open => { if (!open) setDeleteActivityId(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Activity?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove the activity and all its sub-tasks. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingActivity}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteActivity}
+                  disabled={deletingActivity}
+                  className="bg-destructive hover:bg-destructive/90 text-white"
+                >
+                  {deletingActivity ? 'Deleting…' : 'Delete'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Comments section */}
           {currentUser && (
