@@ -87,28 +87,122 @@ CREATE POLICY "projects_select"
   );
 
 -- ── INSERT ─────────────────────────────────────────────────────────────────
--- Keep broadly open (same as pre-RLS behaviour) — application enforces who
--- may create projects.  A separate task can tighten this if needed.
+-- Privileged roles may create any project.
+-- Restricted roles may only insert a project where they are the named PM,
+-- preventing them from creating projects on behalf of others.
 DROP POLICY IF EXISTS "projects_insert" ON projects;
 
 CREATE POLICY "projects_insert"
   ON projects FOR INSERT
   TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (
+    -- 1. Privileged roles: unrestricted insert.
+    EXISTS (
+      SELECT 1 FROM profiles pr
+      WHERE pr.id = (SELECT auth.uid())
+        AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+    )
+    -- 2. Restricted roles: the caller must be the projectManagerId in the new row.
+    OR (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+    )
+  );
 
 -- ── UPDATE ─────────────────────────────────────────────────────────────────
+-- Mirrors the SELECT guard: privileged roles may update any project;
+-- restricted roles may only update projects where they are a member
+-- (PM, teamComposition, or project_team_members).
 DROP POLICY IF EXISTS "projects_update" ON projects;
 
 CREATE POLICY "projects_update"
   ON projects FOR UPDATE
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (
+    -- 1. Privileged roles: unrestricted update.
+    EXISTS (
+      SELECT 1 FROM profiles pr
+      WHERE pr.id = (SELECT auth.uid())
+        AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+    )
+    -- 2. Restricted roles: caller must be a project member.
+    OR (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      AND (
+        (projects.team->>'projectManagerId') = (SELECT auth.uid())::text
+        OR projects.team->'teamComposition' @> jsonb_build_array(
+             jsonb_build_object('userId', (SELECT auth.uid())::text)
+           )
+        OR EXISTS (
+          SELECT 1
+          FROM project_team_members ptm
+          WHERE ptm.project_id = projects.id
+            AND ptm.user_id   = (SELECT auth.uid())
+            AND ptm.is_active  = TRUE
+        )
+      )
+    )
+  )
+  WITH CHECK (
+    -- Same membership check applied to the post-update row shape.
+    EXISTS (
+      SELECT 1 FROM profiles pr
+      WHERE pr.id = (SELECT auth.uid())
+        AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+    )
+    OR (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      AND (
+        (projects.team->>'projectManagerId') = (SELECT auth.uid())::text
+        OR projects.team->'teamComposition' @> jsonb_build_array(
+             jsonb_build_object('userId', (SELECT auth.uid())::text)
+           )
+        OR EXISTS (
+          SELECT 1
+          FROM project_team_members ptm
+          WHERE ptm.project_id = projects.id
+            AND ptm.user_id   = (SELECT auth.uid())
+            AND ptm.is_active  = TRUE
+        )
+      )
+    )
+  );
 
 -- ── DELETE ─────────────────────────────────────────────────────────────────
+-- Privileged roles may delete any project.
+-- Restricted roles may only delete projects where they are the named PM —
+-- team members can view and edit but not remove the entire project.
 DROP POLICY IF EXISTS "projects_delete" ON projects;
 
 CREATE POLICY "projects_delete"
   ON projects FOR DELETE
   TO authenticated
-  USING (true);
+  USING (
+    -- 1. Privileged roles: unrestricted delete.
+    EXISTS (
+      SELECT 1 FROM profiles pr
+      WHERE pr.id = (SELECT auth.uid())
+        AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+    )
+    -- 2. Restricted roles: only the named PM may delete.
+    OR (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      AND (projects.team->>'projectManagerId') = (SELECT auth.uid())::text
+    )
+  );

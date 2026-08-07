@@ -761,6 +761,301 @@ BEGIN
   PERFORM pg_temp.assert_eq('[get_project_professional_fees] countryDirector (ptm of α) — ZERO rows from β', v_count, 0);
 
   ---------------------------------------------------------------------------
+  -- ══ PATH 5: UPDATE policy (USING expression) ══
+  --
+  -- We evaluate the UPDATE USING expression as a WHERE clause, exactly like
+  -- the SELECT tests above.  A row that passes the expression can be updated;
+  -- one that does not cannot.
+  ---------------------------------------------------------------------------
+
+  -- ── 5a. User E (Admin, privileged) can target project α for UPDATE ────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00005-0000-4000-8000-000000000005')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id   = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[update RLS] Admin can target α for UPDATE', v_count, 1);
+
+  -- ── 5b. User A (employee, PM of α) can target project α for UPDATE ────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00001-0000-4000-8000-000000000001')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id   = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[update RLS] employee (PM of α) can target α for UPDATE', v_count, 1);
+
+  -- ── 5c. User D (employee, non-member) CANNOT target project α for UPDATE ──
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00004-0000-4000-8000-000000000004')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id   = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[update RLS] employee (non-member) BLOCKED from UPDATE on α', v_count, 0);
+
+  -- ── 5d. User G (countryDirector, non-member) CANNOT target α for UPDATE ───
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (
+          (team->>'projectManagerId') = (SELECT auth.uid())::text
+          OR team->'teamComposition' @> jsonb_build_array(
+               jsonb_build_object('userId', (SELECT auth.uid())::text)
+             )
+          OR EXISTS (
+            SELECT 1 FROM project_team_members ptm
+            WHERE ptm.project_id = projects.id
+              AND ptm.user_id   = (SELECT auth.uid())
+              AND ptm.is_active  = TRUE
+          )
+        )
+      )
+    );
+  PERFORM pg_temp.assert_eq('[update RLS] countryDirector (non-member) BLOCKED from UPDATE on α', v_count, 0);
+
+
+  ---------------------------------------------------------------------------
+  -- ══ PATH 6: DELETE policy (USING expression) ══
+  --
+  -- Restricted roles may only delete projects where they are the named PM.
+  -- Team members (teamComposition / project_team_members) cannot delete.
+  ---------------------------------------------------------------------------
+
+  -- ── 6a. User E (Admin) can target project α for DELETE ────────────────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00005-0000-4000-8000-000000000005')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+      )
+    );
+  PERFORM pg_temp.assert_eq('[delete RLS] Admin can target α for DELETE', v_count, 1);
+
+  -- ── 6b. User A (employee, PM of α) can target project α for DELETE ────────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00001-0000-4000-8000-000000000001')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+      )
+    );
+  PERFORM pg_temp.assert_eq('[delete RLS] employee (PM of α) can target α for DELETE', v_count, 1);
+
+  -- ── 6c. User B (fom, teamComposition member of α) CANNOT delete α ─────────
+  --        Being a team member is not sufficient; only the PM may delete.
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00002-0000-4000-8000-000000000002')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+      )
+    );
+  PERFORM pg_temp.assert_eq('[delete RLS] fom (teamComp of α, not PM) BLOCKED from DELETE on α', v_count, 0);
+
+  -- ── 6d. User D (employee, non-member) CANNOT target project α for DELETE ──
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00004-0000-4000-8000-000000000004')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+      )
+    );
+  PERFORM pg_temp.assert_eq('[delete RLS] employee (non-member) BLOCKED from DELETE on α', v_count, 0);
+
+  -- ── 6e. User G (countryDirector, non-member) CANNOT target α for DELETE ───
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00007-0000-4000-8000-000000000007')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE id = v_alpha
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles pr
+        WHERE pr.id = (SELECT auth.uid())
+          AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
+      )
+      OR (
+        EXISTS (
+          SELECT 1 FROM profiles pr
+          WHERE pr.id = (SELECT auth.uid())
+            AND pr.role IN ('employee', 'fom', 'countryDirector', 'hr')
+        )
+        AND (team->>'projectManagerId') = (SELECT auth.uid())::text
+      )
+    );
+  PERFORM pg_temp.assert_eq('[delete RLS] countryDirector (non-member) BLOCKED from DELETE on α', v_count, 0);
+
+  ---------------------------------------------------------------------------
   RAISE NOTICE '✅  All end-to-end projects RLS tests passed.';
 END;
 $$;
