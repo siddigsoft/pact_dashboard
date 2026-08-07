@@ -78,6 +78,8 @@ export interface UseProjectFlowReturn {
   setStageStatus: (stageId: string, action: StageStatusAction) => Promise<void>;
   getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
   isStageCompleted: (stageId: string) => boolean;
+  /** Stage IDs that appear in the flow history (completed). */
+  completedStageIds: Set<string>;
   /**
    * Returns labels of incomplete dependency stages that are blocking this stage.
    * Empty array = not blocked.
