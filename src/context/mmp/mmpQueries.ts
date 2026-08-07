@@ -49,6 +49,7 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
         project_code
       )
     `)
+    .not('mmp_id', 'ilike', 'adhoc-tasks-%')
     .order('created_at', { ascending: false });
 
   let rows = mmpData;
@@ -57,6 +58,7 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('mmp_files')
       .select('*')
+      .not('mmp_id', 'ilike', 'adhoc-tasks-%')
       .order('created_at', { ascending: false });
     if (fallbackError) throw fallbackError;
     rows = fallbackData;
