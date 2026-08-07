@@ -6,6 +6,8 @@ PACT Command Center is a centralized platform designed to streamline humanitaria
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+**Never push to GitHub automatically.** Only commit locally. The user controls when to run `git push origin master`.
+
 **Flutter Mobile Sync Rule (permanent default):**
 - The Flutter app at `mobile/` is for field operations staff only (Data Collector, Coordinator, Supervisor, FOM, Data Team).
 - Whenever ANY change is made to the web app that affects field staff screens, features, layouts, or views — the equivalent change MUST also be made to the Flutter app in the same session, automatically, without being asked.
