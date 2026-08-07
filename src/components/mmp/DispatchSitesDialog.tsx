@@ -1006,117 +1006,108 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // Don't wait for coverage checks - run them in background
       Promise.all(coverageCheckPromises).catch(err => console.warn('Coverage checks failed:', err));
 
-      // Step 1: Store TRANSPORT costs only in mmp_site_entries
+      // Step 1: Store TRANSPORT costs only in mmp_site_entries (all sites in parallel)
       // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
       // based on the claiming data collector's classification level (A, B, or C)
       const costSaveFailures: string[] = [];
-      for (const siteEntry of selectedSiteObjects) {
+      await Promise.all(selectedSiteObjects.map(async (siteEntry) => {
         const costs = siteCosts.get(siteEntry.id);
-        if (costs) {
-          // Transport budget = transportation + accommodation + meal per diem + other logistics
-          const transportBudget =
-            costs.transportation +
-            costs.accommodation +
-            costs.mealAllowance +
-            costs.otherCosts;
+        if (!costs) return;
 
-          // Look up GPS coordinates from Sites Registry with enhanced matching
-          // Only update registry_linkage if a match is found; preserve existing data if no match
-          const existingRegistryLinkage =
-            siteEntry.additional_data?.registry_linkage || null;
-          const existingRegistryGps =
-            siteEntry.additional_data?.registry_gps || null;
+        // Transport budget = transportation + accommodation + meal per diem + other logistics
+        const transportBudget =
+          costs.transportation +
+          costs.accommodation +
+          costs.mealAllowance +
+          costs.otherCosts;
 
-          const registryMatch = matchSiteToRegistry(
-            {
-              id: siteEntry.id,
-              siteCode: siteEntry.site_code,
-              siteName: siteEntry.site_name || siteEntry.siteName,
-              state: siteEntry.state || siteEntry.state_name,
-              locality: siteEntry.locality || siteEntry.locality_name,
-            },
-            registrySites,
-            {
-              userId: assignedBy || "system",
-              sourceWorkflow: "dispatch",
-            },
+        // Look up GPS coordinates from Sites Registry with enhanced matching
+        // Only update registry_linkage if a match is found; preserve existing data if no match
+        const existingRegistryLinkage =
+          siteEntry.additional_data?.registry_linkage || null;
+        const existingRegistryGps =
+          siteEntry.additional_data?.registry_gps || null;
+
+        const registryMatch = matchSiteToRegistry(
+          {
+            id: siteEntry.id,
+            siteCode: siteEntry.site_code,
+            siteName: siteEntry.site_name || siteEntry.siteName,
+            state: siteEntry.state || siteEntry.state_name,
+            locality: siteEntry.locality || siteEntry.locality_name,
+          },
+          registrySites,
+          {
+            userId: assignedBy || "system",
+            sourceWorkflow: "dispatch",
+          },
+        );
+
+        // Build enhanced registry_linkage - update if auto-accepted, otherwise preserve existing
+        let registryLinkage: RegistryLinkage | null = existingRegistryLinkage;
+        let registryGps: any = existingRegistryGps;
+
+        if (registryMatch.autoAccepted && registryMatch.matchedRegistry) {
+          registryLinkage = registryMatch.registryLinkage;
+          registryGps = {
+            latitude: registryMatch.gpsCoordinates?.latitude || null,
+            longitude: registryMatch.gpsCoordinates?.longitude || null,
+            accuracy_meters: registryMatch.gpsCoordinates?.accuracy_meters,
+            source: "sites_registry",
+            site_id: registryMatch.matchedRegistry.id,
+            site_code: registryMatch.matchedRegistry.site_code,
+            match_type: registryMatch.matchType,
+            match_confidence: registryMatch.matchConfidence,
+            matched_at: registryMatch.registryLinkage.audit.matched_at,
+          };
+        } else if (registryMatch.requiresReview && !existingRegistryLinkage) {
+          registryLinkage = registryMatch.registryLinkage;
+        }
+
+        console.log(`📍 Saving transport fee for ${siteEntry.site_name || siteEntry.id}...`);
+        try {
+          const costUpdatePromise = supabase
+            .from("mmp_site_entries")
+            .update({
+              transport_fee: transportBudget,
+              additional_data: {
+                ...(siteEntry.additional_data || {}),
+                ...(registryLinkage ? { registry_linkage: registryLinkage } : {}),
+                ...(registryGps ? { registry_gps: registryGps } : {}),
+                dispatch_costs: {
+                  transportation_cost: costs.transportation,
+                  accommodation_cost: costs.accommodation,
+                  meal_per_diem: costs.mealAllowance,
+                  other_logistics: costs.otherCosts,
+                  transport_budget_total: transportBudget,
+                  enumerator_fee_status: "pending_claim",
+                  cost_status: "transport_only",
+                  calculated_by: assignedBy,
+                  calculated_at: new Date().toISOString(),
+                  calculation_notes:
+                    costs.calculationNotes ||
+                    `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
+                },
+              },
+            })
+            .eq("id", siteEntry.id);
+
+          const timeoutPromise = new Promise<{ error: any }>((_, reject) =>
+            setTimeout(() => reject(new Error('Cost update timeout after 10s')), 10000)
           );
 
-          // Build enhanced registry_linkage - update if auto-accepted, otherwise preserve existing
-          let registryLinkage: RegistryLinkage | null = existingRegistryLinkage;
-          let registryGps: any = existingRegistryGps;
-
-          if (registryMatch.autoAccepted && registryMatch.matchedRegistry) {
-            // Auto-accepted match (>90% confidence) - update both structures
-            registryLinkage = registryMatch.registryLinkage;
-            registryGps = {
-              latitude: registryMatch.gpsCoordinates?.latitude || null,
-              longitude: registryMatch.gpsCoordinates?.longitude || null,
-              accuracy_meters: registryMatch.gpsCoordinates?.accuracy_meters,
-              source: "sites_registry",
-              site_id: registryMatch.matchedRegistry.id,
-              site_code: registryMatch.matchedRegistry.site_code,
-              match_type: registryMatch.matchType,
-              match_confidence: registryMatch.matchConfidence,
-              matched_at: registryMatch.registryLinkage.audit.matched_at,
-            };
-          } else if (registryMatch.requiresReview && !existingRegistryLinkage) {
-            // New match requiring review - store for later manual selection
-            registryLinkage = registryMatch.registryLinkage;
-          }
-
-          // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
-          // Add timeout to prevent hanging on slow database
-          console.log(`📍 Saving transport fee for ${siteEntry.site_name || siteEntry.id}...`);
-          
-          let costError: any = null;
-          try {
-            const costUpdatePromise = supabase
-              .from("mmp_site_entries")
-              .update({
-                transport_fee: transportBudget,
-                additional_data: {
-                  ...(siteEntry.additional_data || {}),
-                  ...(registryLinkage
-                    ? { registry_linkage: registryLinkage }
-                    : {}),
-                  ...(registryGps ? { registry_gps: registryGps } : {}),
-                  dispatch_costs: {
-                    transportation_cost: costs.transportation,
-                    accommodation_cost: costs.accommodation,
-                    meal_per_diem: costs.mealAllowance,
-                    other_logistics: costs.otherCosts,
-                    transport_budget_total: transportBudget,
-                    enumerator_fee_status: "pending_claim",
-                    cost_status: "transport_only",
-                    calculated_by: assignedBy,
-                    calculated_at: new Date().toISOString(),
-                    calculation_notes:
-                      costs.calculationNotes ||
-                      `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
-                  },
-                },
-              })
-              .eq("id", siteEntry.id);
-            
-            const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
-              setTimeout(() => reject(new Error('Cost update timeout after 10s')), 10000)
-            );
-            
-            const result = await Promise.race([costUpdatePromise, timeoutPromise]);
-            costError = result.error;
-            console.log(`✅ Transport fee saved for ${siteEntry.site_name || siteEntry.id}`);
-          } catch (err: any) {
-            console.error(`❌ Cost update failed/timed out for ${siteEntry.id}:`, err.message);
-            costError = err;
-          }
-
-          if (costError) {
-            console.error(`❌ Transport cost save failed for ${costs.siteName}:`, costError);
+          const result = await Promise.race([costUpdatePromise, timeoutPromise]);
+          if (result.error) {
+            console.error(`❌ Transport cost save failed for ${costs.siteName}:`, result.error);
             costSaveFailures.push(costs.siteName || siteEntry.id);
+          } else {
+            console.log(`✅ Transport fee saved for ${siteEntry.site_name || siteEntry.id}`);
           }
+        } catch (err: any) {
+          console.error(`❌ Cost update failed/timed out for ${siteEntry.id}:`, err.message);
+          costSaveFailures.push(costs.siteName || siteEntry.id);
         }
-      }
+      }));
 
       // Abort dispatch if ANY transport cost failed to save — prevents sites being
       // dispatched with null/zero transport_fee in the database.
@@ -1320,92 +1311,68 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       console.log("📍 Dispatched by:", dispatchedBy);
       console.log("📍 Processing", selectedSites.size, "entries...");
 
+      // Step 3: Fetch all current statuses in one batch, then update all in parallel
+      console.log("📍 Step 3: Fetching current statuses for", selectedSites.size, "entries...");
+      const entryIds = Array.from(selectedSites);
+
+      // Single bulk fetch instead of N individual selects
+      const { data: currentEntries, error: bulkFetchError } = await supabase
+        .from("mmp_site_entries")
+        .select("id, status, additional_data, site_name")
+        .in("id", entryIds);
+
+      if (bulkFetchError) {
+        console.error("❌ Bulk fetch failed:", bulkFetchError);
+        throw new Error("Failed to fetch site entries for dispatch.");
+      }
+
+      const entryMap = new Map<string, any>(
+        (currentEntries || []).map((e: any) => [e.id, e])
+      );
+
       let successCount = 0;
       let skippedCount = 0;
       let errorCount = 0;
 
-      // Update each entry individually to set status and new columns
-      for (const entryId of Array.from(selectedSites)) {
-        // Get current entry to check status and preserve additional_data (with timeout)
-        let currentEntry: any = null;
-        let fetchError: any = null;
-        
-        try {
-          const fetchPromise = supabase
-            .from("mmp_site_entries")
-            .select("status, additional_data, site_name")
-            .eq("id", entryId)
-            .single();
-          
-          const timeoutPromise = new Promise<any>((_, reject) => 
-            setTimeout(() => reject(new Error('Entry fetch timeout')), 10000)
-          );
-          
-          const result = await Promise.race([fetchPromise, timeoutPromise]);
-          currentEntry = result.data;
-          fetchError = result.error;
-        } catch (err: any) {
-          console.error(`❌ Entry fetch timed out for ${entryId}:`, err.message);
-          fetchError = err;
+      const newStatus =
+        dispatchType === "individual" && selectedCollector ? "Assigned" : "Dispatched";
+
+      // Update all dispatchable entries in parallel
+      const updateResults = await Promise.all(entryIds.map(async (entryId) => {
+        const currentEntry = entryMap.get(entryId);
+        if (!currentEntry) {
+          console.error(`❌ Entry ${entryId} not found in bulk fetch`);
+          return "error";
         }
 
-        if (fetchError || !currentEntry) {
-          console.error(`❌ Error fetching entry ${entryId}:`, fetchError);
-          errorCount++;
-          continue;
-        }
-
-        console.log(
-          `📍 Entry ${entryId}: status="${currentEntry?.status}", site="${currentEntry?.site_name}"`,
-        );
-
-        // Only dispatch sites that are in dispatchable status (costed, dispatched for re-dispatch, or verified statuses)
-        const currentStatus = currentEntry?.status?.toLowerCase().trim() || "";
-        
-        // Check if status is dispatchable - use flexible matching
-        // Include "dispatched" to allow re-dispatching reclaimed sites
-        const isDispatchable = 
+        const currentStatus = currentEntry.status?.toLowerCase().trim() || "";
+        const isDispatchable =
           currentStatus === "costed" ||
           currentStatus.includes("costed") ||
-          currentStatus === "dispatched" || // Allow re-dispatch of reclaimed sites
+          currentStatus === "dispatched" ||
           currentStatus === "verified" ||
           currentStatus === "cp_verified" ||
           currentStatus === "permits_verified" ||
           currentStatus === "locality_permit_verified" ||
           currentStatus.includes("approved");
-          
-        if (!isDispatchable) {
-          console.warn(
-            `⚠️ Skipping entry ${entryId} with status "${currentEntry?.status}" - only costed/verified sites can be dispatched`,
-          );
-          skippedCount++;
-          continue;
-        }
-        
-        console.log(`✅ Entry ${entryId} status "${currentStatus}" is dispatchable`);
 
-        const additionalData = currentEntry?.additional_data || {};
+        if (!isDispatchable) {
+          console.warn(`⚠️ Skipping ${entryId} — status "${currentEntry.status}" not dispatchable`);
+          return "skipped";
+        }
+
+        const additionalData = { ...(currentEntry.additional_data || {}) };
         additionalData.dispatched_at = dispatchedAt;
         additionalData.dispatched_by = dispatchedBy;
-        additionalData.dispatched_from_status = currentEntry?.status; // Track previous status
-
-        // Set different status based on dispatch type
-        // - "Dispatched" for all bulk dispatches (open/state/locality) - available for anyone to claim
-        // - "Assigned" ONLY for individual dispatch with a specific collector selected
-        // Default to "Dispatched" to ensure sites are always dispatchable
-        const newStatus =
-          (dispatchType === "individual" && selectedCollector) ? "Assigned" : "Dispatched";
-        
-        console.log(`📍 Setting status to "${newStatus}" (dispatchType=${dispatchType}, hasCollector=${!!selectedCollector})`);
+        additionalData.dispatched_from_status = currentEntry.status;
 
         const updateData: any = {
           status: newStatus,
           dispatched_at: dispatchedAt,
           dispatched_by: dispatchedBy,
-          additional_data: additionalData, // Keep for backward compatibility
+          additional_data: additionalData,
         };
 
-        // For individual dispatch, assign directly to the specific collector
         if (dispatchType === "individual" && selectedCollector) {
           updateData.accepted_by = selectedCollector;
           updateData.accepted_at = dispatchedAt;
@@ -1414,37 +1381,34 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           additionalData.assigned_by = dispatchedBy;
           updateData.additional_data = additionalData;
         }
-        // For bulk dispatch (state/locality), accepted_by remains null until collector claims it
 
-        // Add timeout to dispatch update to prevent hanging
-        let entryUpdateError: any = null;
         try {
           const updatePromise = supabase
             .from("mmp_site_entries")
             .update(updateData)
             .eq("id", entryId);
-          
-          const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
-            setTimeout(() => reject(new Error('Dispatch update timeout after 10s')), 10000)
-          );
-          
-          const result = await Promise.race([updatePromise, timeoutPromise]);
-          entryUpdateError = result.error;
-        } catch (err: any) {
-          console.error(`❌ Dispatch update timed out for ${entryId}:`, err.message);
-          entryUpdateError = err;
-        }
 
-        if (entryUpdateError) {
-          console.error(
-            `❌ Error updating site entry ${entryId}:`,
-            entryUpdateError,
+          const timeoutPromise = new Promise<{ error: any }>((_, reject) =>
+            setTimeout(() => reject(new Error("Dispatch update timeout")), 10000)
           );
-          errorCount++;
-        } else {
-          console.log(`✅ Successfully dispatched entry ${entryId}`);
-          successCount++;
+
+          const result = await Promise.race([updatePromise, timeoutPromise]);
+          if (result.error) {
+            console.error(`❌ Update failed for ${entryId}:`, result.error);
+            return "error";
+          }
+          console.log(`✅ Dispatched ${entryId}`);
+          return "success";
+        } catch (err: any) {
+          console.error(`❌ Update timed out for ${entryId}:`, err.message);
+          return "error";
         }
+      }));
+
+      for (const r of updateResults) {
+        if (r === "success") successCount++;
+        else if (r === "skipped") skippedCount++;
+        else errorCount++;
       }
 
       console.log(
