@@ -769,7 +769,8 @@ export function GanttView({
                 )}
               </div>
             );
-          })}
+          });
+          })()}
         </div>
 
         {/* Legend */}

@@ -31,7 +31,6 @@ const BUDGET_CAT_LABEL: Record<string, string> = {
   supervisor_fees:           'Supervisor Fees',
   data_collection_tools:     'Data Collection Tools',
   report_production:         'Report Production',
-  management_overhead:       'Management & Overhead',
   other:                     'Other',
 };
 
