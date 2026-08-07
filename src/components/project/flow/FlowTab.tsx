@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
@@ -638,6 +638,7 @@ export function FlowTab({
 }: Props) {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const {
     activeStages, groups, currentStages, currentStage, currentStageIndex, currentGroupIdx,
@@ -731,6 +732,36 @@ export function FlowTab({
   const [riskStageId, setRiskStageId] = useState<string | null>(null);
   const [riskForm, setRiskForm] = useState({ title: '', risk_score: 3, mitigation_plan: '' });
   const [savingRisk, setSavingRisk] = useState(false);
+  const [openingWorkspaceDocs, setOpeningWorkspaceDocs] = useState(false);
+
+  const openProjectWorkspaceFolder = async () => {
+    if (openingWorkspaceDocs) return;
+    setOpeningWorkspaceDocs(true);
+    try {
+      const { ensureProjectWorkspaceFolder } = await import('@/utils/projectDocumentWorkspace');
+      const { folderId, created } = await ensureProjectWorkspaceFolder(
+        projectName,
+        currentUserId || null,
+      );
+      await queryClient.invalidateQueries({ queryKey: ['workspace_folders'] });
+      if (created) {
+        toast({
+          title: 'Project folder created',
+          description: `"${projectName}" was added under Projects in Workspace Hub.`,
+        });
+      }
+      navigate(`/workspace?folder=${folderId}`);
+    } catch (err: any) {
+      toast({
+        title: 'Could not open project folder',
+        description: err?.message || 'Create the folder in Workspace Hub, or try again.',
+        variant: 'destructive',
+      });
+      navigate('/workspace');
+    } finally {
+      setOpeningWorkspaceDocs(false);
+    }
+  };
 
   const resolvedEntry = (stageId: string): CustomStageEntry | undefined =>
     (customFlowStages ?? []).find(e => e.id === stageId);
@@ -1864,19 +1895,31 @@ export function FlowTab({
                       if (actions.length === 0) return null;
                       return (
                         <div className="flex flex-wrap gap-1.5">
-                          {actions.map((action, idx) => (
+                          {actions.map((action, idx) => {
+                            const isDocs = action.icon === 'docs' || action.route === '/documents';
+                            return (
                             <Button
                               key={idx}
                               variant="outline"
                               size="sm"
                               className="h-8 text-xs"
-                              onClick={() => navigate(action.route)}
+                              disabled={isDocs && openingWorkspaceDocs}
+                              onClick={() => {
+                                if (isDocs) {
+                                  void openProjectWorkspaceFolder();
+                                  return;
+                                }
+                                navigate(action.route);
+                              }}
                               data-testid={`button-goto-action-${stage.id}-${idx}`}
                             >
-                              {ICON_MAP[action.icon as StageActionIcon] ?? <ExternalLink className="h-3.5 w-3.5 mr-1.5" />}
+                              {isDocs && openingWorkspaceDocs
+                                ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                : (ICON_MAP[action.icon as StageActionIcon] ?? <ExternalLink className="h-3.5 w-3.5 mr-1.5" />)}
                               {action.label}
                             </Button>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()}
