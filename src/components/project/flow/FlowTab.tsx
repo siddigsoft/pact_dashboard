@@ -96,7 +96,7 @@ import {
 } from '@/components/ui/popover';
 import { GanttView } from './GanttView';
 import { ScheduleView } from './ScheduleView';
-import { exportFlowPDF, exportFlowDocx } from './flowExport';
+import { exportFlowPDF, exportFlowDocx, exportViewTablePDF } from './flowExport';
 import { workingDaysBetween, calendarDaysBetween, DEFAULT_WORKING_DAYS } from '@/utils/workingDays';
 import { ProjectCalendarDialog } from '@/components/project/ProjectCalendarDialog';
 
@@ -191,96 +191,86 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
         supabase.from('project_stage_attachments').select('stage_id, file_name, file_url, file_type, file_size').eq('project_id', projectId),
       ]);
 
-      if (type === 'xlsx') {
-        // ── Excel export: List + Gantt data ──────────────────────────────
-        // Filter tombstone markers before building checklist rows.
-        // __deleted_deliverable__: items are internal soft-delete sentinels stored
-        // in project_stage_checklist — they must never appear in any export.
-        const CHECKLIST_SKIP_PREFIXES = ['__deleted_deliverable__:', '~~rm~~:'];
-        const checklistByStage: Record<string, { item_text: string; completed: boolean }[]> = {};
-        (checklistRes.data ?? []).forEach((r: any) => {
-          const text: string = r.item_text ?? '';
-          if (CHECKLIST_SKIP_PREFIXES.some(p => text.startsWith(p))) return;
-          if (!checklistByStage[r.stage_id]) checklistByStage[r.stage_id] = [];
-          checklistByStage[r.stage_id].push({ item_text: text, completed: r.completed });
-        });
+      // ── Shared row-building (used by both Excel and PDF) ─────────────────
+      // Filter tombstone markers — internal soft-delete sentinels that must
+      // never appear in any export.
+      const CHECKLIST_SKIP_PREFIXES = ['__deleted_deliverable__:', '~~rm~~:'];
+      const checklistByStage: Record<string, { item_text: string; completed: boolean }[]> = {};
+      (checklistRes.data ?? []).forEach((r: any) => {
+        const text: string = r.item_text ?? '';
+        if (CHECKLIST_SKIP_PREFIXES.some(p => text.startsWith(p))) return;
+        if (!checklistByStage[r.stage_id]) checklistByStage[r.stage_id] = [];
+        checklistByStage[r.stage_id].push({ item_text: text, completed: r.completed });
+      });
 
-        const fmtD = (iso?: string | null) => iso ? format(parseISO(iso), 'dd MMM yyyy') : '—';
-        const durLabel = (start?: string | null, end?: string | null) => {
-          if (!start || !end) return '—';
-          const d = differenceInDays(parseISO(end), parseISO(start)) + 1;
-          return `${d}d`;
-        };
-        const statusLabel = (s: string) =>
-          s === 'completed' ? 'Completed' : s === 'current' ? 'Active' : s === 'skipped' ? 'Skipped' : 'Open';
-        const predLabels = (deps?: string[]) => {
-          if (!deps?.length) return '—';
-          return deps.map(depId => {
-            const depEntry = customEntries.find(e => e.id === depId);
-            const depStage = allDefaultStages.find(s => s.id === depId);
-            return depEntry?.customLabel || depStage?.label || depId;
-          }).join(', ');
-        };
+      const fmtD = (iso?: string | null) => iso ? format(parseISO(iso), 'dd MMM yyyy') : '—';
+      const durLabel = (start?: string | null, end?: string | null) => {
+        if (!start || !end) return '—';
+        const d = differenceInDays(parseISO(end), parseISO(start)) + 1;
+        return `${d}d`;
+      };
+      const statusLabel = (s: string) =>
+        s === 'completed' ? 'Completed' : s === 'current' ? 'Active' : s === 'skipped' ? 'Skipped' : 'Open';
+      const predLabels = (deps?: string[]) => {
+        if (!deps?.length) return '—';
+        return deps.map(depId => {
+          const depEntry = customEntries.find(e => e.id === depId);
+          const depStage = allDefaultStages.find(s => s.id === depId);
+          return depEntry?.customLabel || depStage?.label || depId;
+        }).join(', ');
+      };
 
-        // Build rows — phase headers + stage rows + checklist sub-rows
-        const rows: (string | number | null)[][] = [];
-        let stageSeq = 0; // global sequential stage counter (1-based)
+      // Build rows — phase headers + stage rows + checklist sub-rows
+      const tableRows: (string | number | null)[][] = [];
+      let stageSeq = 0;
 
-        flow.groups.forEach((groupStages, gi) => {
-          const phaseId = `C${gi + 1}`;
-          // Phase header row
-          rows.push([phaseId, `PHASE ${gi + 1}`, '', '', '', '', '', '']);
-
-          groupStages.forEach(stage => {
-            stageSeq++;
-            const entry = customEntries.find(e => e.id === stage.id);
-            const label = entry?.customLabel || stage.label;
-            const status = flow.getStageStatus(stage.id);
-            const pct = entry?.percentComplete != null ? `${entry.percentComplete}%` : status === 'completed' ? '100%' : '0%';
-            const milestoneNote = entry?.isMilestone ? ' [Milestone]' : '';
-
-            rows.push([
-              String(stageSeq),
-              label + milestoneNote,
-              pct,
-              durLabel(entry?.plannedStart, entry?.plannedEnd),
-              fmtD(entry?.plannedStart),
-              fmtD(entry?.plannedEnd ?? entry?.dueDate),
-              predLabels(entry?.dependencies),
-              statusLabel(status),
+      flow.groups.forEach((groupStages, gi) => {
+        tableRows.push([`C${gi + 1}`, `PHASE ${gi + 1}`, '', '', '', '', '', '']);
+        groupStages.forEach(stage => {
+          stageSeq++;
+          const entry = customEntries.find(e => e.id === stage.id);
+          const label = entry?.customLabel || stage.label;
+          const status = flow.getStageStatus(stage.id);
+          const pct = entry?.percentComplete != null ? `${entry.percentComplete}%` : status === 'completed' ? '100%' : '0%';
+          const milestoneNote = entry?.isMilestone ? ' [Milestone]' : '';
+          tableRows.push([
+            String(stageSeq),
+            label + milestoneNote,
+            pct,
+            durLabel(entry?.plannedStart, entry?.plannedEnd),
+            fmtD(entry?.plannedStart),
+            fmtD(entry?.plannedEnd ?? entry?.dueDate),
+            predLabels(entry?.dependencies),
+            statusLabel(status),
+          ]);
+          (checklistByStage[stage.id] ?? []).forEach((item, ii) => {
+            tableRows.push([
+              `${stageSeq}.${ii + 1}`,
+              `  ↳ ${item.item_text}`,
+              item.completed ? '100%' : '0%',
+              '—', '—', '—', '—',
+              item.completed ? 'Done' : 'Open',
             ]);
-
-            // Checklist sub-rows (1.1, 1.2, …)
-            const items = checklistByStage[stage.id] ?? [];
-            items.forEach((item, ii) => {
-              rows.push([
-                `${stageSeq}.${ii + 1}`,
-                `  ↳ ${item.item_text}`,
-                item.completed ? '100%' : '0%',
-                '—', '—', '—', '—',
-                item.completed ? 'Done' : 'Open',
-              ]);
-            });
           });
         });
+      });
 
-        // Summary sheet: counts by status
-        const summaryRows: (string | number)[][] = [
-          ['Total Stages', allDefaultStages.length],
-          ['Completed', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'completed').length],
-          ['Active', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'current').length],
-          ['Open', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'upcoming').length],
-          ['Skipped', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'skipped').length],
-        ];
+      const summaryRows: (string | number)[][] = [
+        ['Total Stages', allDefaultStages.length],
+        ['Completed', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'completed').length],
+        ['Active',    allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'current').length],
+        ['Open',      allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'upcoming').length],
+        ['Skipped',   allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'skipped').length],
+      ];
 
-        const VIEW_LABEL: Record<typeof viewMode, string> = {
-          list:     'List View',
-          gantt:    'Gantt View',
-          schedule: 'Schedule View',
-        };
-        const viewLabel = VIEW_LABEL[viewMode];
-        const slugBase = (projectCode ?? projectName.replace(/\s+/g, '-').toLowerCase());
+      const VIEW_LABEL: Record<typeof viewMode, string> = {
+        list: 'List View', gantt: 'Gantt View', schedule: 'Schedule View',
+      };
+      const viewLabel = VIEW_LABEL[viewMode];
+      const slugBase = projectCode ?? projectName.replace(/\s+/g, '-').toLowerCase();
 
+      // ── Excel ─────────────────────────────────────────────────────────────
+      if (type === 'xlsx') {
         await exportStandardExcel({
           reportTitle: projectName,
           subtitleLine: `${viewLabel} — ${projectType}${projectCode ? ` · ${projectCode}` : ''}`,
@@ -289,34 +279,44 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
           mainSheet: {
             sheetName: viewLabel,
             headers: ['ID', 'Task Name', '% Done', 'Duration', 'Start', 'Finish', 'Predecessors', 'Status'],
-            rows,
+            rows: tableRows,
             colWidths: { 0: 8, 1: 42, 2: 10, 3: 12, 4: 16, 5: 16, 6: 28, 7: 14 },
           },
-          summarySheet: {
-            title: 'Stage Summary',
-            rows: summaryRows,
-            colWidths: [28, 14],
-          },
+          summarySheet: { title: 'Stage Summary', rows: summaryRows, colWidths: [28, 14] },
         });
         toast({ title: `${viewLabel} exported to Excel` });
         return;
       }
 
-      // PDF / Word path (unchanged)
+      // ── PDF — view-specific table (landscape A4) ───────────────────────
+      if (type === 'pdf') {
+        await exportViewTablePDF({
+          projectName,
+          projectType,
+          projectCode,
+          viewMode,
+          rows: tableRows,
+          summaryRows,
+        });
+        toast({ title: `${viewLabel} exported to PDF` });
+        return;
+      }
+
+      // ── Word — full narrative report ───────────────────────────────────
       const extras: Record<string, any> = {};
       allDefaultStages.forEach(s => {
         extras[s.id] = {
-          assignees: (assigneesRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id + r.profiles?.full_name, userId: '', fullName: r.profiles?.full_name ?? '', role: r.profiles?.role ?? '', avatarUrl: null, assignedAt: '' })),
-          checklist: (checklistRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id, itemText: r.item_text, completed: r.completed, completedBy: null, completedAt: null, createdAt: '', sortOrder: 0 })),
+          assignees:   (assigneesRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id + r.profiles?.full_name, userId: '', fullName: r.profiles?.full_name ?? '', role: r.profiles?.role ?? '', avatarUrl: null, assignedAt: '' })),
+          checklist:   (checklistRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id, itemText: r.item_text, completed: r.completed, completedBy: null, completedAt: null, createdAt: '', sortOrder: 0 })),
           attachments: (attachmentsRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id, fileName: r.file_name, fileUrl: r.file_url, fileType: r.file_type, fileSize: r.file_size, uploadedByName: null, createdAt: '' })),
         };
       });
       const exportData = { projectName, projectType, projectCode, stages: allDefaultStages, stageHistory: flow.stageHistory, currentStageId: flow.currentStage?.id ?? null, extras, customEntries };
-      if (type === 'pdf') await exportFlowPDF(exportData);
-      else await exportFlowDocx(exportData);
-      toast({ title: `${type.toUpperCase()} exported successfully` });
+      await exportFlowDocx(exportData);
+      toast({ title: 'Full narrative report exported to Word' });
     } catch (err: any) {
-      toast({ title: 'Export failed', description: err.message, variant: 'destructive' });
+      console.error('[FlowTab] Export error:', err);
+      toast({ title: 'Export failed', description: err?.message ?? String(err), variant: 'destructive' });
     } finally { setExporting(null); }
   };
 
@@ -333,12 +333,13 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
           <Download className="h-3.5 w-3.5 mr-2 text-emerald-600" />
           Export {viewMode === 'gantt' ? 'Gantt' : viewMode === 'schedule' ? 'Schedule' : 'List'} View (.xlsx)
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => doExport('pdf')}>
-          <FileText className="h-3.5 w-3.5 mr-2 text-red-500" />Export PDF
+          <FileText className="h-3.5 w-3.5 mr-2 text-red-500" />
+          Export {viewMode === 'gantt' ? 'Gantt' : viewMode === 'schedule' ? 'Schedule' : 'List'} View (.pdf)
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => doExport('docx')}>
-          <FileText className="h-3.5 w-3.5 mr-2 text-blue-500" />Export Word (.docx)
+          <FileText className="h-3.5 w-3.5 mr-2 text-blue-500" />Export Full Narrative (.docx)
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

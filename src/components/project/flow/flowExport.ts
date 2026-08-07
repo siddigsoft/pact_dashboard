@@ -220,6 +220,165 @@ export async function exportFlowPDF(data: ExportData): Promise<void> {
   doc.save(`${safeName}_Flow_Report_${format(new Date(), 'yyyyMMdd')}.pdf`);
 }
 
+// ── View Table PDF Export (List / Gantt / Schedule) ────────────────────────
+// Exports the same tabular data as the Excel export — landscape A4 with
+// phase header rows, stage rows, and checklist sub-rows. This is distinct
+// from exportFlowPDF which exports the narrative flow report.
+
+export async function exportViewTablePDF(params: {
+  projectName: string;
+  projectType: string;
+  projectCode?: string;
+  viewMode: 'list' | 'gantt' | 'schedule';
+  rows: (string | number | null)[][];
+  summaryRows: (string | number)[][];
+}): Promise<void> {
+  const { projectName, projectType, projectCode, viewMode, rows, summaryRows } = params;
+
+  const VIEW_LABEL: Record<string, string> = {
+    list: 'List View', gantt: 'Gantt View', schedule: 'Schedule View',
+  };
+  const viewLabel = VIEW_LABEL[viewMode] ?? 'Project Schedule';
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const PACT_BLUE  = [15,  32,  65]  as [number, number, number];
+  const PACT_MID   = [29,  52,  97]  as [number, number, number];
+  const TEAL       = [8,  145, 178]  as [number, number, number];
+  const WHITE      = [255,255,255]   as [number, number, number];
+  const LIGHT_GRAY = [245,247,250]   as [number, number, number];
+  const PHASE_BG   = [230,236,246]   as [number, number, number];
+  const TEXT_DARK  = [30,  30,  30]  as [number, number, number];
+  const TEXT_MID   = [80,  80,  90]  as [number, number, number];
+  const GREEN      = [16, 124,  65]  as [number, number, number];
+  const AMBER      = [180,120,  20]  as [number, number, number];
+  const SLATE      = [120,130, 145]  as [number, number, number];
+
+  const PAGE_W = 297;  // A4 landscape
+  const MARGIN = 12;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+  const now = format(new Date(), 'dd MMMM yyyy HH:mm');
+
+  // ── Header banner ──────────────────────────────────────────────────────────
+  doc.setFillColor(...PACT_BLUE);
+  doc.rect(0, 0, PAGE_W, 24, 'F');
+  doc.setTextColor(...WHITE);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${projectName} — ${viewLabel}`, MARGIN, 10);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `${projectType.replace(/_/g, ' ')}${projectCode ? ` · ${projectCode}` : ''}    Generated: ${now}`,
+    MARGIN, 18
+  );
+
+  // ── Column definitions (landscape A4, 273mm content) ──────────────────────
+  // Cols: ID | Task Name | % Done | Duration | Start | Finish | Predecessors | Status
+  const COL_W = [12, 88, 16, 18, 26, 26, 50, 22];
+  const HEADERS = ['ID', 'Task Name', '% Done', 'Duration', 'Start', 'Finish', 'Predecessors', 'Status'];
+
+  // Build autoTable body — tag each row type for styling
+  type RowKind = 'phase' | 'stage' | 'task';
+  const body: { data: string[]; kind: RowKind }[] = rows.map(r => {
+    const id = String(r[0] ?? '');
+    const isPhase = /^C\d+$/.test(id);
+    const isTask  = /^\d+\.\d+$/.test(id);
+    return {
+      data: r.map(v => v == null ? '—' : String(v)),
+      kind: isPhase ? 'phase' : isTask ? 'task' : 'stage',
+    };
+  });
+
+  autoTable(doc, {
+    startY: 28,
+    margin: { left: MARGIN, right: MARGIN },
+    head: [HEADERS],
+    body: body.map(r => r.data),
+    headStyles: { fillColor: TEAL, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
+    bodyStyles: { fontSize: 7, textColor: TEXT_DARK },
+    alternateRowStyles: { fillColor: LIGHT_GRAY },
+    columnStyles: {
+      0: { cellWidth: COL_W[0], halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: COL_W[1] },
+      2: { cellWidth: COL_W[2], halign: 'center' },
+      3: { cellWidth: COL_W[3], halign: 'center' },
+      4: { cellWidth: COL_W[4], halign: 'center' },
+      5: { cellWidth: COL_W[5], halign: 'center' },
+      6: { cellWidth: COL_W[6] },
+      7: { cellWidth: COL_W[7], halign: 'center' },
+    },
+    didParseCell: (hookData) => {
+      const rowIdx = hookData.row.index;
+      const kind   = body[rowIdx]?.kind;
+      if (!kind) return;
+
+      if (kind === 'phase') {
+        hookData.cell.styles.fillColor  = PHASE_BG;
+        hookData.cell.styles.textColor  = PACT_MID;
+        hookData.cell.styles.fontStyle  = 'bold';
+        hookData.cell.styles.fontSize   = 8;
+      } else if (kind === 'task') {
+        // Checklist sub-row — indent task name, muted colour
+        if (hookData.column.index === 1) {
+          hookData.cell.styles.textColor = TEXT_MID;
+          hookData.cell.styles.fontSize  = 6.5;
+        } else {
+          hookData.cell.styles.textColor = TEXT_MID;
+          hookData.cell.styles.fontSize  = 6.5;
+        }
+      } else {
+        // Stage row — colour the Status column
+        if (hookData.column.index === 7) {
+          const status = hookData.cell.text?.[0]?.toLowerCase() ?? '';
+          if (status === 'completed') hookData.cell.styles.textColor = GREEN;
+          else if (status === 'active') hookData.cell.styles.textColor = PACT_MID;
+          else if (status === 'skipped') hookData.cell.styles.textColor = SLATE;
+          else hookData.cell.styles.textColor = AMBER;
+          hookData.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
+  });
+
+  // ── Summary block (right-aligned on new area after table) ─────────────────
+  const afterY = (doc as any).lastAutoTable?.finalY ?? 160;
+  if (afterY < 175) {
+    let sy = afterY + 8;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...PACT_BLUE);
+    doc.text('Stage Summary', MARGIN, sy);
+    sy += 4;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    summaryRows.forEach(([label, value]) => {
+      doc.setTextColor(...TEXT_DARK);
+      doc.text(`${label}: `, MARGIN + 2, sy);
+      doc.setFont('helvetica', 'bold');
+      doc.text(String(value), MARGIN + 38, sy);
+      doc.setFont('helvetica', 'normal');
+      sy += 4.5;
+    });
+  }
+
+  // ── Footer on every page ───────────────────────────────────────────────────
+  const totalPages = (doc.internal as any).getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...PACT_BLUE);
+    doc.rect(0, 200, PAGE_W, 10, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('PACT Command Center — Confidential', MARGIN, 206);
+    doc.text(`Page ${i} of ${totalPages}`, PAGE_W - MARGIN, 206, { align: 'right' });
+  }
+
+  const safeName = projectName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
+  const modeSlug = viewMode.charAt(0).toUpperCase() + viewMode.slice(1);
+  doc.save(`${safeName}_${modeSlug}_View_${format(new Date(), 'yyyyMMdd')}.pdf`);
+}
+
 // ── Word Export ────────────────────────────────────────────────────────────
 
 export async function exportFlowDocx(data: ExportData): Promise<void> {
