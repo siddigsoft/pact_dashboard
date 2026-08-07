@@ -251,7 +251,7 @@ export function StageAssignees({
                   <UserPlus className="h-3 w-3 mr-1" /> Assign
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 p-2" align="end">
+              <PopoverContent className="w-72 p-2 z-[200]" align="end">
 
                 {/* Step 1: Search & select person */}
                 {step === 'search' && (

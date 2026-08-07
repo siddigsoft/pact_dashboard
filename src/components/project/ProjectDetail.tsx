@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { dispatchNotification } from '@/lib/notify';
 import { useQueryClient } from '@tanstack/react-query';
+import { useProjectActivitiesQuery, useUpdateProjectInCache } from '@/context/project/projectQueries';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
@@ -293,6 +294,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const updateProjectCache = useUpdateProjectInCache();
+
+  // Keep the Activity Timeline live: whenever the per-project activities query
+  // refreshes (e.g. after a delete triggers the realtime invalidation), push
+  // the fresh list into the shared project cache so the Overview tab reflects it.
+  const { data: freshActivities } = useProjectActivitiesQuery(project.id);
+  useEffect(() => {
+    if (freshActivities !== undefined) {
+      updateProjectCache({ ...project, activities: freshActivities });
+    }
+  }, [freshActivities]);
   // FOM is no longer a full admin — they get the limited-viewer tab set (no financial tabs)
   const isAdminUser = isSuperAdmin() || hasAnyRole(['admin']);
   const isProjectManagerUser =
@@ -713,6 +725,24 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const budgetSummary = project.budget ? getBudgetSummary(project.budget) : null;
   const typeConfig = getProjectTypeConfig(project.projectType);
 
+  // Sum professional fees that are in the same currency as the project budget so
+  // they appear in the "Budget Used" progress bar and the Budget overview card.
+  const feesSummary = (() => {
+    const teamComposition = project.team?.teamComposition || [];
+    if (!teamComposition.length || !budgetSummary) return null;
+    const budgetCurrency = budgetSummary.currency || 'SDG';
+    const budgetTotal = budgetSummary.total || 0;
+    const matchingMembers = teamComposition.filter(
+      m => m.feeType && (m.currency || 'SDG') === budgetCurrency,
+    );
+    if (!matchingMembers.length) return null;
+    return {
+      totalFees:  matchingMembers.reduce((s, m) => s + calcMemberTotalCost(m, budgetTotal), 0),
+      totalPaid:  matchingMembers.reduce((s, m) => s + (m.amountPaid || 0), 0),
+      currency:   budgetCurrency,
+    };
+  })();
+
   return (
     <div className="space-y-2 p-2 md:p-3">
       {/* Back Navigation */}
@@ -1017,7 +1047,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'team',       label: 'Team',                                         icon: Users },
             { value: 'costs',      label: 'Costs',                                        icon: DollarSign },
             { value: 'fees',       label: 'Prof. Fees',                                   icon: Percent },
-            { value: 'field_ops',  label: 'Field Ops',                                    icon: MapPin },
+            ...((project.relatedMMPs?.length ?? 0) > 0 ? [{ value: 'field_ops', label: 'Field Ops', icon: MapPin }] : []),
             { value: 'budget',     label: 'Budget',                                       icon: Wallet },
             { value: 'flow',       label: typeConfig.tabLabels.monitoring ?? 'Stages',    icon: GitBranch },
             { value: 'field_tasks',label: 'Tasks',                                        icon: CheckSquare },
@@ -1248,30 +1278,31 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     />
                   </div>
                   
-                  {!isLimitedProjectViewer && budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
+                  {!isLimitedProjectViewer && budgetSummary && budgetSummary.total != null && budgetSummary.total > 0 && (budgetSummary.allocated != null || feesSummary) && (
                     <div className="space-y-1.5">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Budget Used</span>
-                        <span className="font-medium">
-                          {(() => {
-                            const total = budgetSummary.total || 0;
-                            const allocated = budgetSummary.allocated || 0;
-                            return total > 0
-                              ? Math.round((allocated / total) * 100)
-                              : 0;
-                          })()}%
-                        </span>
-                      </div>
-                      <Progress 
-                        value={(() => {
-                          const total = budgetSummary.total || 0;
-                          const allocated = budgetSummary.allocated || 0;
-                          return total > 0
-                            ? Math.round((allocated / total) * 100)
-                            : 0;
-                        })()} 
-                        className="h-2" 
-                      />
+                      {(() => {
+                        const total     = budgetSummary.total || 0;
+                        const allocated = (budgetSummary.allocated || 0) + (feesSummary?.totalPaid || 0);
+                        const pct       = total > 0 ? Math.round((allocated / total) * 100) : 0;
+                        return (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Budget Used</span>
+                              <span className="font-medium">{pct}%</span>
+                            </div>
+                            <Progress value={pct} className="h-2" />
+                            {feesSummary && feesSummary.totalPaid > 0 && (
+                              <p className="text-[10px] text-muted-foreground">
+                                incl.{' '}
+                                <span className="font-medium text-violet-600">
+                                  {feesSummary.currency} {feesSummary.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                {' '}in professional fees
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
 

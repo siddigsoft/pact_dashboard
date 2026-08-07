@@ -5,7 +5,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
-import { useProjectsQuery, useInvalidateProjectsQueries, useUpdateProjectInCache, useRemoveProjectFromCache, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
+import { useQueryClient } from '@tanstack/react-query';
+import { useProjectsQuery, useInvalidateProjectsQueries, useUpdateProjectInCache, useRemoveProjectFromCache, mapDbProjectToProject, mapProjectToDbProject, projectQueryKeys } from './projectQueries';
 import { getFirstStageId } from '@/config/projectFlows';
 import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
@@ -98,6 +99,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const removeProjectFromCache = useRemoveProjectFromCache();
   const invalidateRef = useRef(invalidateProjects);
   invalidateRef.current = invalidateProjects;
+  const queryClient = useQueryClient();
 
   const { currentUser, roles: userRoles } = useUser();
 
@@ -153,6 +155,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useRealtimeTables(['projects', 'project_activities', 'sub_activities'], () => {
     invalidateRef.current();
+    // Also invalidate per-project activities queries so the Activity Timeline
+    // reflects deletes/inserts without waiting for stale-time to expire.
+    queryClient.invalidateQueries({ queryKey: ['projects', 'activities'] });
   });
 
   const addProject = async (project: Project): Promise<Project | null> => {

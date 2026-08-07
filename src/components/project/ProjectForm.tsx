@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -211,6 +212,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   initialData, 
   isEditing = false 
 }) => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { users } = useUser();
   
@@ -1225,7 +1227,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
             />
 
             <div className="flex justify-end space-x-4">
-              <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
+              <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => navigate(-1)}>Cancel</Button>
               <Button type="submit" className="bg-primary" disabled={isSubmitting} data-testid="button-submit-project">
                 {isSubmitting ? (
                   <>
