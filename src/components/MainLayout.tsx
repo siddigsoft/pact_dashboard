@@ -88,15 +88,19 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <NavBadgeCountsProvider>
         <SidebarProvider>
           <div className="min-h-screen max-h-screen flex w-full bg-[#f3f5f8] dark:bg-gray-950">
-            <AppSidebar />
+            <div className="print:hidden contents">
+              <AppSidebar />
+            </div>
             <SidebarInset className="relative flex flex-col min-w-0 h-screen max-h-screen bg-transparent">
-              <ViewAsBanner />
-              <RealtimeBanner
-                onRefresh={handleGlobalRefresh}
-                dismissible={true}
-                showOnlyWhenDisconnected={true}
-              />
-              <Navbar />
+              <div className="print:hidden">
+                <ViewAsBanner />
+                <RealtimeBanner
+                  onRefresh={handleGlobalRefresh}
+                  dismissible={true}
+                  showOnlyWhenDisconnected={true}
+                />
+                <Navbar />
+              </div>
               <div className="global-scrollable flex-1 flex flex-col relative min-w-0 min-h-0 bg-transparent px-1.5 py-1.5 sm:px-2 sm:py-2 lg:px-3 lg:py-2.5">
                 <div className="w-full rounded-xl border border-slate-200/70 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
                   {showAccessSpinner ? (

@@ -1431,3 +1431,74 @@
   }
 
 }
+
+/* ── Print styles: full-page dashboard output ────────────────────────────── */
+@media print {
+  /* Remove viewport height caps so content flows to as many pages as needed */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* Top-level layout wrapper */
+  .min-h-screen.max-h-screen {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+  }
+
+  /* SidebarInset — remove fixed height */
+  [data-slot="sidebar-inset"],
+  [class*="h-screen"],
+  [class*="max-h-screen"] {
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* The scrollable content wrapper */
+  .global-scrollable {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Hide fixed/floating UI chrome that isn't the dashboard */
+  [data-sidebar],
+  [data-sidebar="sidebar"],
+  [data-sidebar="rail"] {
+    display: none !important;
+  }
+
+  /* Floating action buttons (Manage Access, SuperAdmin tools, etc.) */
+  .fixed.bottom-20,
+  .fixed.bottom-4,
+  .fixed.bottom-6 {
+    display: none !important;
+  }
+
+  /* Remove card border/shadow so it doesn't add visual noise on paper */
+  .rounded-xl.border.border-slate-200\/70 {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Dashboard card: let it fill page width */
+  [ref="dashRef"],
+  .rounded-2xl {
+    border-radius: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Inner scrollable sub-panels (milestone list, risk list, etc.) */
+  .max-h-72, .max-h-48, .max-h-60 {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure background colors print (charts, status badges) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
