@@ -336,7 +336,7 @@ async function resolveTeamRecipientIds(teamMembers: string[], excludeId?: string
 
 export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const { currentUser } = useUser();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const queryClient = useQueryClient();
 
   const defaultFlow = getProjectFlow(project.projectType);
@@ -435,8 +435,8 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const currentStageIndex = currentStage ? effectiveStages.findIndex(s => s.id === currentStage.id) : 0;
   const isLastGroup = currentGroupIdx >= groups.length - 1;
 
-  // Permissions
-  const isPrivilegedRole = hasAnyRole(['super_admin', 'admin', 'fom']);
+  // Permissions — isSuperAdmin() is the reliable check; 'super_admin' (snake) != 'superAdmin' (stored role)
+  const isPrivilegedRole = isSuperAdmin() || hasAnyRole(['admin', 'fom', 'superAdmin', 'ict']);
   // Match by UUID if available, fall back to fullName comparison for legacy data.
   const isProjectManager =
     !!currentUser?.id &&

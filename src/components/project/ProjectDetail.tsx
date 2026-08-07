@@ -1091,7 +1091,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'team',       label: 'Team',                                         icon: Users },
             { value: 'costs',      label: 'Costs',                                        icon: DollarSign },
             { value: 'fees',       label: 'Prof. Fees',                                   icon: Percent },
-            { value: 'field_ops',  label: 'Field Ops',                                    icon: MapPin },
+            ...((project.relatedMMPs?.length ?? 0) > 0 ? [{ value: 'field_ops', label: 'Field Ops', icon: MapPin }] : []),
             { value: 'budget',     label: 'Budget',                                       icon: Wallet },
             { value: 'flow',       label: typeConfig.tabLabels.monitoring ?? 'Stages',    icon: GitBranch },
             { value: 'field_tasks',label: 'Tasks',                                        icon: CheckSquare },
