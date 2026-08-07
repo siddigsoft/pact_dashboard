@@ -292,7 +292,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const isAdminUser = isSuperAdmin() || hasAnyRole(['admin', 'fom']);
+  // FOM is no longer a full admin — they get the limited-viewer tab set (no financial tabs)
+  const isAdminUser = isSuperAdmin() || hasAnyRole(['admin']);
   const isProjectManagerUser =
     !!project.team?.projectManager &&
     ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
@@ -300,15 +301,31 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const canArchive = isAdminUser || isProjectManagerUser;
 
   /**
-   * A "restricted member" is a team member who has no elevated role:
-   * they are on the project team but are not an admin, FOM, PM (anywhere),
-   * Country Director, or Senior Operations Lead.
-   * They see only the tabs relevant to their own work, not financial/management data.
+   * Limited project viewers: Employee, FOM, Country Director, HR.
+   * They can only see projects they are members of, and they never see
+   * financial tabs (Costs, Fees, Budget, Reports).
+   */
+  const isLimitedProjectViewer =
+    !isSuperAdmin() &&
+    !hasAnyRole(['admin', 'projectManager', 'seniorOperationsLead', 'sol', 'ict']) &&
+    hasAnyRole(['employee', 'fom', 'countryDirector', 'hr',
+                'Employee', 'Field Operation Manager (FOM)', 'Country Director', 'HR']);
+
+  /** Tabs that limited-viewer roles are allowed to see (no financial data) */
+  const LIMITED_VIEWER_TABS = new Set([
+    'overview', 'activities', 'team', 'flow', 'field_tasks',
+    'comments', 'documents', 'calendar', 'milestones', 'risks', 'changelog',
+  ]);
+
+  /**
+   * A "restricted member" is a team member who has no elevated role AND is not
+   * a limited-viewer role. They see only their own-work tabs.
    */
   const hasElevatedRole =
     isAdminUser ||
     isProjectManagerUser ||
-    hasAnyRole(['projectManager', 'countryDirector', 'seniorOperationsLead', 'cd', 'sol']);
+    isLimitedProjectViewer ||
+    hasAnyRole(['projectManager', 'seniorOperationsLead', 'sol']);
   const isRestrictedMember = !!currentUser?.id && !hasElevatedRole;
 
   /** Tabs that restricted team members are allowed to see */
@@ -350,12 +367,14 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     }
   }, [activeTab, markCommentsRead]);
 
-  // If a restricted member lands on a tab they can't see (e.g. via URL), bounce to overview
+  // If a limited viewer or restricted member lands on a tab they can't see, bounce to overview
   useEffect(() => {
-    if (isRestrictedMember && !RESTRICTED_MEMBER_TABS.has(activeTab)) {
+    if (isLimitedProjectViewer && !LIMITED_VIEWER_TABS.has(activeTab)) {
+      setActiveTab('overview');
+    } else if (isRestrictedMember && !RESTRICTED_MEMBER_TABS.has(activeTab)) {
       setActiveTab('overview');
     }
-  }, [isRestrictedMember, activeTab]);
+  }, [isLimitedProjectViewer, isRestrictedMember, activeTab]);
 
   useEffect(() => {
     if (!project.partnerId) { setPartnerName(null); return; }
@@ -1084,8 +1103,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             { value: 'changelog',  label: 'Change Log',                                   icon: History },
             { value: 'reports',    label: 'Reports',                                      icon: FileBarChart2 },
           ];
-          // Restricted team members (non-admin, non-PM) only see their own work tabs
-          const projectTabs = isRestrictedMember
+          // Tab visibility: limited viewers (Employee/FOM/CD/HR) → non-financial set;
+          // restricted members (no elevated role) → own-work set; everyone else → all tabs
+          const projectTabs = isLimitedProjectViewer
+            ? allProjectTabs.filter(t => LIMITED_VIEWER_TABS.has(t.value))
+            : isRestrictedMember
             ? allProjectTabs.filter(t => RESTRICTED_MEMBER_TABS.has(t.value))
             : allProjectTabs;
           const currentTab = projectTabs.find(t => t.value === activeTab) ?? projectTabs[0];
@@ -1219,7 +1241,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
                     
-                    {budgetSummary && budgetSummary.total != null && (
+                    {!isLimitedProjectViewer && budgetSummary && budgetSummary.total != null && (
                       <div className="space-y-0.5">
                         <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
                         <div className="flex items-center gap-1.5">
@@ -1300,7 +1322,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     />
                   </div>
                   
-                  {budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
+                  {!isLimitedProjectViewer && budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Budget Used</span>

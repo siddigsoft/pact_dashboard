@@ -29,6 +29,7 @@ import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useUser } from '@/context/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { PROJECT_TEMPLATES } from '@/config/projectTypeConfig';
@@ -55,6 +56,7 @@ const ProjectsPage = () => {
   const navigate = useNavigate();
   useProjectStalledAlert();
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { currentUser } = useUser();
 
   const projectContext = useProjectContext();
   const { projects, loading } = projectContext;
@@ -78,14 +80,36 @@ const ProjectsPage = () => {
     navigate(`/projects/${projectId}`);
   };
 
+  // These roles see ONLY projects they are a member of (no financial tabs in detail)
+  const isLimitedViewer =
+    !isSuperAdmin() &&
+    !hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'projectManager', 'ProjectManager']) &&
+    hasAnyRole(['employee', 'Employee', 'fom', 'FOM', 'countryDirector', 'Country Director', 'hr', 'HR']);
+
+  // For limited viewers, filter to only projects where they are a team member / PM / creator
+  const uid = currentUser?.id;
+  const visibleProjects = useMemo(() => {
+    if (!isLimitedViewer || !uid) return projects;
+    return projects.filter(p => {
+      const team = (p as any).team;
+      if (!team) return false;
+      if (team.projectManager === uid) return true;
+      if (team.projectManagerId === uid) return true;
+      if (Array.isArray(team.teamComposition) && team.teamComposition.some((m: any) => m?.userId === uid)) return true;
+      if ((p as any).createdBy === uid || (p as any).created_by === uid) return true;
+      return false;
+    });
+  }, [projects, isLimitedViewer, uid]);
+
   const projectStats = useMemo(() => {
-    const total = projects.length;
-    const completed = projects.filter(p => p.status === 'completed').length;
-    const active = projects.filter(p => p.status === 'active' || p.status === 'onHold').length;
-    const pending = projects.filter(p => p.status === 'draft').length;
+    const src = visibleProjects;
+    const total = src.length;
+    const completed = src.filter(p => p.status === 'completed').length;
+    const active = src.filter(p => p.status === 'active' || p.status === 'onHold').length;
+    const pending = src.filter(p => p.status === 'draft').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, active, pending, completionRate };
-  }, [projects]);
+  }, [visibleProjects]);
 
   const previewFlow = previewType ? getProjectFlow(previewType) : null;
   const previewTemplate = previewType ? PROJECT_TEMPLATES.find(t => t.type === previewType) : null;
@@ -97,11 +121,11 @@ const ProjectsPage = () => {
 
   const pmOptions = useMemo(() => {
     const pms = new Set<string>();
-    for (const p of projects) {
+    for (const p of visibleProjects) {
       if (p.team?.projectManager) pms.add(p.team.projectManager);
     }
     return Array.from(pms).sort();
-  }, [projects]);
+  }, [visibleProjects]);
 
   const boardFilters = {
     type: filterType,
@@ -119,10 +143,15 @@ const ProjectsPage = () => {
     setFilterSearch('');
   };
 
-  // Allow Super Admin, Admin, FOM, ICT, and Project Managers to view the projects list.
+  // Full access: Super Admin, Admin, FOM, ICT, Project Managers.
+  // Limited access (member-only, no financial tabs): Employee, Country Director, HR.
   const canViewProjects =
     isSuperAdmin() ||
-    hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager']);
+    hasAnyRole([
+      'admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager',
+      'employee', 'Employee', 'countryDirector', 'Country Director', 'hr', 'HR',
+    ]);
+
   if (!canViewProjects) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -132,7 +161,7 @@ const ProjectsPage = () => {
           </div>
           <h2 className="text-xl font-semibold">Access Restricted</h2>
           <p className="text-muted-foreground text-sm">
-            Projects is restricted to Admins, FOM, ICT, and Project Managers.
+            You do not have access to the Projects module.
           </p>
           <button
             onClick={() => navigate('/dashboard')}
@@ -172,19 +201,23 @@ const ProjectsPage = () => {
               Tracker Prep
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowTemplates(true)}
-            data-testid="button-start-from-template"
-          >
-            <LayoutTemplate className="h-4 w-4 mr-1.5" />
-            Start from Template
-          </Button>
-          <Button size="sm" onClick={() => navigate('/projects/create')} data-testid="button-create-project">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Create Project
-          </Button>
+          {!isLimitedViewer && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTemplates(true)}
+                data-testid="button-start-from-template"
+              >
+                <LayoutTemplate className="h-4 w-4 mr-1.5" />
+                Start from Template
+              </Button>
+              <Button size="sm" onClick={() => navigate('/projects/create')} data-testid="button-create-project">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Project
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -333,20 +366,20 @@ const ProjectsPage = () => {
         <div className="p-2.5">
           {viewMode === 'list' && (
             <ProjectList
-              projects={projects}
+              projects={visibleProjects}
               onViewProject={handleViewProject}
               loading={loading}
             />
           )}
           {viewMode === 'board' && (
             <ProjectBoardView
-              projects={projects.filter(p => !p.archived)}
+              projects={visibleProjects.filter(p => !p.archived)}
               filters={boardFilters}
             />
           )}
           {viewMode === 'timeline' && (
             <ProjectTimelineView
-              projects={projects.filter(p => !p.archived)}
+              projects={visibleProjects.filter(p => !p.archived)}
               filters={boardFilters}
             />
           )}
