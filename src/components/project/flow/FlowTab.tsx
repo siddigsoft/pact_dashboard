@@ -72,6 +72,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
@@ -80,7 +81,8 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow, parseISO, isBefore } from 'date-fns';
+import { format, formatDistanceToNow, parseISO, isBefore, differenceInDays } from 'date-fns';
+import { exportStandardExcel } from '@/utils/standardExcelExport';
 import type { UseProjectFlowReturn, CustomStageEntry } from '@/hooks/useProjectFlow';
 import type { FlowStage, StageActionIcon } from '@/config/projectFlows';
 import { StageAssignees } from './StageAssignees';
@@ -176,9 +178,9 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
   flow: UseProjectFlowReturn; allDefaultStages: FlowStage[]; customEntries: CustomStageEntry[];
 }) {
   const { toast } = useToast();
-  const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null);
+  const [exporting, setExporting] = useState<'pdf' | 'docx' | 'xlsx' | null>(null);
 
-  const doExport = async (type: 'pdf' | 'docx') => {
+  const doExport = async (type: 'pdf' | 'docx' | 'xlsx') => {
     setExporting(type);
     try {
       const { supabase } = await import('@/integrations/supabase/client');
@@ -187,6 +189,105 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
         supabase.from('project_stage_checklist').select('stage_id, item_text, completed').eq('project_id', projectId),
         supabase.from('project_stage_attachments').select('stage_id, file_name, file_url, file_type, file_size').eq('project_id', projectId),
       ]);
+
+      if (type === 'xlsx') {
+        // ── Excel export: List + Gantt data ──────────────────────────────
+        const checklistByStage: Record<string, { item_text: string; completed: boolean }[]> = {};
+        (checklistRes.data ?? []).forEach((r: any) => {
+          if (!checklistByStage[r.stage_id]) checklistByStage[r.stage_id] = [];
+          checklistByStage[r.stage_id].push({ item_text: r.item_text, completed: r.completed });
+        });
+
+        const fmtD = (iso?: string | null) => iso ? format(parseISO(iso), 'dd MMM yyyy') : '—';
+        const durLabel = (start?: string | null, end?: string | null) => {
+          if (!start || !end) return '—';
+          const d = differenceInDays(parseISO(end), parseISO(start)) + 1;
+          return `${d}d`;
+        };
+        const statusLabel = (s: string) =>
+          s === 'completed' ? 'Completed' : s === 'current' ? 'Active' : s === 'skipped' ? 'Skipped' : 'Open';
+        const predLabels = (deps?: string[]) => {
+          if (!deps?.length) return '—';
+          return deps.map(depId => {
+            const depEntry = customEntries.find(e => e.id === depId);
+            const depStage = allDefaultStages.find(s => s.id === depId);
+            return depEntry?.customLabel || depStage?.label || depId;
+          }).join(', ');
+        };
+
+        // Build rows — phase headers + stage rows + checklist sub-rows
+        const rows: (string | number | null)[][] = [];
+        let stageSeq = 0; // global sequential stage counter (1-based)
+
+        flow.groups.forEach((groupStages, gi) => {
+          const phaseId = `C${gi + 1}`;
+          // Phase header row
+          rows.push([phaseId, `PHASE ${gi + 1}`, '', '', '', '', '', '']);
+
+          groupStages.forEach(stage => {
+            stageSeq++;
+            const entry = customEntries.find(e => e.id === stage.id);
+            const label = entry?.customLabel || stage.label;
+            const status = flow.getStageStatus(stage.id);
+            const pct = entry?.percentComplete != null ? `${entry.percentComplete}%` : status === 'completed' ? '100%' : '0%';
+            const milestoneNote = entry?.isMilestone ? ' [Milestone]' : '';
+
+            rows.push([
+              String(stageSeq),
+              label + milestoneNote,
+              pct,
+              durLabel(entry?.plannedStart, entry?.plannedEnd),
+              fmtD(entry?.plannedStart),
+              fmtD(entry?.plannedEnd ?? entry?.dueDate),
+              predLabels(entry?.dependencies),
+              statusLabel(status),
+            ]);
+
+            // Checklist sub-rows (1.1, 1.2, …)
+            const items = checklistByStage[stage.id] ?? [];
+            items.forEach((item, ii) => {
+              rows.push([
+                `${stageSeq}.${ii + 1}`,
+                `  ↳ ${item.item_text}`,
+                item.completed ? '100%' : '0%',
+                '—', '—', '—', '—',
+                item.completed ? 'Done' : 'Open',
+              ]);
+            });
+          });
+        });
+
+        // Summary sheet: counts by status
+        const summaryRows: (string | number)[][] = [
+          ['Total Stages', allDefaultStages.length],
+          ['Completed', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'completed').length],
+          ['Active', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'current').length],
+          ['Open', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'upcoming').length],
+          ['Skipped', allDefaultStages.filter(s => flow.getStageStatus(s.id) === 'skipped').length],
+        ];
+
+        await exportStandardExcel({
+          reportTitle: projectName,
+          subtitleLine: `Project Schedule — ${projectType}${projectCode ? ` · ${projectCode}` : ''}`,
+          metaLine: `Exported ${format(new Date(), 'dd MMM yyyy HH:mm')}`,
+          filenamePrefix: `project-schedule-${projectCode ?? projectName.replace(/\s+/g, '-').toLowerCase()}`,
+          mainSheet: {
+            sheetName: 'Project Schedule',
+            headers: ['ID', 'Task Name', '% Done', 'Duration', 'Start', 'Finish', 'Predecessors', 'Status'],
+            rows,
+            colWidths: { 0: 8, 1: 42, 2: 10, 3: 12, 4: 16, 5: 16, 6: 28, 7: 14 },
+          },
+          summarySheet: {
+            title: 'Stage Summary',
+            rows: summaryRows,
+            colWidths: [28, 14],
+          },
+        });
+        toast({ title: 'Excel exported successfully' });
+        return;
+      }
+
+      // PDF / Word path (unchanged)
       const extras: Record<string, any> = {};
       allDefaultStages.forEach(s => {
         extras[s.id] = {
@@ -212,9 +313,17 @@ function ExportButton({ projectId, projectName, projectType, projectCode, flow, 
           Export
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onClick={() => doExport('pdf')}><FileText className="h-3.5 w-3.5 mr-2 text-red-500" />Export PDF</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => doExport('docx')}><FileText className="h-3.5 w-3.5 mr-2 text-blue-500" />Export Word (.docx)</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={() => doExport('xlsx')}>
+          <Download className="h-3.5 w-3.5 mr-2 text-emerald-600" />Export Excel (.xlsx)
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => doExport('pdf')}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-red-500" />Export PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => doExport('docx')}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-blue-500" />Export Word (.docx)
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
