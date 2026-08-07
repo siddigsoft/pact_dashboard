@@ -79,6 +79,7 @@ import { ProjectChatDrawer } from './ProjectChatDrawer';
 import { useProjectChatDrawer } from '@/hooks/use-project-chat';
 
 import { Project, calcMemberTotalCost } from '@/types/project';
+import { normalizeRole } from '@/utils/roleMapping';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -291,7 +292,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     closeDrawer: closeChatDrawer,
     loading: chatDrawerLoading,
   } = useProjectChatDrawer(project, currentUser?.id ?? '');
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole, effectiveRole } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateProjectCache = useUpdateProjectInCache();
@@ -317,12 +318,20 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
    * Limited project viewers: Employee, FOM, Country Director, HR.
    * They can only see projects they are members of, and they never see
    * financial tabs (Costs, Fees, Budget, Reports).
+   *
+   * IMPORTANT: we check only the PRIMARY effective role (profiles.role or the
+   * viewAs role), NOT all secondary user_roles table entries.  An employee
+   * who was also added to user_roles with a 'projectManager' entry for a
+   * project-level assignment must still be treated as an Employee for the
+   * purpose of section visibility — otherwise they see all 15 financial tabs.
    */
+  const _primaryRole = normalizeRole(effectiveRole ?? '') ?? '';
+  const _PRIVILEGED = new Set(['superAdmin', 'admin', 'projectManager', 'seniorOperationsLead', 'ict', 'financialAdmin', 'auditor']);
+  const _LIMITED    = new Set(['employee', 'fom', 'countryDirector', 'hr']);
   const isLimitedProjectViewer =
     !isSuperAdmin() &&
-    !hasAnyRole(['admin', 'projectManager', 'seniorOperationsLead', 'sol', 'ict']) &&
-    hasAnyRole(['employee', 'fom', 'countryDirector', 'hr',
-                'Employee', 'Field Operation Manager (FOM)', 'Country Director', 'HR']);
+    !_PRIVILEGED.has(_primaryRole) &&
+    _LIMITED.has(_primaryRole);
 
   /** Tabs that limited-viewer roles are allowed to see (no financial data) */
   const LIMITED_VIEWER_TABS = new Set([
