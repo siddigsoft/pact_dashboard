@@ -11,7 +11,11 @@
 -- -------
 -- Confirm that restricted-role callers (employee, fom, countryDirector, hr)
 -- see ONLY the projects they are members of across every data path, and that
--- privileged-role callers retain full visibility.
+-- privileged-role callers (Admin, projectManager) retain full visibility.
+--
+-- Task 337 addition: a projectManager user (User H) is explicitly tested to
+-- confirm that a regression accidentally moving 'projectManager' into the
+-- restricted IN-list would be caught immediately.
 --
 -- Paths covered
 -- -------------
@@ -29,6 +33,8 @@
 --   User E  – privileged role (Admin),            full visibility
 --   User F  – restricted role (countryDirector),  has active row in project_team_members for α
 --   User G  – restricted role (countryDirector),  NOT a member of any test project
+--   User H  – privileged role (projectManager),   NOT a member of either test project;
+--             must see both α and β (Task 337: guards against role being moved to restricted)
 --
 -- How to run
 -- ----------
@@ -76,6 +82,9 @@ $$ LANGUAGE plpgsql;
 --   e2e00005-…-0005  → User E  Admin           (privileged — sees everything)
 --   e2e00006-…-0006  → User F  countryDirector (project_team_members row on project α)
 --   e2e00007-…-0007  → User G  countryDirector (NOT a member of any test project)
+--   e2e00008-…-0008  → User H  projectManager  (privileged — NOT a member of either test
+--                                               project; must still see both α and β via
+--                                               the NOT-IN privileged clause; Task 337)
 --
 -- Test-project UUIDs:
 --   e2eaaaaa-…-0001  → Project α  (User A, B, C are members)
@@ -94,7 +103,8 @@ VALUES
   ('e2e00004-0000-4000-8000-000000000004'::uuid, 'authenticated', 'e2e_user_d@test.internal', '', now(), now(), 'authenticated'),
   ('e2e00005-0000-4000-8000-000000000005'::uuid, 'authenticated', 'e2e_user_e@test.internal', '', now(), now(), 'authenticated'),
   ('e2e00006-0000-4000-8000-000000000006'::uuid, 'authenticated', 'e2e_user_f@test.internal', '', now(), now(), 'authenticated'),
-  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'authenticated', 'e2e_user_g@test.internal', '', now(), now(), 'authenticated')
+  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'authenticated', 'e2e_user_g@test.internal', '', now(), now(), 'authenticated'),
+  ('e2e00008-0000-4000-8000-000000000008'::uuid, 'authenticated', 'e2e_user_h@test.internal', '', now(), now(), 'authenticated')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO profiles (id, email, full_name, role)
@@ -105,7 +115,8 @@ VALUES
   ('e2e00004-0000-4000-8000-000000000004'::uuid, 'e2e_user_d@test.internal', 'E2E User D (employee, non-member)',          'employee'),
   ('e2e00005-0000-4000-8000-000000000005'::uuid, 'e2e_user_e@test.internal', 'E2E User E (Admin)',                         'Admin'),
   ('e2e00006-0000-4000-8000-000000000006'::uuid, 'e2e_user_f@test.internal', 'E2E User F (countryDirector, ptm)',          'countryDirector'),
-  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'e2e_user_g@test.internal', 'E2E User G (countryDirector, non-member)',   'countryDirector')
+  ('e2e00007-0000-4000-8000-000000000007'::uuid, 'e2e_user_g@test.internal', 'E2E User G (countryDirector, non-member)',   'countryDirector'),
+  ('e2e00008-0000-4000-8000-000000000008'::uuid, 'e2e_user_h@test.internal', 'E2E User H (projectManager, non-member)',   'projectManager')
 ON CONFLICT (id) DO UPDATE
   SET full_name = EXCLUDED.full_name,
       role      = EXCLUDED.role;
@@ -236,6 +247,24 @@ BEGIN
       )
     );
   PERFORM pg_temp.assert_eq('[table RLS] Admin sees both test projects', v_count, 2);
+
+  -- ── 1h. User H (projectManager, non-member) sees BOTH test projects ───────
+  --        Uses SET LOCAL ROLE authenticated so the actual deployed
+  --        projects_select RLS policy is enforced — not a hand-copied predicate.
+  --        If a regression adds 'projectManager' to the restricted IN-list the
+  --        real policy blocks User H (who has no membership row) and this
+  --        assertion fails, catching the regression immediately.
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  SET LOCAL ROLE authenticated;
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  SET LOCAL ROLE DEFAULT;
+  PERFORM pg_temp.assert_eq('[table RLS] projectManager (non-member) sees BOTH test projects', v_count, 2);
 
   -- ── 1b. User A (employee, projectManagerId of α) sees only α ─────────────
   PERFORM set_config(
@@ -463,6 +492,17 @@ BEGIN
   WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
   PERFORM pg_temp.assert_eq('[get_all_projects] Admin sees both test projects', v_count, 2);
 
+  -- ── 2h. User H (projectManager, non-member) sees BOTH test projects ───────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_all_projects()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_all_projects] projectManager (non-member) sees BOTH test projects', v_count, 2);
+
   -- ── 2b. User A (employee, projectManagerId of α) sees only α ─────────────
   PERFORM set_config(
     'request.jwt.claims',
@@ -575,6 +615,17 @@ BEGIN
   WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
   PERFORM pg_temp.assert_eq('[get_projects_for_analytics] Admin sees both test projects', v_count, 2);
 
+  -- ── 3h. User H (projectManager, non-member) sees BOTH test projects ───────
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM json_array_elements(get_projects_for_analytics()) AS row
+  WHERE row->>'name' IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  PERFORM pg_temp.assert_eq('[get_projects_for_analytics] projectManager (non-member) sees BOTH test projects', v_count, 2);
+
   -- ── 3b. User A (employee, PM of α) sees only α ───────────────────────────
   PERFORM set_config(
     'request.jwt.claims',
@@ -678,6 +729,23 @@ BEGIN
   FROM get_project_professional_fees()
   WHERE project_name = '__e2e_rls_test_alpha__';
   PERFORM pg_temp.assert_eq('[get_project_professional_fees] Admin sees fee row on α', v_count, 1);
+
+  -- ── 4h. User H (projectManager, non-member) sees fee row on α ────────────
+  --        Privileged roles bypass the restricted filter so α's fee row is visible.
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  SELECT COUNT(*) INTO v_count
+  FROM get_project_professional_fees()
+  WHERE project_name = '__e2e_rls_test_alpha__';
+  PERFORM pg_temp.assert_eq('[get_project_professional_fees] projectManager (non-member) sees α fee', v_count, 1);
+
+  SELECT COUNT(*) INTO v_count
+  FROM get_project_professional_fees()
+  WHERE project_name = '__e2e_rls_test_beta__';
+  PERFORM pg_temp.assert_eq('[get_project_professional_fees] projectManager (non-member) — ZERO fee rows from β (β has none)', v_count, 0);
 
   -- ── 4b. User B (fom, teamComposition member of α) sees the fee row ────────
   PERFORM set_config(
@@ -804,6 +872,31 @@ BEGIN
       )
     );
   PERFORM pg_temp.assert_eq('[update RLS] Admin can target α for UPDATE', v_count, 1);
+
+  -- ── 5h. User H (projectManager, non-member) — UPDATE USING + WITH CHECK ───
+  --        Uses SET LOCAL ROLE authenticated to exercise the actual deployed
+  --        UPDATE USING expression (visible rows) and WITH CHECK (updated row
+  --        still satisfies the policy).  A copied predicate cannot do this.
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  -- USING: count rows the policy makes visible as update targets
+  SET LOCAL ROLE authenticated;
+  SELECT COUNT(*) INTO v_count
+  FROM projects
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  SET LOCAL ROLE DEFAULT;
+  PERFORM pg_temp.assert_eq('[update RLS] projectManager (non-member) USING sees BOTH projects', v_count, 2);
+
+  -- WITH CHECK: no-op UPDATE (set updated_at to itself); both rows must be affected
+  SET LOCAL ROLE authenticated;
+  UPDATE projects SET updated_at = updated_at
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  SET LOCAL ROLE DEFAULT;
+  PERFORM pg_temp.assert_eq('[update RLS] projectManager (non-member) UPDATE affected BOTH projects (WITH CHECK)', v_count, 2);
 
   -- ── 5b. User A (employee, PM of α) can target project α for UPDATE ────────
   PERFORM set_config(
@@ -1054,6 +1147,25 @@ BEGIN
       )
     );
   PERFORM pg_temp.assert_eq('[delete RLS] countryDirector (non-member) BLOCKED from DELETE on α', v_count, 0);
+
+  -- ── 6h. User H (projectManager, non-member) can DELETE BOTH projects ──────
+  --        Placed last so the DELETE does not invalidate earlier assertions.
+  --        Uses SET LOCAL ROLE authenticated so the actual deployed
+  --        projects_delete RLS policy is enforced.  A regression adding
+  --        'projectManager' to the restricted IN-list would block User H (who
+  --        is not the PM of either test project) and make this assertion fail.
+  --        The enclosing ROLLBACK ensures the rows are never actually removed.
+  PERFORM set_config(
+    'request.jwt.claims',
+    json_build_object('sub', 'e2e00008-0000-4000-8000-000000000008')::text,
+    true
+  );
+  SET LOCAL ROLE authenticated;
+  DELETE FROM projects
+  WHERE name IN ('__e2e_rls_test_alpha__', '__e2e_rls_test_beta__');
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  SET LOCAL ROLE DEFAULT;
+  PERFORM pg_temp.assert_eq('[delete RLS] projectManager (non-member) DELETE affected BOTH projects', v_count, 2);
 
   ---------------------------------------------------------------------------
   RAISE NOTICE '✅  All end-to-end projects RLS tests passed.';
