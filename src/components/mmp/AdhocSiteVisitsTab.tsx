@@ -714,6 +714,18 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const { error } = await supabase.from('mmp_site_entries').insert(entries);
       if (error) throw error;
 
+      // Sync the live count back to mmp_files.entries so the list card stays accurate
+      const { count: liveCount } = await supabase
+        .from('mmp_site_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('mmp_file_id', mmpFileId);
+      if (liveCount !== null) {
+        await supabase
+          .from('mmp_files')
+          .update({ entries: liveCount })
+          .eq('id', mmpFileId);
+      }
+
       const destLabel = selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE
         ? `into ${selectedMmpLabel}`
         : 'into ad-hoc bucket';
