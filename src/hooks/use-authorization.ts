@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -17,19 +18,29 @@ export const useAuthorization = () => {
     isSuperAdminUser = false;
   }
 
-  let viewAsRole: string | null = null;
-  let viewAsMode: 'role' | 'user' | null = null;
-  let viewAsUserId: string | null = null;
+  let viewAsRoleRaw: string | null = null;
+  let viewAsModeRaw: 'role' | 'user' | null = null;
+  let viewAsUserIdRaw: string | null = null;
   try {
     const viewAsCtx = useViewAs();
-    viewAsRole = viewAsCtx?.viewAs?.role ?? null;
-    viewAsMode = viewAsCtx?.viewAs?.mode ?? null;
-    viewAsUserId = viewAsCtx?.viewAs?.userId ?? null;
+    viewAsRoleRaw = viewAsCtx?.viewAs?.role ?? null;
+    viewAsModeRaw = viewAsCtx?.viewAs?.mode ?? null;
+    viewAsUserIdRaw = viewAsCtx?.viewAs?.userId ?? null;
   } catch {
-    viewAsRole = null;
-    viewAsMode = null;
-    viewAsUserId = null;
+    viewAsRoleRaw = null;
+    viewAsModeRaw = null;
+    viewAsUserIdRaw = null;
   }
+
+  // Everything below is memoized so every returned function keeps a stable
+  // identity between renders. Without this, `hasAnyRole` etc. get a new
+  // reference on every render, and any useEffect that lists them in its deps
+  // re-fires on every render (OperationsZone previously looped infinitely,
+  // flooding the DB with hundreds of thousands of queries).
+  return useMemo(() => {
+  let viewAsRole = viewAsRoleRaw;
+  let viewAsMode = viewAsModeRaw;
+  let viewAsUserId = viewAsUserIdRaw;
 
   // SECURITY GUARD: viewAs must only be honoured for real SuperAdmins.
   // If a previous SA session left 'pact-view-as' in sessionStorage, a non-SA
@@ -611,4 +622,5 @@ export const useAuthorization = () => {
     // Never use for DB writes — those should always record the real user's role.
     effectiveRole: (viewAsRole ?? currentUser?.role ?? null) as string | null,
   };
+  }, [currentUser, hasPermission, getUserPermissions, isSuperAdminUser, viewAsRoleRaw, viewAsModeRaw, viewAsUserIdRaw]);
 };
