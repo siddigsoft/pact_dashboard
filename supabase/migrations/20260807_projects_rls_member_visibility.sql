@@ -16,6 +16,28 @@
 -- ── Enable RLS ─────────────────────────────────────────────────────────────
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
+-- ── NULL / MISSING ROLE SAFETY ANALYSIS ────────────────────────────────────
+--
+-- This policy is intentionally deny-by-default for two edge cases that arise
+-- before a user's profile is fully set up:
+--
+--   Case A — profile row exists but role IS NULL
+--     • Clause 1 (NOT IN):  NULL NOT IN (...) → NULL → treated as FALSE by
+--       Postgres.  The EXISTS returns no row, so clause 1 is false.
+--     • Clause 2 (IN):      NULL IN (...)     → NULL → treated as FALSE.
+--       The EXISTS returns no row, so clause 2 is also false.
+--     ➜ Result: no rows visible.  Correct — deny until a role is assigned.
+--
+--   Case B — profile row is missing entirely (auth user but no profiles row)
+--     • Both EXISTS subqueries find no matching profile row → both return
+--       false immediately.
+--     ➜ Result: no rows visible.  Correct — deny until the profile is created.
+--
+-- These outcomes are intentional.  Administrators should assign a role (or
+-- ensure the profile trigger has run) before the user is expected to access
+-- the projects list.  See supabase/RUNBOOK_projects_rls_null_role.md for
+-- manual SQL verification steps.
+--
 -- ── SELECT ─────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "projects_select" ON projects;
 
@@ -25,6 +47,8 @@ CREATE POLICY "projects_select"
   USING (
     -- 1. Privileged roles: full, unrestricted read access.
     --    All roles NOT in the restricted list fall through here too.
+    --    NOTE: if pr.role IS NULL, NOT IN evaluates to NULL (unknown) and
+    --    Postgres treats it as FALSE — so null-role users are correctly denied.
     EXISTS (
       SELECT 1 FROM profiles pr
       WHERE pr.id = (SELECT auth.uid())
@@ -33,6 +57,8 @@ CREATE POLICY "projects_select"
     -- 2. Restricted roles: access only when the user is a project member.
     OR (
       -- Caller is a restricted role …
+      -- NOTE: if pr.role IS NULL, IN evaluates to NULL → FALSE, so
+      -- null-role users never satisfy this clause either.
       EXISTS (
         SELECT 1 FROM profiles pr
         WHERE pr.id = (SELECT auth.uid())
