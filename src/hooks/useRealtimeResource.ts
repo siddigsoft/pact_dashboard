@@ -73,6 +73,20 @@ export function useRealtimeResource<T = any>(
     }
   }, []);
 
+  // Coalesce onRefresh calls: bulk imports fire hundreds of events in a burst,
+  // and each onRefresh is typically a full reload. One trailing refresh is enough.
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (!handlersRef.current.onRefresh || refreshTimerRef.current) return;
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      handlersRef.current.onRefresh?.();
+    }, 1000);
+  }, []);
+  useEffect(() => () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (!enabled) {
       setIsSubscribed(false);
@@ -86,9 +100,7 @@ export function useRealtimeResource<T = any>(
         if (handlersRef.current.onInsert) {
           handlersRef.current.onInsert(item);
         }
-        if (handlersRef.current.onRefresh) {
-          handlersRef.current.onRefresh();
-        }
+        scheduleRefresh();
       },
       onUpdate: (data) => {
         setLastEventAt(new Date());
@@ -96,9 +108,7 @@ export function useRealtimeResource<T = any>(
         if (handlersRef.current.onUpdate) {
           handlersRef.current.onUpdate(data);
         }
-        if (handlersRef.current.onRefresh) {
-          handlersRef.current.onRefresh();
-        }
+        scheduleRefresh();
       },
       onDelete: (item) => {
         setLastEventAt(new Date());
@@ -106,9 +116,7 @@ export function useRealtimeResource<T = any>(
         if (handlersRef.current.onDelete) {
           handlersRef.current.onDelete(item);
         }
-        if (handlersRef.current.onRefresh) {
-          handlersRef.current.onRefresh();
-        }
+        scheduleRefresh();
       },
       onAny: (payload) => {
         if (handlersRef.current.onAny) {

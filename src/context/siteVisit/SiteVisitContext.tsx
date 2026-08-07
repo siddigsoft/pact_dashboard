@@ -13,6 +13,7 @@ import { useWallet } from '../wallet/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useSiteVisitsQuery, siteVisitQueryKeys } from './siteVisitQueries';
+import { mapMMPSiteEntryToSiteVisit } from './mmpSiteEntriesAdapter';
 import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
@@ -52,6 +53,15 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all });
   }, [queryClient]);
 
+  // Replace one visit in the cache. Mutations already get the updated row back,
+  // so a full-table refetch per button click is wasted work (it was the single
+  // hottest query in the app).
+  const patchSiteVisit = useCallback((visit: SiteVisit) => {
+    queryClient.setQueryData<SiteVisit[]>(siteVisitQueryKeys.list(), (prev) =>
+      prev ? prev.map((v) => (v.id === visit.id ? visit : v)) : prev
+    );
+  }, [queryClient]);
+
   useEffect(() => {
     if (siteVisitsQuery.isError && siteVisitsQuery.error) {
       console.error('[SiteVisitContext] Failed to load site visits:', siteVisitsQuery.error);
@@ -61,21 +71,76 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     if (!queriesEnabled) return;
 
+    // Coalesce full refetches — bulk MMP imports fire hundreds of INSERTs in a
+    // burst, and each full refetch pulls the whole table for every connected user.
+    let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleInvalidate = () => {
+      if (invalidateTimer) return;
+      invalidateTimer = setTimeout(() => {
+        invalidateTimer = null;
+        queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all });
+      }, 1500);
+    };
+
     const channel = supabase
       .channel('site_visit_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        () => queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all })
+        { event: 'UPDATE', schema: 'public', table: 'mmp_site_entries' },
+        (payload) => {
+          // Patch the one changed row in place instead of refetching the table.
+          const row = payload.new as any;
+          let patched = false;
+          queryClient.setQueryData<SiteVisit[]>(siteVisitQueryKeys.list(), (prev) => {
+            if (!prev || !row?.id) return prev;
+            const idx = prev.findIndex((v) => v.id === row.id);
+            if (idx === -1) return prev;
+            patched = true;
+            const old = prev[idx];
+            const mapped = mapMMPSiteEntryToSiteVisit(row);
+            const next = [...prev];
+            // realtime rows carry no mmp_files join — keep file-derived fields
+            next[idx] = {
+              ...mapped,
+              mmpDetails: old.mmpDetails,
+              projectName: old.projectName,
+              hub: mapped.hub || old.hub,
+              cpName: mapped.cpName || old.cpName,
+              coordinatorVerifiedAt: old.coordinatorVerifiedAt,
+            };
+            return next;
+          });
+          if (!patched) scheduleInvalidate();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'mmp_site_entries' },
+        scheduleInvalidate
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'mmp_site_entries' },
+        (payload) => {
+          const id = (payload.old as any)?.id;
+          if (!id) {
+            scheduleInvalidate();
+            return;
+          }
+          queryClient.setQueryData<SiteVisit[]>(siteVisitQueryKeys.list(), (prev) =>
+            prev ? prev.filter((v) => v.id !== id) : prev
+          );
+        }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'site_visits' },
-        () => queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all })
+        scheduleInvalidate
       )
       .subscribe();
 
     return () => {
+      if (invalidateTimer) clearTimeout(invalidateTimer);
       supabase.removeChannel(channel);
     };
   }, [queryClient, queriesEnabled]);
@@ -172,7 +237,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         try {
           const { data: activeEntries } = await supabase
             .from('mmp_site_entries')
-            .select('additional_data, status');
+            .select('additional_data, status')
+            .in('status', ['assigned', 'inProgress', 'in_progress']);
           const counts: Record<string, number> = {};
           (activeEntries || []).forEach((r: any) => {
             const ad = r.additional_data || {};
@@ -220,7 +286,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             assignedAt: new Date().toISOString(),
           });
 
-          refreshSiteVisits();
+          patchSiteVisit(updatedVisit);
 
           addNotification({
             userId: best.user.id,
@@ -248,7 +314,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               assignedAt: new Date().toISOString(),
             });
 
-            refreshSiteVisits();
+            patchSiteVisit(updatedVisit);
 
             addNotification({
               userId: bestState.user.id,
@@ -276,7 +342,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 assignedAt: new Date().toISOString(),
               });
 
-              refreshSiteVisits();
+              patchSiteVisit(updatedVisit);
 
               addNotification({
                 userId: bestHub.user.id,
@@ -301,7 +367,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 assignedAt: new Date().toISOString(),
               });
 
-              refreshSiteVisits();
+              patchSiteVisit(updatedVisit);
 
               addNotification({
                 userId: bestAny.user.id,
@@ -354,7 +420,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         },
       });
 
-      refreshSiteVisits();
+      patchSiteVisit(updatedVisit);
 
       const managers = users.filter(u => 
         ['admin', 'ict', 'fom'].includes(u.role)
@@ -412,7 +478,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         assignedAt: new Date().toISOString(),
       });
 
-      refreshSiteVisits();
+      patchSiteVisit(updatedVisit);
 
       // Notify the assignee with fee and payment schedule details
       addNotification({
@@ -465,8 +531,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return false;
       }
 
-      await updateSiteVisitInDb(siteVisitId, { status: 'inProgress' });
-      refreshSiteVisits();
+      const updatedVisit = await updateSiteVisitInDb(siteVisitId, { status: 'inProgress' });
+      patchSiteVisit(updatedVisit);
 
       const supervisors = users.filter(u => normalizeRole(u.role) === 'supervisor');
       supervisors.forEach(supervisor => {
@@ -550,16 +616,16 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const now = new Date().toISOString();
 
       try {
-        await updateSiteVisitInDb(siteVisitId, {
+        const updatedVisit = await updateSiteVisitInDb(siteVisitId, {
           status: 'completed',
           completedAt: now,
           notes: data.notes,
           attachments: data.attachments,
         });
+        patchSiteVisit(updatedVisit);
       } catch (persistErr) {
         console.warn('Failed to persist completed status:', persistErr);
       }
-      refreshSiteVisits();
 
       const assignedUserId = siteVisit.assignedTo;
       const user = users.find(u => u.id === assignedUserId);
@@ -758,8 +824,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return false;
       }
 
-      await updateSiteVisitInDb(siteVisitId, { rating: data.rating, notes: data.notes });
-      refreshSiteVisits();
+      const updatedVisit = await updateSiteVisitInDb(siteVisitId, { rating: data.rating, notes: data.notes });
+      patchSiteVisit(updatedVisit);
 
       const assignedUserId = siteVisit.assignedTo;
       const user = users.find(u => u.id === assignedUserId);
@@ -804,7 +870,9 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const deleteSiteVisit = async (siteVisitId: string): Promise<boolean> => {
     try {
       await deleteSiteVisitInDb(siteVisitId);
-      refreshSiteVisits();
+      queryClient.setQueryData<SiteVisit[]>(siteVisitQueryKeys.list(), (prev) =>
+        prev ? prev.filter((v) => v.id !== siteVisitId) : prev
+      );
       toast({
         title: "Site visit deleted",
         description: `The site visit has been removed.`,
