@@ -26,6 +26,8 @@ interface Props {
   canEdit: boolean;
   /** User IDs to notify (email + in-app) when an assignee clicks Acknowledge */
   notifyUserIds?: string[];
+  /** Project team member IDs — shown immediately as quick-pick in the assign popover */
+  teamUserIds?: string[];
   /** Stage planned start — constrains assignee work-period start date */
   stageStart?: string | null;
   /** Stage planned end — constrains assignee work-period end date */
@@ -51,6 +53,23 @@ function useProfileSearch(query: string) {
     },
     enabled: query.length >= 2,
     staleTime: 60_000,
+  });
+}
+
+function useTeamMemberProfiles(teamUserIds: string[]) {
+  return useQuery({
+    queryKey: ['team_member_profiles', teamUserIds.slice().sort().join(',')],
+    queryFn: async () => {
+      if (!teamUserIds.length) return [];
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .in('id', teamUserIds)
+        .order('full_name');
+      return data ?? [];
+    },
+    enabled: teamUserIds.length > 0,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -101,7 +120,8 @@ function initials(name: string) {
 export function StageAssignees({
   projectId, stageId, stageLabel = 'Stage', projectName = 'Project',
   currentUserId, assignedByName = 'A manager', canEdit, notifyUserIds = [],
-  stageStart, stageEnd, workingDays = DEFAULT_WORKING_DAYS, calendarExceptions = [],
+  teamUserIds = [], stageStart, stageEnd,
+  workingDays = DEFAULT_WORKING_DAYS, calendarExceptions = [],
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -115,6 +135,9 @@ export function StageAssignees({
   const [assignStart, setAssignStart] = useState('');
   const [assignEnd, setAssignEnd] = useState('');
 
+  // Project team members — shown immediately without typing
+  const { data: teamProfiles = [] } = useTeamMemberProfiles(teamUserIds);
+  // Global search — only kicks in when user types 2+ chars
   const { data: searchResults = [] } = useProfileSearch(search);
 
   const resetPopover = () => {
@@ -260,42 +283,86 @@ export function StageAssignees({
                       Assign to "{stageLabel}"
                     </p>
                     <Input
-                      placeholder="Search staff by name..."
+                      placeholder="Search all staff by name…"
                       value={search}
                       onChange={e => setSearch(e.target.value)}
                       className="h-8 text-sm mb-2"
                       autoFocus
                     />
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {searchResults.length === 0 && search.length >= 2 && (
-                        <p className="text-xs text-muted-foreground px-2 py-1">No results</p>
-                      )}
+                    <div className="space-y-1 max-h-56 overflow-y-auto">
+                      {/* When no search typed: show project team members */}
                       {search.length < 2 && (
-                        <p className="text-[10px] text-muted-foreground px-2 py-1">Type at least 2 characters…</p>
+                        <>
+                          {teamProfiles.length > 0 && (
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 pb-0.5">
+                              Team Members
+                            </p>
+                          )}
+                          {teamProfiles.length === 0 && (
+                            <p className="text-[10px] text-muted-foreground px-2 py-1">
+                              No team members found — type a name to search all staff.
+                            </p>
+                          )}
+                          {teamProfiles.map((p: any) => {
+                            const alreadyAssigned = assignees.some(a => a.userId === p.id);
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded text-sm ${alreadyAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted'}`}
+                                onClick={() => !alreadyAssigned && handlePickUser(p.id, p.full_name)}
+                                disabled={isAdding || alreadyAssigned}
+                              >
+                                <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                  {p.full_name?.charAt(0) ?? '?'}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium truncate">{p.full_name}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                                </div>
+                                {alreadyAssigned && (
+                                  <span className="text-[9px] text-emerald-600 font-medium flex-shrink-0">✓ Assigned</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </>
                       )}
-                      {searchResults.map((p: any) => {
-                        const alreadyAssigned = assignees.some(a => a.userId === p.id);
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded text-sm ${alreadyAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted'}`}
-                            onClick={() => !alreadyAssigned && handlePickUser(p.id, p.full_name)}
-                            disabled={isAdding || alreadyAssigned}
-                          >
-                            <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                              {p.full_name?.charAt(0) ?? '?'}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate">{p.full_name}</p>
-                              <p className="text-[10px] text-muted-foreground truncate capitalize">{p.role?.replace(/_/g, ' ')}</p>
-                            </div>
-                            {alreadyAssigned && (
-                              <span className="text-[9px] text-emerald-600 font-medium flex-shrink-0">✓ Assigned</span>
-                            )}
-                          </button>
-                        );
-                      })}
+
+                      {/* When typing: show global search results */}
+                      {search.length >= 2 && (
+                        <>
+                          {searchResults.length === 0 && (
+                            <p className="text-xs text-muted-foreground px-2 py-1">No results</p>
+                          )}
+                          {searchResults.map((p: any) => {
+                            const alreadyAssigned = assignees.some(a => a.userId === p.id);
+                            const isTeamMember = teamUserIds.includes(p.id);
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded text-sm ${alreadyAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted'}`}
+                                onClick={() => !alreadyAssigned && handlePickUser(p.id, p.full_name)}
+                                disabled={isAdding || alreadyAssigned}
+                              >
+                                <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                  {p.full_name?.charAt(0) ?? '?'}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium truncate">{p.full_name}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                                </div>
+                                {alreadyAssigned ? (
+                                  <span className="text-[9px] text-emerald-600 font-medium flex-shrink-0">✓ Assigned</span>
+                                ) : isTeamMember ? (
+                                  <span className="text-[9px] text-blue-600 font-medium flex-shrink-0">Team</span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </>
+                      )}
                     </div>
                   </>
                 )}

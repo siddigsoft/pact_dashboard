@@ -2061,6 +2061,7 @@ export function FlowTab({
                           assignedByName={currentUser?.fullName ?? 'A manager'}
                           canEdit={canEditFlow}
                           notifyUserIds={teamUserIds ?? []}
+                          teamUserIds={teamUserIds ?? []}
                           stageStart={plannedStart ?? undefined}
                           stageEnd={plannedEnd ?? undefined}
                           workingDays={localWorkingDays}
