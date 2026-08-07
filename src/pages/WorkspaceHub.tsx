@@ -1312,6 +1312,27 @@ export default function WorkspaceHub() {
     staleTime: 300_000,
   });
 
+  // Deep-link: /workspace?folder=<id> opens that folder in the tree
+  useEffect(() => {
+    const folderId = new URLSearchParams(location.search).get('folder');
+    if (!folderId || folders.length === 0) return;
+    const target = folders.find(f => f.id === folderId);
+    if (!target) return;
+
+    setSelectedFolderId(folderId);
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      let current: WFolder | undefined = target;
+      while (current) {
+        next.add(current.id);
+        current = current.parent_folder_id
+          ? folders.find(f => f.id === current!.parent_folder_id)
+          : undefined;
+      }
+      return next;
+    });
+  }, [location.search, folders]);
+
   const { data: allFiles = [], refetch: refetchFiles } = useQuery<WFile[]>({
     queryKey: ['workspace_files', userId],
     queryFn: async () => {

@@ -126,6 +126,29 @@ async function upsertWorkspaceFile(params: {
  * Projects / {Project Name} / {Uploader Name} / file
  * Non-throwing callers should wrap; this throws on hard failures.
  */
+export async function ensureProjectWorkspaceFolder(
+  projectName: string,
+  createdBy: string | null,
+): Promise<{ folderId: string; created: boolean }> {
+  const safeName = sanitizeFolderName(projectName);
+  const projectsRootId = await ensureWorkspaceFolder(PROJECTS_ROOT, null, createdBy);
+
+  const { data: existing } = await supabase
+    .from('workspace_folders')
+    .select('id')
+    .ilike('name', safeName)
+    .eq('parent_folder_id', projectsRootId)
+    .eq('archived', false)
+    .limit(1);
+
+  if (existing?.[0]?.id) {
+    return { folderId: existing[0].id as string, created: false };
+  }
+
+  const folderId = await ensureWorkspaceFolder(projectName, projectsRootId, createdBy);
+  return { folderId, created: true };
+}
+
 export async function mirrorProjectDocumentToWorkspace(input: {
   projectId: string;
   uploaderId: string;
