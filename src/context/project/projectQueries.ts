@@ -130,10 +130,15 @@ export async function fetchProjectActivities(projectId: string): Promise<Project
   return mapActivitiesFromRows(rows, subActivitiesData || [], assignmentsData || []);
 }
 
-/** Keep lazily loaded activities when the list refetch returns empty arrays. */
+/**
+ * Keep lazily loaded activities when the list refetch returns empty arrays —
+ * UNLESS the per-project activities cache was already set (which means the
+ * activities were explicitly loaded, and the current value in cache is authoritative).
+ */
 export function mergeProjectsPreserveActivities(
   fresh: Project[],
-  prev: Project[] | undefined
+  prev: Project[] | undefined,
+  getActivitiesCache?: (id: string) => ProjectActivity[] | undefined
 ): Project[] {
   if (!prev?.length) return fresh;
   const prevById = new Map(prev.map((p) => [p.id, p]));
@@ -142,6 +147,16 @@ export function mergeProjectsPreserveActivities(
     const priorLen = prior?.activities?.length ?? 0;
     const freshLen = p.activities?.length ?? 0;
     if (priorLen > 0 && freshLen === 0) {
+      // If the per-project activities cache was ever set, use it — it reflects the
+      // real current DB state (even if that state is now empty after a delete).
+      if (getActivitiesCache) {
+        const cached = getActivitiesCache(p.id);
+        if (cached !== undefined) {
+          return { ...p, activities: cached };
+        }
+      }
+      // Cache was never set → activities haven't been loaded for this project yet;
+      // preserve the previously merged activities so they don't flicker away.
       return { ...p, activities: prior!.activities };
     }
     return p;
@@ -157,7 +172,9 @@ export function useProjectsQuery(enabled = true) {
     queryFn: async () => {
       const fresh = await fetchProjects();
       const prev = queryClient.getQueryData<Project[]>(projectQueryKeys.all);
-      return mergeProjectsPreserveActivities(fresh, prev);
+      return mergeProjectsPreserveActivities(fresh, prev, (id) =>
+        queryClient.getQueryData<ProjectActivity[]>(projectQueryKeys.activities(id))
+      );
     },
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
@@ -192,7 +209,9 @@ export function useUpdateProjectInCache() {
       if (idx === -1) return [updatedProject, ...old];
       return old.map((p) => (p.id === updatedProject.id ? { ...p, ...updatedProject } : p));
     });
-    if (updatedProject.activities?.length) {
+    // Always update the per-project activities cache — even when the list is now
+    // empty (e.g. after a delete), so mergeProjectsPreserveActivities can trust it.
+    if (updatedProject.activities !== undefined) {
       queryClient.setQueryData(
         projectQueryKeys.activities(updatedProject.id),
         updatedProject.activities

@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { dispatchNotification } from '@/lib/notify';
 import { useQueryClient } from '@tanstack/react-query';
+import { useProjectActivitiesQuery, useUpdateProjectInCache } from '@/context/project/projectQueries';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
@@ -293,6 +294,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const updateProjectCache = useUpdateProjectInCache();
+
+  // Keep the Activity Timeline live: whenever the per-project activities query
+  // refreshes (e.g. after a delete triggers the realtime invalidation), push
+  // the fresh list into the shared project cache so the Overview tab reflects it.
+  const { data: freshActivities } = useProjectActivitiesQuery(project.id);
+  useEffect(() => {
+    if (freshActivities !== undefined) {
+      updateProjectCache({ ...project, activities: freshActivities });
+    }
+  }, [freshActivities]);
   // FOM is no longer a full admin — they get the limited-viewer tab set (no financial tabs)
   const isAdminUser = isSuperAdmin() || hasAnyRole(['admin']);
   const isProjectManagerUser =
