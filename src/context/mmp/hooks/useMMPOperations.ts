@@ -362,7 +362,13 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
 
           if (error) {
             console.error('[MMP Delete] Database delete error:', error);
-            toast.error('Database delete failed. Check permissions/RLS and try again.');
+            const isFkViolation = error.code === '23503' || error.message?.includes('foreign key');
+            toast.error(
+              isFkViolation
+                ? 'Delete blocked by linked data. A database migration must be applied in Supabase Studio — run supabase/migrations/20260807_mmp_delete_fix_combined.sql then try again.'
+                : 'Database delete failed. ' + (error.message ?? 'Unknown error'),
+              { duration: 8000 }
+            );
             return false;
           }
 
