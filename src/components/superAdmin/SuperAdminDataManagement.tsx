@@ -646,36 +646,34 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names — three-layer fallback so names work even before migrations are run:
-      //   1. SECURITY DEFINER RPC (bypasses RLS fully — needs 20260810b migration)
-      //   2. Direct mmp_files query filtered by IDs (works if mmp_files_all_auth policy exists)
-      //   3. Full mmp_files table fetch (catches cases where IDs don't match)
+      // Resolve MMP names — three-layer fallback:
+      //   1. RPC with NO params (SECURITY DEFINER, returns all MMPs, avoids uuid[] cast issue)
+      //   2. Direct mmp_files full fetch (works if bypass policy was applied)
+      //   3. Direct mmp_files filtered by IDs (last resort)
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const mmpNameMap: Record<string, string> = {};
       const fillMap = (rows: any[]) => rows.forEach((m: any) => {
-        mmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
       });
-      // Layer 1: RPC
-      if (uniqueMmpIds.length > 0) {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names', { p_ids: uniqueMmpIds });
+      // Layer 1: RPC without p_ids — avoids uuid[] JSON cast, returns all MMPs via SECURITY DEFINER
+      {
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names');
         if (!rpcErr && (rpcRows || []).length > 0) { fillMap(rpcRows); }
-      } else {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names', {});
-        if (!rpcErr && (rpcRows || []).length > 0) { fillMap(rpcRows); }
+        else if (rpcErr) console.warn('[MMP] RPC get_mmp_names failed:', rpcErr.message);
       }
-      // Layer 2: direct mmp_files query (if RPC didn't populate the map)
-      if (Object.keys(mmpNameMap).length === 0 && uniqueMmpIds.length > 0) {
-        const { data: directRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .in('id', uniqueMmpIds);
-        if ((directRows || []).length > 0) { fillMap(directRows!); }
-      }
-      // Layer 3: full table fetch (last resort — catches RLS-accessible rows without matching IDs)
+      // Layer 2: direct full table fetch (if RPC not deployed yet, works with bypass policy)
       if (Object.keys(mmpNameMap).length === 0) {
         const { data: allMmpRows } = await supabase
           .from('mmp_files').select('id, name, project_name, month, year')
           .order('created_at', { ascending: false }).limit(500);
         if ((allMmpRows || []).length > 0) { fillMap(allMmpRows!); }
+      }
+      // Layer 3: filtered by specific IDs (last resort)
+      if (Object.keys(mmpNameMap).length === 0 && uniqueMmpIds.length > 0) {
+        const { data: directRows } = await supabase
+          .from('mmp_files').select('id, name, project_name, month, year')
+          .in('id', uniqueMmpIds);
+        if ((directRows || []).length > 0) { fillMap(directRows!); }
       }
 
       const enriched = allData.map((site: any) => {
@@ -723,33 +721,30 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names — same three-layer fallback as claimed sites.
+      // Resolve MMP names — same layered approach as claimed sites.
       const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const dispatchedMmpNameMap: Record<string, string> = {};
       const fillDispMap = (rows: any[]) => rows.forEach((m: any) => {
-        dispatchedMmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
       });
-      // Layer 1: RPC
-      if (uniqueDispatchedMmpIds.length > 0) {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names', { p_ids: uniqueDispatchedMmpIds });
-        if (!rpcErr && (rpcRows || []).length > 0) { fillDispMap(rpcRows); }
-      } else {
-        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names', {});
+      // Layer 1: RPC without p_ids (SECURITY DEFINER, no uuid[] cast needed)
+      {
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_mmp_names');
         if (!rpcErr && (rpcRows || []).length > 0) { fillDispMap(rpcRows); }
       }
-      // Layer 2: direct query
-      if (Object.keys(dispatchedMmpNameMap).length === 0 && uniqueDispatchedMmpIds.length > 0) {
-        const { data: directRows } = await supabase
-          .from('mmp_files').select('id, name, project_name, month, year')
-          .in('id', uniqueDispatchedMmpIds);
-        if ((directRows || []).length > 0) { fillDispMap(directRows!); }
-      }
-      // Layer 3: full table fetch
+      // Layer 2: direct full table fetch
       if (Object.keys(dispatchedMmpNameMap).length === 0) {
         const { data: allMmpRows } = await supabase
           .from('mmp_files').select('id, name, project_name, month, year')
           .order('created_at', { ascending: false }).limit(500);
         if ((allMmpRows || []).length > 0) { fillDispMap(allMmpRows!); }
+      }
+      // Layer 3: filtered by IDs
+      if (Object.keys(dispatchedMmpNameMap).length === 0 && uniqueDispatchedMmpIds.length > 0) {
+        const { data: directRows } = await supabase
+          .from('mmp_files').select('id, name, project_name, month, year')
+          .in('id', uniqueDispatchedMmpIds);
+        if ((directRows || []).length > 0) { fillDispMap(directRows!); }
       }
 
       const enriched = allDispatched.map(site => ({
@@ -1749,12 +1744,11 @@ export function SuperAdminDataManagement() {
         mmpOptionMap.set(m.id, m.name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`);
       }
     });
-    // Fallback: for any IDs not yet in mmps (loadMMPs still in flight), use inline name or UUID
+    // Fallback: for any IDs not yet in mmps, use inline-resolved name or short UUID
     claimedSites.forEach(s => {
       if (s.mmp_id && !mmpOptionMap.has(s.mmp_id)) {
-        const label = mmpById[s.mmp_id]?.name || s.mmp_name;
-        if (label) mmpOptionMap.set(s.mmp_id, label);
-        // If still no name, omit from options (UUID labels are not useful)
+        const label = mmpById[s.mmp_id]?.name || s.mmp_name || `MMP-${String(s.mmp_id).slice(0, 8).toUpperCase()}`;
+        mmpOptionMap.set(s.mmp_id, label);
       }
     });
     const mmpOptions = [...mmpOptionMap.entries()]
