@@ -614,39 +614,18 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names directly at load time (don't rely on mmps state which may be RLS-blocked).
-      // Strategy: try targeted IN query first; if that returns nothing, try a full table fetch
-      // (RLS may allow reads but the IN list may not match, e.g. if IDs are null or synthetic).
+      // Resolve MMP names via SECURITY DEFINER RPC — bypasses RLS on mmp_files so super_admin
+      // always gets names without needing a permissive policy. Run the 20260810b migration first.
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const mmpNameMap: Record<string, string> = {};
-      if (uniqueMmpIds.length > 0) {
-        const { data: targeted } = await supabase
-          .from('mmp_files')
-          .select('id, name, project_name')
-          .in('id', uniqueMmpIds);
-        (targeted || []).forEach((m: any) => {
-          mmpNameMap[m.id] = m.name || m.project_name || m.id;
-        });
-        // Fallback: if targeted query returned nothing, fetch all rows the user can see
-        if ((targeted || []).length === 0) {
-          const { data: allMmps } = await supabase
-            .from('mmp_files')
-            .select('id, name, project_name')
-            .order('created_at', { ascending: false })
-            .limit(200);
-          (allMmps || []).forEach((m: any) => {
-            mmpNameMap[m.id] = m.name || m.project_name || m.id;
-          });
-        }
-      } else {
-        // No mmp_file_id on any site — fetch all visible mmp_files so the filter is populated
-        const { data: allMmps } = await supabase
-          .from('mmp_files')
-          .select('id, name, project_name')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        (allMmps || []).forEach((m: any) => {
-          mmpNameMap[m.id] = m.name || m.project_name || m.id;
+      {
+        // Pass specific IDs when available; otherwise fetch all (RPC caps at 500)
+        const rpcArgs = uniqueMmpIds.length > 0
+          ? { p_ids: uniqueMmpIds }
+          : {};
+        const { data: mmpRows } = await supabase.rpc('get_mmp_names', rpcArgs);
+        (mmpRows || []).forEach((m: any) => {
+          mmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
         });
       }
 
@@ -695,16 +674,16 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names at load time (same pattern as claimed sites — mmps state may be RLS-blocked)
+      // Resolve MMP names via SECURITY DEFINER RPC — bypasses RLS on mmp_files.
       const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const dispatchedMmpNameMap: Record<string, string> = {};
-      if (uniqueDispatchedMmpIds.length > 0) {
-        const { data: mmpRows } = await supabase
-          .from('mmp_files')
-          .select('id, name, project_name')
-          .in('id', uniqueDispatchedMmpIds);
+      {
+        const rpcArgs = uniqueDispatchedMmpIds.length > 0
+          ? { p_ids: uniqueDispatchedMmpIds }
+          : {};
+        const { data: mmpRows } = await supabase.rpc('get_mmp_names', rpcArgs);
         (mmpRows || []).forEach((m: any) => {
-          dispatchedMmpNameMap[m.id] = m.name || m.project_name || m.id;
+          dispatchedMmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
         });
       }
 
@@ -2670,7 +2649,6 @@ export function SuperAdminDataManagement() {
                         <TableHead className="font-semibold">State</TableHead>
                         <TableHead className="font-semibold">Locality</TableHead>
                         <TableHead className="font-semibold">Site</TableHead>
-                        <TableHead className="font-semibold">Activity</TableHead>
                         <TableHead className="font-semibold">Claimed By</TableHead>
                         <TableHead className="font-semibold">Claimed At</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
@@ -2719,12 +2697,6 @@ export function SuperAdminDataManagement() {
                                   : (site.site_code || '—')}
                               </p>
                             </div>
-                          </TableCell>
-                          {/* Activity */}
-                          <TableCell>
-                            <Badge variant="outline" className="whitespace-nowrap">
-                              {site.main_activity || '—'}
-                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -2949,7 +2921,6 @@ export function SuperAdminDataManagement() {
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Site</TableHead>
                         <TableHead className="font-semibold">MMP</TableHead>
-                        <TableHead className="font-semibold">Activity</TableHead>
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Hub</TableHead>
                         <TableHead className="font-semibold">Dispatched At</TableHead>
@@ -2980,11 +2951,6 @@ export function SuperAdminDataManagement() {
                                 <span className="text-muted-foreground text-sm">—</span>
                               );
                             })()}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="whitespace-nowrap">
-                              {site.main_activity || 'N/A'}
-                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
