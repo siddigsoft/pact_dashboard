@@ -672,10 +672,24 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
+      // Resolve MMP names at load time (same pattern as claimed sites — mmps state may be RLS-blocked)
+      const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
+      const dispatchedMmpNameMap: Record<string, string> = {};
+      if (uniqueDispatchedMmpIds.length > 0) {
+        const { data: mmpRows } = await supabase
+          .from('mmp_files')
+          .select('id, name, project_name')
+          .in('id', uniqueDispatchedMmpIds);
+        (mmpRows || []).forEach((m: any) => {
+          dispatchedMmpNameMap[m.id] = m.name || m.project_name || m.id;
+        });
+      }
+
       const enriched = allDispatched.map(site => ({
         ...site,
         dispatched_by_name: userMap.get(site.dispatched_by)?.name || 'Unknown',
         main_activity: site.main_activity || site.activity_at_site || null,
+        mmp_name: dispatchedMmpNameMap[site.mmp_file_id] || null,
       }));
 
       setDispatchedSites(enriched);
@@ -1585,7 +1599,8 @@ export function SuperAdminDataManagement() {
         site.dispatched_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         site.state?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         site.locality?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        site.hub_office?.toLowerCase().includes(debouncedSearch.toLowerCase());
+        site.hub_office?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (site as any).mmp_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
 
       const matchesState    = dispatchedStateFilter    === 'all' || site.state         === dispatchedStateFilter;
       const matchesLocality = dispatchedLocalityFilter === 'all' || site.locality      === dispatchedLocalityFilter;
@@ -1609,11 +1624,17 @@ export function SuperAdminDataManagement() {
     )].sort() as string[];
     const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort() as string[];
     const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort() as string[];
-    // Show ALL MMPs in the filter (not just those with dispatched entries)
-    // so the admin can always filter by any cycle, even if it has none in this status.
-    const mmpOptions = mmps.map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
+    // Derive MMP options from dispatched sites data (mmp_name now baked in at load time).
+    // Use mmp_file_id as the filter key so the comparison in filteredDispatchedSites stays correct.
+    const mmpEntries = new Map<string, string>();
+    dispatchedSites.forEach(s => {
+      if (s.mmp_file_id) mmpEntries.set(s.mmp_file_id, (s as any).mmp_name || s.mmp_file_id);
+    });
+    const mmpOptions = [...mmpEntries.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
     return { states, localities, activities, hubs, mmpOptions };
-  }, [dispatchedSites, dispatchedStateFilter, mmps]);
+  }, [dispatchedSites, dispatchedStateFilter]);
 
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
