@@ -837,7 +837,7 @@ export function SuperAdminDataManagement() {
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
-        name: m.name || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
+        name: m.name || m.project_name || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
         month: m.month,
         year: m.year,
         status: m.status,
@@ -2890,7 +2890,7 @@ export function SuperAdminDataManagement() {
                             {(() => {
                               const mmp = site.mmp_id ? mmpById[site.mmp_id] : null;
                               const label = mmp
-                                ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`)
+                                ? (mmp.name || (mmp as any).project_name || (mmp.month && mmp.year ? `MMP ${mmp.month}/${mmp.year}` : null) || `MMP-${site.mmp_id!.slice(0,8).toUpperCase()}`)
                                 : (site.mmp_name || null);
                               return label ? (
                                 <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[140px] truncate block">
