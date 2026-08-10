@@ -82,6 +82,7 @@ interface SiteVisitData {
   locality?: string;
   hub_office?: string;
   mmp_file_id?: string;
+  mmp_name?: string;
 }
 
 interface ClaimedSiteData {
@@ -459,10 +460,23 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
+      // Resolve MMP names via SECURITY DEFINER RPC — bypasses RLS on mmp_files so super_admin
+      // always gets names without needing a permissive policy.
+      const uniqueMmpIds = [...new Set(allSiteVisits.map((sv: any) => sv.mmp_file_id).filter(Boolean))] as string[];
+      const mmpNameMap: Record<string, string> = {};
+      if (uniqueMmpIds.length > 0) {
+        const rpcArgs = uniqueMmpIds.length > 0 ? { p_ids: uniqueMmpIds } : {};
+        const { data: mmpRows } = await supabase.rpc('get_mmp_names', rpcArgs);
+        (mmpRows || []).forEach((m: any) => {
+          mmpNameMap[m.id] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+        });
+      }
+
       const enriched = allSiteVisits.map(sv => ({
         ...sv,
         accepted_by_name: userMap.get(sv.accepted_by)?.name || 'Unknown',
         completed_by_name: sv.visit_completed_by ? userMap.get(sv.visit_completed_by)?.name || 'N/A' : 'N/A',
+        mmp_name: sv.mmp_file_id ? (mmpNameMap[sv.mmp_file_id] || null) : null,
       }));
 
       setSiteVisits(enriched);
@@ -1446,10 +1460,19 @@ export function SuperAdminDataManagement() {
     const stateFiltered = siteVisits.filter(s => svStateFilter === 'all' || s.state === svStateFilter);
     const localities = [...new Set(stateFiltered.map(s => s.locality).filter(Boolean))].sort() as string[];
     const hubs = [...new Set(siteVisits.map(s => s.hub_office).filter(Boolean))].sort() as string[];
-    // Use all loaded MMPs so the filter bar always renders; selecting an MMP filters to visits under it
-    const mmpOptions = mmps.map(m => ({ id: m.id, label: m.name || m.project_name || m.id }));
+    // Derive MMP options directly from visit data — avoids dependency on mmps state (which may be
+    // empty due to RLS) and ensures the filter only shows MMPs that actually have site visits.
+    const mmpSeen = new Map<string, string>();
+    siteVisits.forEach(sv => {
+      if (sv.mmp_file_id && !mmpSeen.has(sv.mmp_file_id)) {
+        mmpSeen.set(sv.mmp_file_id, sv.mmp_name || sv.mmp_file_id);
+      }
+    });
+    const mmpOptions = [...mmpSeen.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id, label]) => ({ id, label }));
     return { states, localities, hubs, mmpOptions };
-  }, [siteVisits, svStateFilter, mmps]);
+  }, [siteVisits, svStateFilter]);
 
   const filteredSiteVisits = useMemo(() => {
     return siteVisits.filter(sv => {
@@ -2015,6 +2038,7 @@ export function SuperAdminDataManagement() {
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Site</TableHead>
                         <TableHead className="font-semibold">Location</TableHead>
+                        <TableHead className="font-semibold">MMP</TableHead>
                         <TableHead className="font-semibold">Data Collector</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
                         <TableHead className="font-semibold">Completed</TableHead>
@@ -2036,6 +2060,9 @@ export function SuperAdminDataManagement() {
                               <div>{sv.state || '—'}</div>
                               <div className="text-muted-foreground">{sv.locality || '—'}</div>
                             </div>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {sv.mmp_name || '—'}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
