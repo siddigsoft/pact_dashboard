@@ -660,7 +660,7 @@ export function SuperAdminDataManagement() {
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const mmpNameMap: Record<string, string> = {};
       const fillMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
       });
       // Layer 1: RPC without p_ids — avoids uuid[] JSON cast, returns all MMPs via SECURITY DEFINER
       {
@@ -732,7 +732,7 @@ export function SuperAdminDataManagement() {
       const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const dispatchedMmpNameMap: Record<string, string> = {};
       const fillDispMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project_name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`;
+        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
       });
       // Layer 1: RPC without p_ids (SECURITY DEFINER, no uuid[] cast needed)
       {
@@ -777,7 +777,7 @@ export function SuperAdminDataManagement() {
       let data: any[] | null = null;
       const { data: d1, error: e1 } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
+        .select('id, mmp_id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
         .order('created_at', { ascending: false });
       if (!e1 && d1 && d1.length > 0) {
         data = d1;
@@ -795,7 +795,7 @@ export function SuperAdminDataManagement() {
           for (let i = 0; i < uniqueIds.length; i += BATCH) {
             const { data: batchData } = await supabase
               .from('mmp_files')
-              .select('id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
+              .select('id, mmp_id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
               .in('id', uniqueIds.slice(i, i + BATCH));
             allMmpFiles.push(...(batchData || []));
           }
@@ -844,7 +844,7 @@ export function SuperAdminDataManagement() {
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
-        name: m.name || m.project?.name || m.project_name || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
+        name: m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
         month: m.month,
         year: m.year,
         status: m.status,
