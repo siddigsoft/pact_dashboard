@@ -1553,12 +1553,14 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Show ALL MMPs in the filter so the admin can filter any cycle,
-    // even if it currently has no claimed sites.
-    // Use label as the filter key (consistent with the filter comparison at filteredClaimedSites).
-    const mmpOptions = mmps
-      .map(m => ({ id: m.name || m.id, label: m.name || m.id }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+    // Derive MMP options directly from claimed sites data so the list is always
+    // populated regardless of whether mmp_files RLS allows the super_admin to read it.
+    const mmpNames = [...new Set(
+      claimedSites.map(s => {
+        return mmpById[s.mmp_id!]?.name || s.mmp_name || null;
+      }).filter(Boolean) as string[]
+    )].sort();
+    const mmpOptions = mmpNames.map(name => ({ id: name, label: name }));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps]);
@@ -2444,9 +2446,10 @@ export function SuperAdminDataManagement() {
                   onClearAll={() => { setClaimedMmpFilter('all'); setStatusFilter('all'); setStateFilter('all'); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
                 />
               </div>
-              {/* Extra filters: MMP + Activity + Enumerator */}
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="space-y-1">
+              {/* Extra filters: MMP + State + Locality + Activity + Enumerator */}
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {/* MMP */}
+                <div className="space-y-1 col-span-2 sm:col-span-1">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
                     <FileText className="h-3 w-3" /> MMP
                     {claimedMmpFilter !== 'all' && (
@@ -2466,6 +2469,37 @@ export function SuperAdminDataManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* State */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">State</Label>
+                  <Select value={stateFilter} onValueChange={(val) => { setStateFilter(val); setLocalityFilter('all'); }}>
+                    <SelectTrigger data-testid="select-claimed-state-filter">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      <SelectItem value="all">All States</SelectItem>
+                      {claimedSitesFilterOptions.states.map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Locality */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Locality</Label>
+                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                    <SelectTrigger data-testid="select-claimed-locality-filter">
+                      <SelectValue placeholder="All Localities" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {claimedSitesFilterOptions.localities.map(l => (
+                        <SelectItem key={l} value={l}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Activity */}
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setClaimedByFilter('all'); }}>
@@ -2480,6 +2514,7 @@ export function SuperAdminDataManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Enumerator */}
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Enumerator</Label>
                   <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
