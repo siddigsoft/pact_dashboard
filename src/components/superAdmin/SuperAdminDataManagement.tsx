@@ -378,6 +378,13 @@ export function SuperAdminDataManagement() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedClaimedSiteSearch, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
 
+  // Clear bulk-reclaim selection whenever any Claimed Sites filter changes so
+  // stale IDs from a previous filter set are never accidentally reclaimed.
+  useEffect(() => {
+    setSelectedClaimedSiteIds(new Set());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedClaimedSiteSearch, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter, claimedNoCostFilter]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTxSearch(txSearch), 300);
     return () => clearTimeout(timer);
