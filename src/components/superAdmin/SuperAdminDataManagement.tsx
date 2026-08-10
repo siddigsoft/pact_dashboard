@@ -3847,6 +3847,7 @@ export function SuperAdminDataManagement() {
             <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg">
               <p className="font-semibold">{selectedSiteVisit?.site_name}</p>
               <p className="text-sm text-muted-foreground">{selectedSiteVisit?.site_code}</p>
+              <p className="text-sm text-muted-foreground">MMP: {selectedSiteVisit?.mmp_name || '—'}</p>
               <div className="mt-2 pt-2 border-t border-destructive/10">
                 <p className="text-sm">
                   <span className="text-muted-foreground">Collector:</span> {selectedSiteVisit?.accepted_by_name}
