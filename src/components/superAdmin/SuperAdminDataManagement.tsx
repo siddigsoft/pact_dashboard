@@ -614,7 +614,19 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // MMP names are resolved at render time from the mmps state (mmpById memo)
+      // Resolve MMP names directly at load time (don't rely on mmps state which may be RLS-blocked)
+      const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
+      const mmpNameMap: Record<string, string> = {};
+      if (uniqueMmpIds.length > 0) {
+        const { data: mmpRows } = await supabase
+          .from('mmp_files')
+          .select('id, name, project_name')
+          .in('id', uniqueMmpIds);
+        (mmpRows || []).forEach((m: any) => {
+          mmpNameMap[m.id] = m.name || m.project_name || m.id;
+        });
+      }
+
       const enriched = allData.map((site: any) => {
         const claimerUid = site.accepted_by
           || site.additional_data?.claimed_by
@@ -628,7 +640,7 @@ export function SuperAdminDataManagement() {
           accepted_by_name: resolvedName,
           main_activity: site.main_activity || site.activity_at_site || null,
           mmp_id: site.mmp_file_id,
-          mmp_name: undefined, // resolved at render via mmpById
+          mmp_name: mmpNameMap[site.mmp_file_id] || null,
         };
       });
 
