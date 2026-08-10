@@ -447,6 +447,10 @@ export function SuperAdminDataManagement() {
   const [bulkReclaimReason, setBulkReclaimReason] = useState('');
   const [bulkReclaimProcessing, setBulkReclaimProcessing] = useState(false);
   const [bulkReclaimProgress, setBulkReclaimProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkReclaimAdvanceInfo, setBulkReclaimAdvanceInfo] = useState<{ siteId: string; siteName: string; disbursed: any[] }[]>([]);
+  const [bulkReclaimAdvanceLoading, setBulkReclaimAdvanceLoading] = useState(false);
+  const [excludeDisbursedFromBulk, setExcludeDisbursedFromBulk] = useState(false);
+  const [bulkDisbursedExpanded, setBulkDisbursedExpanded] = useState(false);
 
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
@@ -1001,7 +1005,14 @@ export function SuperAdminDataManagement() {
     if (!currentUser || !bulkReclaimReason.trim() || selectedClaimedSiteIds.size === 0) return;
 
     setBulkReclaimProcessing(true);
-    const ids = Array.from(selectedClaimedSiteIds);
+    const disbursedSiteIds = new Set(bulkReclaimAdvanceInfo.map(s => s.siteId));
+    const ids = Array.from(selectedClaimedSiteIds).filter(
+      id => !excludeDisbursedFromBulk || !disbursedSiteIds.has(id)
+    );
+    if (ids.length === 0) {
+      setBulkReclaimProcessing(false);
+      return;
+    }
     setBulkReclaimProgress({ done: 0, total: ids.length });
 
     let successCount = 0;
@@ -1284,6 +1295,43 @@ export function SuperAdminDataManagement() {
       // Non-critical — warnings just won't show
     } finally {
       setReclaimAdvanceLoading(false);
+    }
+  };
+
+  const openBulkReclaimDialog = async () => {
+    setBulkReclaimReason('');
+    setBulkReclaimAdvanceInfo([]);
+    setExcludeDisbursedFromBulk(false);
+    setBulkDisbursedExpanded(false);
+    setShowBulkReclaimDialog(true);
+
+    const ids = Array.from(selectedClaimedSiteIds);
+    if (ids.length === 0) return;
+
+    setBulkReclaimAdvanceLoading(true);
+    try {
+      const { data } = await supabase
+        .from('down_payment_requests')
+        .select('id, mmp_site_entry_id, requested_amount, currency, status')
+        .in('mmp_site_entry_id', ids)
+        .in('status', ['approved', 'partially_paid', 'fully_paid']);
+
+      if (data && data.length > 0) {
+        const siteMap = new Map<string, any[]>();
+        data.forEach((r: any) => {
+          if (!siteMap.has(r.mmp_site_entry_id)) siteMap.set(r.mmp_site_entry_id, []);
+          siteMap.get(r.mmp_site_entry_id)!.push(r);
+        });
+        const result = Array.from(siteMap.entries()).map(([siteId, rows]) => {
+          const site = claimedSites.find(s => s.id === siteId);
+          return { siteId, siteName: site?.site_name || siteId, disbursed: rows };
+        });
+        setBulkReclaimAdvanceInfo(result);
+      }
+    } catch {
+      // Non-critical — warning panel just won't show
+    } finally {
+      setBulkReclaimAdvanceLoading(false);
     }
   };
 
@@ -2572,7 +2620,7 @@ export function SuperAdminDataManagement() {
                       variant="destructive"
                       size="sm"
                       className="gap-1.5"
-                      onClick={() => { setBulkReclaimReason(''); setShowBulkReclaimDialog(true); }}
+                      onClick={openBulkReclaimDialog}
                       data-testid="button-bulk-reclaim"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
@@ -3541,14 +3589,75 @@ export function SuperAdminDataManagement() {
               </p>
             </div>
 
-            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-                <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                  Already-disbursed advances cannot be automatically reversed and will require manual reconciliation.
-                </p>
+            {/* Disbursed advances panel */}
+            {bulkReclaimAdvanceLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground p-3 border rounded-lg">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                Checking for disbursed advances…
               </div>
-            </div>
+            ) : bulkReclaimAdvanceInfo.length > 0 ? (
+              <div className="border border-yellow-500/40 rounded-lg overflow-hidden">
+                <div className="bg-yellow-500/10 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+                          {bulkReclaimAdvanceInfo.length} site{bulkReclaimAdvanceInfo.length !== 1 ? 's' : ''} have disbursed advances
+                        </p>
+                        <p className="text-xs text-yellow-700/80 dark:text-yellow-400/80 mt-0.5">
+                          These cannot be automatically reversed and will require manual reconciliation.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-yellow-700 dark:text-yellow-400 underline underline-offset-2 shrink-0 hover:opacity-80"
+                      onClick={() => setBulkDisbursedExpanded(v => !v)}
+                    >
+                      {bulkDisbursedExpanded ? 'Hide' : 'Show'} sites
+                    </button>
+                  </div>
+
+                  {bulkDisbursedExpanded && (
+                    <ul className="mt-2 space-y-1 max-h-36 overflow-y-auto pr-1">
+                      {bulkReclaimAdvanceInfo.map(s => (
+                        <li key={s.siteId} className="text-xs text-yellow-800 dark:text-yellow-300 flex items-center gap-1.5">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          {s.siteName}
+                          <span className="text-yellow-600 dark:text-yellow-500">
+                            ({s.disbursed.length} disbursed)
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="bg-muted/30 px-3 py-2 flex items-center gap-2 border-t border-yellow-500/20">
+                  <input
+                    type="checkbox"
+                    id="exclude-disbursed"
+                    checked={excludeDisbursedFromBulk}
+                    onChange={e => setExcludeDisbursedFromBulk(e.target.checked)}
+                    disabled={bulkReclaimProcessing}
+                    className="h-3.5 w-3.5 accent-destructive"
+                  />
+                  <label htmlFor="exclude-disbursed" className="text-xs cursor-pointer select-none">
+                    Exclude these {bulkReclaimAdvanceInfo.length} site{bulkReclaimAdvanceInfo.length !== 1 ? 's' : ''} from this bulk reclaim
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                    Already-disbursed advances cannot be automatically reversed and will require manual reconciliation.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {bulkReclaimProgress && (
               <div className="space-y-1">
@@ -3578,15 +3687,23 @@ export function SuperAdminDataManagement() {
               />
             </div>
 
-            <div className="bg-muted/50 p-3 rounded-lg">
-              <p className="text-sm font-medium mb-2">This action will:</p>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Release {selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} to dispatch pool</li>
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify each former assignee</li>
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Cancel pending advances per site</li>
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log all actions for audit</li>
-              </ul>
-            </div>
+            {(() => {
+              const disbursedIds = new Set(bulkReclaimAdvanceInfo.map(s => s.siteId));
+              const effectiveCount = excludeDisbursedFromBulk
+                ? Array.from(selectedClaimedSiteIds).filter(id => !disbursedIds.has(id)).length
+                : selectedClaimedSiteIds.size;
+              return (
+                <div className="bg-muted/50 p-3 rounded-lg">
+                  <p className="text-sm font-medium mb-2">This action will:</p>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Release {effectiveCount} site{effectiveCount !== 1 ? 's' : ''} to dispatch pool</li>
+                    <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify each former assignee</li>
+                    <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Cancel pending advances per site</li>
+                    <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log all actions for audit</li>
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
 
           <DialogFooter>
@@ -3598,18 +3715,26 @@ export function SuperAdminDataManagement() {
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleBulkReclaimSites}
-              disabled={bulkReclaimProcessing || !bulkReclaimReason.trim()}
-              data-testid="button-confirm-bulk-reclaim"
-            >
-              {bulkReclaimProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-              {bulkReclaimProcessing
-                ? `Reclaiming… (${bulkReclaimProgress?.done ?? 0}/${bulkReclaimProgress?.total ?? selectedClaimedSiteIds.size})`
-                : `Reclaim ${selectedClaimedSiteIds.size} Sites`}
-            </Button>
+            {(() => {
+              const disbursedIds = new Set(bulkReclaimAdvanceInfo.map(s => s.siteId));
+              const effectiveCount = excludeDisbursedFromBulk
+                ? Array.from(selectedClaimedSiteIds).filter(id => !disbursedIds.has(id)).length
+                : selectedClaimedSiteIds.size;
+              return (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleBulkReclaimSites}
+                  disabled={bulkReclaimProcessing || !bulkReclaimReason.trim() || effectiveCount === 0}
+                  data-testid="button-confirm-bulk-reclaim"
+                >
+                  {bulkReclaimProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                  {bulkReclaimProcessing
+                    ? `Reclaiming… (${bulkReclaimProgress?.done ?? 0}/${bulkReclaimProgress?.total ?? effectiveCount})`
+                    : `Reclaim ${effectiveCount} Site${effectiveCount !== 1 ? 's' : ''}`}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
