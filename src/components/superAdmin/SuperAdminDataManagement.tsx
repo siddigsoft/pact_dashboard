@@ -3436,6 +3436,13 @@ export function SuperAdminDataManagement() {
               <p className="text-sm font-medium mb-2">This action will:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Release site to dispatch pool</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Clear enumerator fee (re-agreed with next assignee)</li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  {selectedClaimedSite?.transport_fee != null
+                    ? <>Keep transport fee pre-filled at <span className="font-semibold text-foreground">{selectedClaimedSite.transport_fee.toLocaleString()} SDG</span></>
+                    : 'Transport fee preserved for next dispatch'}
+                </li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify the former assignee</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log action for audit</li>
                 {cancelPendingAdvances && reclaimAdvanceInfo && reclaimAdvanceInfo.pending.length > 0 && (

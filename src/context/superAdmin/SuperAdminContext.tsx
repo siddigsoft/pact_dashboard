@@ -1101,7 +1101,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       let previousStatus: string;
       
       if (currentStatus === 'dispatched' || currentStatus === 'assigned') {
-        // Dispatched → stays Dispatched, clear ALL costs so new enumerator goes through fresh costing
+        // Dispatched → stays Dispatched. Clear enumerator fee (tied to the specific person) but
+        // preserve transport_fee — route cost stays constant when a different enumerator takes over.
         previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
@@ -1109,13 +1110,14 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           status: 'dispatched',
           cost: null,
           enumerator_fee: null,
-          transport_fee: null,
+          // transport_fee intentionally NOT cleared — pre-fills for next dispatch
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
         };
       } else if (currentStatus === 'accepted' || currentStatus === 'claimed') {
-        // Accepted → Dispatched (clear claim info AND costs — fresh costing required)
+        // Accepted → Dispatched. Clear enumerator fee but keep transport_fee as a pre-fill
+        // for the next enumerator assigned to this route.
         previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
@@ -1123,7 +1125,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           status: 'dispatched',
           cost: null,
           enumerator_fee: null,
-          transport_fee: null,
+          // transport_fee intentionally NOT cleared — pre-fills for next dispatch
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
