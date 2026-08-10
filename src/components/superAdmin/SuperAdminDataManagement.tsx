@@ -773,11 +773,11 @@ export function SuperAdminDataManagement() {
   const loadMMPs = async () => {
     setLoadingMMPs(true);
     try {
-      // Primary: select with native project_name column (no FK join needed)
+      // Primary: join projects table to get real name when mmp_files.name is null
       let data: any[] | null = null;
       const { data: d1, error: e1 } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year, status, project_id, project_name, created_at')
+        .select('id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
         .order('created_at', { ascending: false });
       if (!e1 && d1 && d1.length > 0) {
         data = d1;
@@ -795,7 +795,7 @@ export function SuperAdminDataManagement() {
           for (let i = 0; i < uniqueIds.length; i += BATCH) {
             const { data: batchData } = await supabase
               .from('mmp_files')
-              .select('id, name, month, year, status, project_id, project_name, created_at')
+              .select('id, name, month, year, status, project_id, project_name, created_at, project:projects(name)')
               .in('id', uniqueIds.slice(i, i + BATCH));
             allMmpFiles.push(...(batchData || []));
           }
@@ -844,7 +844,7 @@ export function SuperAdminDataManagement() {
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
-        name: m.name || m.project_name || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
+        name: m.name || m.project?.name || m.project_name || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
         month: m.month,
         year: m.year,
         status: m.status,
