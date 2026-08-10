@@ -614,15 +614,38 @@ export function SuperAdminDataManagement() {
         from += PAGE_SIZE;
       }
 
-      // Resolve MMP names directly at load time (don't rely on mmps state which may be RLS-blocked)
+      // Resolve MMP names directly at load time (don't rely on mmps state which may be RLS-blocked).
+      // Strategy: try targeted IN query first; if that returns nothing, try a full table fetch
+      // (RLS may allow reads but the IN list may not match, e.g. if IDs are null or synthetic).
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const mmpNameMap: Record<string, string> = {};
       if (uniqueMmpIds.length > 0) {
-        const { data: mmpRows } = await supabase
+        const { data: targeted } = await supabase
           .from('mmp_files')
           .select('id, name, project_name')
           .in('id', uniqueMmpIds);
-        (mmpRows || []).forEach((m: any) => {
+        (targeted || []).forEach((m: any) => {
+          mmpNameMap[m.id] = m.name || m.project_name || m.id;
+        });
+        // Fallback: if targeted query returned nothing, fetch all rows the user can see
+        if ((targeted || []).length === 0) {
+          const { data: allMmps } = await supabase
+            .from('mmp_files')
+            .select('id, name, project_name')
+            .order('created_at', { ascending: false })
+            .limit(200);
+          (allMmps || []).forEach((m: any) => {
+            mmpNameMap[m.id] = m.name || m.project_name || m.id;
+          });
+        }
+      } else {
+        // No mmp_file_id on any site — fetch all visible mmp_files so the filter is populated
+        const { data: allMmps } = await supabase
+          .from('mmp_files')
+          .select('id, name, project_name')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        (allMmps || []).forEach((m: any) => {
           mmpNameMap[m.id] = m.name || m.project_name || m.id;
         });
       }
@@ -1579,14 +1602,16 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Derive MMP options directly from claimed sites data so the list is always
-    // populated regardless of whether mmp_files RLS allows the super_admin to read it.
-    const mmpNames = [...new Set(
-      claimedSites.map(s => {
-        return mmpById[s.mmp_id!]?.name || s.mmp_name || null;
-      }).filter(Boolean) as string[]
-    )].sort();
-    const mmpOptions = mmpNames.map(name => ({ id: name, label: name }));
+    // Derive MMP options from claimed sites — name resolved at load time, fall back to raw ID.
+    // Using name as key (consistent with filteredClaimedSites comparison at matchesMmp).
+    const mmpEntries = new Map<string, string>();
+    claimedSites.forEach(s => {
+      const key = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id || null;
+      if (key) mmpEntries.set(key, key);
+    });
+    const mmpOptions = [...mmpEntries.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps]);
@@ -2600,10 +2625,12 @@ export function SuperAdminDataManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead className="font-semibold">Site</TableHead>
                         <TableHead className="font-semibold">MMP</TableHead>
+                        <TableHead className="font-semibold">Hub</TableHead>
+                        <TableHead className="font-semibold">State</TableHead>
+                        <TableHead className="font-semibold">Locality</TableHead>
+                        <TableHead className="font-semibold">Site</TableHead>
                         <TableHead className="font-semibold">Activity</TableHead>
-                        <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Claimed By</TableHead>
                         <TableHead className="font-semibold">Claimed At</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
@@ -2614,6 +2641,35 @@ export function SuperAdminDataManagement() {
                     <TableBody>
                       {filteredClaimedSites.slice(0, claimedVisibleCount).map((site) => (
                         <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-claimed-site-${site.id}`}>
+                          {/* MMP */}
+                          <TableCell>
+                            {(() => {
+                              const mmp = site.mmp_id ? mmpById[site.mmp_id] : null;
+                              const label = mmp
+                                ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`)
+                                : (site.mmp_name || null);
+                              return label ? (
+                                <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[140px] truncate block">
+                                  {label}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              );
+                            })()}
+                          </TableCell>
+                          {/* Hub */}
+                          <TableCell>
+                            <span className="text-sm">{site.hub_office || '—'}</span>
+                          </TableCell>
+                          {/* State */}
+                          <TableCell>
+                            <span className="text-sm">{site.state || '—'}</span>
+                          </TableCell>
+                          {/* Locality */}
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">{site.locality || '—'}</span>
+                          </TableCell>
+                          {/* Site */}
                           <TableCell>
                             <div>
                               <p className="font-medium">{site.site_name}</p>
@@ -2624,31 +2680,11 @@ export function SuperAdminDataManagement() {
                               </p>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {(() => {
-                              const mmp = site.mmp_id ? mmpById[site.mmp_id] : null;
-                              const label = mmp
-                                ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`)
-                                : null;
-                              return label ? (
-                                <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[140px] truncate block">
-                                  {label}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">—</span>
-                              );
-                            })()}
-                          </TableCell>
+                          {/* Activity */}
                           <TableCell>
                             <Badge variant="outline" className="whitespace-nowrap">
                               {site.main_activity || '—'}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              <div>{site.state || '—'}</div>
-                              <div className="text-muted-foreground">{site.locality || '—'}</div>
-                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -2893,7 +2929,9 @@ export function SuperAdminDataManagement() {
                           <TableCell>
                             {(() => {
                               const mmp = site.mmp_file_id ? mmpById[site.mmp_file_id] : null;
-                              const label = mmp ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`) : null;
+                              const label = mmp
+                                ? (mmp.name || `MMP ${mmp.month ?? '?'}/${mmp.year ?? '?'}`)
+                                : ((site as any).mmp_name || null);
                               return label ? (
                                 <Badge variant="secondary" className="whitespace-nowrap text-xs max-w-[120px] truncate block">
                                   {label}
