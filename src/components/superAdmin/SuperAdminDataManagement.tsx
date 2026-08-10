@@ -2444,8 +2444,28 @@ export function SuperAdminDataManagement() {
                   onClearAll={() => { setClaimedMmpFilter('all'); setStatusFilter('all'); setStateFilter('all'); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
                 />
               </div>
-              {/* Extra filters: Activity + Enumerator */}
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              {/* Extra filters: MMP + Activity + Enumerator */}
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> MMP
+                    {claimedMmpFilter !== 'all' && (
+                      <button type="button" onClick={() => setClaimedMmpFilter('all')}
+                        className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
+                    )}
+                  </Label>
+                  <Select value={claimedMmpFilter} onValueChange={setClaimedMmpFilter}>
+                    <SelectTrigger data-testid="select-claimed-mmp-filter">
+                      <SelectValue placeholder="All MMPs" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {claimedSitesFilterOptions.mmpOptions.map(mmp => (
+                        <SelectItem key={mmp.id} value={mmp.id}>{mmp.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setClaimedByFilter('all'); }}>
