@@ -1567,7 +1567,8 @@ export function SuperAdminDataManagement() {
       const matchesSearch = 
         sv.site_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         sv.site_code?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        sv.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
+        sv.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        sv.mmp_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || sv.status === statusFilter;
       const matchesState    = svStateFilter    === 'all' || sv.state      === svStateFilter;
