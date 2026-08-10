@@ -433,6 +433,13 @@ export function SuperAdminDataManagement() {
   const [changeStatusProcessing, setChangeStatusProcessing] = useState(false);
   const [changeStatusReverseWallet, setChangeStatusReverseWallet] = useState(false);
 
+  // Bulk-reclaim state (Claimed Sites tab)
+  const [selectedClaimedSiteIds, setSelectedClaimedSiteIds] = useState<Set<string>>(new Set());
+  const [showBulkReclaimDialog, setShowBulkReclaimDialog] = useState(false);
+  const [bulkReclaimReason, setBulkReclaimReason] = useState('');
+  const [bulkReclaimProcessing, setBulkReclaimProcessing] = useState(false);
+  const [bulkReclaimProgress, setBulkReclaimProgress] = useState<{ done: number; total: number } | null>(null);
+
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
     try {
@@ -932,6 +939,45 @@ export function SuperAdminDataManagement() {
       setShowReclaimSiteDialog(false);
       setSelectedClaimedSite(null);
       setReason('');
+      loadClaimedSites();
+    }
+  };
+
+  const handleBulkReclaimSites = async () => {
+    if (!currentUser || !bulkReclaimReason.trim() || selectedClaimedSiteIds.size === 0) return;
+
+    setBulkReclaimProcessing(true);
+    const ids = Array.from(selectedClaimedSiteIds);
+    setBulkReclaimProgress({ done: 0, total: ids.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const siteId of ids) {
+      const ok = await reclaimSite({
+        siteEntryId: siteId,
+        reason: bulkReclaimReason.trim(),
+        reclaimedBy: currentUser.id,
+        reclaimedByName: currentUser.name || currentUser.email || 'Super Admin',
+        reclaimedByRole: currentUser.role || 'superadmin',
+        cancelPendingAdvances: true,
+      });
+      if (ok) successCount++; else failCount++;
+      setBulkReclaimProgress(prev => prev ? { ...prev, done: prev.done + 1 } : null);
+    }
+
+    setBulkReclaimProcessing(false);
+    setBulkReclaimProgress(null);
+
+    if (successCount > 0) {
+      toast({
+        title: `Bulk Reclaim Complete`,
+        description: `${successCount} site${successCount !== 1 ? 's' : ''} reclaimed${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+        variant: failCount > 0 ? 'destructive' : 'default',
+      });
+      setShowBulkReclaimDialog(false);
+      setBulkReclaimReason('');
+      setSelectedClaimedSiteIds(new Set());
       loadClaimedSites();
     }
   };
@@ -2441,9 +2487,24 @@ export function SuperAdminDataManagement() {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-sm px-2 py-0.5">
-                  {filteredClaimedSites.length}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {selectedClaimedSiteIds.size > 0 && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => { setBulkReclaimReason(''); setShowBulkReclaimDialog(true); }}
+                      data-testid="button-bulk-reclaim"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reclaim {selectedClaimedSiteIds.size} selected
+                    </Button>
+                  )}
+                  <Badge variant="outline" className="text-sm px-2 py-0.5">
+                    {filteredClaimedSites.length}
+                  </Badge>
+                </div>
               </div>
               
               {/* Search by Site Name */}
@@ -2644,6 +2705,34 @@ export function SuperAdminDataManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
+                        <TableHead className="w-10 pr-0">
+                          <input
+                            type="checkbox"
+                            className="rounded border-border"
+                            aria-label="Select all filtered sites"
+                            data-testid="checkbox-select-all-claimed"
+                            checked={
+                              filteredClaimedSites.slice(0, claimedVisibleCount).length > 0 &&
+                              filteredClaimedSites.slice(0, claimedVisibleCount).every(s => selectedClaimedSiteIds.has(s.id))
+                            }
+                            onChange={(e) => {
+                              const visible = filteredClaimedSites.slice(0, claimedVisibleCount);
+                              if (e.target.checked) {
+                                setSelectedClaimedSiteIds(prev => {
+                                  const next = new Set(prev);
+                                  visible.forEach(s => next.add(s.id));
+                                  return next;
+                                });
+                              } else {
+                                setSelectedClaimedSiteIds(prev => {
+                                  const next = new Set(prev);
+                                  visible.forEach(s => next.delete(s.id));
+                                  return next;
+                                });
+                              }
+                            }}
+                          />
+                        </TableHead>
                         <TableHead className="font-semibold">MMP</TableHead>
                         <TableHead className="font-semibold">Hub</TableHead>
                         <TableHead className="font-semibold">State</TableHead>
@@ -2658,7 +2747,23 @@ export function SuperAdminDataManagement() {
                     </TableHeader>
                     <TableBody>
                       {filteredClaimedSites.slice(0, claimedVisibleCount).map((site) => (
-                        <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-claimed-site-${site.id}`}>
+                        <TableRow key={site.id} className={`hover:bg-muted/30 ${selectedClaimedSiteIds.has(site.id) ? 'bg-destructive/5' : ''}`} data-testid={`row-claimed-site-${site.id}`}>
+                          <TableCell className="pr-0">
+                            <input
+                              type="checkbox"
+                              className="rounded border-border"
+                              aria-label={`Select ${site.site_name}`}
+                              data-testid={`checkbox-claimed-site-${site.id}`}
+                              checked={selectedClaimedSiteIds.has(site.id)}
+                              onChange={(e) => {
+                                setSelectedClaimedSiteIds(prev => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(site.id); else next.delete(site.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
                           {/* MMP */}
                           <TableCell>
                             {(() => {
@@ -3325,6 +3430,100 @@ export function SuperAdminDataManagement() {
             >
               {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
               {processing ? 'Reclaiming...' : 'Reclaim Site'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Reclaim Dialog */}
+      <Dialog open={showBulkReclaimDialog} onOpenChange={(open) => { if (!bulkReclaimProcessing) setShowBulkReclaimDialog(open); }}>
+        <DialogContent className="max-w-md" data-testid="dialog-bulk-reclaim">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-destructive" />
+              Reclaim {selectedClaimedSiteIds.size} Sites
+            </DialogTitle>
+            <DialogDescription>
+              Release all selected sites back to the dispatch pool. Pending advances will be automatically cancelled.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg">
+              <p className="text-sm font-semibold">{selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} selected</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Each site will be returned to the dispatch pool. Any pending advance requests for these sites will be cancelled automatically.
+              </p>
+            </div>
+
+            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                  Already-disbursed advances cannot be automatically reversed and will require manual reconciliation.
+                </p>
+              </div>
+            </div>
+
+            {bulkReclaimProgress && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Processing…</span>
+                  <span>{bulkReclaimProgress.done} / {bulkReclaimProgress.total}</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-destructive transition-all duration-300"
+                    style={{ width: `${(bulkReclaimProgress.done / bulkReclaimProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="bulk-reclaim-reason">Reason for Reclaim <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="bulk-reclaim-reason"
+                value={bulkReclaimReason}
+                onChange={(e) => setBulkReclaimReason(e.target.value)}
+                placeholder="Explain why these sites are being reclaimed..."
+                rows={3}
+                disabled={bulkReclaimProcessing}
+                data-testid="textarea-bulk-reclaim-reason"
+              />
+            </div>
+
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">This action will:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Release {selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} to dispatch pool</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify each former assignee</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Cancel pending advances per site</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log all actions for audit</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBulkReclaimDialog(false)}
+              disabled={bulkReclaimProcessing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleBulkReclaimSites}
+              disabled={bulkReclaimProcessing || !bulkReclaimReason.trim()}
+              data-testid="button-confirm-bulk-reclaim"
+            >
+              {bulkReclaimProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+              {bulkReclaimProcessing
+                ? `Reclaiming… (${bulkReclaimProgress?.done ?? 0}/${bulkReclaimProgress?.total ?? selectedClaimedSiteIds.size})`
+                : `Reclaim ${selectedClaimedSiteIds.size} Sites`}
             </Button>
           </DialogFooter>
         </DialogContent>
