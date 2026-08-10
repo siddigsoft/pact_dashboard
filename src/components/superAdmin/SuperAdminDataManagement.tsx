@@ -1653,9 +1653,8 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
-      // claimedMmpFilter now stores the MMP label (not ID) so same-name MMPs both match
-      const resolvedLabel = mmpById[site.mmp_id!]?.name || site.mmp_name || '';
-      const matchesMmp = claimedMmpFilter === 'all' || resolvedLabel === claimedMmpFilter;
+      // claimedMmpFilter stores the UUID (mmp_file_id) — compare directly for reliability
+      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
       
       const matchesNoCost = !claimedNoCostFilter || (site.transport_fee == null || site.transport_fee === 0);
       return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp && matchesNoCost;
@@ -1690,14 +1689,26 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Derive MMP options from claimed sites — name resolved at load time, fall back to raw ID.
-    // Using name as key (consistent with filteredClaimedSites comparison at matchesMmp).
-    const mmpEntries = new Map<string, string>();
-    claimedSites.forEach(s => {
-      const key = mmpById[s.mmp_id!]?.name || s.mmp_name || s.mmp_id || null;
-      if (key) mmpEntries.set(key, key);
+    // Derive MMP options from the mmps state (same source as MMP Management page).
+    // Key = UUID (mmp_file_id), label = real MMP name. Falls back to inline-resolved name
+    // or raw UUID for any ID not yet in the mmps state (e.g. before loadMMPs finishes).
+    const claimedMmpIds = new Set(claimedSites.map(s => s.mmp_id).filter(Boolean));
+    const mmpOptionMap = new Map<string, string>(); // id → label
+    // Primary: use mmps state (has real names, same data source as MMP Management page)
+    mmps.forEach(m => {
+      if (m.id && claimedMmpIds.has(m.id)) {
+        mmpOptionMap.set(m.id, m.name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`);
+      }
     });
-    const mmpOptions = [...mmpEntries.entries()]
+    // Fallback: for any IDs not yet in mmps (loadMMPs still in flight), use inline name or UUID
+    claimedSites.forEach(s => {
+      if (s.mmp_id && !mmpOptionMap.has(s.mmp_id)) {
+        const label = mmpById[s.mmp_id]?.name || s.mmp_name;
+        if (label) mmpOptionMap.set(s.mmp_id, label);
+        // If still no name, omit from options (UUID labels are not useful)
+      }
+    });
+    const mmpOptions = [...mmpOptionMap.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
