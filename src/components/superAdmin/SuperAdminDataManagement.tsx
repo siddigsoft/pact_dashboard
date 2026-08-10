@@ -3152,7 +3152,7 @@ export function SuperAdminDataManagement() {
                 {/* Sticky bulk-action bar — outside overflow-x-auto so sticky positioning
                     attaches to the page scroll context, not the horizontal scroll wrapper */}
                 {selectedClaimedSiteIds.size > 0 && (
-                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-4 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]" data-testid="bulk-action-bar">
+                  <div className="fixed bottom-0 right-0 z-[200] flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-4 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]" style={{ left: 'var(--sidebar-width, 15rem)' }} data-testid="bulk-action-bar">
                     <span className="text-sm font-medium text-foreground">
                       {selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} selected
                     </span>
