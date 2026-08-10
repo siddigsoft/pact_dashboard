@@ -452,6 +452,13 @@ export function SuperAdminDataManagement() {
   const [excludeDisbursedFromBulk, setExcludeDisbursedFromBulk] = useState(false);
   const [bulkDisbursedExpanded, setBulkDisbursedExpanded] = useState(false);
 
+  // Bulk change-status state (Claimed Sites tab)
+  const [showBulkChangeStatusDialog, setShowBulkChangeStatusDialog] = useState(false);
+  const [bulkChangeStatusTarget, setBulkChangeStatusTarget] = useState('');
+  const [bulkChangeStatusReason, setBulkChangeStatusReason] = useState('');
+  const [bulkChangeStatusProcessing, setBulkChangeStatusProcessing] = useState(false);
+  const [bulkChangeStatusProgress, setBulkChangeStatusProgress] = useState<{ done: number; total: number } | null>(null);
+
   const loadSiteVisits = async () => {
     setLoadingVisits(true);
     try {
@@ -1462,6 +1469,74 @@ export function SuperAdminDataManagement() {
       toast({ title: 'Update Failed', description: error.message || 'Could not update status.', variant: 'destructive' });
     } finally {
       setChangeStatusProcessing(false);
+    }
+  };
+
+  const handleBulkChangeStatus = async () => {
+    if (!currentUser || !bulkChangeStatusTarget || !bulkChangeStatusReason.trim()) return;
+    setBulkChangeStatusProcessing(true);
+    setBulkChangeStatusProgress({ done: 0, total: selectedClaimedSiteIds.size });
+    const ids = Array.from(selectedClaimedSiteIds);
+    let successCount = 0;
+    let errorCount = 0;
+    try {
+      const session = await ensureValidSession();
+      if (!session.success) { setBulkChangeStatusProcessing(false); return; }
+
+      for (let i = 0; i < ids.length; i++) {
+        const siteId = ids[i];
+        try {
+          const { error: updateError } = await supabase
+            .from('mmp_site_entries')
+            .update({ status: bulkChangeStatusTarget, updated_at: new Date().toISOString() })
+            .eq('id', siteId);
+
+          if (updateError) {
+            errorCount++;
+          } else {
+            successCount++;
+            // Only audit-log after a confirmed successful update
+            try {
+              await supabase.from('super_admin_audit_logs').insert({
+                action_type: 'status_correction',
+                entity_type: 'mmp_site_entry',
+                entity_id: siteId,
+                performed_by: currentUser.id,
+                performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
+                performed_by_role: currentUser.role || 'superadmin',
+                reason: bulkChangeStatusReason.trim(),
+                details: {
+                  new_status: bulkChangeStatusTarget,
+                  bulk_operation: true,
+                  wallet_reversed: false,
+                },
+              });
+            } catch {
+              // Audit insert failed — status was still updated; surface as a partial warning
+              console.warn(`Audit log insert failed for site ${siteId} after successful status update`);
+            }
+          }
+        } catch {
+          errorCount++;
+        }
+        setBulkChangeStatusProgress({ done: i + 1, total: ids.length });
+      }
+
+      toast({
+        title: 'Bulk Status Updated',
+        description: `${successCount} site${successCount !== 1 ? 's' : ''} updated to "${ALL_CORRECTABLE_STATUSES.find(s => s.value === bulkChangeStatusTarget)?.label || bulkChangeStatusTarget}"${errorCount > 0 ? `. ${errorCount} failed.` : '.'}`,
+        variant: errorCount > 0 ? 'destructive' : 'default',
+      });
+      setShowBulkChangeStatusDialog(false);
+      setBulkChangeStatusTarget('');
+      setBulkChangeStatusReason('');
+      setBulkChangeStatusProgress(null);
+      setSelectedClaimedSiteIds(new Set());
+      loadClaimedSites();
+    } catch (error: any) {
+      toast({ title: 'Bulk Update Failed', description: error.message || 'Could not update statuses.', variant: 'destructive' });
+    } finally {
+      setBulkChangeStatusProcessing(false);
     }
   };
 
@@ -2822,6 +2897,7 @@ export function SuperAdminDataManagement() {
                   <p className="text-muted-foreground">No claimed sites found</p>
                 </div>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -2998,25 +3074,50 @@ export function SuperAdminDataManagement() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-1 text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
-                                onClick={() => openChangeStatusDialog(site)}
-                                data-testid={`button-change-status-${site.id}`}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                Change Status
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => openReclaimSiteDialog(site)}
-                                data-testid={`button-reclaim-${site.id}`}
-                              >
-                                <RotateCcw className="h-4 w-4 mr-1" />
-                                Reclaim
-                              </Button>
+                              {selectedClaimedSiteIds.size > 0 ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    title="Change Status"
+                                    className="h-7 w-7 flex items-center justify-center rounded border border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950 transition-colors"
+                                    onClick={() => openChangeStatusDialog(site)}
+                                    data-testid={`button-change-status-${site.id}`}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Reclaim Site"
+                                    className="h-7 w-7 flex items-center justify-center rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                                    onClick={() => openReclaimSiteDialog(site)}
+                                    data-testid={`button-reclaim-${site.id}`}
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1 text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                                    onClick={() => openChangeStatusDialog(site)}
+                                    data-testid={`button-change-status-${site.id}`}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Change Status
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => openReclaimSiteDialog(site)}
+                                    data-testid={`button-reclaim-${site.id}`}
+                                  >
+                                    <RotateCcw className="h-4 w-4 mr-1" />
+                                    Reclaim
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -3047,6 +3148,57 @@ export function SuperAdminDataManagement() {
                     </div>
                   )}
                 </div>
+
+                {/* Sticky bulk-action bar — outside overflow-x-auto so sticky positioning
+                    attaches to the page scroll context, not the horizontal scroll wrapper */}
+                {selectedClaimedSiteIds.size > 0 && (
+                  <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-4 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]" data-testid="bulk-action-bar">
+                    <span className="text-sm font-medium text-foreground">
+                      {selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} selected
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                        onClick={() => {
+                          setBulkChangeStatusTarget('');
+                          setBulkChangeStatusReason('');
+                          setBulkChangeStatusProgress(null);
+                          setShowBulkChangeStatusDialog(true);
+                        }}
+                        data-testid="button-bulk-change-status"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Change Status
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={openBulkReclaimDialog}
+                        data-testid="button-bulk-reclaim-bar"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Reclaim Selected
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => setSelectedClaimedSiteIds(new Set())}
+                        data-testid="button-deselect-all"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -4228,6 +4380,109 @@ export function SuperAdminDataManagement() {
               {changeStatusProcessing
                 ? (changeStatusReverseWallet ? 'Reversing & Updating…' : 'Updating…')
                 : (changeStatusReverseWallet ? 'Update + Reverse Wallet' : 'Update Status Only')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Change Status Dialog */}
+      <Dialog open={showBulkChangeStatusDialog} onOpenChange={(open) => { if (!bulkChangeStatusProcessing) setShowBulkChangeStatusDialog(open); }}>
+        <DialogContent className="max-w-md" data-testid="dialog-bulk-change-status">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-600" />
+              Change Status for {selectedClaimedSiteIds.size} Site{selectedClaimedSiteIds.size !== 1 ? 's' : ''}
+            </DialogTitle>
+            <DialogDescription>
+              Apply the same status to all selected sites. This is logged for audit.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-blue-500/5 border border-blue-500/20 p-4 rounded-lg">
+              <p className="text-sm font-semibold">{selectedClaimedSiteIds.size} site{selectedClaimedSiteIds.size !== 1 ? 's' : ''} will be updated</p>
+              {bulkChangeStatusTarget && (
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">→</span>
+                  <Badge className="bg-blue-500/10 text-blue-700 border-blue-500/20">
+                    {ALL_CORRECTABLE_STATUSES.find(s => s.value === bulkChangeStatusTarget)?.label || bulkChangeStatusTarget}
+                  </Badge>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bulk-change-status-target">New Status <span className="text-destructive">*</span></Label>
+              <Select value={bulkChangeStatusTarget} onValueChange={setBulkChangeStatusTarget} disabled={bulkChangeStatusProcessing}>
+                <SelectTrigger id="bulk-change-status-target" data-testid="select-bulk-change-status-target">
+                  <SelectValue placeholder="Select target status…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALL_CORRECTABLE_STATUSES.map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bulk-change-status-reason">Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="bulk-change-status-reason"
+                value={bulkChangeStatusReason}
+                onChange={e => setBulkChangeStatusReason(e.target.value)}
+                placeholder="Explain why this bulk status correction is needed…"
+                rows={3}
+                disabled={bulkChangeStatusProcessing}
+                data-testid="textarea-bulk-change-status-reason"
+              />
+            </div>
+
+            {bulkChangeStatusProgress && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Processing…</span>
+                  <span>{bulkChangeStatusProgress.done} / {bulkChangeStatusProgress.total}</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-300"
+                    style={{ width: `${(bulkChangeStatusProgress.done / bulkChangeStatusProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">This action will:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Update status for all {selectedClaimedSiteIds.size} selected site{selectedClaimedSiteIds.size !== 1 ? 's' : ''}</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-blue-500" /> Log each change in the audit trail</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-muted-foreground/50" /> Wallet transactions are NOT touched</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBulkChangeStatusDialog(false)}
+              disabled={bulkChangeStatusProcessing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBulkChangeStatus}
+              disabled={bulkChangeStatusProcessing || !bulkChangeStatusTarget || !bulkChangeStatusReason.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-confirm-bulk-change-status"
+            >
+              {bulkChangeStatusProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Pencil className="h-4 w-4 mr-2" />}
+              {bulkChangeStatusProcessing
+                ? `Updating… (${bulkChangeStatusProgress?.done ?? 0}/${bulkChangeStatusProgress?.total ?? selectedClaimedSiteIds.size})`
+                : `Update ${selectedClaimedSiteIds.size} Site${selectedClaimedSiteIds.size !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>
