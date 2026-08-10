@@ -2479,136 +2479,176 @@ export function SuperAdminDataManagement() {
                 />
               </div>
 
-              {/* MMP-style filter bar for Claimed Sites */}
-              <div className="mt-3">
-                <MmpFilterBar
-                  title="Filter Claimed Sites"
-                  mmpOptions={claimedSitesFilterOptions.mmpOptions}
-                  mmpFilter={claimedMmpFilter}
-                  onMmpFilterChange={setClaimedMmpFilter}
-                  statusOptions={claimedSitesFilterOptions.statusOptions.map(s => STATUS_LABELS[s] || s)}
-                  statusFilter={statusFilter !== 'all' ? (STATUS_LABELS[statusFilter] || statusFilter) : 'all'}
-                  onStatusFilterChange={(val) => {
-                    if (val === 'all') { setStatusFilter('all'); return; }
-                    const key = Object.entries(STATUS_LABELS).find(([, v]) => v === val)?.[0] || val;
-                    setStatusFilter(key);
-                  }}
-                  stateOptions={claimedSitesFilterOptions.states}
-                  stateFilter={stateFilter}
-                  onStateFilterChange={(val) => { setStateFilter(val); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
-                  localityOptions={claimedSitesFilterOptions.localities}
-                  localityFilter={localityFilter}
-                  onLocalityFilterChange={(val) => { setLocalityFilter(val); setActivityFilter('all'); setClaimedByFilter('all'); }}
-                  totalCount={claimedSites.length}
-                  filteredCount={filteredClaimedSites.length}
-                  onClearAll={() => { setClaimedMmpFilter('all'); setStatusFilter('all'); setStateFilter('all'); setLocalityFilter('all'); setActivityFilter('all'); setClaimedByFilter('all'); }}
-                />
-              </div>
-              {/* Extra filters: MMP + State + Locality + Activity + Enumerator */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {/* MMP */}
-                <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <FileText className="h-3 w-3" /> MMP
-                    {claimedMmpFilter !== 'all' && (
-                      <button type="button" onClick={() => setClaimedMmpFilter('all')}
-                        className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
-                    )}
-                  </Label>
-                  <Select value={claimedMmpFilter} onValueChange={setClaimedMmpFilter}>
-                    <SelectTrigger data-testid="select-claimed-mmp-filter">
-                      <SelectValue placeholder="All MMPs" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64">
-                      <SelectItem value="all">All MMPs</SelectItem>
-                      {claimedSitesFilterOptions.mmpOptions.map(mmp => (
-                        <SelectItem key={mmp.id} value={mmp.id}>{mmp.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* State */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">State</Label>
-                  <Select value={stateFilter} onValueChange={(val) => { setStateFilter(val); setLocalityFilter('all'); }}>
-                    <SelectTrigger data-testid="select-claimed-state-filter">
-                      <SelectValue placeholder="All States" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64">
-                      <SelectItem value="all">All States</SelectItem>
-                      {claimedSitesFilterOptions.states.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Locality */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Locality</Label>
-                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
-                    <SelectTrigger data-testid="select-claimed-locality-filter">
-                      <SelectValue placeholder="All Localities" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64">
-                      <SelectItem value="all">All Localities</SelectItem>
-                      {claimedSitesFilterOptions.localities.map(l => (
-                        <SelectItem key={l} value={l}>{l}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Activity */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Activity</Label>
-                  <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setClaimedByFilter('all'); }}>
-                    <SelectTrigger data-testid="select-activity-filter">
-                      <SelectValue placeholder="All Activities" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Activities</SelectItem>
-                      {claimedSitesFilterOptions.activities.map(activity => (
-                        <SelectItem key={activity} value={activity}>{activity}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Enumerator */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Enumerator</Label>
-                  <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
-                    <SelectTrigger data-testid="select-claimed-by-filter">
-                      <SelectValue placeholder="All Enumerators" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Enumerators</SelectItem>
-                      {claimedSitesFilterOptions.claimedByUsers.map(user => (
-                        <SelectItem key={user} value={user}>{user}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {/* No-cost quick filter */}
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setClaimedNoCostFilter(v => !v)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    claimedNoCostFilter
-                      ? 'bg-amber-500 border-amber-500 text-white'
-                      : 'border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600'
-                  }`}
-                  data-testid="button-claimed-no-cost-filter"
-                >
-                  <span className="h-2 w-2 rounded-full bg-current" />
-                  No Transport Cost
-                </button>
-                {claimedNoCostFilter && (
-                  <span className="text-xs text-amber-600 dark:text-amber-400">
-                    Showing {filteredClaimedSites.length} site{filteredClaimedSites.length !== 1 ? 's' : ''} without cost set
-                  </span>
-                )}
-              </div>
+              {/* ── Unified Filter Claimed Sites panel ── */}
+              {(() => {
+                const activeCount = [
+                  claimedMmpFilter !== 'all',
+                  statusFilter !== 'all',
+                  stateFilter !== 'all',
+                  localityFilter !== 'all',
+                  activityFilter !== 'all',
+                  claimedByFilter !== 'all',
+                  claimedNoCostFilter,
+                ].filter(Boolean).length;
+                const clearAll = () => {
+                  setClaimedMmpFilter('all');
+                  setStatusFilter('all');
+                  setStateFilter('all');
+                  setLocalityFilter('all');
+                  setActivityFilter('all');
+                  setClaimedByFilter('all');
+                  setClaimedNoCostFilter(false);
+                };
+                return (
+                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-800 p-3 space-y-3">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                        <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Filter Claimed Sites</span>
+                        <span className="text-xs text-blue-600/70 dark:text-blue-400/70">
+                          — {filteredClaimedSites.length} of {claimedSites.length} sites
+                        </span>
+                        {activeCount > 0 && (
+                          <span className="rounded-full bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">
+                            {activeCount} active
+                          </span>
+                        )}
+                      </div>
+                      {activeCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAll}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                          <X className="h-3 w-3" /> Clear All
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter grid: 2 cols mobile → 3 cols md */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {/* MMP */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">MMP</Label>
+                        <Select value={claimedMmpFilter} onValueChange={setClaimedMmpFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-claimed-mmp-filter">
+                            <SelectValue placeholder="All MMPs" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="all">All MMPs</SelectItem>
+                            {claimedSitesFilterOptions.mmpOptions.map(mmp => (
+                              <SelectItem key={mmp.id} value={mmp.id}>{mmp.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Status */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Status</Label>
+                        <Select
+                          value={statusFilter !== 'all' ? (STATUS_LABELS[statusFilter] || statusFilter) : 'all'}
+                          onValueChange={(val) => {
+                            if (val === 'all') { setStatusFilter('all'); return; }
+                            const key = Object.entries(STATUS_LABELS).find(([, v]) => v === val)?.[0] || val;
+                            setStatusFilter(key);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-claimed-status-filter">
+                            <SelectValue placeholder="All Statuses" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            {claimedSitesFilterOptions.statusOptions.map(s => (
+                              <SelectItem key={s} value={STATUS_LABELS[s] || s}>{STATUS_LABELS[s] || s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* State */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">State</Label>
+                        <Select value={stateFilter} onValueChange={(val) => { setStateFilter(val); setLocalityFilter('all'); }}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-claimed-state-filter">
+                            <SelectValue placeholder="All States" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="all">All States</SelectItem>
+                            {claimedSitesFilterOptions.states.map(s => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Locality */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Locality</Label>
+                        <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-claimed-locality-filter">
+                            <SelectValue placeholder="All Localities" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="all">All Localities</SelectItem>
+                            {claimedSitesFilterOptions.localities.map(l => (
+                              <SelectItem key={l} value={l}>{l}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Activity */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Activity</Label>
+                        <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setClaimedByFilter('all'); }}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-activity-filter">
+                            <SelectValue placeholder="All Activities" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Activities</SelectItem>
+                            {claimedSitesFilterOptions.activities.map(a => (
+                              <SelectItem key={a} value={a}>{a}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Enumerator */}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Enumerator</Label>
+                        <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
+                          <SelectTrigger className="h-8 text-xs" data-testid="select-claimed-by-filter">
+                            <SelectValue placeholder="All Enumerators" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Enumerators</SelectItem>
+                            {claimedSitesFilterOptions.claimedByUsers.map(user => (
+                              <SelectItem key={user} value={user}>{user}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* No-transport-cost quick toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setClaimedNoCostFilter(v => !v)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        claimedNoCostFilter
+                          ? 'bg-amber-500 border-amber-500 text-white'
+                          : 'border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:border-amber-400 hover:text-amber-600'
+                      }`}
+                      data-testid="button-claimed-no-cost-filter"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-current" />
+                      No Transport Cost
+                    </button>
+                  </div>
+                );
+              })()}
             </CardHeader>
             <CardContent className="p-0">
               {loadingClaimed ? (
