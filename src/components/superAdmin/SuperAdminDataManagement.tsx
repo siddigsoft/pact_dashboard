@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -294,6 +295,7 @@ const ALL_CORRECTABLE_STATUSES = [
 export function SuperAdminDataManagement() {
   const { currentUser, users } = useUser();
   const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
+  const { mmpFiles: contextMmpFiles } = useMMP();   // already loaded — real names, bypasses RLS
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('site-visits');
@@ -1606,12 +1608,22 @@ export function SuperAdminDataManagement() {
     };
   }, [siteVisits, wallets, transactions, claimedSites, dispatchedSites, mmps]);
 
-  // Fast id→MMP lookup used in claimed sites table and filter options
+  // Fast id→MMP lookup — merges loadMMPs() result AND the already-loaded useMMP() context
+  // so real names ("August 2026 MMP", "July 2026 MMP" etc.) always win over UUID fallbacks.
   const mmpById = useMemo(() => {
     const map: Record<string, { id: string; name: string; month?: number; year?: number }> = {};
     mmps.forEach(m => { if (m.id) map[m.id] = m; });
+    // Overlay with context MMP files — these have real names and bypass RLS
+    contextMmpFiles.forEach(f => {
+      if (f.id) {
+        const resolvedName = f.name || (f as any).projectName || (f as any).mmpId
+          || ((f as any).month && (f as any).year ? `MMP ${(f as any).month}/${(f as any).year}` : null)
+          || `MMP-${f.id.slice(0, 8).toUpperCase()}`;
+        map[f.id] = { id: f.id, name: resolvedName, month: (f as any).month, year: (f as any).year };
+      }
+    });
     return map;
-  }, [mmps]);
+  }, [mmps, contextMmpFiles]);
 
   const svFilterOptions = useMemo(() => {
     const states = [...new Set(siteVisits.map(s => s.state).filter(Boolean))].sort() as string[];
@@ -1808,30 +1820,26 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // Derive MMP options from the mmps state (same source as MMP Management page).
-    // Key = UUID (mmp_file_id), label = real MMP name. Falls back to inline-resolved name
-    // or raw UUID for any ID not yet in the mmps state (e.g. before loadMMPs finishes).
+    // MMP filter options — primary source is mmpById which merges useMMP() context
+    // (real names like "August 2026 MMP") + loadMMPs() result + inline resolved names.
     const claimedMmpIds = new Set(claimedSites.map(s => s.mmp_id).filter(Boolean));
-    const mmpOptionMap = new Map<string, string>(); // id → label
-    // Primary: use mmps state (has real names, same data source as MMP Management page)
-    mmps.forEach(m => {
-      if (m.id && claimedMmpIds.has(m.id)) {
-        mmpOptionMap.set(m.id, m.name || `MMP ${m.month ?? '?'}/${m.year ?? '?'}`);
-      }
+    const mmpOptionMap = new Map<string, string>(); // uuid → display label
+    // Use the merged mmpById map (real names from context win)
+    claimedMmpIds.forEach(id => {
+      if (!id) return;
+      const label = mmpById[id]?.name || s_mmp_name_from_site(id) || `MMP-${String(id).slice(0, 8).toUpperCase()}`;
+      mmpOptionMap.set(id, label);
     });
-    // Fallback: for any IDs not yet in mmps, use inline-resolved name or short UUID
-    claimedSites.forEach(s => {
-      if (s.mmp_id && !mmpOptionMap.has(s.mmp_id)) {
-        const label = mmpById[s.mmp_id]?.name || s.mmp_name || `MMP-${String(s.mmp_id).slice(0, 8).toUpperCase()}`;
-        mmpOptionMap.set(s.mmp_id, label);
-      }
-    });
+    // Helper to get mmp_name from site data for a given id
+    function s_mmp_name_from_site(id: string) {
+      return claimedSites.find(s => s.mmp_id === id)?.mmp_name || null;
+    }
     const mmpOptions = [...mmpOptionMap.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
     return { states, localities, activities, claimedByUsers, mmpOptions, statusOptions };
-  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps]);
+  }, [claimedSites, stateFilter, localityFilter, activityFilter, mmpById, mmps, contextMmpFiles]);
 
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
