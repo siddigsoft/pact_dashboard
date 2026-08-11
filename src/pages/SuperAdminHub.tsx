@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const SuperAdminMgmtPanel     = lazy(() => import('../components/superAdmin/SuperAdminManagementPage').then(m => ({ default: m.SuperAdminManagementPage })));
 const MonitoringDashboardPanel = lazy(() => import('./MonitoringDashboard'));
@@ -159,11 +160,27 @@ export default function SuperAdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as SATab | null;
   const _savedSA = localStorage.getItem('hub_last_tab_super_admin') as SATab | null;
-  const _defaultSA: SATab = (_savedSA && ALL_TABS.find(t => t.id === _savedSA)) ? _savedSA : DEFAULT_TAB;
-  const activeTab: SATab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as SATab) : _defaultSA;
 
-  const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
-  const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
+  const { isTabBlocked } = useCurrentUserAccess();
+
+  const visibleSections = useMemo(() =>
+    SECTIONS
+      .map(s => ({ ...s, tabs: s.tabs.filter(t => !isTabBlocked(`super-admin-hub:${t.id}`)) }))
+      .filter(s => s.tabs.length > 0),
+    [isTabBlocked],
+  );
+  const visibleAllTabs = useMemo(() =>
+    visibleSections.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id, sectionColor: s.color }))),
+    [visibleSections],
+  );
+
+  const _defaultSA: SATab = (
+    (_savedSA && visibleAllTabs.find(t => t.id === _savedSA)) ? _savedSA : (visibleAllTabs[0]?.id ?? DEFAULT_TAB)
+  ) as SATab;
+  const activeTab: SATab = (visibleAllTabs.find(t => t.id === rawTab) ? rawTab : _defaultSA) as SATab;
+
+  const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
+  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? SECTIONS[0];
 
   const setTab = (tab: SATab) => {
     localStorage.setItem('hub_last_tab_super_admin', tab);
@@ -179,7 +196,7 @@ export default function SuperAdminHub() {
       title="Super Admin Hub"
       subtitle="Monitoring · Permissions · Email · Mobile · Data"
       hubIcon={ShieldCheck}
-      sections={SECTIONS}
+      sections={visibleSections}
       activeSectionId={activeSection.id}
       activeTabId={activeTab}
       activeTabDescription={activeTabDef.description}

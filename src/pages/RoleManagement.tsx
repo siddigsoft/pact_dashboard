@@ -14,6 +14,7 @@ import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignm
 import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
+import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
@@ -302,10 +303,10 @@ const RoleManagement = () => {
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
 
-          {/* Tab 2: Security Panel — unified everything */}
-          <TabsTrigger value="security-panel" className="gap-2" data-testid="tab-security-panel">
+          {/* Tab 2: Unified Access Manager */}
+          <TabsTrigger value="access-manager" className="gap-2" data-testid="tab-access-manager">
             <KeyRound className="h-4 w-4" />
-            <span>Security Panel <span className="text-[10px] opacity-60">/ لوحة الأمان</span></span>
+            <span>Access Manager <span className="text-[10px] opacity-60">/ مدير الوصول</span></span>
           </TabsTrigger>
 
           {/* Tab 3: Cost Submission Access — Admin + Super Admin only */}
@@ -379,18 +380,21 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-        {/* ── Tab 2: Security Panel ── */}
-        <TabsContent value="security-panel" className="mt-0">
+        {/* ── Tab 2: Unified Access Manager ── */}
+        <TabsContent value="access-manager" className="mt-0">
           <div className="mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-indigo-600" />
-              Security Panel <span className="text-base font-normal text-muted-foreground" dir="rtl">/ لوحة الأمان</span>
+              Access Manager <span className="text-base font-normal text-muted-foreground" dir="rtl">/ مدير الوصول</span>
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              View by role or by user — every page, button, report and permission in one place. Toggle any access individually per user.
+              Per-user control of every access dimension: page access, hub tab visibility, action permissions, column visibility, and data scope.
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5" dir="rtl">
+              التحكم في كل أبعاد الوصول: الصفحات، التبويبات، الصلاحيات، الأعمدة ونطاق البيانات
             </p>
           </div>
-          <SecurityPanel isSuperAdmin={isSuperAdmin} />
+          <UnifiedAccessManager />
         </TabsContent>
 
         {/* ── Tab 3: Cost Submission Access (Admin + Super Admin) ── */}

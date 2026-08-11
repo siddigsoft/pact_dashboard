@@ -31,6 +31,7 @@ import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNot
 import { SyncStatusProvider } from './sync/SyncStatusContext';
 import { LocationProvider } from './location/LocationContext';
 import { DataScopeProvider } from './DataScopeContext';
+import { CurrentUserAccessProvider } from './CurrentUserAccessContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -182,6 +183,7 @@ export const AppProviders: FC<{ children: ReactNode }> = ({ children }) => {
                         <ArchiveProvider>
                           <RoleManagementProvider>
                             <CompositeContextProvider>
+                              <CurrentUserAccessProvider>
                               <BudgetProvider>
                                 <CostSubmissionProvider>
                                   <DownPaymentProvider>
@@ -208,6 +210,7 @@ export const AppProviders: FC<{ children: ReactNode }> = ({ children }) => {
                                   </DownPaymentProvider>
                                 </CostSubmissionProvider>
                               </BudgetProvider>
+                              </CurrentUserAccessProvider>
                             </CompositeContextProvider>
                           </RoleManagementProvider>
                         </ArchiveProvider>

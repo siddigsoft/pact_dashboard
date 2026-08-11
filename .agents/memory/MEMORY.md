@@ -24,3 +24,4 @@
 - [recycle-bin-system](recycle-bin-system.md) — Global soft-delete recycle bin: recycle_bin table (28-day retention), softDelete() utility, /recycle-bin page (Super Admin only), Super Admin-only delete guards on Positions/PreFunding/UserDetail.
 - [senior-management-role](senior-management-role.md) — SeniorManagement AppRole fully wired: type, permissions, roleMapping, sidebar/nav; no admin hub access; maps DB name "Senior Management" via normalizeRole().
 - [project-duration-calendar](project-duration-calendar.md) — MS-Project durations: checklist item dates, stage assignee work periods, per-project calendar; migration must be run manually in Supabase Studio.
+- [unified-access-manager](unified-access-manager.md) — 5-tab access manager in RoleManagement; tab overrides stored in page_access_overrides with `hubSlug:tabId` slug; CurrentUserAccessContext filters hub tabs live; Finance/HR hubs not yet wired.

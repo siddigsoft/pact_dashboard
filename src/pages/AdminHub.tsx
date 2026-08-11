@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useRef, useEffect } from 'react';
+import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, Users, Shield, Lock, Building2, Award, DollarSign,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const UsersPanel              = lazy(() => import('./Users'));
 const RoleManagementPanel     = lazy(() => import('./RoleManagement'));
@@ -94,11 +95,27 @@ export default function AdminHub() {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as AdminTab | null;
   const _savedAdm = localStorage.getItem('hub_last_tab_admin') as AdminTab | null;
-  const _defaultAdm: AdminTab = (_savedAdm && ALL_TABS.find(t => t.id === _savedAdm)) ? _savedAdm : DEFAULT_TAB;
-  const activeTab: AdminTab = ALL_TABS.find(t => t.id === rawTab) ? (rawTab as AdminTab) : _defaultAdm;
 
-  const activeTabDef = ALL_TABS.find(t => t.id === activeTab)!;
-  const activeSection = SECTIONS.find(s => s.id === activeTabDef.sectionId)!;
+  const { isTabBlocked } = useCurrentUserAccess();
+
+  const visibleSections = useMemo(() =>
+    SECTIONS
+      .map(s => ({ ...s, tabs: s.tabs.filter(t => !isTabBlocked(`admin-hub:${t.id}`)) }))
+      .filter(s => s.tabs.length > 0),
+    [isTabBlocked],
+  );
+  const visibleAllTabs = useMemo(() =>
+    visibleSections.flatMap(s => s.tabs.map(t => ({ ...t, sectionId: s.id, sectionColor: s.color }))),
+    [visibleSections],
+  );
+
+  const _defaultAdm: AdminTab = (
+    (_savedAdm && visibleAllTabs.find(t => t.id === _savedAdm)) ? _savedAdm : (visibleAllTabs[0]?.id ?? DEFAULT_TAB)
+  ) as AdminTab;
+  const activeTab: AdminTab = (visibleAllTabs.find(t => t.id === rawTab) ? rawTab : _defaultAdm) as AdminTab;
+
+  const activeTabDef = ALL_TABS.find(t => t.id === activeTab) ?? ALL_TABS[0];
+  const activeSection = visibleSections.find(s => s.id === activeTabDef.sectionId) ?? visibleSections[0] ?? SECTIONS[0];
 
   const setTab = (tab: AdminTab) => {
     localStorage.setItem('hub_last_tab_admin', tab);
@@ -145,7 +162,7 @@ export default function AdminHub() {
                 Administration Hub
               </h1>
               <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400">
-                {SECTIONS.map((s, i) => (
+                {visibleSections.map((s, i) => (
                   <span key={s.id} className="flex items-center gap-1">
                     {i > 0 && <ChevronRight className="h-2.5 w-2.5 opacity-40" />}
                     <span
@@ -169,7 +186,7 @@ export default function AdminHub() {
 
         {/* ── Level 2: Section tabs ── */}
         <div className="px-5 pt-3 flex items-end gap-1.5">
-          {SECTIONS.map(s => {
+          {visibleSections.map(s => {
             const isActive = activeSection.id === s.id;
             return (
               <button
