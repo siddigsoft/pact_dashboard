@@ -475,7 +475,7 @@ export function parsePermissions(notes: string | null): Perms {
 
 function packPermissions(perms: Perms): string { return JSON.stringify(perms); }
 
-const PERM_DEFS: { key: keyof Perms; label: string; desc: string; activeClass: string }[] = [
+export const PERM_DEFS: { key: keyof Perms; label: string; desc: string; activeClass: string }[] = [
   { key: 'r', label: 'Read',   desc: 'View and read data on this page',  activeClass: 'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-900/30 dark:text-sky-300' },
   { key: 'w', label: 'Write',  desc: 'Edit and update existing records', activeClass: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300' },
   { key: 'c', label: 'Create', desc: 'Create new records on this page',  activeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300' },
