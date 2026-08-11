@@ -77,8 +77,8 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       const [pageRes, permRes, colRes, scopeRes] = await Promise.all([
         supabase.from('page_access_overrides').select('*').eq('user_id', userId),
         supabase.from('user_permission_overrides').select('*').eq('user_id', userId),
-        supabase.from('column_visibility_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).catch(() => ({ data: [] as any })),
-        supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).catch(() => ({ data: [] as any })),
+        supabase.from('column_visibility_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).then(r => r, () => ({ data: [] as any })),
+        supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).then(r => r, () => ({ data: [] as any })),
       ]);
       setPageOverrides(pageRes.data ?? []);
       setPermOverrides(permRes.data ?? []);

@@ -1,6 +1,5 @@
 import { exportToExcel } from '@/utils/report-export';
 import { useState, useMemo } from 'react';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import {
@@ -1054,9 +1053,6 @@ export default function TaskAdmin() {
           <p className="text-sm text-muted-foreground">Manage recurring task templates, view department task health, and calculate payroll</p>
         </div>
       </div>
-
-      {/* Quick Navigation */}
-      <ConnectedPagesBar exclude="task-admin" />
 
       <Tabs defaultValue="overview">
         <TabsList className="h-9 text-xs">

@@ -87,6 +87,7 @@ import { useRoleManagement } from '@/context/role-management/RoleManagementConte
 import { useAppContextSelector } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 import RoleBadge from '@/components/user/RoleBadge';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
@@ -98,6 +99,7 @@ const Users = () => {
   const { toast } = useToast();
   const roles = useAppContextSelector((c) => c.roles);
   
+  const isColVisible = useColumnVisibility('users');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -777,7 +779,7 @@ const Users = () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
+              {isColVisible('email') && <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>}
             </div>
           </div>
         </TableCell>
@@ -1260,8 +1262,8 @@ const Users = () => {
                               <Clock className="h-2.5 w-2.5 mr-1" /> Pending
                             </Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
-                          {user.phone && (
+                          {isColVisible('email') && <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>}
+                          {isColVisible('phone') && user.phone && (
                             <p className="text-xs text-muted-foreground mt-0.5">{user.phone}</p>
                           )}
                           <div className="flex items-center gap-3 mt-1 flex-wrap">

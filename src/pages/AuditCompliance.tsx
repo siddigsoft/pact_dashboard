@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Navigate } from "react-router-dom";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,23 +39,37 @@ const AuditCompliancePage = () => {
 
   const stats = useMemo(() => getAuditStats(), [logs]);
 
-  const todayCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return logs.filter(l => new Date(l.timestamp) >= today).length;
-  }, [logs]);
+  // Use server-side COUNT queries so these numbers aren't capped by the
+  // PostgREST 1000-row default that affects the in-memory logs array.
+  const [todayCount, setTodayCount]   = useState<number | null>(null);
+  const [weekCount,  setWeekCount]    = useState<number | null>(null);
+  const [monthCount, setMonthCount]   = useState<number | null>(null);
 
-  const weekCount = useMemo(() => {
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return logs.filter(l => new Date(l.timestamp) >= weekAgo).length;
-  }, [logs]);
-
-  const monthCount = useMemo(() => {
+  useEffect(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const weekAgo  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
     const monthAgo = new Date();
     monthAgo.setMonth(monthAgo.getMonth() - 1);
-    return logs.filter(l => new Date(l.timestamp) >= monthAgo).length;
-  }, [logs]);
+
+    Promise.all([
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('timestamp', todayStart.toISOString()),
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('timestamp', weekAgo.toISOString()),
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('timestamp', monthAgo.toISOString()),
+    ]).then(([todayRes, weekRes, monthRes]) => {
+      if (todayRes.count !== null) setTodayCount(todayRes.count);
+      if (weekRes.count  !== null) setWeekCount(weekRes.count);
+      if (monthRes.count !== null) setMonthCount(monthRes.count);
+    }).catch(() => {
+      // Fall back to in-memory counts if the DB query fails
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const wAgo  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
+      const mAgo  = new Date(); mAgo.setMonth(mAgo.getMonth() - 1);
+      setTodayCount(logs.filter(l => new Date(l.timestamp) >= today).length);
+      setWeekCount( logs.filter(l => new Date(l.timestamp) >= wAgo).length);
+      setMonthCount(logs.filter(l => new Date(l.timestamp) >= mAgo).length);
+    });
+  }, []); // run once on mount; these are summary stats, not live-updating
 
   const criticalCount = useMemo(() => {
     return (stats.bySeverity?.critical || 0) + (stats.bySeverity?.error || 0);
@@ -294,15 +309,15 @@ const AuditCompliancePage = () => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Today</span>
-                  <span className="font-medium" data-testid="text-today-count">{todayCount} events</span>
+                  <span className="font-medium" data-testid="text-today-count">{todayCount === null ? '—' : todayCount.toLocaleString()} events</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">This Week</span>
-                  <span className="font-medium" data-testid="text-week-count">{weekCount} events</span>
+                  <span className="font-medium" data-testid="text-week-count">{weekCount === null ? '—' : weekCount.toLocaleString()} events</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">This Month</span>
-                  <span className="font-medium" data-testid="text-month-count">{monthCount} events</span>
+                  <span className="font-medium" data-testid="text-month-count">{monthCount === null ? '—' : monthCount.toLocaleString()} events</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t">
                   <span className="text-muted-foreground">Critical Events</span>

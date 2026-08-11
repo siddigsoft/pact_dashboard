@@ -26,6 +26,7 @@ import {
   User, CalendarDays, CreditCard, History, DollarSign, ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
@@ -1914,6 +1915,7 @@ export default function Employees() {
   const roleCanEdit = isSuperAdmin() || hasAnyRole(['admin', 'fom', 'financialAdmin', 'hrManager', 'hr']);
   const overrideCanEdit = usePageManageOverride('employees', roleCanEdit);
   const canEdit = roleCanEdit || overrideCanEdit;
+  const isColVisible = useColumnVisibility('employees');
 
   const [profiles, setProfiles]               = useState<EmployeeProfile[]>([]);
   const [salaryConfigMap, setSalaryConfigMap]     = useState<Record<string, SalaryConfigSummary>>({});
@@ -2603,18 +2605,22 @@ export default function Employees() {
                               <RoleBadge role={p.role} />
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <div className="rounded bg-blue-50 dark:bg-blue-950/30 px-2 py-1.5">
-                              <p className="text-[10px] text-muted-foreground">Base Salary</p>
-                              <p className="text-xs font-bold text-blue-700 dark:text-blue-400 truncate">{sc ? fmtMoney(sc.base_salary, sc.currency) : '—'}</p>
+                          {isColVisible('salary') && (
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <div className="rounded bg-blue-50 dark:bg-blue-950/30 px-2 py-1.5">
+                                <p className="text-[10px] text-muted-foreground">Base Salary</p>
+                                <p className="text-xs font-bold text-blue-700 dark:text-blue-400 truncate">{sc ? fmtMoney(sc.base_salary, sc.currency) : '—'}</p>
+                              </div>
+                              <div className="rounded bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1.5">
+                                <p className="text-[10px] text-muted-foreground">Gross</p>
+                                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 truncate">{sc ? fmtMoney(computeGross(sc), sc.currency) : '—'}</p>
+                              </div>
                             </div>
-                            <div className="rounded bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1.5">
-                              <p className="text-[10px] text-muted-foreground">Gross</p>
-                              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 truncate">{sc ? fmtMoney(computeGross(sc), sc.currency) : '—'}</p>
-                            </div>
-                          </div>
+                          )}
                           <div className="flex items-center justify-between pt-1 border-t text-xs">
-                            <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-red-500 font-medium">No account</span>}</div>
+                            {isColVisible('bank_account') && (
+                              <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-red-500 font-medium">No account</span>}</div>
+                            )}
                             {hub && <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{hub.name}</span>}
                           </div>
                         </div>
@@ -2631,10 +2637,10 @@ export default function Employees() {
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead className="w-[200px]">Name</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Base Salary</TableHead>
-                        <TableHead>Gross</TableHead>
+                        {isColVisible('salary') && <TableHead>Base Salary</TableHead>}
+                        {isColVisible('salary') && <TableHead>Gross</TableHead>}
                         <TableHead>Hub</TableHead>
-                        <TableHead>Payroll Account</TableHead>
+                        {isColVisible('bank_account') && <TableHead>Payroll Account</TableHead>}
                         <TableHead>Contract</TableHead>
                         <TableHead>Expiry</TableHead>
                         <TableHead>Profile</TableHead>
@@ -2661,19 +2667,25 @@ export default function Employees() {
                               </div>
                             </TableCell>
                             <TableCell><RoleBadge role={p.role} /></TableCell>
-                            <TableCell>
-                              {sc ? <span className="text-sm font-bold text-blue-700 dark:text-blue-400">{fmtMoney(sc.base_salary, sc.currency)}</span>
-                                  : <span className="text-xs text-amber-600 italic">Not configured</span>}
-                            </TableCell>
-                            <TableCell>
-                              {sc ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{fmtMoney(computeGross(sc), sc.currency)}</span>
-                                  : <span className="text-muted-foreground text-xs">—</span>}
-                            </TableCell>
+                            {isColVisible('salary') && (
+                              <TableCell>
+                                {sc ? <span className="text-sm font-bold text-blue-700 dark:text-blue-400">{fmtMoney(sc.base_salary, sc.currency)}</span>
+                                    : <span className="text-xs text-amber-600 italic">Not configured</span>}
+                              </TableCell>
+                            )}
+                            {isColVisible('salary') && (
+                              <TableCell>
+                                {sc ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{fmtMoney(computeGross(sc), sc.currency)}</span>
+                                    : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                            )}
                             <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
-                            <TableCell>
-                              {hasBank ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
-                                       : <span className="text-xs text-red-500 font-medium">Missing</span>}
-                            </TableCell>
+                            {isColVisible('bank_account') && (
+                              <TableCell>
+                                {hasBank ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
+                                         : <span className="text-xs text-red-500 font-medium">Missing</span>}
+                              </TableCell>
+                            )}
                             <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
                             <TableCell><ExpiryBadge endDate={p.contract_end_date} /></TableCell>
                             <TableCell>
@@ -2758,7 +2770,9 @@ export default function Employees() {
                             </div>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t text-xs">
-                            <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-amber-500 font-medium">No cash-out account</span>}</div>
+                            {isColVisible('bank_account') && (
+                              <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3 text-muted-foreground" />{hasBank ? <span className="font-mono text-[10px]">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-amber-500 font-medium">No cash-out account</span>}</div>
+                            )}
                             {hub && <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{hub.name}</span>}
                           </div>
                         </div>
@@ -2778,7 +2792,7 @@ export default function Employees() {
                         <TableHead>Classification</TableHead>
                         <TableHead>Retainer / Month</TableHead>
                         <TableHead>Last Payment</TableHead>
-                        <TableHead>Cash-out Account</TableHead>
+                        {isColVisible('bank_account') && <TableHead>Cash-out Account</TableHead>}
                         <TableHead>Contract</TableHead>
                         <TableHead>Expiry</TableHead>
                         <TableHead>Status</TableHead>
@@ -2812,11 +2826,13 @@ export default function Employees() {
                             <TableCell className="text-xs text-muted-foreground">
                               {lastPay ? format(new Date(lastPay), 'dd MMM yyyy') : '—'}
                             </TableCell>
-                            <TableCell>
-                              {hasBank
-                                ? <div className="flex flex-col gap-0"><span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span><span className="text-[10px] text-muted-foreground">Cash-out</span></div>
-                                : <span className="text-xs text-amber-600 italic">Not registered</span>}
-                            </TableCell>
+                            {isColVisible('bank_account') && (
+                              <TableCell>
+                                {hasBank
+                                  ? <div className="flex flex-col gap-0"><span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span><span className="text-[10px] text-muted-foreground">Cash-out</span></div>
+                                  : <span className="text-xs text-amber-600 italic">Not registered</span>}
+                              </TableCell>
+                            )}
                             <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
                             <TableCell><ExpiryBadge endDate={p.contract_end_date} /></TableCell>
                             <TableCell>
