@@ -19,6 +19,7 @@ import { BalanceAdjustmentDialog } from '@/components/wallet/BalanceAdjustmentDi
 import { exportTransactionsToCSV, exportTransactionsToPDF } from '@/lib/wallet/export';
 import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
@@ -27,6 +28,7 @@ const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let _walletCache: { rows: any[]; currency: string; ts: number } | null = null;
 
 const AdminWallets: FC = () => {
+  const isColVisible = useColumnVisibility('admin-wallets');
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [currency, setCurrency] = useState('SDG');
@@ -877,11 +879,11 @@ const AdminWallets: FC = () => {
                   <TableRow className="bg-slate-900/60 hover:bg-slate-900/60 border-slate-700">
                     <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">User</TableHead>
                     <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Email</TableHead>
-                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Balance</TableHead>
+                    {isColVisible('balance') && <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Balance</TableHead>}
                     <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Earnings</TableHead>
                     <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-right">Withdrawn</TableHead>
-                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-center">Status</TableHead>
-                    <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Updated</TableHead>
+                    {isColVisible('status') && <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-center">Status</TableHead>}
+                    {isColVisible('last_transaction') && <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Updated</TableHead>}
                     <TableHead className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -932,11 +934,13 @@ const AdminWallets: FC = () => {
                           <TableCell className="text-slate-400 text-sm">
                             {wallet.profiles?.email || '-'}
                           </TableCell>
-                          <TableCell className="text-right font-bold">
-                            <span className={balance > 0 ? 'text-emerald-400' : 'text-slate-400'}>
-                              {fmt(balance * 100, currency)}
-                            </span>
-                          </TableCell>
+                          {isColVisible('balance') && (
+                            <TableCell className="text-right font-bold">
+                              <span className={balance > 0 ? 'text-emerald-400' : 'text-slate-400'}>
+                                {fmt(balance * 100, currency)}
+                              </span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <div className="flex flex-col gap-1 items-end">
                               {siteVisitFees > 0 && (
@@ -996,17 +1000,21 @@ const AdminWallets: FC = () => {
                               {fmt(withdrawn * 100, currency)}
                             </span>
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Badge 
-                              variant={isActive ? 'default' : 'secondary'}
-                              className={isActive ? 'bg-green-500/90 hover:bg-green-600' : ''}
-                            >
-                              {isActive ? 'ACTIVE' : 'INACTIVE'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {wallet.updated_at ? format(new Date(wallet.updated_at), 'MMM dd, yyyy') : '-'}
-                          </TableCell>
+                          {isColVisible('status') && (
+                            <TableCell className="text-center">
+                              <Badge 
+                                variant={isActive ? 'default' : 'secondary'}
+                                className={isActive ? 'bg-green-500/90 hover:bg-green-600' : ''}
+                              >
+                                {isActive ? 'ACTIVE' : 'INACTIVE'}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {isColVisible('last_transaction') && (
+                            <TableCell className="text-muted-foreground text-sm">
+                              {wallet.updated_at ? format(new Date(wallet.updated_at), 'MMM dd, yyyy') : '-'}
+                            </TableCell>
+                          )}
                           <TableCell className="text-center">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

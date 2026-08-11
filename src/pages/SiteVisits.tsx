@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useAppContextSelector } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
 import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User, RefreshCw } from "lucide-react";
@@ -50,6 +51,7 @@ const SiteVisits = () => {
   const currentUser = useAppContextSelector((c) => c.currentUser);
   const hasRole = useAppContextSelector((c) => c.hasRole);
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
+  const isColVisible = useColumnVisibility('site-visits');
   const { isSuperAdmin } = useSuperAdmin();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
@@ -789,16 +791,19 @@ const SiteVisits = () => {
                 }`}>
                   {(visit.priority ? visit.priority.charAt(0).toUpperCase() + visit.priority.slice(1) : 'Unknown')} Priority
                 </div>
-                <div className="font-medium text-sm sm:text-base">
-                  {visit.fees?.total ? `SDG ${Number(visit.fees.total).toLocaleString()}` : 'N/A'}
-                </div>
+                {isColVisible('transport_fee') && (
+                  <div className="font-medium text-sm sm:text-base">
+                    {visit.fees?.total ? `SDG ${Number(visit.fees.total).toLocaleString()}` : 'N/A'}
+                  </div>
+                )}
               </div>
             </CardContent>
             
             {/* Mobile-optimized footer with larger touch target */}
             <CardFooter className="bg-muted/20 p-3 sm:p-4 flex flex-col gap-2">
               {/* Show Request Advance button for accepted/ongoing sites with transport budget */}
-              {['accepted', 'ongoing', 'in progress', 'in_progress', 'assigned'].includes(visit.status?.toLowerCase() || '') && 
+              {isColVisible('transport_fee') &&
+               ['accepted', 'ongoing', 'in progress', 'in_progress', 'assigned'].includes(visit.status?.toLowerCase() || '') && 
                (visit.assignedTo === currentUser?.id || (visit as any).accepted_by === currentUser?.id || (visit as any).acceptedBy === currentUser?.id) &&
                ((visit as any).transport_fee > 0 || (visit as any).transportFee > 0 || (visit.fees?.transportation && visit.fees.transportation > 0)) && (
                 <RequestDownPaymentButton

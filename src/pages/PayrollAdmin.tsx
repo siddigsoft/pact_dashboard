@@ -3,6 +3,7 @@
  * 3 sub-tabs: Employee Salaries · Run Payroll · Payslips & History
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
@@ -659,6 +660,7 @@ function onboardingScore(emp: EmployeeRow): { score: number; items: { label: str
 }
 
 function SalarySetupTab({ employees, loading, departments }: { employees: EmployeeRow[]; loading: boolean; departments: DeptOption[] }) {
+  const isColVisible = useColumnVisibility('payroll-admin');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('all');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
@@ -713,22 +715,29 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 border-b">
                 <th className="text-left text-xs font-semibold text-muted-foreground px-5 py-3 uppercase tracking-wide">Employee</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide hidden md:table-cell">Contract</th>
+                {isColVisible('contract_type') && <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide hidden md:table-cell">Contract</th>}
                 <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Department</th>
                 <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Base</th>
-                <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">Gross</th>
-                <th className="text-right text-xs font-semibold text-blue-600 px-3 py-3 uppercase tracking-wide">Net Pay</th>
+                {isColVisible('gross_pay') && <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">Gross</th>}
+                {isColVisible('net_pay') && <th className="text-right text-xs font-semibold text-blue-600 px-3 py-3 uppercase tracking-wide">Net Pay</th>}
                 <th className="text-center text-xs font-semibold text-violet-600 px-3 py-3 uppercase tracking-wide">Onboarding</th>
                 <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="py-20 text-center"><Loader2 className="h-6 w-6 animate-spin opacity-30 mx-auto" /></td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} className="py-16 text-center text-sm text-muted-foreground">No employees with employment records found.</td></tr>
-              ) : filtered.map(emp => {
+              {(() => {
+                const empColCount = 6
+                  + (isColVisible('contract_type') ? 1 : 0)
+                  + (isColVisible('gross_pay') ? 1 : 0)
+                  + (isColVisible('net_pay') ? 1 : 0);
+                return loading ? (
+                  <tr><td colSpan={empColCount} className="py-20 text-center"><Loader2 className="h-6 w-6 animate-spin opacity-30 mx-auto" /></td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={empColCount} className="py-16 text-center text-sm text-muted-foreground">No employees with employment records found.</td></tr>
+                ) : null;
+              })()}
+              {!loading && filtered.map(emp => {
                 const calc = emp.salary_config ? computePayroll(emp.salary_config) : null;
                 const cur  = emp.salary_config?.currency ?? 'SDG';
                 return (
@@ -744,18 +753,20 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3.5 hidden md:table-cell">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize" data-testid={`text-emptype-${emp.id}`}>
-                          {emp.employment_type?.replace(/_/g, ' ') ?? '—'}
-                        </span>
-                        {(emp.contract_type === 'retainer' || emp.retainer?.is_active) && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40" data-testid={`badge-retainer-${emp.id}`}>
-                            Retainer
+                    {isColVisible('contract_type') && (
+                      <td className="px-3 py-3.5 hidden md:table-cell">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize" data-testid={`text-emptype-${emp.id}`}>
+                            {emp.employment_type?.replace(/_/g, ' ') ?? '—'}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                          {(emp.contract_type === 'retainer' || emp.retainer?.is_active) && (
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40" data-testid={`badge-retainer-${emp.id}`}>
+                              Retainer
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     <td className="px-3 py-3.5 text-sm text-muted-foreground">{emp.department_name ?? <span className="opacity-30">—</span>}</td>
                     <td className="px-3 py-3.5 text-right font-medium text-sm">
                       {calc
@@ -764,8 +775,8 @@ function SalarySetupTab({ employees, loading, departments }: { employees: Employ
                           ? <span className="text-violet-600" data-testid={`text-retainer-${emp.id}`}>{fmt(emp.retainer.amount_cents / 100, emp.retainer.currency)}<span className="text-[10px] text-muted-foreground ml-1">/{emp.retainer.frequency.slice(0,1)}</span></span>
                           : <span className="text-muted-foreground/30">—</span>}
                     </td>
-                    <td className="px-3 py-3.5 text-right font-semibold text-emerald-600 text-sm">{calc ? fmt(calc.gross, cur) : <span className="text-muted-foreground/30">—</span>}</td>
-                    <td className="px-3 py-3.5 text-right font-bold text-blue-600 text-sm">{calc ? fmt(calc.net, cur) : <span className="text-muted-foreground/30">—</span>}</td>
+                    {isColVisible('gross_pay') && <td className="px-3 py-3.5 text-right font-semibold text-emerald-600 text-sm">{calc ? fmt(calc.gross, cur) : <span className="text-muted-foreground/30">—</span>}</td>}
+                    {isColVisible('net_pay') && <td className="px-3 py-3.5 text-right font-bold text-blue-600 text-sm">{calc ? fmt(calc.net, cur) : <span className="text-muted-foreground/30">—</span>}</td>}
                     <td className="px-3 py-3.5 text-center">
                       {(() => {
                         const ob = onboardingScore(emp);
@@ -3583,6 +3594,7 @@ function PreRunDiffModal({ open, loading, data, periodLabel, onClose, onConfirm 
 function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   employees: EmployeeRow[]; runs: PayrollRun[]; currentUserId: string; currentUserRole: string;
 }) {
+  const isColVisible = useColumnVisibility('payroll-admin');
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -4204,10 +4216,10 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
                   <th className="text-left text-xs font-semibold text-muted-foreground px-5 py-3 uppercase tracking-wide">Employee</th>
                   <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Base</th>
                   <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">+Allow.</th>
-                  <th className="text-right text-xs font-semibold text-[#0F2041] dark:text-blue-300 px-3 py-3 uppercase tracking-wide">Gross</th>
-                  <th className="text-right text-xs font-semibold text-red-500 px-3 py-3 uppercase tracking-wide">−Ded.</th>
+                  {isColVisible('gross_pay') && <th className="text-right text-xs font-semibold text-[#0F2041] dark:text-blue-300 px-3 py-3 uppercase tracking-wide">Gross</th>}
+                  {isColVisible('deductions') && <th className="text-right text-xs font-semibold text-red-500 px-3 py-3 uppercase tracking-wide">−Ded.</th>}
                   <th className="text-right text-xs font-semibold text-violet-600 px-3 py-3 uppercase tracking-wide">Adjustments</th>
-                  <th className="text-right text-xs font-semibold text-blue-600 px-5 py-3 uppercase tracking-wide">Net Pay</th>
+                  {isColVisible('net_pay') && <th className="text-right text-xs font-semibold text-blue-600 px-5 py-3 uppercase tracking-wide">Net Pay</th>}
                 </tr>
               </thead>
               <tbody>
@@ -4229,8 +4241,8 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
                       </td>
                       <td className="px-3 py-3.5 text-right text-sm">{fmt(row.base_salary, row.currency)}</td>
                       <td className="px-3 py-3.5 text-right text-sm text-emerald-600">+{fmt(row.allowances_total, row.currency)}</td>
-                      <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F2041] dark:text-blue-300">{fmt(row.gross_salary, row.currency)}</td>
-                      <td className="px-3 py-3.5 text-right text-sm text-red-500">-{fmt(row.deductions_total, row.currency)}</td>
+                      {isColVisible('gross_pay') && <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F2041] dark:text-blue-300">{fmt(row.gross_salary, row.currency)}</td>}
+                      {isColVisible('deductions') && <td className="px-3 py-3.5 text-right text-sm text-red-500">-{fmt(row.deductions_total, row.currency)}</td>}
                       <td className="px-3 py-3.5 text-right">
                         {!isLocked && !isApproved ? (
                           <button onClick={() => setAdjEmp(row)} className={cn(
@@ -4247,7 +4259,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
                           </span>
                         ) : <span className="text-xs text-muted-foreground">—</span>}
                       </td>
-                      <td className="px-5 py-3.5 text-right text-sm font-bold text-blue-600">{fmt(net, row.currency)}</td>
+                      {isColVisible('net_pay') && <td className="px-5 py-3.5 text-right text-sm font-bold text-blue-600">{fmt(net, row.currency)}</td>}
                     </tr>
                   );
                 })}
@@ -4255,10 +4267,10 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
               <tfoot>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-t-2">
                   <td className="px-5 py-3 text-sm font-bold text-muted-foreground">Totals</td>
-                  <td colSpan={3} />
-                  <td className="px-3 py-3 text-right text-sm font-bold text-red-500">-{fmt(totals.ded)}</td>
+                  <td colSpan={2 + (isColVisible('gross_pay') ? 1 : 0)} />
+                  {isColVisible('deductions') && <td className="px-3 py-3 text-right text-sm font-bold text-red-500">-{fmt(totals.ded)}</td>}
                   <td />
-                  <td className="px-5 py-3 text-right text-sm font-bold text-blue-600">{fmt(totals.net)}</td>
+                  {isColVisible('net_pay') && <td className="px-5 py-3 text-right text-sm font-bold text-blue-600">{fmt(totals.net)}</td>}
                 </tr>
               </tfoot>
             </table>
