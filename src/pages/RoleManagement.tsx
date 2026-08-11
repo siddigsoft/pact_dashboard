@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Shield, Sparkles, Award, Lock, FlaskConical, KeyRound } from 'lucide-react';
+import { Plus, Users, Shield, Sparkles, Award, FlaskConical, KeyRound } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -12,7 +12,6 @@ import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog'
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
 import { PermissionTester } from '@/components/role-management/PermissionTester';
-import { CostSubmissionPermissions } from '@/components/role-management/CostSubmissionPermissions';
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -26,7 +25,7 @@ import { normalizeRole } from '@/utils/roleMapping';
 
 const RoleManagement = () => {
   const { currentUser, users, refreshUsers } = useAppContext();
-  const { canManageRoles: canManageRolesAuth, isSuperAdmin: isSuperAdminFn, hasAnyRole } = useAuthorization();
+  const { canManageRoles: canManageRolesAuth, isSuperAdmin: isSuperAdminFn } = useAuthorization();
   const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
   const { toast } = useToast();
   const {
@@ -51,10 +50,7 @@ const RoleManagement = () => {
 
   // ── Access gates ─────────────────────────────────────────────────────────
   const canManageRoles = canManageRolesAuth();
-  // FIX: isSuperAdmin uses the proper hook — Admin is NOT Super Admin
   const isSuperAdmin = isSuperAdminFn();
-  // Admin can see Cost Submission Access (both SA and Admin)
-  const isAdminOrAbove = isSuperAdmin || hasAnyRole(['admin', 'Admin']);
 
   if (!canManageRoles) {
     return (
@@ -294,7 +290,7 @@ const RoleManagement = () => {
         </Card>
       </div>
 
-      {/* Tabbed content — 3 tabs only */}
+      {/* Tabbed content */}
       <Tabs defaultValue="roles">
         <TabsList className="mb-4 h-auto gap-1">
           {/* Tab 1: Roles */}
@@ -308,14 +304,6 @@ const RoleManagement = () => {
             <KeyRound className="h-4 w-4" />
             <span>Access Manager <span className="text-[10px] opacity-60">/ مدير الوصول</span></span>
           </TabsTrigger>
-
-          {/* Tab 3: Cost Submission Access — Admin + Super Admin only */}
-          {isAdminOrAbove && (
-            <TabsTrigger value="cost-submissions" className="gap-2" data-testid="tab-cost-submission-perms">
-              <Lock className="h-4 w-4" />
-              <span>Cost Submission Access <span className="text-[10px] opacity-60">/ صلاحيات التكاليف</span></span>
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {/* ── Tab 1: Roles ── */}
@@ -397,12 +385,6 @@ const RoleManagement = () => {
           <UnifiedAccessManager />
         </TabsContent>
 
-        {/* ── Tab 3: Cost Submission Access (Admin + Super Admin) ── */}
-        {isAdminOrAbove && (
-          <TabsContent value="cost-submissions">
-            <CostSubmissionPermissions />
-          </TabsContent>
-        )}
       </Tabs>
 
       {/* Dialogs */}
