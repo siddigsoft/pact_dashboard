@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { usePreFundPaymentGate } from "@/hooks/usePreFundPaymentGate";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useRestrictedAction } from "@/hooks/useRestrictedAction";
@@ -235,6 +236,7 @@ const CostSubmission = () => {
   // Deep-link: ?open=<submissionId> auto-opens a specific submission detail sheet
   const openSubmissionId = searchParams.get('open') || null;
   const { currentUser } = useAppContext();
+  const isColVisible = useColumnVisibility('cost-submission');
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
    const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
@@ -6650,24 +6652,26 @@ const CostSubmission = () => {
                             </div>
                             {/* Amount + View + Audit */}
                             <div className="flex-none text-right space-y-1 ml-1">
-                              <div>
-                                <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
-                                  {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
-                                </p>
-                                <p className="text-[9px] text-gray-400 dark:text-gray-500 leading-tight">Requested</p>
-                                {(oc.amount_paid_cents || 0) > 0 && (
-                                  <>
-                                    <p className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400 mt-0.5" data-testid={`text-paid-amount-${oc.id}`}>
-                                      Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
-                                    </p>
-                                    {(oc.amount_paid_cents || 0) < oc.amount_cents && (
-                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                                        Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}
+                              {isColVisible('amount') && (
+                                <div>
+                                  <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
+                                    {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
+                                  </p>
+                                  <p className="text-[9px] text-gray-400 dark:text-gray-500 leading-tight">Requested</p>
+                                  {(oc.amount_paid_cents || 0) > 0 && (
+                                    <>
+                                      <p className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400 mt-0.5" data-testid={`text-paid-amount-${oc.id}`}>
+                                        Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
                                       </p>
-                                    )}
-                                  </>
-                                )}
-                              </div>
+                                      {(oc.amount_paid_cents || 0) < oc.amount_cents && (
+                                        <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
+                                          Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}
+                                        </p>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
                               <button className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
                                 onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
                                 <Eye className="h-3 w-3" /> View

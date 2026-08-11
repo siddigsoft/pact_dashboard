@@ -14,6 +14,7 @@ const XLSXStyle: any = (_XLSXStyleNS as any).default ?? _XLSXStyleNS;
 import { format, parse, isValid } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { ToastAction } from '@/components/ui/toast';
 import { ensureValidSession } from '@/lib/session-health';
 
@@ -424,6 +425,7 @@ export default function TransactionScanner() {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(['note']));
+  const isColVisible = useColumnVisibility('transaction-scanner');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewRow, setPreviewRow] = useState<TxRow | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -1094,7 +1096,7 @@ export default function TransactionScanner() {
                     <SortTh col="recipient_name" label="Recipient" />
                     {!hiddenCols.has('comment') && <th className="px-3 py-2.5 text-left font-medium">Comment</th>}
                     {!hiddenCols.has('note') && <th className="px-3 py-2.5 text-left font-medium">Notes</th>}
-                    <SortTh col="amount" label="Amount (SDG)" align="right" />
+                    {isColVisible('amount') && <SortTh col="amount" label="Amount (SDG)" align="right" />}
                     <th className="px-2 py-2.5 text-center font-medium w-28">Actions</th>
                   </tr>
                 </thead>
@@ -1195,50 +1197,52 @@ export default function TransactionScanner() {
                             ) : ''}
                           </td>
                         )}
-                        <td className="px-3 py-2 text-right font-mono font-semibold" onClick={e => e.stopPropagation()}>
-                          {isDone ? (
-                            editingAmountId === row.id ? (
-                              <input
-                                type="text"
-                                className="w-28 text-right font-mono text-xs border border-[#1D3461]/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1D3461] bg-white dark:bg-background"
-                                value={editingAmountValue}
-                                autoFocus
-                                onChange={e => setEditingAmountValue(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
+                        {isColVisible('amount') && (
+                          <td className="px-3 py-2 text-right font-mono font-semibold" onClick={e => e.stopPropagation()}>
+                            {isDone ? (
+                              editingAmountId === row.id ? (
+                                <input
+                                  type="text"
+                                  className="w-28 text-right font-mono text-xs border border-[#1D3461]/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#1D3461] bg-white dark:bg-background"
+                                  value={editingAmountValue}
+                                  autoFocus
+                                  onChange={e => setEditingAmountValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      const n = parseFloat(editingAmountValue.replace(/,/g, ''));
+                                      if (!isNaN(n)) updateRow(row.id, { amount: n, amount_confidence: 100 });
+                                      setEditingAmountId(null);
+                                    }
+                                    if (e.key === 'Escape') setEditingAmountId(null);
+                                  }}
+                                  onBlur={() => {
                                     const n = parseFloat(editingAmountValue.replace(/,/g, ''));
                                     if (!isNaN(n)) updateRow(row.id, { amount: n, amount_confidence: 100 });
                                     setEditingAmountId(null);
-                                  }
-                                  if (e.key === 'Escape') setEditingAmountId(null);
-                                }}
-                                onBlur={() => {
-                                  const n = parseFloat(editingAmountValue.replace(/,/g, ''));
-                                  if (!isNaN(n)) updateRow(row.id, { amount: n, amount_confidence: 100 });
-                                  setEditingAmountId(null);
-                                }}
-                              />
-                            ) : (
-                              <div className="flex items-center justify-end gap-1 group/amt">
-                                {isLowConfidence && (
-                                  <span title={`AI confidence: ${row.amount_confidence}% — please verify`} className="text-amber-500 shrink-0 cursor-help">
-                                    <AlertCircle className="h-3.5 w-3.5" />
+                                  }}
+                                />
+                              ) : (
+                                <div className="flex items-center justify-end gap-1 group/amt">
+                                  {isLowConfidence && (
+                                    <span title={`AI confidence: ${row.amount_confidence}% — please verify`} className="text-amber-500 shrink-0 cursor-help">
+                                      <AlertCircle className="h-3.5 w-3.5" />
+                                    </span>
+                                  )}
+                                  <span className={isLowConfidence ? 'text-amber-700 dark:text-amber-400' : ''}>
+                                    {amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
                                   </span>
-                                )}
-                                <span className={isLowConfidence ? 'text-amber-700 dark:text-amber-400' : ''}>
-                                  {amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
-                                </span>
-                                <button
-                                  onClick={() => { setEditingAmountId(row.id); setEditingAmountValue(String(amountNum(row.amount))); }}
-                                  className="opacity-0 group-hover/amt:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 rounded shrink-0"
-                                  title="Edit amount (or select row and press E)"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </div>
-                            )
-                          ) : ''}
-                        </td>
+                                  <button
+                                    onClick={() => { setEditingAmountId(row.id); setEditingAmountValue(String(amountNum(row.amount))); }}
+                                    className="opacity-0 group-hover/amt:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 rounded shrink-0"
+                                    title="Edit amount (or select row and press E)"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )
+                            ) : ''}
+                          </td>
+                        )}
                         <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-0.5">
                             {isDone && (
