@@ -1,7 +1,7 @@
 import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Loader2, Users, Shield, Lock, Building2, Award, DollarSign,
+  Loader2, Users, Shield, Building2, Award, DollarSign,
   CheckSquare, ClipboardList, Settings, Activity, Info,
   ChevronRight, ChevronDown,
 } from 'lucide-react';
@@ -11,7 +11,6 @@ import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const UsersPanel              = lazy(() => import('./Users'));
 const RoleManagementPanel     = lazy(() => import('./RoleManagement'));
-const PageAccessPanel         = lazy(() => import('./PageAccessControl'));
 const DepartmentsPanel        = lazy(() => import('./Departments'));
 const HubManagementPanel      = lazy(() => import('./HubManagement'));
 const ClassificationsPanel    = lazy(() => import('./Classifications'));
@@ -24,7 +23,7 @@ const MonitoringDashboardPanel = lazy(() => import('./MonitoringDashboard'));
 
 type AdminSection = 'people' | 'organisation' | 'system';
 type AdminTab =
-  | 'users' | 'role-management' | 'page-access' | 'departments' | 'hub-management'
+  | 'users' | 'role-management' | 'departments' | 'hub-management'
   | 'classifications' | 'classification-fees' | 'task-admin' | 'project-flow-stages'
   | 'settings' | 'audit-compliance' | 'system-monitoring';
 
@@ -38,8 +37,7 @@ const SECTIONS: SectionDef[] = [
     description: 'Manage users, roles, access permissions, departments, and hub structures.',
     tabs: [
       { id: 'users',          label: 'User Management',    icon: Users,      description: 'Create, edit, and deactivate user accounts — assign roles, set hub affiliations, manage profile details, and view login history.' },
-      { id: 'role-management',label: 'Role Management',    icon: Shield,     description: 'Define and configure roles — set default permissions for each role, manage role hierarchies, and control which modules each role can access.' },
-      { id: 'page-access',    label: 'Page Access',        icon: Lock,       description: 'Override page visibility on a per-user basis — grant or block specific pages independently of role defaults for individual staff.' },
+      { id: 'role-management',label: 'Role Management',    icon: Shield,     description: 'Define and configure roles, permissions, and per-user access overrides — use the Access Manager inside Role Management for page, tab, column, and action-level control.' },
       { id: 'departments',    label: 'Departments',        icon: Building2,  description: 'Manage organisational departments — create entries, assign staff, and link departments to hubs for reporting and filtering.' },
       { id: 'hub-management', label: 'Hub Management',     icon: Building2,  description: 'Configure hubs and sub-hubs — define geographic coverage, assign managers, set operational parameters, and manage locality lists.' },
     ],
@@ -73,7 +71,6 @@ const DEFAULT_TAB: AdminTab = 'users';
 const PanelMap: Record<AdminTab, React.LazyExoticComponent<any>> = {
   'users': UsersPanel,
   'role-management': RoleManagementPanel,
-  'page-access': PageAccessPanel,
   'departments': DepartmentsPanel,
   'hub-management': HubManagementPanel,
   'classifications': ClassificationsPanel,

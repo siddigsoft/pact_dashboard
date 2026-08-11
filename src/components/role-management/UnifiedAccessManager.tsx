@@ -167,7 +167,7 @@ export function UnifiedAccessManager() {
                     <OverviewTab {...tabProps} onTabChange={t => setActiveTab(t as TabKey)} />
                   </TabsContent>
                   <TabsContent value="pages" className="flex-1 overflow-hidden m-0">
-                    <PageAccessTab {...tabProps} />
+                    <PageAccessTab {...tabProps} onTabChange={t => setActiveTab(t as TabKey)} />
                   </TabsContent>
                   <TabsContent value="tabs" className="flex-1 overflow-hidden m-0">
                     <TabAccessTab {...tabProps} />
