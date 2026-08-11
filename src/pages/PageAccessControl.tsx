@@ -895,6 +895,10 @@ export default function PageAccessControl() {
     p.group.toLowerCase().includes(pageSearch.toLowerCase())
   );
   const groupedPages = PAGE_GROUPS.map(g => ({ group: g, pages: filteredPages.filter(p => p.group === g) })).filter(g => g.pages.length);
+  // When a search is active, auto-expand every group that has a match so results aren't hidden behind collapsed headers
+  const effectiveExpandedGroups = pageSearch.trim()
+    ? new Set(groupedPages.map(g => g.group))
+    : expandedGroups;
 
   function toggleGroup(g: string) {
     setExpandedGroups(prev => {
@@ -1015,10 +1019,10 @@ export default function PageAccessControl() {
                 <div key={group}>
                   <button onClick={() => toggleGroup(group)}
                     className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors">
-                    <ChevronRight className={cn('h-3 w-3 transition-transform', expandedGroups.has(group) && 'rotate-90')} />
+                    <ChevronRight className={cn('h-3 w-3 transition-transform', effectiveExpandedGroups.has(group) && 'rotate-90')} />
                     {group}
                   </button>
-                  {expandedGroups.has(group) && pages.map(page => {
+                  {effectiveExpandedGroups.has(group) && pages.map(page => {
                     const Icon = page.icon;
                     const isSelected = page.slug === selectedPage.slug;
                     const ovCount = ovCountForPage(page.slug);
