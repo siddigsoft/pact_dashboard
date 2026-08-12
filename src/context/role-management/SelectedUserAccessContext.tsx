@@ -77,17 +77,44 @@ export function SelectedUserAccessProvider({ userId, userRole, children }: Props
       const [pageRes, permRes, colRes, scopeRes] = await Promise.all([
         supabase.from('page_access_overrides').select('*').eq('user_id', userId),
         supabase.from('user_permission_overrides').select('*').eq('user_id', userId),
-        supabase.from('column_visibility_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).then(r => r, () => ({ data: [] as any })),
-        supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`).then(r => r, () => ({ data: [] as any })),
+        supabase.from('column_visibility_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`),
+        supabase.from('data_scope_config').select('*').or(`user_id.eq.${userId},role.eq.${userRole}`),
       ]);
       setPageOverrides(pageRes.data ?? []);
       setPermOverrides(permRes.data ?? []);
-      setColumnConfigs((colRes as any).data ?? []);
-      setDataScopeRows((scopeRes as any).data ?? []);
+
+      // Surface RLS / table-missing errors rather than silently returning [].
+      // Column and scope configs failing means saved rules won't be applied —
+      // warn the admin so they know to run the RLS migration.
+      if (colRes.error) {
+        const isRls = colRes.error.message?.includes('row-level security') || (colRes.error as any).code === '42501';
+        console.error('[SelectedUserAccess] column_visibility_config load error:', colRes.error);
+        if (isRls) {
+          toast({
+            title: 'Column visibility rules unavailable',
+            description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
+            variant: 'destructive',
+          });
+        }
+      }
+      if (scopeRes.error) {
+        const isRls = scopeRes.error.message?.includes('row-level security') || (scopeRes.error as any).code === '42501';
+        console.error('[SelectedUserAccess] data_scope_config load error:', scopeRes.error);
+        if (isRls) {
+          toast({
+            title: 'Data scope rules unavailable',
+            description: 'Database access policy not yet applied. Run the access_config_tables_rls migration in Supabase Studio.',
+            variant: 'destructive',
+          });
+        }
+      }
+
+      setColumnConfigs(colRes.data ?? []);
+      setDataScopeRows(scopeRes.data ?? []);
     } finally {
       setLoading(false);
     }
-  }, [userId, userRole]);
+  }, [userId, userRole, toast]);
 
   useEffect(() => { load(); }, [load]);
 
