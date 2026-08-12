@@ -299,16 +299,17 @@ export function SuperAdminDataManagement() {
   const { mmpFiles: contextMmpFiles } = useMMP();   // already loaded — real names, bypasses RLS
   const { toast } = useToast();
 
-  // Allow access if the user is a super-admin OR has been explicitly granted this page
+  // Allow access if the user is a super-admin, an admin/ICT role, or has been explicitly granted this page
+  const isAdminRole = ['admin', 'ict'].includes(currentUser?.role ?? '');
   const [hasPageGrant, setHasPageGrant] = useState(false);
   const [grantChecked, setGrantChecked] = useState(false);
   useEffect(() => {
-    if (isSuperAdmin) { setHasPageGrant(true); setGrantChecked(true); return; }
+    if (isSuperAdmin || isAdminRole) { setHasPageGrant(true); setGrantChecked(true); return; }
     canSeePageWithOverrides('data-management', currentUser?.role ?? null, currentUser?.id ?? null)
       .then(allowed => { setHasPageGrant(allowed); setGrantChecked(true); })
       .catch(() => setGrantChecked(true));
-  }, [isSuperAdmin, currentUser?.id, currentUser?.role]);
-  const canAccess = isSuperAdmin || hasPageGrant;
+  }, [isSuperAdmin, isAdminRole, currentUser?.id, currentUser?.role]);
+  const canAccess = isSuperAdmin || isAdminRole || hasPageGrant;
 
   const [activeTab, setActiveTab] = useState('site-visits');
   const [loadingVisits, setLoadingVisits] = useState(false);
