@@ -63,6 +63,11 @@ function StatusBadge({ status, small }: { status: AccessStatus; small?: boolean 
 export function SuperAdminPageAccessPanel() {
   const { isSuperAdmin }     = useSuperAdmin();
   const { users, currentUser } = useUser();
+
+  // Super-admins AND admin/ICT roles can manage page grants.
+  // (The destructive data operations inside each guarded page still have their
+  //  own isSuperAdmin checks — this panel only controls *who can see* a tab.)
+  const canManageGrants = isSuperAdmin || ['admin', 'ict'].includes(currentUser?.role ?? '');
   const { toast }            = useToast();
 
   const [search,       setSearch]       = useState('');
@@ -160,14 +165,14 @@ export function SuperAdminPageAccessPanel() {
   }
 
   // ── Access guard ─────────────────────────────────────────────────────────────
-  if (!isSuperAdmin) {
+  if (!canManageGrants) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Card className="max-w-md">
           <CardContent className="p-8 text-center space-y-4">
             <Shield className="h-16 w-16 text-destructive mx-auto" />
             <h2 className="text-2xl font-bold">Access Denied</h2>
-            <p className="text-muted-foreground">Only super-admins can manage page access grants.</p>
+            <p className="text-muted-foreground">Only super-admins and admins can manage page access grants.</p>
           </CardContent>
         </Card>
       </div>
