@@ -21,6 +21,7 @@ import { PageAccessDenied } from "@/components/access/PageAccessDenied";
 import { usePageAccessGuard } from "@/hooks/usePageAccessGuard";
 import { Shield } from "lucide-react";
 import { PageLoader } from "@/components/ui/page-loader";
+import { TourButton, HUB_SLUGS } from "@/components/onboarding/TourButton";
 
 // Map current pathname to a PAGE_DEFS slug
 function pathToSlug(pathname: string): string | null {
@@ -113,6 +114,11 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
                 </div>
               </div>
               <OnlineOfflineToggle variant="floating" />
+
+              {/* Floating tour button — shown on non-hub pages (hub pages render TourButton in their own header) */}
+              {!HUB_SLUGS.has(currentSlug ?? '') && (
+                <TourButton variant="floating" />
+              )}
 
               {isSuperAdmin && (
                 <>

@@ -149,6 +149,7 @@ export default function FinanceHub() {
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'accounting', 'reports', 'my-tasks']}
+      tourSlug="finance-hub"
       onSectionClick={id => setTab(id as FinTab)}
       onTabClick={id => setTab(id as FinTab)}
     >

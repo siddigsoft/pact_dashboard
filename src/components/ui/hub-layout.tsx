@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { ConnectedPagesBar } from './connected-pages-bar';
+import { TourButton } from '@/components/onboarding/TourButton';
 
 export interface HubSection {
   id: string;
@@ -32,13 +33,15 @@ interface HubLayoutProps {
   onTabClick: (tabId: string) => void;
   children: React.ReactNode;
   overviewContent?: React.ReactNode;
+  /** Page slug for the tour registry — shows a Tour button in the hub header */
+  tourSlug?: string;
 }
 
 export function HubLayout({
   title, subtitle, hubIcon: HubIcon,
   sections, activeSectionId, activeTabId, activeTabDescription,
   quickLinks, onSectionClick, onTabClick,
-  children, overviewContent,
+  children, overviewContent, tourSlug,
 }: HubLayoutProps) {
   const activeSection = sections.find(s => s.id === activeSectionId) ?? null;
   const activeTab = activeSection?.tabs.find(t => t.id === activeTabId) ?? null;
@@ -102,13 +105,14 @@ export function HubLayout({
               </div>
             </div>
           </div>
-          <div className="hidden md:block shrink-0">
+          <div className="hidden md:flex items-center gap-2 shrink-0">
+            {tourSlug && <TourButton slug={tourSlug} variant="inline" />}
             <ConnectedPagesBar pages={quickLinks} />
           </div>
         </div>
 
         {/* ── Level 2: Section tabs ── */}
-        <div className="px-5 pt-3 flex items-end gap-1.5 overflow-x-auto scrollbar-none">
+        <div id="tour-hub-sections" className="px-5 pt-3 flex items-end gap-1.5 overflow-x-auto scrollbar-none">
           {sections.map(s => {
             const isActive = activeSectionId === s.id;
             const bg = s.bg ?? `${s.color}1e`;
@@ -150,6 +154,7 @@ export function HubLayout({
         {/* ── Level 3: Sub-tab dropdown bar ── */}
         {activeSection && (
           <div
+            id="tour-hub-tab-bar"
             className="relative px-4 py-2 border-t flex items-center gap-3"
             style={{ borderColor: `${accent}30`, backgroundColor: `${accent}0a` }}
             ref={dropRef}

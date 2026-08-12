@@ -134,6 +134,7 @@ export default function FieldOpsHub() {
       activeTabId={activeTab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'mmp', 'my-tasks', 'reports']}
+      tourSlug="field-ops"
       onSectionClick={id => setTab(id as FOTab)}
       onTabClick={id => setTab(id as FOTab)}
     >

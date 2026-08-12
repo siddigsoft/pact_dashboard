@@ -154,6 +154,7 @@ export default function PreFundingHub() {
       activeTabId={tab}
       activeTabDescription={activeTabDef?.description ?? ''}
       quickLinks={['dashboard', 'accounting', 'finance-hub', 'approvals']}
+      tourSlug="pre-funding"
       onSectionClick={() => setTab(defaultTab)}
       onTabClick={id => setTab(id)}
     >

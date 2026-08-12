@@ -150,6 +150,7 @@ export default function CommunicationHub() {
       activeTabId={activeTab}
       activeTabDescription={activeTabDef?.description ?? null}
       quickLinks={['dashboard', 'my-tasks', 'admin', 'projects']}
+      tourSlug="communication-hub"
       onSectionClick={id => setTab(id as CommTab)}
       onTabClick={id => setTab(id as CommTab)}
       overviewContent={overviewContent}

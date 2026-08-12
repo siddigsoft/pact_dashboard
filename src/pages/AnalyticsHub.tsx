@@ -120,6 +120,7 @@ export default function AnalyticsHub() {
       activeTabId={activeTab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'projects', 'portfolio', 'reports']}
+      tourSlug="analytics-hub"
       onSectionClick={id => setTab(id as ATab)}
       onTabClick={id => setTab(id as ATab)}
     >

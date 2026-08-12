@@ -187,6 +187,7 @@ export default function ProgrammeHub() {
       activeTabId={activeTab}
       activeTabDescription={activeTabDef?.description ?? null}
       quickLinks={['dashboard', 'field-ops', 'analytics-hub', 'my-tasks']}
+      tourSlug="programme-hub"
       onSectionClick={id => setTab(id as ProgTab)}
       onTabClick={id => setTab(id as ProgTab)}
       overviewContent={overviewContent}

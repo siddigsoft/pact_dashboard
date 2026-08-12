@@ -214,6 +214,7 @@ export default function HRHub() {
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}
       quickLinks={['dashboard', 'my-tasks', 'accounting', 'admin']}
+      tourSlug="hr-hub"
       onSectionClick={id => setTab(id as HRTab)}
       onTabClick={id => setTab(id as HRTab)}
     >
