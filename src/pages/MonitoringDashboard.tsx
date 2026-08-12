@@ -2130,7 +2130,7 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
 
       // ── Broadcast ─────────────────────────────────────────────────────
       if (channels.has('broadcast')) {
-        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).then(null, () => {});
       }
 
       const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
@@ -2490,7 +2490,7 @@ function CoverageNotifyDialog({
 
       // ── Broadcast ─────────────────────────────────────────────────────
       if (channels.has('broadcast')) {
-        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).then(null, () => {});
       }
 
       const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
@@ -2773,7 +2773,7 @@ function NotifyActionDialog({ open, onClose, action, siteCount }: {
         }).catch(() => {});
       }
       if (channels.has('broadcast')) {
-        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).then(null, () => {});
       }
 
       const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
@@ -4217,7 +4217,7 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
         }
       }
       if (channels.has('broadcast')) {
-        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).then(null, () => {});
       }
 
       // ── FYI back-notification to requester ──────────────────────────────────
