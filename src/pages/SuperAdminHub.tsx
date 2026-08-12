@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
   Lock, ScrollText, Mail, Eye, Smartphone, PenTool, PhoneCall,
-  RefreshCw, ScanLine, Database, Info, Users, LayoutGrid,
+  RefreshCw, ScanLine, Database, Info, Users, LayoutGrid, Shield, KeyRound,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -26,11 +26,13 @@ const TransactionScannerPanel = lazy(() => import('./TransactionScanner'));
 const DataManagementPanel     = lazy(() => import('../components/superAdmin/SuperAdminDataManagement').then(m => ({ default: m.SuperAdminDataManagement })));
 const PageGrantsPanel         = lazy(() => import('../components/superAdmin/SuperAdminPageAccessPanel').then(m => ({ default: m.SuperAdminPageAccessPanel })));
 const ButtonRegistryPanel     = lazy(() => import('../components/superAdmin/SuperAdminButtonRegistry').then(m => ({ default: m.SuperAdminButtonRegistry })));
+const RolesPanel              = lazy(() => import('./RoleManagement'));
+const UserAccessPanel         = lazy(() => import('../components/superAdmin/InlineAccessManager'));
 
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
   | 'super-admin' | 'system-monitoring' | 'cycle-health' | 'approval-dashboard'
-  | 'permissions' | 'audit-logs' | 'page-grants' | 'button-registry'
+  | 'roles' | 'user-access' | 'permissions' | 'audit-logs' | 'page-grants' | 'button-registry'
   | 'email-tracking' | 'email-management' | 'email-preview'
   | 'mobile-help-articles' | 'mobile-signatures' | 'mobile-call-scheduling' | 'mobile-document-sync'
   | 'transaction-scanner' | 'data-management';
@@ -63,11 +65,19 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: 'permissions', label: 'Permissions & Audit', icon: Lock, color: '#1e3a5f',
-    description: 'User permission overrides, role perspective testing, and full system audit trail.',
+    description: 'Role management, per-user access overrides, page grants, button registry, and full system audit trail.',
     tabs: [
       {
-        id: 'permissions', label: 'User Permissions', icon: Lock,
-        description: 'Fine-grained permission overrides per user — grant or revoke specific capabilities beyond role defaults, with change log and approval trail.',
+        id: 'roles', label: 'Roles', icon: Shield,
+        description: 'Manage system and custom roles — create, edit, clone, delete roles and assign users. Full role CRUD with approval workflow and user assignment.',
+      },
+      {
+        id: 'user-access', label: 'User Access', icon: KeyRound,
+        description: 'Per-user control of page access, hub-tab visibility, action permission overrides, column visibility, and data scope rules.',
+      },
+      {
+        id: 'permissions', label: 'Screen Permissions', icon: Lock,
+        description: 'Fine-grained screen-level permission matrix — grant or revoke read/write/open/create/delete per user across all 174+ pages.',
       },
       {
         id: 'audit-logs', label: 'Audit Logs', icon: ScrollText,
@@ -147,6 +157,8 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'system-monitoring': MonitoringDashboardPanel,
   'cycle-health': CycleHealthPanel,
   'approval-dashboard': ApprovalDashboardPanel,
+  'roles': RolesPanel,
+  'user-access': UserAccessPanel,
   'permissions': PermissionsPanel,
   'audit-logs': AuditLogsPanel,
   'email-tracking': EmailTrackingPanel,

@@ -50,7 +50,7 @@ type UAMUser = { id: string; name?: string | null; email: string; role: string }
 type TabKey = 'overview' | 'pages' | 'tabs' | 'permissions' | 'scope';
 
 // ── Component ──────────────────────────────────────────────────────────────
-export function UnifiedAccessManager() {
+export function UnifiedAccessManager({ containerClassName }: { containerClassName?: string } = {}) {
   const { users } = useAppContext();
 
   const [search, setSearch]         = useState('');
@@ -93,7 +93,7 @@ export function UnifiedAccessManager() {
   } : null;
 
   return (
-    <div className="flex h-[calc(100vh-260px)] min-h-[600px] border rounded-xl overflow-hidden bg-background">
+    <div className={containerClassName ?? "flex h-[calc(100vh-260px)] min-h-[600px] border rounded-xl overflow-hidden bg-background"}>
 
       {/* ── Left panel: user list ── */}
       <div className="w-72 shrink-0 flex flex-col border-r bg-muted/20">
