@@ -18,12 +18,23 @@ async function sign(action: string, payload: Record<string, unknown>): Promise<a
 /** Uploads a file to R2. Returns the object key to store as storage_path. */
 export async function r2Upload(file: File): Promise<{ key: string }> {
   const { key, url } = await sign('sign-upload', { fileName: file.name });
-  const res = await fetch(url, {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
-  });
-  if (!res.ok) throw new Error(`R2 upload failed (HTTP ${res.status})`);
+  // Presigned URL signs only `host` (see r2-sign). Do NOT send Content-Type —
+  // an unsigned Content-Type header makes R2 return 401 SignatureDoesNotMatch,
+  // which browsers then surface as a misleading CORS failure.
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'PUT', body: file });
+  } catch (e: any) {
+    throw new Error(
+      e?.message === 'Failed to fetch'
+        ? 'R2 upload blocked (CORS or network). Confirm the pact-workspace-archive bucket CORS allows https://app.pactorg.com with PUT.'
+        : (e?.message || 'R2 upload failed')
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`R2 upload failed (HTTP ${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+  }
   return { key };
 }
 
