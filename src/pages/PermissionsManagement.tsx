@@ -335,6 +335,7 @@ const PermissionsManagement = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [hasChanges, setHasChanges] = useState(false);
   const [expandedScreens, setExpandedScreens] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [tableExists, setTableExists] = useState(true);
   const [showSqlHelp, setShowSqlHelp] = useState(false);
 
@@ -627,6 +628,17 @@ const PermissionsManagement = () => {
     });
   };
 
+  const toggleCategoryCollapsed = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category); else next.add(category);
+      return next;
+    });
+  };
+
+  const collapseAllCategories = () => setCollapsedCategories(new Set(CATEGORIES));
+  const expandAllCategories   = () => setCollapsedCategories(new Set());
+
   useEffect(() => {
     if (selectedUserId) loadUserPermissions(selectedUserId);
     else setUserPermissions(null);
@@ -899,7 +911,7 @@ const PermissionsManagement = () => {
               </CardContent>
             </Card>
 
-            {/* Legend */}
+            {/* Legend + collapse controls */}
             <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="flex items-center gap-1"><Badge variant="outline" className="text-xs">R</Badge> Read</span>
@@ -912,9 +924,17 @@ const PermissionsManagement = () => {
                   = role grants access
                 </span>
               </div>
-              <span className="flex items-center gap-1">
-                <Layers className="h-4 w-4" /> Click page rows with tabs to expand
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1 text-xs">
+                  <Layers className="h-4 w-4" /> Click page rows with tabs to expand
+                </span>
+                <Button variant="outline" size="sm" onClick={expandAllCategories} className="h-7 text-xs px-2">
+                  <ChevronDown className="h-3 w-3 mr-1" /> Expand All
+                </Button>
+                <Button variant="outline" size="sm" onClick={collapseAllCategories} className="h-7 text-xs px-2">
+                  <ChevronRight className="h-3 w-3 mr-1" /> Collapse All
+                </Button>
+              </div>
             </div>
 
             {isLoading ? (
@@ -925,66 +945,84 @@ const PermissionsManagement = () => {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-6">
-                {CATEGORIES.filter(cat => groupedScreens[cat]?.length > 0).map(category => (
-                  <Card key={category}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">{category}</CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => toggleCategoryPermissions(category, true)} data-testid={`button-enable-all-${category}`}>
-                            <Unlock className="h-3 w-3 mr-1" /> Enable All
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => toggleCategoryPermissions(category, false)} data-testid={`button-disable-all-${category}`}>
-                            <Lock className="h-3 w-3 mr-1" /> Disable All
-                          </Button>
+              <div className="space-y-3">
+                {CATEGORIES.filter(cat => groupedScreens[cat]?.length > 0).map(category => {
+                  const isCollapsed = collapsedCategories.has(category);
+                  const count = groupedScreens[category]?.length ?? 0;
+                  return (
+                    <Card key={category}>
+                      {/* Clickable header — toggles collapse */}
+                      <CardHeader
+                        className="pb-3 cursor-pointer select-none"
+                        onClick={() => toggleCategoryCollapsed(category)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {isCollapsed
+                              ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                              : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            }
+                            <CardTitle className="text-base">{category}</CardTitle>
+                            <Badge variant="secondary" className="text-xs">{count}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <Button variant="outline" size="sm" onClick={() => toggleCategoryPermissions(category, true)} data-testid={`button-enable-all-${category}`}>
+                              <Unlock className="h-3 w-3 mr-1" /> Enable All
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => toggleCategoryPermissions(category, false)} data-testid={`button-disable-all-${category}`}>
+                              <Lock className="h-3 w-3 mr-1" /> Disable All
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[280px]">Page / Tab</TableHead>
-                            <TableHead className="w-[80px] text-center">Visible</TableHead>
-                            <TableHead className="w-[60px] text-center">Read</TableHead>
-                            <TableHead className="w-[60px] text-center">Write</TableHead>
-                            <TableHead className="w-[60px] text-center">Open</TableHead>
-                            <TableHead className="w-[60px] text-center">Create</TableHead>
-                            <TableHead className="w-[60px] text-center text-red-600">Delete</TableHead>
-                            <TableHead className="w-[90px] text-center">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {groupedScreens[category]?.map(screen => {
-                            const IconComponent = iconMap[screen.screenId] || LayoutDashboard;
-                            const hasTabs = screen.tabs && screen.tabs.length > 0;
-                            const isExpanded = expandedScreens.has(screen.screenId);
-                            const pageDef = PAGE_DEFS.find(p => p.slug === screen.screenId);
-                            const hasRoleDefault = pageDef ? hasDefaultAccess(pageDef, selectedUserRole) : false;
+                      </CardHeader>
 
-                            return (
-                              <ScreenRow
-                                key={screen.screenId}
-                                screen={screen}
-                                IconComponent={IconComponent}
-                                hasTabs={hasTabs || false}
-                                isExpanded={isExpanded}
-                                hasRoleDefault={hasRoleDefault}
-                                onToggleExpand={() => toggleScreenExpanded(screen.screenId)}
-                                onUpdateVisibility={(v) => updateVisibility(screen.screenId, v)}
-                                onUpdatePermission={(p, v) => updatePermission(screen.screenId, p, v)}
-                                onToggleAll={(e) => toggleAllPermissions(screen.screenId, e)}
-                                onUpdateTabPermission={(tabId, p, v) => updateTabPermission(screen.screenId, tabId, p, v)}
-                                onToggleAllTab={(tabId, e) => toggleAllTabPermissions(screen.screenId, tabId, e)}
-                              />
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                ))}
+                      {!isCollapsed && (
+                        <CardContent className="pt-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[280px]">Page / Tab</TableHead>
+                                <TableHead className="w-[80px] text-center">Visible</TableHead>
+                                <TableHead className="w-[60px] text-center">Read</TableHead>
+                                <TableHead className="w-[60px] text-center">Write</TableHead>
+                                <TableHead className="w-[60px] text-center">Open</TableHead>
+                                <TableHead className="w-[60px] text-center">Create</TableHead>
+                                <TableHead className="w-[60px] text-center text-red-600">Delete</TableHead>
+                                <TableHead className="w-[90px] text-center">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {groupedScreens[category]?.map(screen => {
+                                const IconComponent = iconMap[screen.screenId] || LayoutDashboard;
+                                const hasTabs = screen.tabs && screen.tabs.length > 0;
+                                const isExpanded = expandedScreens.has(screen.screenId);
+                                const pageDef = PAGE_DEFS.find(p => p.slug === screen.screenId);
+                                const hasRoleDefault = pageDef ? hasDefaultAccess(pageDef, selectedUserRole) : false;
+
+                                return (
+                                  <ScreenRow
+                                    key={screen.screenId}
+                                    screen={screen}
+                                    IconComponent={IconComponent}
+                                    hasTabs={hasTabs || false}
+                                    isExpanded={isExpanded}
+                                    hasRoleDefault={hasRoleDefault}
+                                    onToggleExpand={() => toggleScreenExpanded(screen.screenId)}
+                                    onUpdateVisibility={(v) => updateVisibility(screen.screenId, v)}
+                                    onUpdatePermission={(p, v) => updatePermission(screen.screenId, p, v)}
+                                    onToggleAll={(e) => toggleAllPermissions(screen.screenId, e)}
+                                    onUpdateTabPermission={(tabId, p, v) => updateTabPermission(screen.screenId, tabId, p, v)}
+                                    onToggleAllTab={(tabId, e) => toggleAllTabPermissions(screen.screenId, tabId, e)}
+                                  />
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
               </div>
             )}
 
