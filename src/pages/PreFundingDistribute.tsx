@@ -70,7 +70,7 @@ export default function PreFundingDistribute() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
-  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
+  const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'CountryDirector']);
 
   const [funds, setFunds]               = useState<HeldFund[]>([]);
   const [loading, setLoading]           = useState(true);
