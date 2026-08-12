@@ -354,24 +354,47 @@ const PageRouteGuardAsync = ({
   slug,
   role,
   children,
+  startDenied = false,
 }: {
   slug: string;
   role: string | undefined;
   children: React.ReactNode;
+  /** When true, the role check already failed — show nothing until the DB
+   *  confirms whether a grant override exists. Prevents a flash of content. */
+  startDenied?: boolean;
 }) => {
   const { currentUser } = useAppContext();
-  const [blocked, setBlocked] = useState<boolean>(false);
+  // If role already denied (startDenied), start as 'checking' so we show
+  // nothing until the grant lookup resolves. Otherwise start as 'ok' and
+  // only flip to 'denied' if the async check finds an explicit block.
+  const [status, setStatus] = useState<'ok' | 'checking' | 'denied'>(
+    startDenied ? 'checking' : 'ok',
+  );
 
   useEffect(() => {
-    setBlocked(false);
-    if (!currentUser?.id) return;
+    setStatus(startDenied ? 'checking' : 'ok');
+    if (!currentUser?.id) {
+      if (startDenied) setStatus('denied');
+      return;
+    }
     canSeePageWithOverrides(slug, role, currentUser.id).then(allowed => {
-      if (!allowed) setBlocked(true);
+      if (startDenied) {
+        // Grant check: only open the page if DB explicitly grants access
+        setStatus(allowed ? 'ok' : 'denied');
+      } else {
+        // Block check: only close the page if DB explicitly blocks access
+        if (!allowed) setStatus('denied');
+      }
     });
-  }, [slug, role, currentUser?.id]);
+  }, [slug, role, currentUser?.id, startDenied]);
 
-  if (blocked) {
+  if (status === 'denied') {
     return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
+  }
+  if (status === 'checking') {
+    // Show nothing (blank) while we verify the grant — avoids a flash of
+    // content that would immediately be replaced by "Access Restricted".
+    return null;
   }
   return <>{children}</>;
 };
@@ -390,16 +413,16 @@ const PageRouteGuard = ({ children }: { children: React.ReactNode }) => {
   // Unknown path (no slug in PAGE_DEFS) → fail-open so new routes work
   if (!slug) return <>{children}</>;
 
-  // Layer 1: instant role check — block immediately without a DB round-trip
-  if (!canSeePage(slug, role)) {
-    return <PageAccessDenied pageLabel={getPageLabel(slug)} reason="role" />;
-  }
+  // Layer 1: instant role check.
+  // If the role passes → render immediately, then let Layer 2 apply any block.
+  // If the role fails  → don't block immediately; delegate to Layer 2 which
+  //   checks page_access_overrides for an explicit grant (e.g. a Super Admin
+  //   granting a non-default role access to a restricted page). Only deny once
+  //   we confirm no grant exists in the DB.
+  const roleAllowed = canSeePage(slug, role);
 
-  // Layer 2: async DB override (per-user block set from Security Panel)
-  // Children render immediately (role check passed); the async result replaces
-  // them only if an admin-set block is found.
   return (
-    <PageRouteGuardAsync slug={slug} role={role}>
+    <PageRouteGuardAsync slug={slug} role={role} startDenied={!roleAllowed}>
       {children}
     </PageRouteGuardAsync>
   );
