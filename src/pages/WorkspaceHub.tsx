@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
@@ -566,11 +566,17 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const name       = parts[parts.length - 1];
           const parentPath = parts.slice(0, -1).join('/');
           const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
-          const { data: created, error: folderErr } = await withTimeout((supabase as any)
-            .from('workspace_folders')
-            .insert({ name, parent_folder_id: parentId, security_level: secLevel, created_by: currentUserId, is_system_folder: false, archived: false })
-            .select('id').single());
+          const { data: created, error: folderErr } = await withTimeout(
+            (async () => {
+              const res = await (supabase as any)
+                .from('workspace_folders')
+                .insert({ name, parent_folder_id: parentId, security_level: secLevel, created_by: currentUserId, is_system_folder: false, archived: false })
+                .select('id').single();
+              return res as { data: { id: string } | null; error: { message: string } | null };
+            })()
+          );
           if (folderErr) throw folderErr;
+          if (!created?.id) throw new Error('Failed to create folder');
           folderIdMap[folderPath] = created.id;
         }
       }
@@ -594,13 +600,16 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         pendingOrphanPaths.push(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
         const { error: dbErr } = await withTimeout(
-          supabase.from('workspace_files').insert({
-            folder_id: targetFolderId, name: f.name, description: description || null,
-            storage_path: path, public_url: null, storage_provider: 'r2',
-            file_size: f.size, mime_type: f.type, extension: ext,
-            security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
-            tags: tagList,
-          }) as any
+          (async () => {
+            const res = await supabase.from('workspace_files').insert({
+              folder_id: targetFolderId, name: f.name, description: description || null,
+              storage_path: path, public_url: null, storage_provider: 'r2',
+              file_size: f.size, mime_type: f.type, extension: ext,
+              security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
+              tags: tagList,
+            } as any);
+            return res as { error: { message: string } | null };
+          })()
         );
         if (dbErr) throw dbErr;
         const idx = pendingOrphanPaths.indexOf(path);
@@ -1814,7 +1823,7 @@ export default function WorkspaceHub() {
           className={cn('flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer group transition-all text-sm',
             isSelected ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white' : 'text-gray-700 dark:text-foreground hover:bg-gray-200/60 dark:hover:bg-muted/60',
             isDragOver && !isSelected && 'ring-2 ring-offset-1 bg-blue-50')}
-          style={{ paddingLeft: `${8 + depth * 14}px`, ringColor: folderColor }}
+          style={{ paddingLeft: `${8 + depth * 14}px`, ['--tw-ring-color']: folderColor } as CSSProperties}
           onClick={() => openFolder(folder)}
           onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverFolderId(folder.id); }}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
@@ -2030,7 +2039,7 @@ export default function WorkspaceHub() {
                 {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
                 {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
                 {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
-                {!file.allow_download && <Ban className="h-3 w-3 text-orange-400 flex-shrink-0" title="Downloads disabled" />}
+                {!file.allow_download && <span title="Downloads disabled"><Ban className="h-3 w-3 text-orange-400 flex-shrink-0" /></span>}
               </div>
               {file.tags.length > 0 && (
                 <div className="flex items-center gap-1 mt-0.5">
@@ -3336,9 +3345,9 @@ export default function WorkspaceHub() {
               }
 
               async function copyQRImage() {
-                const svgEl = document.getElementById('workspace-qr-svg') as SVGElement | null;
-                if (!svgEl) return;
-                const canvas = await svgToCanvas(svgEl, 300);
+                const el = document.getElementById('workspace-qr-svg');
+                if (!(el instanceof SVGElement)) return;
+                const canvas = await svgToCanvas(el, 300);
                 canvas.toBlob(async blob => {
                   if (!blob) return;
                   try {
@@ -3351,8 +3360,9 @@ export default function WorkspaceHub() {
               }
 
               async function downloadQR() {
-                const svgEl = document.getElementById('workspace-qr-svg') as SVGElement | null;
-                if (!svgEl) return;
+                const el = document.getElementById('workspace-qr-svg');
+                if (!(el instanceof SVGElement)) return;
+                const svgEl = el;
                 const canvas = await svgToCanvas(svgEl, 600);
                 canvas.toBlob(blob => {
                   if (!blob) return;
