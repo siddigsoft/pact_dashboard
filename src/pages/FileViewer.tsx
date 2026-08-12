@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { r2SignedUrl } from '@/lib/r2Storage';
 import {
   Loader2, Download, AlertCircle, File, FileImage,
   FileSpreadsheet, FileVideo, FileAudio, FileText,
@@ -14,6 +15,8 @@ interface FileData {
   mime_type: string | null;
   extension: string | null;
   public_url: string | null;
+  storage_path: string;
+  storage_provider: 'supabase' | 'r2';
   file_size: number;
   description: string | null;
   security_level: string;
@@ -107,28 +110,35 @@ export default function FileViewer() {
 
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId);
     const query  = supabase.from('workspace_files')
-      .select('id, name, mime_type, extension, public_url, file_size, description, security_level');
+      .select('id, name, mime_type, extension, public_url, storage_path, storage_provider, file_size, description, security_level');
 
-    (isUUID ? query.eq('id', fileId) : query.eq('short_code', fileId.toUpperCase()))
-      .eq('archived', false)
-      .single()
-      .then(({ data, error: err }) => {
-        if (err || !data) {
-          setError('File not found or is no longer available.');
-        } else if (['top_secret', 'restricted'].includes(data.security_level)) {
-          setError('This file requires authentication to view. Please log in to the PACT Command Center.');
-        } else if (!data.public_url) {
+    (async () => {
+      const { data, error: err } = await (isUUID ? query.eq('id', fileId) : query.eq('short_code', fileId.toUpperCase()))
+        .eq('archived', false)
+        .single();
+      if (err || !data) {
+        setError('File not found or is no longer available.');
+      } else if (['top_secret', 'restricted'].includes(data.security_level)) {
+        setError('This file requires authentication to view. Please log in to the PACT Command Center.');
+      } else {
+        const fd = { ...data } as FileData;
+        // R2 files have no permanent public URL — fetch a short-lived signed one.
+        if (!fd.public_url && fd.storage_provider === 'r2') {
+          fd.public_url = await r2SignedUrl(fd.storage_path).catch(() => null);
+        }
+        if (!fd.public_url) {
           setError('This file is not publicly accessible via QR code.');
         } else {
-          setFile(data as FileData);
+          setFile(fd);
           supabase.from('workspace_activity').insert({
-            file_id: data.id,
+            file_id: fd.id,
             action: 'viewed',
             metadata: { source: 'qr_scan' },
           }).then(() => {});
         }
-        setLoading(false);
-      });
+      }
+      setLoading(false);
+    })();
   }, [fileId]);
 
   if (loading) return (
