@@ -523,7 +523,7 @@ export function ModuleControlCenter({ roles: liveRoles, onTogglePermission, canE
 
   const totalModules = MODULE_REGISTRY.length;
   const totalPages = MODULE_REGISTRY.reduce((s, m) => s + m.pages.length, 0);
-  const totalActions = MODULE_REGISTRY.reduce((s, m) => m.pages.reduce((ps, p) => ps + p.actions.length, ps), 0);
+  const totalActions = MODULE_REGISTRY.reduce((s, m) => s + m.pages.reduce((ps, p) => ps + p.actions.length, 0), 0);
 
   // Filtered registry
   const filteredRegistry = useMemo(() => {
