@@ -1765,6 +1765,7 @@ export default function WorkspaceHub() {
 
   // ── Password protection helpers ───────────────────────────────────────────
 
+  // Row/card click toggles the detail panel; menu "View Details" always opens it.
   function openFile(file: WFile) {
     if (file.password_hash && !unlockedIds.has(file.id)) {
       setPasswordPromptTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false });
@@ -1774,6 +1775,17 @@ export default function WorkspaceHub() {
     } else {
       setSelectedFile(prev => prev?.id === file.id ? null : file);
     }
+  }
+
+  function openFileDetails(file: WFile) {
+    if (file.password_hash && !unlockedIds.has(file.id)) {
+      setPasswordPromptTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false });
+      setPasswordInput('');
+      setPasswordWrong(false);
+      setShowPromptPwd(false);
+      return;
+    }
+    setSelectedFile(file);
   }
 
   function openFolder(folder: WFolder) {
@@ -2142,8 +2154,8 @@ export default function WorkspaceHub() {
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
-              <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
+              <DropdownMenuItem onSelect={() => openFileDetails(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
               {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
               {canManageFile(file) && <>
                 <DropdownMenuSeparator />
@@ -2231,8 +2243,8 @@ export default function WorkspaceHub() {
                   <MoreVertical className="h-3.5 w-3.5" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
-                <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
+                <DropdownMenuItem onSelect={() => openFileDetails(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
                 {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
                 {canManageFile(file) && <>
                   <DropdownMenuSeparator />
@@ -2954,7 +2966,7 @@ export default function WorkspaceHub() {
 
         {/* ══ File Detail Panel ════════════════════════════════════════════ */}
         {selectedFile && (
-          <div className="fixed right-0 top-0 h-full w-[380px] border-l shadow-2xl z-30 flex flex-col bg-background">
+          <div className="fixed right-0 top-0 h-full w-[380px] border-l shadow-2xl z-50 flex flex-col bg-background">
             <FileDetailPanel
               file={selectedFile} currentUserId={userId}
               onClose={() => setSelectedFile(null)} onRefresh={refetch}
