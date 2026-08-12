@@ -1719,7 +1719,7 @@ export default function PreFundingDistribute() {
                     {addReceiptFiles.length > 0 ? 'Add more receipts…' : 'Attach receipt(s) — images or PDFs'}
                   </span>
                   <input
-                    type="file" accept="image/*,.pdf" multiple className="hidden"
+                    type="file" accept="image/*,.pdf,.xlsx,.xls" multiple className="hidden"
                     onChange={e => setAddReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
                     data-testid="input-add-receipt-file"
                   />
@@ -1910,7 +1910,7 @@ export default function PreFundingDistribute() {
                         Receipt of Fund Sent
                         <span className="text-destructive font-bold">*</span>
                         <span className="ml-auto text-[9px] font-normal text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5">
-                          JPG · PNG · WEBP · GIF · PDF · max 10 MB
+                          JPG · PNG · WEBP · GIF · PDF · XLS · XLSX · max 10 MB
                         </span>
                       </Label>
                       {topUpReceiptFiles.length > 0 && (
@@ -1942,12 +1942,12 @@ export default function PreFundingDistribute() {
                             {topUpReceiptFiles.length > 0 ? 'Add more receipts…' : 'Click to attach receipt'}
                           </p>
                           {topUpReceiptFiles.length === 0 && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Image or PDF — required before submitting</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Image, PDF or Excel — required before submitting</p>
                           )}
                         </div>
                         <input
                           type="file"
-                          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf"
+                          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls"
                           multiple
                           className="hidden"
                           onChange={e => setTopUpReceiptFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
@@ -2163,7 +2163,7 @@ export default function PreFundingDistribute() {
                 </p>
                 {/* Accepted file types */}
                 <p className="text-[10px] text-muted-foreground/70 bg-muted/60 rounded px-3 py-1.5">
-                  Accepted: <strong>JPG, PNG, WEBP, GIF, PDF</strong> (max 10 MB)
+                  Accepted: <strong>JPG, PNG, WEBP, GIF, PDF, XLS, XLSX</strong> (max 10 MB)
                 </p>
                 {/* Primary action: upload replacement */}
                 {viewReceiptMeta && (
@@ -2222,7 +2222,7 @@ export default function PreFundingDistribute() {
       <input
         ref={replaceFileRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,.xls"
         className="hidden"
         onChange={handleReplaceReceiptFile}
         data-testid="input-replace-receipt-file"
