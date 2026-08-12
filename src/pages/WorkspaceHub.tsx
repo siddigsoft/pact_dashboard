@@ -642,7 +642,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg flex flex-col gap-0 p-0 max-h-[88vh] overflow-hidden">
+      <DialogContent hideCloseButton className="max-w-lg flex flex-col gap-0 p-0 max-h-[88vh] overflow-hidden">
         {/* ── Fixed header ── */}
         <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b flex-shrink-0">
           <div>
@@ -656,7 +656,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
