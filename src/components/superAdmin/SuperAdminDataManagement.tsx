@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { canSeePageWithOverrides } from '@/lib/page-roles';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
@@ -297,6 +298,17 @@ export function SuperAdminDataManagement() {
   const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
   const { mmpFiles: contextMmpFiles } = useMMP();   // already loaded — real names, bypasses RLS
   const { toast } = useToast();
+
+  // Allow access if the user is a super-admin OR has been explicitly granted this page
+  const [hasPageGrant, setHasPageGrant] = useState(false);
+  const [grantChecked, setGrantChecked] = useState(false);
+  useEffect(() => {
+    if (isSuperAdmin) { setHasPageGrant(true); setGrantChecked(true); return; }
+    canSeePageWithOverrides('data-management', currentUser?.role ?? null, currentUser?.id ?? null)
+      .then(allowed => { setHasPageGrant(allowed); setGrantChecked(true); })
+      .catch(() => setGrantChecked(true));
+  }, [isSuperAdmin, currentUser?.id, currentUser?.role]);
+  const canAccess = isSuperAdmin || hasPageGrant;
 
   const [activeTab, setActiveTab] = useState('site-visits');
   const [loadingVisits, setLoadingVisits] = useState(false);
@@ -898,15 +910,15 @@ export function SuperAdminDataManagement() {
   // is loaded lazily per-tab via the on-demand useEffect below.
   const hasPreloadedRef = useRef(false);
   useEffect(() => {
-    if (!isSuperAdmin || userMap.size === 0 || hasPreloadedRef.current) return;
+    if (!canAccess || userMap.size === 0 || hasPreloadedRef.current) return;
     hasPreloadedRef.current = true;
     loadQuickCounts(); // fast HEAD queries — populate stats card numbers immediately
     loadMMPs();        // fast: mmp_files + parallel COUNT queries per MMP (9 MMPs ≈ 27 parallel HEAD requests)
-  }, [isSuperAdmin, userMap]);
+  }, [canAccess, userMap]);
 
   // Fallback: load a tab on-demand if it was somehow missed
   useEffect(() => {
-    if (!isSuperAdmin || userMap.size === 0) return;
+    if (!canAccess || userMap.size === 0) return;
     if (!loadedTabsRef.current.has(activeTab)) {
       if (activeTab === 'site-visits') loadSiteVisits();
       else if (activeTab === 'wallets') loadWallets();
@@ -1967,7 +1979,16 @@ export function SuperAdminDataManagement() {
     else if (activeTab === 'mmps') loadMMPs();
   };
 
-  if (!isSuperAdmin) {
+  // Still checking the DB for a page grant — avoid flashing "Access Denied"
+  if (!grantChecked) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!canAccess) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Card className="max-w-md">
