@@ -37,7 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2Storage';
+import { r2Upload, r2SignedUrl, r2Delete, isZipFile, r2ExtractZip, MAX_ZIP_BYTES } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -512,14 +512,17 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentUploadingName, setCurrentUploadingName] = useState('');
+  const [extractZips, setExtractZips] = useState(true);
   const cancelledRef = useRef(false);
+
+  const hasZipSelected = files.some(item => isZipFile(item.file));
 
   // Pre-populate with entries dropped onto the main area
   useEffect(() => {
     if (open && initialEntries && initialEntries.length > 0) {
       setFiles(initialEntries);
     }
-    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); }
+    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); }
   }, [open, initialEntries]);
 
   const addFiles = (raw: FileList | File[]) => {
@@ -596,24 +599,47 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         }
         // New uploads go to Cloudflare R2; the edge function generates the key
         // under the caller's user-id prefix (see supabase/functions/r2-sign).
+        const shouldExtract = extractZips && isZipFile(f);
+        if (shouldExtract && f.size > MAX_ZIP_BYTES) {
+          throw new Error(`"${f.name}" exceeds the 100MB ZIP extract limit. Upload without extract, or split the archive.`);
+        }
         const { key: path } = await withTimeout(r2Upload(f), 600000);
         pendingOrphanPaths.push(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
-        const { error: dbErr } = await withTimeout(
+        const insertPayload = {
+          folder_id: targetFolderId, name: f.name, description: description || null,
+          storage_path: path, public_url: null, storage_provider: 'r2',
+          file_size: f.size, mime_type: f.type, extension: ext,
+          security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
+          tags: tagList,
+          ...(shouldExtract ? { extract_status: 'pending' } : {}),
+        };
+        const { data: inserted, error: dbErr } = await withTimeout(
           (async () => {
-            const res = await supabase.from('workspace_files').insert({
-              folder_id: targetFolderId, name: f.name, description: description || null,
-              storage_path: path, public_url: null, storage_provider: 'r2',
-              file_size: f.size, mime_type: f.type, extension: ext,
-              security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
-              tags: tagList,
-            } as any);
-            return res as { error: { message: string } | null };
+            const res = await supabase.from('workspace_files').insert(insertPayload as any).select('id').single();
+            return res as { data: { id: string } | null; error: { message: string } | null };
           })()
         );
         if (dbErr) throw dbErr;
+        if (!inserted?.id) throw new Error('Failed to register uploaded file');
+
+        // Zip is registered — don't orphan-delete it if extract fails later.
         const idx = pendingOrphanPaths.indexOf(path);
         if (idx >= 0) pendingOrphanPaths.splice(idx, 1);
+
+        if (shouldExtract) {
+          setCurrentUploadingName(`Extracting ${f.name}…`);
+          await withTimeout(
+            r2ExtractZip({
+              zipKey: path,
+              zipFileId: inserted.id,
+              folderId: targetFolderId,
+              securityLevel: secLevel,
+            }),
+            300000,
+          );
+        }
+
         completed++;
         setProgress(Math.round((completed / files.length) * 100));
       }
@@ -631,11 +657,14 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         }
         toast({ title: 'Upload cancelled', description: `${completed} of ${files.length} file${files.length !== 1 ? 's' : ''} were uploaded before cancellation.` });
       } else {
+        const zipCount = extractZips ? files.filter(f => isZipFile(f.file)).length : 0;
         toast({
           title: `${files.length} file${files.length !== 1 ? 's' : ''} uploaded`,
-          description: isFolderUpload
-            ? `Folder structure recreated · Security: ${SEC_CFG[secLevel].label}`
-            : `Security: ${SEC_CFG[secLevel].label}`,
+          description: zipCount > 0
+            ? `Extracted ${zipCount} ZIP${zipCount !== 1 ? 's' : ''} · Security: ${SEC_CFG[secLevel].label}`
+            : isFolderUpload
+              ? `Folder structure recreated · Security: ${SEC_CFG[secLevel].label}`
+              : `Security: ${SEC_CFG[secLevel].label}`,
         });
         onUploaded(); onClose(); setFiles([]); setDescription(''); setTags('');
       }
@@ -739,6 +768,25 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
                 {files.length} file{files.length !== 1 ? 's' : ''} · {fmtSize(files.reduce((s, f) => s + f.file.size, 0))} total
               </div>
             </div>
+          )}
+
+          {/* ZIP extract toggle */}
+          {hasZipSelected && (
+            <label className="flex items-start gap-2.5 rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/[0.03] px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={extractZips}
+                onChange={e => setExtractZips(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[#1D3461]/40"
+                data-testid="checkbox-extract-zips"
+              />
+              <span className="min-w-0">
+                <span className="text-xs font-semibold text-[#0F2041] block">Extract ZIP into this folder</span>
+                <span className="text-[11px] text-muted-foreground">
+                  Server unpacks archives (max 100MB, 500 files). Folder structure is recreated. Original ZIP is kept.
+                </span>
+              </span>
+            </label>
           )}
 
           {/* Security level */}
