@@ -14,7 +14,7 @@ import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignm
 import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { SecurityPanel } from '@/components/role-management/SecurityPanel';
 import { UnifiedAccessManager } from '@/components/role-management/UnifiedAccessManager';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -47,6 +47,16 @@ const RoleManagement = () => {
   const [showPermissionTester, setShowPermissionTester] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
   const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
+  const [activeRoleTab, setActiveRoleTab] = useState('roles');
+  const [showAccessManagerDialog, setShowAccessManagerDialog] = useState(false);
+
+  function handleRoleTabChange(val: string) {
+    if (val === 'access-manager') {
+      setShowAccessManagerDialog(true);
+    } else {
+      setActiveRoleTab(val);
+    }
+  }
 
   // ── Access gates ─────────────────────────────────────────────────────────
   const canManageRoles = canManageRolesAuth();
@@ -291,7 +301,7 @@ const RoleManagement = () => {
       </div>
 
       {/* Tabbed content */}
-      <Tabs defaultValue="roles">
+      <Tabs value={activeRoleTab} onValueChange={handleRoleTabChange}>
         <TabsList className="mb-4 h-auto gap-1">
           {/* Tab 1: Roles */}
           <TabsTrigger value="roles" className="gap-2" data-testid="tab-roles">
@@ -299,7 +309,7 @@ const RoleManagement = () => {
             <span>Roles <span className="text-[10px] opacity-60">/ الأدوار</span></span>
           </TabsTrigger>
 
-          {/* Tab 2: Unified Access Manager */}
+          {/* Tab 2: Unified Access Manager — opens full-screen dialog */}
           <TabsTrigger value="access-manager" className="gap-2" data-testid="tab-access-manager">
             <KeyRound className="h-4 w-4" />
             <span>Access Manager <span className="text-[10px] opacity-60">/ مدير الوصول</span></span>
@@ -368,24 +378,27 @@ const RoleManagement = () => {
           </div>
         </TabsContent>
 
-        {/* ── Tab 2: Unified Access Manager ── */}
-        <TabsContent value="access-manager" className="mt-0">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-indigo-600" />
-              Access Manager <span className="text-base font-normal text-muted-foreground" dir="rtl">/ مدير الوصول</span>
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Per-user control of every access dimension: page access, hub tab visibility, action permissions, column visibility, and data scope.
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5" dir="rtl">
-              التحكم في كل أبعاد الوصول: الصفحات، التبويبات، الصلاحيات، الأعمدة ونطاق البيانات
-            </p>
-          </div>
-          <UnifiedAccessManager />
-        </TabsContent>
-
       </Tabs>
+
+      {/* ── Access Manager — full-screen dialog ── */}
+      <Dialog open={showAccessManagerDialog} onOpenChange={setShowAccessManagerDialog}>
+        <DialogContent className="max-w-[100vw] w-screen h-screen max-h-screen p-0 rounded-none border-0 flex flex-col gap-0">
+          <DialogHeader className="shrink-0 flex flex-row items-center gap-3 px-5 py-3 border-b bg-gradient-to-r from-[#0F2041] to-[#1D3461]">
+            <KeyRound className="h-5 w-5 text-indigo-300 shrink-0" />
+            <div className="min-w-0">
+              <DialogTitle className="text-white text-base font-semibold leading-tight">
+                Access Manager <span className="text-white/50 font-normal text-sm" dir="rtl">/ مدير الوصول</span>
+              </DialogTitle>
+              <p className="text-white/60 text-xs mt-0.5 truncate">
+                Per-user control of page access, hub tabs, permissions, columns and data scope
+              </p>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <UnifiedAccessManager />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialogs */}
       <CreateRoleDialog
