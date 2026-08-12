@@ -18,6 +18,8 @@ jobs:
       - run: npm run build:mobile
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/setup-java@v4
         with:
           java-version: '21'

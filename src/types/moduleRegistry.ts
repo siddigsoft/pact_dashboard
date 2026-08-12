@@ -522,6 +522,103 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     ],
   },
 
+  // ─── Communication ───────────────────────────────────────────────────────
+  {
+    module: 'Communication',
+    icon: 'Handshake',
+    color: 'teal',
+    description: 'Chat, broadcast center, WhatsApp, signatures, and communication hub',
+    pages: [
+      {
+        page: 'Communication Hub',
+        route: '/communication-hub',
+        description: 'Unified hub for chat, calls, and WebRTC conferencing',
+        actions: [
+          { key: 'chat:read',   label: 'View Chat',       description: 'Access chat rooms and message history', resource: 'chat', action: 'read' },
+          { key: 'chat:create', label: 'Send Message',     description: 'Send a chat message or start a thread', resource: 'chat', action: 'create' },
+          { key: 'chat:delete', label: 'Delete Message',   description: 'Remove a chat message', resource: 'chat', action: 'delete', isDestructive: true, isAdminOnly: true },
+        ],
+      },
+      {
+        page: 'Broadcast Center',
+        route: '/admin/broadcast',
+        description: 'Send mass announcements to all or filtered users via in-app and WhatsApp',
+        actions: [
+          { key: 'broadcast:read',   label: 'View Broadcasts',  description: 'See broadcast history and delivery stats', resource: 'broadcast', action: 'read', isAdminOnly: true },
+          { key: 'broadcast:create', label: 'Send Broadcast',   description: 'Compose and send a broadcast message', resource: 'broadcast', action: 'create', isAdminOnly: true },
+          { key: 'broadcast:delete', label: 'Delete Broadcast', description: 'Remove a broadcast record', resource: 'broadcast', action: 'delete', isDestructive: true, isAdminOnly: true },
+        ],
+      },
+      {
+        page: 'WhatsApp Admin',
+        route: '/admin/whatsapp',
+        description: 'WhatsApp Business API settings, message templates, delivery opt-in',
+        actions: [
+          { key: 'whatsapp:read',     label: 'View WhatsApp Config',  description: 'See WhatsApp connection status and logs', resource: 'whatsapp', action: 'read', isSuperAdminOnly: true },
+          { key: 'whatsapp:update',   label: 'Manage WhatsApp',       description: 'Configure WhatsApp API and templates', resource: 'whatsapp', action: 'update', isSuperAdminOnly: true },
+        ],
+      },
+    ],
+  },
+
+  // ─── Coordination & Oversight ─────────────────────────────────────────────
+  {
+    module: 'Coordination & Oversight',
+    icon: 'ClipboardList',
+    color: 'orange',
+    description: 'Site verification, coordinator dashboard, monitoring plan, tracker preparation',
+    pages: [
+      {
+        page: 'Site Verification',
+        route: '/coordinator/sites',
+        description: 'Coordinator site-visit verification and quality checks',
+        actions: [
+          { key: 'site_visits:read',    label: 'View Assigned Sites',    description: 'See sites assigned for verification', resource: 'site_visits', action: 'read' },
+          { key: 'site_visits:approve', label: 'Verify / Reject Visit',  description: 'Mark a visit as verified or rejected', resource: 'site_visits', action: 'approve' },
+          { key: 'site_visits:update',  label: 'Add Verification Notes', description: 'Annotate a site visit with coordinator notes', resource: 'site_visits', action: 'update' },
+        ],
+      },
+      {
+        page: 'Supervisor Sites',
+        route: '/supervisor/sites',
+        description: 'Supervisor-level site status overview and team management',
+        actions: [
+          { key: 'site_visits:read',   label: 'View Team Sites',      description: 'See all sites under supervised hub', resource: 'site_visits', action: 'read' },
+          { key: 'site_visits:assign', label: 'Reassign Enumerator',  description: 'Move a site to a different enumerator', resource: 'site_visits', action: 'assign' },
+        ],
+      },
+      {
+        page: 'Coordinator Dashboard',
+        route: '/coordinator-dashboard',
+        description: 'Personal dashboard for coordinators — pending verifications and cycle progress',
+        actions: [
+          { key: 'hub_operations:read', label: 'View Coordinator Dashboard', description: 'Access the coordinator overview', resource: 'hub_operations', action: 'read' },
+          { key: 'site_visits:export',  label: 'Export Verification Report',  description: 'Download coordinator site report', resource: 'site_visits', action: 'export' },
+        ],
+      },
+      {
+        page: 'Monitoring Plan',
+        route: '/monitoring-plan',
+        description: 'Plan and track monthly monitoring coverage across sites and hubs',
+        actions: [
+          { key: 'mmp:read',   label: 'View Monitoring Plan',   description: 'Browse the monitoring plan', resource: 'mmp', action: 'read' },
+          { key: 'mmp:update', label: 'Update Monitoring Plan', description: 'Modify monitoring plan entries', resource: 'mmp', action: 'update' },
+          { key: 'mmp:export', label: 'Export Monitoring Plan', description: 'Download monitoring plan data', resource: 'mmp', action: 'export' },
+        ],
+      },
+      {
+        page: 'Tracker Preparation Plan',
+        route: '/tracker-preparation-plan',
+        description: 'Pre-cycle tracker setup — locality assignments, site inclusion, preparation checklists',
+        actions: [
+          { key: 'mmp:create', label: 'Create Tracker Entry', description: 'Add a new site to the tracker plan', resource: 'mmp', action: 'create' },
+          { key: 'mmp:update', label: 'Edit Tracker Plan',    description: 'Update tracker preparation data', resource: 'mmp', action: 'update' },
+          { key: 'mmp:read',   label: 'View Tracker Plan',   description: 'Read tracker preparation plan', resource: 'mmp', action: 'read' },
+        ],
+      },
+    ],
+  },
+
   // ─── Field Operations (Safety / Incidents) ───────────────────────────────
   {
     module: 'Field Operations',
