@@ -90,8 +90,10 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
         sectionId: 'permissions',
         sectionLabel: 'Permissions & Audit',
         tabs: [
-          { tabId: 'permissions', label: 'User Permissions', description: 'Fine-grained permission overrides per user.' },
-          { tabId: 'audit-logs',  label: 'Audit Logs',       description: 'Immutable record of all system actions.' },
+          { tabId: 'permissions',     label: 'User Permissions', description: 'Fine-grained permission overrides per user.' },
+          { tabId: 'audit-logs',      label: 'Audit Logs',       description: 'Immutable record of all system actions.' },
+          { tabId: 'page-grants',     label: 'Page Grants',      description: 'Grant or restrict access to Super Admin Hub tabs per user.' },
+          { tabId: 'button-registry', label: 'Button Registry',  description: 'Full button and permission map across the entire platform.' },
         ],
       },
       {

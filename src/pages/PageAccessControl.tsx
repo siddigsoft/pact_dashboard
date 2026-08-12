@@ -369,19 +369,60 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'staff-directory',     label:'Staff Directory',        path:'/admin/staff-profiles',   icon:Users, group:'Administration',
     roles:['superAdmin','admin'] },
 
-  // ── Super Admin Pages ─────────────────────────────────────────────────────
-  { slug:'cycle-health',        label:'Cycle Health Dashboard', path:'/admin/cycle-health',     icon:Activity, group:'Super Admin',
-    roles:['superAdmin','admin'] },
-  { slug:'admin-monitoring',    label:'System Monitoring',      path:'/admin/monitoring',       icon:BarChart3, group:'Super Admin',
+  // ── Super Admin Hub & Tabs ────────────────────────────────────────────────
+  // Hub page itself
+  { slug:'super-admin-hub',     label:'Super Admin Hub',        path:'/super-admin-hub',        icon:Shield, group:'Super Admin',
+    roles:['superAdmin'], note:'The hub — grants page-level entry; individual tabs are managed via Tab Access or Page Grants' },
+
+  // Monitoring & Health section
+  { slug:'sa-console',          label:'Super Admin Console',    path:'/super-admin-hub?tab=super-admin', icon:Shield, group:'Super Admin',
     roles:['superAdmin'] },
+  { slug:'admin-monitoring',    label:'System Monitoring',      path:'/super-admin-hub?tab=system-monitoring', icon:Activity, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'cycle-health',        label:'Cycle Health Dashboard', path:'/super-admin-hub?tab=cycle-health', icon:Activity, group:'Super Admin',
+    roles:['superAdmin','admin'] },
+  { slug:'sa-approval-dashboard', label:'Approval Dashboard',   path:'/super-admin-hub?tab=approval-dashboard', icon:ClipboardCheck, group:'Super Admin',
+    roles:['superAdmin','admin'] },
+
+  // Permissions & Audit section
+  { slug:'sa-permissions-mgmt', label:'User Permissions (SA)',  path:'/super-admin-hub?tab=permissions', icon:Lock, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-audit-logs',       label:'System Audit Logs (SA)', path:'/super-admin-hub?tab=audit-logs', icon:ScrollText, group:'Super Admin',
+    roles:['superAdmin','admin'] },
+  { slug:'sa-page-grants',      label:'Page Grants',            path:'/super-admin-hub?tab=page-grants', icon:Users, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-button-registry',  label:'Button Registry',        path:'/super-admin-hub?tab=button-registry', icon:LayoutList, group:'Super Admin',
+    roles:['superAdmin'] },
+
+  // Email & Comms section
+  { slug:'sa-email-tracking',   label:'Email Tracking (SA)',    path:'/super-admin-hub?tab=email-tracking', icon:Mail, group:'Super Admin',
+    roles:['superAdmin','admin'] },
+  { slug:'sa-email-management', label:'Email Management',       path:'/super-admin-hub?tab=email-management', icon:Mail, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-email-preview',    label:'Email Preview',          path:'/super-admin-hub?tab=email-preview', icon:Eye, group:'Super Admin',
+    roles:['superAdmin'] },
+
+  // Mobile Config section
+  { slug:'sa-mobile-help',      label:'Mobile Help Articles',   path:'/super-admin-hub?tab=mobile-help-articles', icon:Smartphone, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-mobile-signatures',label:'Mobile Signatures (SA)', path:'/super-admin-hub?tab=mobile-signatures', icon:Smartphone, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-call-scheduling',  label:'Call Scheduling (SA)',   path:'/super-admin-hub?tab=mobile-call-scheduling', icon:Smartphone, group:'Super Admin',
+    roles:['superAdmin'] },
+  { slug:'sa-doc-sync',         label:'Document Sync (SA)',     path:'/super-admin-hub?tab=mobile-document-sync', icon:Smartphone, group:'Super Admin',
+    roles:['superAdmin'] },
+
+  // Data & Tools section
+  { slug:'transaction-scanner', label:'Transaction Scanner',    path:'/super-admin-hub?tab=transaction-scanner', icon:ScanLine, group:'Super Admin',
+    roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'data-management',    label:'Data Management',         path:'/super-admin-hub?tab=data-management', icon:Database, group:'Super Admin',
+    roles:['superAdmin'], note:'Raw data console — bulk imports, corrections, table-level ops inside Super Admin Hub' },
+
+  // Standalone super admin pages (not hub tabs)
   { slug:'recycle-bin',         label:'Recycle Bin',            path:'/recycle-bin',            icon:Archive, group:'Super Admin',
     roles:['superAdmin'] },
   { slug:'project-flow-stages', label:'Project Flow Stages',    path:'/admin/project-flow-stages', icon:GitBranch, group:'Super Admin',
     roles:['superAdmin'] },
-  { slug:'transaction-scanner', label:'Transaction Scanner',    path:'/admin/transaction-scanner', icon:ScanLine, group:'Super Admin',
-    roles:['superAdmin','admin','financialAdmin'] },
-  { slug:'data-management',    label:'Data Management',         path:'/super-admin-hub?tab=data-management', icon:Database, group:'Super Admin',
-    roles:['superAdmin'], note:'Raw data console — bulk imports, corrections, table-level ops inside Super Admin Hub' },
 
   // ── Audit & Security ──────────────────────────────────────────────────────
   { slug:'hierarchy-audit',     label:'Hierarchy Audit',        path:'/hierarchy-audit',        icon:History, group:'Audit & Security',

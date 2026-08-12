@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, Activity, HeartPulse, ClipboardCheck,
   Lock, ScrollText, Mail, Eye, Smartphone, PenTool, PhoneCall,
-  RefreshCw, ScanLine, Database, Info,
+  RefreshCw, ScanLine, Database, Info, Users, LayoutGrid,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -24,11 +24,13 @@ const MobileCallSchedPanel    = lazy(() => import('./MobileCallScheduling'));
 const MobileDocSyncPanel      = lazy(() => import('./MobileDocumentSync'));
 const TransactionScannerPanel = lazy(() => import('./TransactionScanner'));
 const DataManagementPanel     = lazy(() => import('../components/superAdmin/SuperAdminDataManagement').then(m => ({ default: m.SuperAdminDataManagement })));
+const PageGrantsPanel         = lazy(() => import('../components/superAdmin/SuperAdminPageAccessPanel').then(m => ({ default: m.SuperAdminPageAccessPanel })));
+const ButtonRegistryPanel     = lazy(() => import('../components/superAdmin/SuperAdminButtonRegistry').then(m => ({ default: m.SuperAdminButtonRegistry })));
 
 type SASection = 'monitoring' | 'permissions' | 'email' | 'mobile' | 'data';
 type SATab =
   | 'super-admin' | 'system-monitoring' | 'cycle-health' | 'approval-dashboard'
-  | 'permissions' | 'audit-logs'
+  | 'permissions' | 'audit-logs' | 'page-grants' | 'button-registry'
   | 'email-tracking' | 'email-management' | 'email-preview'
   | 'mobile-help-articles' | 'mobile-signatures' | 'mobile-call-scheduling' | 'mobile-document-sync'
   | 'transaction-scanner' | 'data-management';
@@ -148,6 +150,8 @@ const PanelMap: Record<SATab, React.LazyExoticComponent<any>> = {
   'mobile-document-sync': MobileDocSyncPanel,
   'transaction-scanner': TransactionScannerPanel,
   'data-management': DataManagementPanel,
+  'page-grants': PageGrantsPanel,
+  'button-registry': ButtonRegistryPanel,
 };
 
 const Spinner = () => (
