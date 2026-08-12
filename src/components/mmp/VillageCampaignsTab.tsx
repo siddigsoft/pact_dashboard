@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,7 +19,7 @@ import {
   Plus, Pencil, Trash2, Loader2, ChevronLeft, MapPin, Users, Target,
   BarChart3, Calendar, ClipboardList, CheckCircle2, AlertCircle,
   Download, Eye, RefreshCw, Home, Building2, UserCheck, FileText,
-  ArrowRight, TrendingUp, Activity
+  ArrowRight, TrendingUp, Activity, Camera, ImageIcon, X, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -216,6 +216,16 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     hh_covered: '', male_count: '', female_count: '', beneficiaries: '', notes: '',
   });
 
+  // ── Photo upload — daily log dialog ──────────────────────────────────────
+  const [logPhotos, setLogPhotos] = useState<File[]>([]);
+  const logPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Photos fetched for existing logs (keyed by log id) ───────────────────
+  const [photosByLogId, setPhotosByLogId] = useState<Record<string, { photo_url: string; storage_path?: string; caption?: string }[]>>({});
+
+  // ── Expanded log row in the Daily Logs table ─────────────────────────────
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
   // ── Form state — team ─────────────────────────────────────────────────────
   const [teamForm, setTeamForm] = useState({ team_name: '', team_code: '', team_lead_id: '', member_count: '', notes: '' });
 
@@ -302,6 +312,23 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
         .eq('campaign_id', campaignId)
         .order('report_date', { ascending: false }),
     ]);
+
+    // Load photos for all logs in parallel
+    const logIds = (logRes.data || []).map((l: any) => l.id);
+    let fetchedPhotos: Record<string, { photo_url: string; storage_path?: string; caption?: string }[]> = {};
+    if (logIds.length > 0) {
+      const { data: photoRows } = await supabase
+        .from('adhoc_daily_log_photos')
+        .select('log_id, photo_url, storage_path, caption')
+        .in('log_id', logIds)
+        .order('created_at', { ascending: true });
+      for (const p of (photoRows || [])) {
+        const lid = p.log_id as string;
+        fetchedPhotos[lid] = fetchedPhotos[lid] || [];
+        fetchedPhotos[lid].push({ photo_url: p.photo_url, storage_path: p.storage_path ?? undefined, caption: p.caption ?? undefined });
+      }
+    }
+    setPhotosByLogId(fetchedPhotos);
 
     const logs: DailyLog[] = (logRes.data || []).map((l: any) => ({
       ...l,
@@ -520,7 +547,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     if (!assignment || !selectedCampaign) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('adhoc_daily_logs').upsert({
+      // Upsert the log row; we need the id to attach photos
+      const { data: logRow, error } = await supabase.from('adhoc_daily_logs').upsert({
         assignment_id: logForm.assignment_id,
         campaign_id:   selectedCampaign.id,
         village_id:    assignment.village_id,
@@ -532,11 +560,46 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
         beneficiaries: parseInt(logForm.beneficiaries) || 0,
         notes:         logForm.notes || null,
         source:        'web',
-      }, { onConflict: 'assignment_id,report_date' });
+      }, { onConflict: 'assignment_id,report_date' }).select('id').single();
       if (error) throw error;
-      toast({ title: 'Daily log saved', description: `${fmtDate(logForm.report_date)}` });
+
+      // Upload any attached photos and record them in adhoc_daily_log_photos
+      if (logPhotos.length > 0 && logRow?.id) {
+        const logId = logRow.id as string;
+        const photoInserts: { log_id: string; photo_url: string; storage_path: string }[] = [];
+
+        for (const file of logPhotos) {
+          const ext = file.name.split('.').pop() || 'jpg';
+          const storagePath = `village-campaign-logs/${logId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('site-visit-photos')
+            .upload(storagePath, file, { upsert: false });
+
+          if (uploadErr) {
+            // Non-fatal: log and continue with remaining photos
+            console.error('Photo upload error:', uploadErr.message);
+            continue;
+          }
+
+          const { data: urlData } = supabase.storage
+            .from('site-visit-photos')
+            .getPublicUrl(storagePath);
+
+          if (urlData?.publicUrl) {
+            photoInserts.push({ log_id: logId, photo_url: urlData.publicUrl, storage_path: storagePath });
+          }
+        }
+
+        if (photoInserts.length > 0) {
+          const { error: photoErr } = await supabase.from('adhoc_daily_log_photos').insert(photoInserts);
+          if (photoErr) console.error('Photo record insert error:', photoErr.message);
+        }
+      }
+
+      toast({ title: 'Daily log saved', description: fmtDate(logForm.report_date) });
       setShowDailyLog(false);
       setLogForm({ assignment_id:'', report_date: format(new Date(), 'yyyy-MM-dd'), hh_covered:'', male_count:'', female_count:'', beneficiaries:'', notes:'' });
+      setLogPhotos([]);
       await loadCampaignDetail(selectedCampaign.id);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -1168,6 +1231,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
+                  <TableHead className="w-6" />
                   <TableHead>Date</TableHead>
                   <TableHead>Village</TableHead>
                   <TableHead>Team</TableHead>
@@ -1178,25 +1242,86 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                   <TableHead>Notes</TableHead>
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Source</TableHead>
+                  <TableHead className="text-center">Photos</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLogs.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No daily logs yet</TableCell></TableRow>
-                ) : filteredLogs.map(l => (
-                  <TableRow key={l.id}>
-                    <TableCell className="font-mono text-xs whitespace-nowrap">{l.report_date}</TableCell>
-                    <TableCell className="text-xs">{l.village_name}</TableCell>
-                    <TableCell className="text-xs"><span className="font-mono text-[10px] text-muted-foreground">{l.team_code}</span> {l.team_name}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold text-emerald-600">{l.hh_covered.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs">{l.male_count.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs">{l.female_count.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs">{l.beneficiaries.toLocaleString()}</TableCell>
-                    <TableCell className="text-xs max-w-[160px] truncate text-muted-foreground">{l.notes || '—'}</TableCell>
-                    <TableCell className="text-xs">{l.submitted_by_name}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px]">{l.source}</Badge></TableCell>
-                  </TableRow>
-                ))}
+                  <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">No daily logs yet</TableCell></TableRow>
+                ) : filteredLogs.map(l => {
+                  const photos = photosByLogId[l.id] || [];
+                  const isExpanded = expandedLogId === l.id;
+                  return (
+                    <>
+                      <TableRow key={l.id} className={isExpanded ? 'border-b-0' : undefined}>
+                        <TableCell className="pr-0">
+                          {photos.length > 0 && (
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={() => setExpandedLogId(isExpanded ? null : l.id)}
+                            >
+                              {isExpanded
+                                ? <ChevronUp className="h-3.5 w-3.5" />
+                                : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{l.report_date}</TableCell>
+                        <TableCell className="text-xs">{l.village_name}</TableCell>
+                        <TableCell className="text-xs"><span className="font-mono text-[10px] text-muted-foreground">{l.team_code}</span> {l.team_name}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold text-emerald-600">{l.hh_covered.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{l.male_count.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{l.female_count.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{l.beneficiaries.toLocaleString()}</TableCell>
+                        <TableCell className="text-xs max-w-[160px] truncate text-muted-foreground">{l.notes || '—'}</TableCell>
+                        <TableCell className="text-xs">{l.submitted_by_name}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{l.source}</Badge></TableCell>
+                        <TableCell className="text-center">
+                          {photos.length > 0 ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                              onClick={() => setExpandedLogId(isExpanded ? null : l.id)}
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              {photos.length}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+
+                      {/* ── Expandable photo strip ── */}
+                      {isExpanded && photos.length > 0 && (
+                        <TableRow key={`${l.id}-photos`} className="bg-muted/20">
+                          <TableCell colSpan={12} className="py-3 px-4">
+                            <div className="flex flex-wrap gap-2">
+                              {photos.map((p, idx) => (
+                                <a
+                                  key={idx}
+                                  href={p.photo_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="block w-20 h-20 rounded overflow-hidden border bg-muted hover:opacity-80 transition-opacity"
+                                  title={p.caption || `Photo ${idx + 1}`}
+                                >
+                                  <img
+                                    src={p.photo_url}
+                                    alt={p.caption || `Field photo ${idx + 1}`}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -1457,9 +1582,63 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
               <Label>Notes / Observations</Label>
               <Textarea value={logForm.notes} onChange={e => setLogForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any observations, issues, or highlights from today's fieldwork…" rows={3} />
             </div>
+
+            {/* ── Photo upload ─────────────────────────────────── */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-1.5">
+                <Camera className="h-3.5 w-3.5" /> Field Photos
+                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+
+              {/* Thumbnail preview of selected photos */}
+              {logPhotos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {logPhotos.map((file, idx) => {
+                    const src = URL.createObjectURL(file);
+                    return (
+                      <div key={idx} className="relative group w-16 h-16 rounded overflow-hidden border bg-muted">
+                        <img src={src} alt={`photo-${idx}`} className="w-full h-full object-cover" onLoad={() => URL.revokeObjectURL(src)} />
+                        <button
+                          type="button"
+                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setLogPhotos(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+                  onClick={() => logPhotoInputRef.current?.click()}>
+                  <ImageIcon className="h-3.5 w-3.5" /> Add Photos
+                </Button>
+                {logPhotos.length > 0 && (
+                  <span className="text-xs text-muted-foreground self-center">
+                    {logPhotos.length} photo{logPhotos.length !== 1 ? 's' : ''} selected
+                  </span>
+                )}
+              </div>
+              <input
+                ref={logPhotoInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={e => {
+                  const files = Array.from(e.target.files || []);
+                  setLogPhotos(prev => [...prev, ...files]);
+                  // Reset input so same file can be re-selected after removal
+                  e.target.value = '';
+                }}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDailyLog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowDailyLog(false); setLogPhotos([]); }}>Cancel</Button>
             <Button onClick={submitDailyLog} disabled={saving || !logForm.assignment_id}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Save Log
             </Button>

@@ -97,6 +97,7 @@ export default function PreFundingDistribute() {
     }));
   const [topUpDialog, setTopUpDialog] = useState<{ open: boolean; alloc: Allocation | null; fundId: string; fund: HeldFund | null }>({ open: false, alloc: null, fundId: '', fund: null });
   const [topUpAmt, setTopUpAmt]           = useState('');
+  const [topUpReason, setTopUpReason]     = useState('');
   const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
   const [topUpSaving, setTopUpSaving]     = useState(false);
   const [topUpConfirmStep, setTopUpConfirmStep] = useState(false);
@@ -314,6 +315,7 @@ export default function PreFundingDistribute() {
     by_user_id: string;
     by_name: string;
     receipt_url: string | null;
+    reason?: string;
   }
   interface AllocMeta {
     text: string;
@@ -741,6 +743,7 @@ export default function PreFundingDistribute() {
           by_user_id: currentUser?.id ?? '',
           by_name: currentUser?.full_name ?? currentUser?.email ?? 'Unknown',
           receipt_url: uploaded,
+          reason: topUpReason.trim() || undefined,
         },
         alloc.receipt_url,     // preserve original receipt on first top-up
         alloc.created_at,      // preserve original allocation date
@@ -762,6 +765,7 @@ export default function PreFundingDistribute() {
       toast({ title: 'Funds added', description: `${formatNumber(increment, 0)} ${alloc.currency} added. New total: ${formatNumber(newTotal, 0)}.` });
       setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null });
       setTopUpReceiptFiles([]);
+      setTopUpReason('');
       setTopUpConfirmStep(false);
       await loadAllocations(fundId);
     } catch (e: any) {
@@ -1262,6 +1266,7 @@ export default function PreFundingDistribute() {
                                   by_name: string;
                                   receipt_url: string | null;
                                   is_initial: boolean;
+                                  reason?: string;
                                 };
 
                                 const rows: Disbursement[] = [];
@@ -1296,6 +1301,7 @@ export default function PreFundingDistribute() {
                                     by_name: entry.by_name,
                                     receipt_url: entry.receipt_url,
                                     is_initial: false,
+                                    reason: entry.reason,
                                   });
                                 });
 
@@ -1348,6 +1354,7 @@ export default function PreFundingDistribute() {
                                             <th className="text-right py-2 px-2.5 text-muted-foreground font-semibold">Amount Sent</th>
                                             <th className="text-right py-2 px-2.5 text-muted-foreground font-semibold">Running Total</th>
                                             <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold hidden sm:table-cell">Sent By</th>
+                                            <th className="text-left py-2 px-2.5 text-muted-foreground font-semibold hidden md:table-cell">Reason</th>
                                             <th className="text-center py-2 px-2.5 text-muted-foreground font-semibold">Receipt</th>
                                           </tr>
                                         </thead>
@@ -1392,6 +1399,9 @@ export default function PreFundingDistribute() {
                                               </td>
                                               <td className="py-2 px-2.5 text-muted-foreground hidden sm:table-cell truncate max-w-[120px]">
                                                 {row.by_name}
+                                              </td>
+                                              <td className="py-2 px-2.5 text-muted-foreground hidden md:table-cell truncate max-w-[160px] italic text-[10px]">
+                                                {row.reason || '—'}
                                               </td>
                                               <td className="py-2 px-2.5 text-center">
                                                 {row.receipt_url ? (
@@ -1737,7 +1747,7 @@ export default function PreFundingDistribute() {
       </Dialog>
 
       {/* Top-Up / Add Funds Dialog */}
-      <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); } }}>
+      <Dialog open={topUpDialog.open} onOpenChange={o => { if (!o) { setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null }); setTopUpConfirmStep(false); setTopUpReason(''); setTopUpReceiptFiles([]); } }}>
         <DialogContent className="max-w-lg w-full flex flex-col max-h-[90vh]">
           {topUpDialog.alloc && (() => {
             const alloc = topUpDialog.alloc;
@@ -1883,6 +1893,7 @@ export default function PreFundingDistribute() {
 
                   {/* Top-up amount — disabled when holder is locked */}
                   {!holderLocked && (
+                    <>
                     <div>
                       <Label className="text-xs mb-1 block">Top-Up Amount ({alloc.currency}) <span className="text-destructive">*</span></Label>
                       <Input
@@ -1900,6 +1911,17 @@ export default function PreFundingDistribute() {
                         </p>
                       )}
                     </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Reason / Top-Up Name</Label>
+                      <Input
+                        placeholder="e.g. Q3 operational cash, July salary supplement…"
+                        value={topUpReason}
+                        onChange={e => setTopUpReason(e.target.value)}
+                        className="h-9 text-sm"
+                        data-testid="input-topup-reason"
+                      />
+                    </div>
+                    </>
                   )}
 
                   {/* Receipt upload — only when not locked */}
@@ -2005,6 +2027,9 @@ export default function PreFundingDistribute() {
                                     </span>
                                   </div>
                                   <div className="text-muted-foreground truncate">by {entry.by_name}</div>
+                                  {entry.reason && (
+                                    <div className="text-[10px] text-sky-700 dark:text-sky-300 font-medium truncate mt-0.5">"{entry.reason}"</div>
+                                  )}
                                   <div className="text-[10px] text-muted-foreground">
                                     {formatNumber(entry.previous_total, 0)} → {formatNumber(entry.new_total, 0)} {alloc.currency}
                                   </div>

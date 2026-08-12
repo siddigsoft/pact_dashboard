@@ -39,6 +39,7 @@ import '../services/advance_report_service.dart';
 import '../screens/approval_dashboard_screen.dart';
 import '../screens/down_payment_approval_screen.dart';
 import '../screens/admin/monitoring_dashboard_screen.dart';
+import '../screens/village_campaigns_screen.dart';
 import 'main_layout.dart';
 import '../utils/user_role.dart';
 
@@ -96,6 +97,11 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
       _isAdmin || _isSupervisor || _isCoordinator || _isFinance;
 
   bool get _canSeeFinanceFeatures => _canApproveFinance;
+
+  bool get _isTeamLead =>
+      _role == 'team_leader' ||
+      _role == 'teamlead' ||
+      _role == 'team_lead';
 
   bool get _isEmployee => UserRoleHelper.isEmployee(_role);
 
@@ -590,6 +596,20 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             }
                           },
                         ),
+
+                      // Village Campaigns — visible to ALL authenticated users.
+                      // Team-lead eligibility is determined at runtime by querying
+                      // adhoc_teams.team_lead_id, so hiding this item by profile role
+                      // would lock out valid team leads whose DB role isn't 'team_leader'.
+                      // The screen shows a friendly empty state when the user has no
+                      // active assignments.
+                      _MenuItemData(
+                        icon: Icons.campaign_rounded,
+                        title: 'Village Campaigns',
+                        subtitle: 'View and submit daily village progress',
+                        iconColor: Colors.teal,
+                        onTap: () => _pushScreen(const VillageCampaignsScreen()),
+                      ),
 
                       if (!_isEmployee &&
                           (_isCoordinator ||
