@@ -380,6 +380,8 @@ export const PAGE_DEFS: PageDef[] = [
     roles:['superAdmin'] },
   { slug:'transaction-scanner', label:'Transaction Scanner',    path:'/admin/transaction-scanner', icon:ScanLine, group:'Super Admin',
     roles:['superAdmin','admin','financialAdmin'] },
+  { slug:'data-management',    label:'Data Management',         path:'/super-admin-hub?tab=data-management', icon:Database, group:'Super Admin',
+    roles:['superAdmin'], note:'Raw data console — bulk imports, corrections, table-level ops inside Super Admin Hub' },
 
   // ── Audit & Security ──────────────────────────────────────────────────────
   { slug:'hierarchy-audit',     label:'Hierarchy Audit',        path:'/hierarchy-audit',        icon:History, group:'Audit & Security',
