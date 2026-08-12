@@ -46,11 +46,20 @@ jobs:
           rm: true
 
       - name: Fix permissions on VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: 209.38.78.38
-          username: deploy
-          key: |
+        # Use native ssh instead of appleboy/ssh-action to avoid the runtime
+        # drone-ssh binary download (GitHub Releases CDN returns 503 intermittently).
+        run: |
+          echo "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh -i /tmp/deploy_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              deploy@209.38.78.38 \
+              "find /home/deploy/pact_dashboard/dist -type d -exec chmod 755 {} \; && \
+               find /home/deploy/pact_dashboard/dist -type f -exec chmod 644 {} \;"
+          rm -f /tmp/deploy_key
+        env:
+          SSH_KEY: |
             -----BEGIN OPENSSH PRIVATE KEY-----
             b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
             QyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQwAAAJjD7cU1w+3F
@@ -58,6 +67,3 @@ jobs:
             AAAEC1vOU+lUWcM2NmT4hRzQZTI3rhDcQhthO9CUrk0lkkrewdnKnsOHprn/gcXk0RLbwN
             f4D/7qPn5xU8pENyQ8ZDAAAAE2dpdGh1Yi1hY3Rpb25zQHBhY3QBAg==
             -----END OPENSSH PRIVATE KEY-----
-          script: |
-            find /home/deploy/pact_dashboard/dist -type d -exec chmod 755 {} \;
-            find /home/deploy/pact_dashboard/dist -type f -exec chmod 644 {} \;
