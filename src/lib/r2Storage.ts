@@ -48,3 +48,27 @@ export async function r2Delete(keys: string | string[]): Promise<void> {
   const list = Array.isArray(keys) ? keys : [keys];
   await Promise.all(list.map(key => sign('delete', { key })));
 }
+
+const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+
+export function isZipFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+}
+
+/** Ask the edge function to unpack a zip already in R2 into workspace folders/files. */
+export async function r2ExtractZip(opts: {
+  zipKey: string;
+  zipFileId: string;
+  folderId: string | null;
+  securityLevel: string;
+}): Promise<{ extracted: number; folders: number }> {
+  const { data, error } = await supabase.functions.invoke('r2-extract', {
+    body: opts,
+  });
+  if (error) throw new Error(error.message || 'ZIP extract failed');
+  if (data?.error) throw new Error(data.error);
+  return { extracted: data.extracted ?? 0, folders: data.folders ?? 0 };
+}
+
+export { MAX_ZIP_BYTES };
