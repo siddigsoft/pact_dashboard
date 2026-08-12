@@ -37,6 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -66,6 +67,7 @@ interface PasswordTarget {
 interface WFile {
   id: string; folder_id: string | null; name: string; description: string | null;
   storage_path: string; public_url: string | null; file_size: number;
+  storage_provider: 'supabase' | 'r2';
   mime_type: string | null; extension: string | null;
   security_level: SecurityLevel; version: number; version_label: string | null;
   tags: string[]; created_by: string | null; last_modified_by: string | null;
@@ -586,18 +588,15 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const parentPath = parts.slice(0, -1).join('/');
           targetFolderId = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
         }
-        const path = `${currentUserId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const { error: uploadErr } = await withTimeout(
-          supabase.storage.from('workspace-files').upload(path, f, { upsert: false })
-        );
-        if (uploadErr) throw uploadErr;
+        // New uploads go to Cloudflare R2; the edge function generates the key
+        // under the caller's user-id prefix (see supabase/functions/r2-sign).
+        const { key: path } = await withTimeout(r2Upload(f), 600000);
         pendingOrphanPaths.push(path);
-        const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
         const { error: dbErr } = await withTimeout(
           supabase.from('workspace_files').insert({
             folder_id: targetFolderId, name: f.name, description: description || null,
-            storage_path: path, public_url: urlData?.publicUrl ?? null,
+            storage_path: path, public_url: null, storage_provider: 'r2',
             file_size: f.size, mime_type: f.type, extension: ext,
             security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
             tags: tagList,
@@ -619,7 +618,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
       if (cancelledRef.current) {
         if (pendingOrphanPaths.length > 0) {
-          try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
+          try { await r2Delete(pendingOrphanPaths); } catch { /* best effort */ }
         }
         toast({ title: 'Upload cancelled', description: `${completed} of ${files.length} file${files.length !== 1 ? 's' : ''} were uploaded before cancellation.` });
       } else {
@@ -633,7 +632,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
       }
     } catch (e: any) {
       if (pendingOrphanPaths.length > 0) {
-        try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
+        try { await r2Delete(pendingOrphanPaths); } catch { /* best effort */ }
       }
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
     } finally { setUploading(false); cancelledRef.current = false; }
@@ -911,11 +910,16 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
 
   async function downloadFile() {
     try {
-      const { data, error } = await supabase.storage.from('workspace-files').download(file.storage_path);
-      if (error || !data) throw error ?? new Error('Download failed');
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
-      URL.revokeObjectURL(url);
+      if (file.storage_provider === 'r2') {
+        const signedUrl = await r2SignedUrl(file.storage_path, file.name);
+        const a = document.createElement('a'); a.href = signedUrl; a.download = file.name; a.click();
+      } else {
+        const { data, error } = await supabase.storage.from('workspace-files').download(file.storage_path);
+        if (error || !data) throw error ?? new Error('Download failed');
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
+        URL.revokeObjectURL(url);
+      }
       await supabase.from('workspace_files').update({ download_count: (file.download_count ?? 0) + 1 }).eq('id', file.id);
       await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: currentUserId, action: 'downloaded', metadata: {} });
       onRefresh();
@@ -1091,8 +1095,14 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
                   {v.storage_path && (
                     <button
                       onClick={async () => {
-                        const { data: signed } = await supabase.storage.from('workspace-files').createSignedUrl(v.storage_path, 3600, { download: file.name });
-                        if (signed?.signedUrl) { const a = document.createElement('a'); a.href = signed.signedUrl; a.download = file.name; a.click(); }
+                        let signedUrl: string | undefined;
+                        if (v.storage_provider === 'r2') {
+                          signedUrl = await r2SignedUrl(v.storage_path, file.name).catch(() => undefined);
+                        } else {
+                          const { data: signed } = await supabase.storage.from('workspace-files').createSignedUrl(v.storage_path, 3600, { download: file.name });
+                          signedUrl = signed?.signedUrl;
+                        }
+                        if (signedUrl) { const a = document.createElement('a'); a.href = signedUrl; a.download = file.name; a.click(); }
                       }}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors"
                       title="Download this version"
@@ -1489,6 +1499,7 @@ export default function WorkspaceHub() {
         sourceFiles.map(f => ({
           folder_id: newFolder.id, name: f.name, description: f.description,
           storage_path: f.storage_path, public_url: f.public_url, file_size: f.file_size,
+          storage_provider: f.storage_provider ?? 'supabase',
           mime_type: f.mime_type, extension: f.extension, security_level: f.security_level,
           tags: f.tags, created_by: userId, version: 1, allow_download: f.allow_download,
         }))
@@ -1514,7 +1525,11 @@ export default function WorkspaceHub() {
   }
 
   async function permanentlyDeleteFile(file: WFile) {
-    await supabase.storage.from('workspace-files').remove([file.storage_path]);
+    if (file.storage_provider === 'r2') {
+      try { await r2Delete(file.storage_path); } catch { /* best effort — row delete below is the source of truth */ }
+    } else {
+      await supabase.storage.from('workspace-files').remove([file.storage_path]);
+    }
     const { error } = await supabase.from('workspace_files').delete().eq('id', file.id);
     if (error) { toast({ title: 'Failed to delete file', description: error.message, variant: 'destructive' }); return; }
     refetchArchived();
@@ -1868,20 +1883,29 @@ export default function WorkspaceHub() {
   // ── File open actions helper ───────────────────────────────────────────────
 
   async function openFileAs(file: WFile, mode: 'browser' | 'google' | 'office' | 'download') {
-    const url = file.public_url;
-    if (!url) return;
     if (mode === 'browser') {
       window.open(`/view/${file.short_code || file.id}`, '_blank');
-    } else if (mode === 'google') {
+      return;
+    }
+    const url = file.storage_provider === 'r2'
+      ? await r2SignedUrl(file.storage_path).catch(() => null)
+      : file.public_url;
+    if (!url) return;
+    if (mode === 'google') {
       window.open(`https://docs.google.com/viewer?url=${encodeURIComponent(url)}`, '_blank');
     } else if (mode === 'office') {
       window.open(`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`, '_blank');
     } else if (mode === 'download') {
       // Generate a signed URL with download flag so the browser always saves the file
-      const { data: signed } = await supabase.storage
-        .from('workspace-files')
-        .createSignedUrl(file.storage_path, 3600, { download: file.name });
-      const downloadHref = signed?.signedUrl ?? url;
+      let downloadHref = url;
+      if (file.storage_provider === 'r2') {
+        downloadHref = await r2SignedUrl(file.storage_path, file.name).catch(() => url);
+      } else {
+        const { data: signed } = await supabase.storage
+          .from('workspace-files')
+          .createSignedUrl(file.storage_path, 3600, { download: file.name });
+        downloadHref = signed?.signedUrl ?? url;
+      }
       const a = document.createElement('a');
       a.href = downloadHref;
       a.download = file.name;
@@ -1892,7 +1916,7 @@ export default function WorkspaceHub() {
   }
 
   function OpenAsSubMenu({ file }: { file: WFile }) {
-    if (!file.public_url) return null;
+    if (!file.public_url && file.storage_provider !== 'r2') return null;
     const n = file.name.toLowerCase();
     const mime = file.mime_type || '';
     const isOffice = /\.(docx?|xlsx?|pptx?)$/.test(n);
@@ -2075,7 +2099,7 @@ export default function WorkspaceHub() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
               </>}
-              {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
+              {(file.public_url || file.storage_provider === 'r2') && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
                 <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
                   <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
                 </DropdownMenuItem>
@@ -2164,7 +2188,7 @@ export default function WorkspaceHub() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
                 </>}
-                {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
+                {(file.public_url || file.storage_provider === 'r2') && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
                     <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
                   </DropdownMenuItem>

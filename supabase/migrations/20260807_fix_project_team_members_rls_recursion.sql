@@ -70,7 +70,7 @@ CREATE POLICY "project_team_members_select"
       WHERE pr.id = (SELECT auth.uid())
         AND pr.role NOT IN ('employee', 'fom', 'countryDirector', 'hr')
     )
-    -- Own membership row — no subquery on this table
+    
     OR project_team_members.user_id = (SELECT auth.uid())
     -- Teammates on a project where I am an active member (via SECURITY DEFINER)
     OR public.is_active_project_team_member(project_team_members.project_id)
