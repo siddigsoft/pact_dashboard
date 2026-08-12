@@ -53,6 +53,7 @@ import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
+import VillageCampaignsTab from '@/components/mmp/VillageCampaignsTab';
 import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
@@ -4650,6 +4651,13 @@ const MMP = () => {
                     Ad-hoc Visits
                   </TabsTrigger>
                 )}
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+                  <TabsTrigger value="village-campaigns" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
+                    data-testid="tab-village-campaigns">
+                    <Home className="h-3.5 w-3.5" />
+                    Village Campaigns
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -6720,6 +6728,13 @@ const MMP = () => {
             {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && (
               <TabsContent value="adhoc">
                 <AdhocSiteVisitsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
+              </TabsContent>
+            )}
+
+            {/* Village Campaigns Tab */}
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+              <TabsContent value="village-campaigns">
+                <VillageCampaignsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
               </TabsContent>
             )}
           </Tabs>
