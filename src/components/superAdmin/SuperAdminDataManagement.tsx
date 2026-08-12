@@ -245,6 +245,20 @@ function formatMmpMonthYear(month: number | null | undefined, year: number | nul
   return `${abbr} ${year}`;
 }
 
+/**
+ * Returns true when `n` is a bare machine-generated fallback code rather than a
+ * real human-entered name.  Patterns that qualify:
+ *   • "MMP-XXXXXXXX"  (8 hex chars — UUID-slice fallback)
+ *   • Raw UUID strings (36 chars, "xxxxxxxx-…" format)
+ * Both are useless as display labels and should be replaced with richer context.
+ */
+function isMmpFallbackCode(n: string | null | undefined): boolean {
+  if (!n) return true;
+  if (/^MMP-[0-9A-F]{8}$/i.test(n)) return true;        // UUID-slice fallback
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(n)) return true; // raw UUID
+  return false;
+}
+
 const normalizeStatus = (s: string): string => {
   const l = (s || '').toLowerCase().replace(/\s+/g, '_');
   if (['inprogress', 'in_progress', 'inprogress', 'ongoing'].includes(l)) return 'ongoing';
@@ -1659,10 +1673,18 @@ export function SuperAdminDataManagement() {
     const hubs = [...new Set(siteVisits.map(s => s.hub_office).filter(Boolean))].sort() as string[];
     // Derive MMP options directly from visit data — avoids dependency on mmps state (which may be
     // empty due to RLS) and ensures the filter only shows MMPs that actually have site visits.
+    // When no real name is available, augment the code with hub_office context.
     const mmpSeen = new Map<string, string>();
     siteVisits.forEach(sv => {
       if (sv.mmp_file_id && !mmpSeen.has(sv.mmp_file_id)) {
-        mmpSeen.set(sv.mmp_file_id, sv.mmp_name || sv.mmp_file_id);
+        const name = sv.mmp_name;
+        if (!isMmpFallbackCode(name)) {
+          mmpSeen.set(sv.mmp_file_id, name!);
+        } else {
+          const hub  = sv.hub_office;
+          const code = name || `MMP-${String(sv.mmp_file_id).slice(0, 8).toUpperCase()}`;
+          mmpSeen.set(sv.mmp_file_id, hub ? `${hub} · ${code}` : code);
+        }
       }
     });
     const mmpOptions = [...mmpSeen.entries()]
@@ -1847,20 +1869,29 @@ export function SuperAdminDataManagement() {
       claimedSites.map(s => normalizeStatus(s.status)).filter(Boolean)
     )].sort((a, b) => (STATUS_LABELS[a] || a).localeCompare(STATUS_LABELS[b] || b));
 
-    // MMP filter options — primary source is mmpById which merges useMMP() context
-    // (real names like "August 2026 MMP") + loadMMPs() result + inline resolved names.
+    // MMP filter options — built from claimed site data plus mmpById name resolution.
+    // Priority: real DB name → hub-augmented code (no extra query needed — hub_office
+    // is already present on every claimed site row from the mmp_site_entries query).
     const claimedMmpIds = new Set(claimedSites.map(s => s.mmp_id).filter(Boolean));
     const mmpOptionMap = new Map<string, string>(); // uuid → display label
-    // Use the merged mmpById map (real names from context win)
     claimedMmpIds.forEach(id => {
       if (!id) return;
-      const label = mmpById[id]?.name || s_mmp_name_from_site(id) || `MMP-${String(id).slice(0, 8).toUpperCase()}`;
-      mmpOptionMap.set(id, label);
+      const mapName  = mmpById[id]?.name;
+      const siteName = claimedSites.find(s => s.mmp_id === id)?.mmp_name;
+      // Use the first real (non-fallback) name found
+      const realName = (!isMmpFallbackCode(mapName) && mapName)
+        || (!isMmpFallbackCode(siteName) && siteName)
+        || null;
+      if (realName) {
+        mmpOptionMap.set(id, realName);
+      } else {
+        // No real name available — augment the code with hub context so the
+        // dropdown is still meaningful ("Kassala Hub · MMP-5C48A1CC").
+        const hub  = claimedSites.find(s => s.mmp_id === id)?.hub_office;
+        const code = mapName || `MMP-${String(id).slice(0, 8).toUpperCase()}`;
+        mmpOptionMap.set(id, hub ? `${hub} · ${code}` : code);
+      }
     });
-    // Helper to get mmp_name from site data for a given id
-    function s_mmp_name_from_site(id: string) {
-      return claimedSites.find(s => s.mmp_id === id)?.mmp_name || null;
-    }
     const mmpOptions = [...mmpOptionMap.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -1903,9 +1934,18 @@ export function SuperAdminDataManagement() {
     const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort() as string[];
     // Derive MMP options from dispatched sites data (mmp_name now baked in at load time).
     // Use mmp_file_id as the filter key so the comparison in filteredDispatchedSites stays correct.
+    // When no real name is available, augment the code with hub_office context.
     const mmpEntries = new Map<string, string>();
     dispatchedSites.forEach(s => {
-      if (s.mmp_file_id) mmpEntries.set(s.mmp_file_id, (s as any).mmp_name || s.mmp_file_id);
+      if (!s.mmp_file_id) return;
+      const name = (s as any).mmp_name;
+      if (!isMmpFallbackCode(name)) {
+        mmpEntries.set(s.mmp_file_id, name);
+      } else {
+        const hub  = s.hub_office;
+        const code = name || `MMP-${String(s.mmp_file_id).slice(0, 8).toUpperCase()}`;
+        mmpEntries.set(s.mmp_file_id, hub ? `${hub} · ${code}` : code);
+      }
     });
     const mmpOptions = [...mmpEntries.entries()]
       .map(([id, label]) => ({ id, label }))
