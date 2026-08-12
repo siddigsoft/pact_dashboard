@@ -232,6 +232,19 @@ function StatsCard({ title, value, subtitle, icon: Icon, trend, trendValue, colo
   );
 }
 
+/** Short month names used to render "Aug 2026" style MMP labels. */
+const MMP_MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/**
+ * Returns a human-readable MMP label like "Aug 2026" when month+year are known.
+ * Returns null when either field is missing so callers can fall through to the next option.
+ */
+function formatMmpMonthYear(month: number | null | undefined, year: number | null | undefined): string | null {
+  if (!month || !year) return null;
+  const abbr = MMP_MONTH_ABBR[(month - 1)] ?? String(month);
+  return `${abbr} ${year}`;
+}
+
 const normalizeStatus = (s: string): string => {
   const l = (s || '').toLowerCase().replace(/\s+/g, '_');
   if (['inprogress', 'in_progress', 'inprogress', 'ongoing'].includes(l)) return 'ongoing';
@@ -675,7 +688,7 @@ export function SuperAdminDataManagement() {
       const uniqueMmpIds = [...new Set(allData.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const mmpNameMap: Record<string, string> = {};
       const fillMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
+        if (m.id) mmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || formatMmpMonthYear(m.month, m.year) || m.mmp_id || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
       });
       // Layer 1: RPC without p_ids — avoids uuid[] JSON cast, returns all MMPs via SECURITY DEFINER
       {
@@ -747,7 +760,7 @@ export function SuperAdminDataManagement() {
       const uniqueDispatchedMmpIds = [...new Set(allDispatched.map((s: any) => s.mmp_file_id).filter(Boolean))] as string[];
       const dispatchedMmpNameMap: Record<string, string> = {};
       const fillDispMap = (rows: any[]) => rows.forEach((m: any) => {
-        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
+        if (m.id) dispatchedMmpNameMap[String(m.id)] = m.name || m.project?.name || m.project_name || formatMmpMonthYear(m.month, m.year) || m.mmp_id || `MMP-${String(m.id).slice(0, 8).toUpperCase()}`;
       });
       // Layer 1: RPC without p_ids (SECURITY DEFINER, no uuid[] cast needed)
       {
@@ -859,7 +872,7 @@ export function SuperAdminDataManagement() {
 
       const enriched = mmpSource.map((m: any) => ({
         id: m.id,
-        name: m.name || m.project?.name || m.project_name || m.mmp_id || (m.month && m.year ? `MMP ${m.month}/${m.year}` : null) || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
+        name: m.name || m.project?.name || m.project_name || formatMmpMonthYear(m.month, m.year) || m.mmp_id || `MMP-${m.id.slice(0, 8).toUpperCase()}`,
         month: m.month,
         year: m.year,
         status: m.status,
@@ -1629,8 +1642,9 @@ export function SuperAdminDataManagement() {
     // Overlay with context MMP files — these have real names and bypass RLS
     contextMmpFiles.forEach(f => {
       if (f.id) {
-        const resolvedName = f.name || (f as any).projectName || (f as any).mmpId
-          || ((f as any).month && (f as any).year ? `MMP ${(f as any).month}/${(f as any).year}` : null)
+        const resolvedName = f.name || (f as any).projectName
+          || formatMmpMonthYear((f as any).month, (f as any).year)
+          || (f as any).mmpId
           || `MMP-${f.id.slice(0, 8).toUpperCase()}`;
         map[f.id] = { id: f.id, name: resolvedName, month: (f as any).month, year: (f as any).year };
       }
