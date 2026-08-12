@@ -1918,7 +1918,7 @@ export default function WorkspaceHub() {
                   <MoreVertical className="h-2.5 w-2.5" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
+              <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
                 <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
                   <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
                 </DropdownMenuItem>
@@ -3333,7 +3333,7 @@ export default function WorkspaceHub() {
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) { setQrFile(null); setShowQrCustomize(false); } }}>
-          <DialogContent className="max-w-[600px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl max-h-[92vh] flex flex-col">
+          <DialogContent hideCloseButton className="max-w-[600px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl max-h-[92vh] flex flex-col">
             {qrFile && (() => {
               const viewerUrl = `${window.location.origin}/view/${qrFile.short_code ?? qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
