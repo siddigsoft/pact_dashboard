@@ -302,7 +302,14 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
       refetchGrants();
       qc.invalidateQueries({ queryKey: ['workspace_access_grant'] });
     } catch (e: any) {
-      toast({ title: 'Error granting access', description: e.message, variant: 'destructive' });
+      const isRls = e?.message?.includes('row-level security') || e?.code === '42501';
+      toast({
+        title: 'Error granting access',
+        description: isRls
+          ? 'Database access policy not yet applied. A Super Admin must run the workspace RLS migration in Supabase Studio before this action is available.'
+          : e.message,
+        variant: 'destructive',
+      });
     } finally {
       setGranting(false);
       setActioningId(null);
