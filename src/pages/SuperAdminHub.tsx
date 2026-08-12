@@ -73,6 +73,14 @@ const SECTIONS: SectionDef[] = [
         id: 'audit-logs', label: 'Audit Logs', icon: ScrollText,
         description: 'Immutable record of all system actions — user logins, data changes, approvals, and admin operations with timestamps, IPs, and change diffs.',
       },
+      {
+        id: 'page-grants', label: 'Page Grants', icon: Users,
+        description: 'Grant or restrict individual users\' access to Super Admin Hub tabs — override visibility per user without opening the Access Manager.',
+      },
+      {
+        id: 'button-registry', label: 'Button Registry', icon: LayoutGrid,
+        description: 'Full button and permission map across the entire platform — see every action, which roles can perform it, and jump to Role Management for changes.',
+      },
     ],
   },
   {
