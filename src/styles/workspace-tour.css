@@ -1,0 +1,111 @@
+/* Reskin driver.js (product tour) to match the PACT sheet/register system:
+   white sheet, blue-100 edge, Manrope titles, Inter body, mono progress. */
+
+.pact-tour-popover.driver-popover {
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 16px 40px -24px rgb(15 23 42 / 0.3);
+  padding: 20px;
+  max-width: 320px;
+}
+.dark .pact-tour-popover.driver-popover {
+  background: #0f1422;
+  border-color: #1e3a8a;
+}
+
+.pact-tour-popover .driver-popover-title {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  color: #020817;
+}
+.dark .pact-tour-popover .driver-popover-title {
+  color: #f8fafc;
+}
+
+.pact-tour-popover .driver-popover-description {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #64748b;
+  margin-top: 6px;
+}
+
+.pact-tour-popover .driver-popover-progress-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  color: #94a3b8;
+}
+
+.pact-tour-popover .driver-popover-footer {
+  margin-top: 16px;
+}
+
+.pact-tour-popover .driver-popover-navigation-btns button {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+  padding: 8px 14px;
+  text-shadow: none;
+  transition: transform 150ms ease-out, filter 150ms ease-out;
+}
+.pact-tour-popover .driver-popover-navigation-btns button:active {
+  transform: scale(0.98);
+}
+
+.pact-tour-popover .driver-popover-next-btn,
+.pact-tour-popover .driver-popover-done-btn {
+  background: #2865eb;
+  color: #ffffff;
+  border: none;
+}
+.pact-tour-popover .driver-popover-next-btn:hover,
+.pact-tour-popover .driver-popover-done-btn:hover {
+  filter: brightness(1.1);
+  background: #2865eb;
+}
+
+.pact-tour-popover .driver-popover-prev-btn {
+  background: transparent;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+.pact-tour-popover .driver-popover-prev-btn:hover {
+  background: rgb(15 23 42 / 0.03);
+  color: #020817;
+}
+
+.pact-tour-popover .driver-popover-close-btn {
+  color: #94a3b8;
+}
+.pact-tour-popover .driver-popover-close-btn:hover {
+  color: #020817;
+}
+
+.pact-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #ffffff;
+}
+.pact-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #ffffff;
+}
+.pact-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #ffffff;
+}
+.pact-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #ffffff;
+}
+.dark .pact-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #0f1422;
+}
+.dark .pact-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #0f1422;
+}
+.dark .pact-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #0f1422;
+}
+.dark .pact-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #0f1422;
+}

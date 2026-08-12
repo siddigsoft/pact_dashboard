@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft,
+  SquareCheck, Square, ArrowLeft, HelpCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -46,6 +46,7 @@ import { NavBadgeCountsProvider } from '@/context/NavBadgeCountsContext';
 import Navbar from '@/components/Navbar';
 import { WorkspaceAccessGate } from '@/components/workspace/WorkspaceAccessGate';
 import { WorkspaceAccessManager } from '@/components/workspace/WorkspaceAccessManager';
+import { startWorkspaceTour, hasCompletedWorkspaceTour, markWorkspaceTourCompleted } from '@/components/onboarding/workspaceTour';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1239,6 +1240,17 @@ export default function WorkspaceHub() {
   const [openShareForFileId, setOpenShareForFileId] = useState<string | null>(null);
   const [shareFileTarget, setShareFileTarget] = useState<WFile | null>(null);
 
+  // First-visit product tour — see src/components/onboarding/workspaceTour.ts.
+  // Delayed slightly so the KPI tiles / sidebar it points at have mounted.
+  useEffect(() => {
+    if (!userId || hasCompletedWorkspaceTour(userId)) return;
+    const t = setTimeout(() => {
+      startWorkspaceTour({ isAdmin, isSuperAdmin }, () => markWorkspaceTourCompleted(userId));
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   // Fetch current user's security clearance
   const { data: myClearance } = useQuery<SecurityLevel>({
     queryKey: ['my-workspace-clearance', userId],
@@ -2370,6 +2382,13 @@ export default function WorkspaceHub() {
                 <FileText className="w-3.5 h-3.5 text-white" />
               </div>
               <span className="text-sm font-semibold text-gray-800 dark:text-foreground truncate flex-1">PACT Workspace</span>
+              <button
+                onClick={() => startWorkspaceTour({ isAdmin, isSuperAdmin }, () => markWorkspaceTourCompleted(userId))}
+                className="flex-shrink-0 p-1 rounded hover:bg-gray-200 dark:hover:bg-muted text-gray-400 transition-colors"
+                title="Take a tour"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
               {isSuperAdmin && (
                 <button
                   onClick={() => setAccessManagerOpen(true)}
@@ -2403,7 +2422,7 @@ export default function WorkspaceHub() {
           </div>
 
           {/* Folder tree */}
-          <div className="p-2 flex-1">
+          <div id="tour-folders" className="p-2 flex-1">
             <div className="flex items-center px-2 mb-1 mt-2">
               <p className="text-[10px] font-semibold text-gray-400 dark:text-muted-foreground uppercase tracking-wider">Folders</p>
             </div>
@@ -2417,12 +2436,12 @@ export default function WorkspaceHub() {
           {/* Bottom: new folder + clearance */}
           <div className="mt-auto p-3 border-t border-gray-200 space-y-2">
             {isAdmin && (
-              <button onClick={() => { setNewFolderSec(ancestorSecFloor); setNewFolderOpen(true); }}
+              <button id="tour-new-folder" onClick={() => { setNewFolderSec(ancestorSecFloor); setNewFolderOpen(true); }}
                 className="w-full flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-200/60 dark:hover:bg-muted transition-colors">
                 <Plus className="h-3.5 w-3.5" /> New folder
               </button>
             )}
-            <div className={cn(
+            <div id="tour-clearance" className={cn(
               'flex items-center gap-1.5 rounded-lg px-2 py-1',
               SEC_CFG[effectiveClearance].bg, SEC_CFG[effectiveClearance].border, 'border'
             )}>
@@ -2589,6 +2608,7 @@ export default function WorkspaceHub() {
                   </SelectContent>
                 </Select>
                 <button
+                  id="tour-upload-btn"
                   className="flex items-center gap-1.5 text-xs font-semibold text-white rounded-lg px-3.5 py-2 bg-gradient-to-br from-sky-600 to-blue-700 shadow-lg shadow-blue-600/25 hover:brightness-110 hover:-translate-y-px active:scale-[0.98] transition-all ease-[cubic-bezier(0.16,1,0.3,1)]"
                   style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}
                   onClick={() => setUploadOpen(true)}
@@ -2601,7 +2621,7 @@ export default function WorkspaceHub() {
 
           {/* KPI tiles — each reports a number and filters the view; click again to clear */}
           {breadcrumbs.length === 0 && selectedFolderId !== '__trash__' && (
-            <div className="px-8 pt-3 pb-1 flex-shrink-0">
+            <div id="tour-kpi-tiles" className="px-8 pt-3 pb-1 flex-shrink-0">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
                 {[
                   { id: '__all__', label: 'All Files', value: stats.total, caption: `${fmtSize(stats.totalSize)} in the workspace`, icon: Folders, from: '#0284c7', to: '#1e40af' },
@@ -2637,7 +2657,7 @@ export default function WorkspaceHub() {
 
           {/* Inline search + secondary controls — sticky: stays put as the masthead/tiles scroll away */}
           <div className="sticky top-0 z-20 flex items-center gap-3 px-8 py-3 flex-wrap bg-[#f3f6f9]/95 dark:bg-[#080c16]/95 backdrop-blur-sm border-b border-slate-900/[0.06] dark:border-slate-100/[0.08]">
-            <div className="flex items-center gap-2 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.06)] rounded-lg px-4 py-2 flex-1 max-w-md focus-within:border-[#2865eb]/40 focus-within:ring-[3px] focus-within:ring-[#2865eb]/15 transition-all">
+            <div id="tour-search-bar" className="flex items-center gap-2 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.06)] rounded-lg px-4 py-2 flex-1 max-w-md focus-within:border-[#2865eb]/40 focus-within:ring-[3px] focus-within:ring-[#2865eb]/15 transition-all">
               <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
               <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…"
                 className="bg-transparent border-0 text-sm flex-1 placeholder:text-gray-400 h-auto p-0 focus-visible:ring-0 shadow-none" />
@@ -2651,7 +2671,7 @@ export default function WorkspaceHub() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
+            <div id="tour-view-toggle" className="flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
               <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'list' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
                 <List className="h-3.5 w-3.5" />
               </button>

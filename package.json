@@ -99,6 +99,7 @@
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
     "docx": "^9.5.1",
+    "driver.js": "^1.8.0",
     "drizzle-zod": "^0.8.3",
     "embla-carousel-react": "^8.3.0",
     "exceljs": "^4.4.0",
