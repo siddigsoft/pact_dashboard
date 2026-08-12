@@ -1052,7 +1052,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
             { id: 'versions', label: 'Versions', icon: History },
             { id: 'activity', label: 'Activity', icon: Activity },
           ].map(t => (
-            <TabsTrigger key={t.id} value={t.id} className="h-8 text-xs gap-1 rounded-none border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:bg-transparent">
+            <TabsTrigger key={t.id} value={t.id} className="h-8 text-xs gap-1 rounded-none border-b-2 border-transparent text-muted-foreground data-[state=active]:border-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:text-[#1D3461] data-[state=active]:shadow-none">
               <t.icon className="h-3 w-3" />{t.label}
             </TabsTrigger>
           ))}
