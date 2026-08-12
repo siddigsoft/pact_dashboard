@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, CartesianGrid } from 'recharts';
 import { exportMultiSheetExcel } from '@/utils/report-export';
 import { PageLoader } from '@/components/ui/page-loader';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 const PayrollPanel         = lazy(() => import('./Payroll'));
 const RetainerPanel        = lazy(() => import('./RetainerManagement'));
@@ -153,6 +154,7 @@ function PanelLoader() {
 }
 
 export default function HRHub() {
+  const isColVisible = useColumnVisibility('hr');
   const [params, setParams] = useSearchParams();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const isAdmin = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
@@ -268,6 +270,7 @@ interface StaffProfile { id: string; full_name: string | null; email: string | n
 interface CarryForwardPreviewRow { userId: string; name: string; annualEntitled: number; usedAnnual: number; remaining: number; carryForward: number; }
 
 function LeaveEntitlementsPanel() {
+  const isColVisible = useColumnVisibility('hr');
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -486,12 +489,12 @@ function LeaveEntitlementsPanel() {
             <thead className="bg-slate-50 dark:bg-slate-800/60">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">Staff</th>
-                <th className="text-center px-2 py-2 font-semibold">Annual</th>
-                <th className="text-center px-2 py-2 font-semibold">Sick</th>
-                <th className="text-center px-2 py-2 font-semibold">Emergency</th>
-                <th className="text-center px-2 py-2 font-semibold">Maternity</th>
-                <th className="text-center px-2 py-2 font-semibold">Paternity</th>
-                <th className="text-center px-2 py-2 font-semibold">Unpaid</th>
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Annual</th>}
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Sick</th>}
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Emergency</th>}
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Maternity</th>}
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Paternity</th>}
+                {isColVisible('leave_balances') && <th className="text-center px-2 py-2 font-semibold">Unpaid</th>}
                 <th className="text-center px-2 py-2 font-semibold">Action</th>
               </tr>
             </thead>
@@ -507,12 +510,12 @@ function LeaveEntitlementsPanel() {
                     </td>
                     {isEditing ? (
                       <>
-                        <td className="px-2 py-1 text-center"><EntField label="Annual" field="annual_days" /></td>
-                        <td className="px-2 py-1 text-center"><EntField label="Sick" field="sick_days" /></td>
-                        <td className="px-2 py-1 text-center"><EntField label="Emergency" field="emergency_days" /></td>
-                        <td className="px-2 py-1 text-center"><EntField label="Maternity" field="maternity_days" /></td>
-                        <td className="px-2 py-1 text-center"><EntField label="Paternity" field="paternity_days" /></td>
-                        <td className="px-2 py-1 text-center"><EntField label="Unpaid" field="unpaid_days" /></td>
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Annual" field="annual_days" /></td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Sick" field="sick_days" /></td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Emergency" field="emergency_days" /></td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Maternity" field="maternity_days" /></td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Paternity" field="paternity_days" /></td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-1 text-center"><EntField label="Unpaid" field="unpaid_days" /></td>}
                         <td className="px-2 py-1 text-center">
                           <div className="flex gap-1 justify-center">
                             <Button size="sm" className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveEntitlement} disabled={saving} data-testid="btn-save-entitlement">Save</Button>
@@ -522,12 +525,12 @@ function LeaveEntitlementsPanel() {
                       </>
                     ) : (
                       <>
-                        <td className="px-2 py-2 text-center">{ent?.annual_days ?? <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-2 py-2 text-center">{ent?.sick_days ?? <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-2 py-2 text-center">{ent?.emergency_days ?? <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-2 py-2 text-center">{ent?.maternity_days ?? <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-2 py-2 text-center">{ent?.paternity_days ?? <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-2 py-2 text-center">{ent?.unpaid_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.annual_days ?? <span className="text-muted-foreground">—</span>}</td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.sick_days ?? <span className="text-muted-foreground">—</span>}</td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.emergency_days ?? <span className="text-muted-foreground">—</span>}</td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.maternity_days ?? <span className="text-muted-foreground">—</span>}</td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.paternity_days ?? <span className="text-muted-foreground">—</span>}</td>}
+                        {isColVisible('leave_balances') && <td className="px-2 py-2 text-center">{ent?.unpaid_days ?? <span className="text-muted-foreground">—</span>}</td>}
                         <td className="px-2 py-2 text-center">
                           <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => startEdit(p)} data-testid={`btn-edit-entitlement-${p.id}`}>
                             {ent ? 'Edit' : 'Set'}
@@ -1255,6 +1258,7 @@ function computeScenario(rows: ProjectionRow[]) {
 }
 
 function StaffCostProjection() {
+  const isColVisible = useColumnVisibility('hr');
   const [scenarios, setScenarios] = useState<Scenario[]>(() => [makeScenario('Scenario 1')]);
   const [activeId, setActiveId]   = useState<string>(() => scenarios[0].id);
   const [viewMode, setViewMode]   = useState<'table' | 'chart'>('table');
@@ -1541,13 +1545,13 @@ function StaffCostProjection() {
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
                   <th className="px-4 py-2.5 text-left   text-[11px] font-semibold uppercase text-muted-foreground">Role / Grade</th>
                   <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-muted-foreground">HC</th>
-                  <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-muted-foreground">Base Salary</th>
+                  {isColVisible('base_salary') && <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-muted-foreground">Base Salary</th>}
                   <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-emerald-600">Allow %</th>
                   <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-red-500">Deduct %</th>
-                  <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-slate-500">Net / Head</th>
-                  <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-emerald-600">Mo. Gross</th>
-                  <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-blue-600">Mo. Net</th>
-                  <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-violet-600">Annual Net</th>
+                  {isColVisible('net_pay') && <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-slate-500">Net / Head</th>}
+                  {isColVisible('gross_pay') && <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-emerald-600">Mo. Gross</th>}
+                  {isColVisible('net_pay') && <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-blue-600">Mo. Net</th>}
+                  {isColVisible('annual_net') && <th className="px-3 py-2.5 text-right  text-[11px] font-semibold uppercase text-violet-600">Annual Net</th>}
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -1564,12 +1568,14 @@ function StaffCostProjection() {
                     <td className="px-3 py-2">
                       <Input type="number" value={r.headcount} onChange={e => updateRow(r.id, 'headcount', e.target.value)} className="h-7 text-xs w-14 text-center mx-auto" />
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1 justify-end">
-                        <span className="text-[11px] text-muted-foreground font-medium w-10 text-right shrink-0">{displayCurrency}</span>
-                        <Input type="number" value={r.baseSalary} onChange={e => updateRow(r.id, 'baseSalary', e.target.value)} className="h-7 text-xs w-24 text-right" />
-                      </div>
-                    </td>
+                    {isColVisible('base_salary') ? (
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className="text-[11px] text-muted-foreground font-medium w-10 text-right shrink-0">{displayCurrency}</span>
+                          <Input type="number" value={r.baseSalary} onChange={e => updateRow(r.id, 'baseSalary', e.target.value)} className="h-7 text-xs w-24 text-right" />
+                        </div>
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-0.5 justify-center">
                         <Input type="number" value={r.allowancePct} onChange={e => updateRow(r.id, 'allowancePct', e.target.value)} className="h-7 text-xs w-14 text-center" />
@@ -1582,10 +1588,10 @@ function StaffCostProjection() {
                         <span className="text-muted-foreground text-xs">%</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right text-xs text-slate-500">{fmtN(r.netPerHead)}</td>
-                    <td className="px-3 py-2 text-right text-xs font-semibold text-emerald-600">{fmtN(r.monthlyGross)}</td>
-                    <td className="px-3 py-2 text-right text-xs font-bold text-blue-600">{fmtN(r.monthlyNet)}</td>
-                    <td className="px-3 py-2 text-right text-xs font-bold text-violet-600">{fmtN(r.monthlyNet * 12)}</td>
+                    {isColVisible('net_pay') && <td className="px-3 py-2 text-right text-xs text-slate-500">{fmtN(r.netPerHead)}</td>}
+                    {isColVisible('gross_pay') && <td className="px-3 py-2 text-right text-xs font-semibold text-emerald-600">{fmtN(r.monthlyGross)}</td>}
+                    {isColVisible('net_pay') && <td className="px-3 py-2 text-right text-xs font-bold text-blue-600">{fmtN(r.monthlyNet)}</td>}
+                    {isColVisible('annual_net') && <td className="px-3 py-2 text-right text-xs font-bold text-violet-600">{fmtN(r.monthlyNet * 12)}</td>}
                     <td className="pr-3">
                       <button onClick={() => removeRow(r.id)} className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 text-red-400 hover:text-red-600 transition-all">
                         <Minus className="h-3.5 w-3.5" />
@@ -1598,10 +1604,10 @@ function StaffCostProjection() {
                 <tr className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/40 dark:to-slate-800/60 border-t-2 border-slate-300 dark:border-slate-600">
                   <td className="px-4 py-3 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">TOTALS</td>
                   <td className="px-3 py-3 text-center text-sm font-bold text-[#0F2041] dark:text-blue-300">{totals.headcount}</td>
-                  <td colSpan={4} />
-                  <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{fmtN(totals.monthlyGross)}</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-blue-700">{fmtN(totals.monthlyNet)}</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-violet-700">{fmtN(totals.annualNet)}</td>
+                  <td colSpan={2 + (isColVisible('base_salary') ? 1 : 0) + (isColVisible('net_pay') ? 1 : 0)} />
+                  {isColVisible('gross_pay') && <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{fmtN(totals.monthlyGross)}</td>}
+                  {isColVisible('net_pay') && <td className="px-3 py-3 text-right text-xs font-bold text-blue-700">{fmtN(totals.monthlyNet)}</td>}
+                  {isColVisible('annual_net') && <td className="px-3 py-3 text-right text-xs font-bold text-violet-700">{fmtN(totals.annualNet)}</td>}
                   <td />
                 </tr>
               </tfoot>
@@ -1624,10 +1630,10 @@ function StaffCostProjection() {
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Scenario</th>
                   <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-muted-foreground">Currency</th>
                   <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-muted-foreground">Headcount</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-emerald-600">Mo. Gross</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-blue-600">Mo. Net</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-violet-600">Annual Net</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-amber-600">Avg / Head</th>
+                  {isColVisible('gross_pay') && <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-emerald-600">Mo. Gross</th>}
+                  {isColVisible('net_pay') && <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-blue-600">Mo. Net</th>}
+                  {isColVisible('annual_net') && <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-violet-600">Annual Net</th>}
+                  {isColVisible('net_pay') && <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-amber-600">Avg / Head</th>}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -1646,10 +1652,10 @@ function StaffCostProjection() {
                     </td>
                     <td className="px-3 py-2.5 text-center text-xs text-muted-foreground font-medium">{sc.currency}</td>
                     <td className="px-3 py-2.5 text-center text-xs font-bold text-[#0F2041] dark:text-blue-300">{sc.headcount}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-600">{sc.currency} {Math.round(sc.monthlyGross).toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{sc.currency} {Math.round(sc.monthlyNet).toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-bold text-violet-600">{sc.currency} {Math.round(sc.annualNet).toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-right text-xs text-amber-600">{sc.headcount > 0 ? `${sc.currency} ${Math.round(sc.monthlyNet / sc.headcount).toLocaleString()}` : '—'}</td>
+                    {isColVisible('gross_pay') && <td className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-600">{sc.currency} {Math.round(sc.monthlyGross).toLocaleString()}</td>}
+                    {isColVisible('net_pay') && <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{sc.currency} {Math.round(sc.monthlyNet).toLocaleString()}</td>}
+                    {isColVisible('annual_net') && <td className="px-3 py-2.5 text-right text-xs font-bold text-violet-600">{sc.currency} {Math.round(sc.annualNet).toLocaleString()}</td>}
+                    {isColVisible('net_pay') && <td className="px-3 py-2.5 text-right text-xs text-amber-600">{sc.headcount > 0 ? `${sc.currency} ${Math.round(sc.monthlyNet / sc.headcount).toLocaleString()}` : '—'}</td>}
                   </tr>
                 ))}
               </tbody>

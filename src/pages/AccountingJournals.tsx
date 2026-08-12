@@ -18,6 +18,7 @@ import { exportToExcel } from '@/utils/report-export';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { Textarea } from '@/components/ui/textarea';
 import {
   JOURNAL_PAGE_SIZE,
@@ -64,6 +65,7 @@ const BLANK_LINE = (): NewLine => ({
 });
 
 export default function AccountingJournals() {
+  const isColVisible = useColumnVisibility('accounting-journals');
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
@@ -677,10 +679,10 @@ export default function AccountingJournals() {
                   <tr>
                     <th className="text-left px-2 py-2 w-8">#</th>
                     <th className="text-left px-2 py-2">Account</th>
-                    <th className="text-left px-2 py-2">Fund</th>
+                    {isColVisible('fund') && <th className="text-left px-2 py-2">Fund</th>}
                     <th className="text-left px-2 py-2 w-24">Function</th>
-                    <th className="text-left px-2 py-2 w-16">DR/CR</th>
-                    <th className="text-left px-2 py-2 w-28">Amount</th>
+                    {isColVisible('debit') && <th className="text-left px-2 py-2 w-16">DR/CR</th>}
+                    {isColVisible('amount') && <th className="text-left px-2 py-2 w-28">Amount</th>}
                     <th className="text-left px-2 py-2 w-16">CCY</th>
                     <th className="text-left px-2 py-2">Note</th>
                     <th className="w-8" />
@@ -705,18 +707,20 @@ export default function AccountingJournals() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-1.5">
-                        <Select value={l.fund_id} onValueChange={v => setLineField(idx, 'fund_id', v)}>
-                          <SelectTrigger className="h-7 text-xs min-w-[120px]" data-testid={`select-line-fund-${idx}`}>
-                            <SelectValue placeholder="Select…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(fundsMap).map(([id, f]) => (
-                              <SelectItem key={id} value={id}>{f.code} — {f.name_en}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
+                      {isColVisible('fund') ? (
+                        <td className="px-2 py-1.5">
+                          <Select value={l.fund_id} onValueChange={v => setLineField(idx, 'fund_id', v)}>
+                            <SelectTrigger className="h-7 text-xs min-w-[120px]" data-testid={`select-line-fund-${idx}`}>
+                              <SelectValue placeholder="Select…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(fundsMap).map(([id, f]) => (
+                                <SelectItem key={id} value={id}>{f.code} — {f.name_en}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      ) : null}
                       <td className="px-2 py-1.5">
                         <Input
                           className="h-7 text-xs w-24"
@@ -726,27 +730,31 @@ export default function AccountingJournals() {
                           data-testid={`input-line-function-${idx}`}
                         />
                       </td>
-                      <td className="px-2 py-1.5">
-                        <Select value={l.debit_credit} onValueChange={v => setLineField(idx, 'debit_credit', v as 'DR' | 'CR')}>
-                          <SelectTrigger className="h-7 text-xs w-16" data-testid={`select-line-dc-${idx}`}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DR"><span className="text-emerald-700 font-semibold">DR</span></SelectItem>
-                            <SelectItem value="CR"><span className="text-rose-700 font-semibold">CR</span></SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="h-7 text-xs w-28"
-                          placeholder="0.00"
-                          value={l.amount}
-                          onChange={e => setLineField(idx, 'amount', e.target.value)}
-                          data-testid={`input-line-amount-${idx}`}
-                        />
-                      </td>
+                      {isColVisible('debit') ? (
+                        <td className="px-2 py-1.5">
+                          <Select value={l.debit_credit} onValueChange={v => setLineField(idx, 'debit_credit', v as 'DR' | 'CR')}>
+                            <SelectTrigger className="h-7 text-xs w-16" data-testid={`select-line-dc-${idx}`}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="DR"><span className="text-emerald-700 font-semibold">DR</span></SelectItem>
+                              <SelectItem value="CR"><span className="text-rose-700 font-semibold">CR</span></SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      ) : null}
+                      {isColVisible('amount') ? (
+                        <td className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="h-7 text-xs w-28"
+                            placeholder="0.00"
+                            value={l.amount}
+                            onChange={e => setLineField(idx, 'amount', e.target.value)}
+                            data-testid={`input-line-amount-${idx}`}
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-2 py-1.5">
                         <Input
                           className="h-7 text-xs w-14"
@@ -854,11 +862,11 @@ export default function AccountingJournals() {
                       <tr>
                         <th className="text-left px-2 py-1.5">#</th>
                         <th className="text-left px-2 py-1.5">Account</th>
-                        <th className="text-left px-2 py-1.5">Fund</th>
+                        {isColVisible('fund') && <th className="text-left px-2 py-1.5">Fund</th>}
                         <th className="text-left px-2 py-1.5">Function</th>
-                        <th className="text-right px-2 py-1.5">Original</th>
-                        <th className="text-right px-2 py-1.5">DR</th>
-                        <th className="text-right px-2 py-1.5">CR</th>
+                        {isColVisible('amount') && <th className="text-right px-2 py-1.5">Original</th>}
+                        {isColVisible('debit') && <th className="text-right px-2 py-1.5">DR</th>}
+                        {isColVisible('credit') && <th className="text-right px-2 py-1.5">CR</th>}
                         <th className="text-left px-2 py-1.5">Description</th>
                       </tr>
                     </thead>
@@ -873,11 +881,11 @@ export default function AccountingJournals() {
                               <div className="font-mono text-[10px]">{acct?.code ?? l.account_id.slice(0, 8)}</div>
                               <div className="text-[11px]">{acct?.name_en ?? ''}</div>
                             </td>
-                            <td className="px-2 py-1.5"><span className="font-mono text-[10px]">{fund?.code ?? l.fund_id.slice(0, 8)}</span></td>
+                            {isColVisible('fund') && <td className="px-2 py-1.5"><span className="font-mono text-[10px]">{fund?.code ?? l.fund_id.slice(0, 8)}</span></td>}
                             <td className="px-2 py-1.5">{l.function}</td>
-                            <td className="px-2 py-1.5 text-right">{formatNumber(l.original_amount)} {l.original_currency}</td>
-                            <td className="px-2 py-1.5 text-right font-medium text-emerald-700">{l.debit_credit === 'DR' ? formatNumber(l.functional_amount) : ''}</td>
-                            <td className="px-2 py-1.5 text-right font-medium text-rose-700">{l.debit_credit === 'CR' ? formatNumber(l.functional_amount) : ''}</td>
+                            {isColVisible('amount') && <td className="px-2 py-1.5 text-right">{formatNumber(l.original_amount)} {l.original_currency}</td>}
+                            {isColVisible('debit') && <td className="px-2 py-1.5 text-right font-medium text-emerald-700">{l.debit_credit === 'DR' ? formatNumber(l.functional_amount) : ''}</td>}
+                            {isColVisible('credit') && <td className="px-2 py-1.5 text-right font-medium text-rose-700">{l.debit_credit === 'CR' ? formatNumber(l.functional_amount) : ''}</td>}
                             <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[200px]">{l.description ?? ''}</td>
                           </tr>
                         );
@@ -885,9 +893,9 @@ export default function AccountingJournals() {
                     </tbody>
                     <tfoot className="border-t bg-muted/30">
                       <tr>
-                        <td colSpan={5} className="px-2 py-2 text-right text-xs font-semibold">Totals (functional {openLines[0]?.functional_currency ?? 'SDG'}):</td>
-                        <td className="px-2 py-2 text-right font-bold text-emerald-700">{formatNumber(lineTotals.dr)}</td>
-                        <td className="px-2 py-2 text-right font-bold text-rose-700">{formatNumber(lineTotals.cr)}</td>
+                        <td colSpan={3 + (isColVisible('fund') ? 1 : 0) + (isColVisible('amount') ? 1 : 0)} className="px-2 py-2 text-right text-xs font-semibold">Totals (functional {openLines[0]?.functional_currency ?? 'SDG'}):</td>
+                        {isColVisible('debit') && <td className="px-2 py-2 text-right font-bold text-emerald-700">{formatNumber(lineTotals.dr)}</td>}
+                        {isColVisible('credit') && <td className="px-2 py-2 text-right font-bold text-rose-700">{formatNumber(lineTotals.cr)}</td>}
                         <td className="px-2 py-2 text-xs">
                           {lineTotals.balanced
                             ? <Badge variant="outline" className="bg-emerald-50 text-emerald-700 text-[10px]">Balanced</Badge>

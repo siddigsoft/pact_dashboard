@@ -26,6 +26,7 @@ import {
   Filter, X, Database, Globe,
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
@@ -168,6 +169,7 @@ function GroupedSummaryTable({
   loading: boolean;
   getProfileName: (id: string) => string;
 }) {
+  const isColVisible = useColumnVisibility('down-payment-approval');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [detailsReq, setDetailsReq] = useState<DownPaymentRequest | null>(null);
 
@@ -191,11 +193,11 @@ function GroupedSummaryTable({
               <TableHead className="w-6" />
               <TableHead>{groupLabel}</TableHead>
               <TableHead className="text-right">Requests</TableHead>
-              {groupLabel === 'MMP' && <TableHead className="text-right">MMP Budget (SDG)</TableHead>}
-              <TableHead className="text-right">Total Requested (SDG)</TableHead>
-              <TableHead className="text-right">Total Approved (SDG)</TableHead>
-              <TableHead className="text-right">Total Paid (SDG)</TableHead>
-              <TableHead className="text-right">Remaining (SDG)</TableHead>
+              {groupLabel === 'MMP' && isColVisible('mmp_budget') && <TableHead className="text-right">MMP Budget (SDG)</TableHead>}
+              {isColVisible('total_requested') && <TableHead className="text-right">Total Requested (SDG)</TableHead>}
+              {isColVisible('total_approved') && <TableHead className="text-right">Total Approved (SDG)</TableHead>}
+              {isColVisible('total_paid') && <TableHead className="text-right">Total Paid (SDG)</TableHead>}
+              {isColVisible('remaining') && <TableHead className="text-right">Remaining (SDG)</TableHead>}
               <TableHead className="text-right">Pending</TableHead>
             </TableRow>
           </TableHeader>
@@ -217,22 +219,26 @@ function GroupedSummaryTable({
                   </TableCell>
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell className="text-right">{row.requests}</TableCell>
-                  {groupLabel === 'MMP' && (
+                  {groupLabel === 'MMP' && isColVisible('mmp_budget') && (
                     <TableCell className="text-right font-mono text-muted-foreground">
                       {row.originalBudget > 0 ? row.originalBudget.toLocaleString() : '—'}
                     </TableCell>
                   )}
-                  <TableCell className="text-right font-mono">
-                    <span className={isOver ? 'text-red-600 font-bold' : ''}>{row.totalRequested.toLocaleString()}</span>
-                    {isOver && <span className="ml-1 text-xs text-red-500">⚠</span>}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-green-600">{row.totalApproved.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono text-emerald-600">{row.totalPaid.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {row.totalRemaining > 0
-                      ? <span className="text-amber-600 font-semibold">{row.totalRemaining.toLocaleString()}</span>
-                      : <span className="text-muted-foreground">0</span>}
-                  </TableCell>
+                  {isColVisible('total_requested') && (
+                    <TableCell className="text-right font-mono">
+                      <span className={isOver ? 'text-red-600 font-bold' : ''}>{row.totalRequested.toLocaleString()}</span>
+                      {isOver && <span className="ml-1 text-xs text-red-500">⚠</span>}
+                    </TableCell>
+                  )}
+                  {isColVisible('total_approved') && <TableCell className="text-right font-mono text-green-600">{row.totalApproved.toLocaleString()}</TableCell>}
+                  {isColVisible('total_paid') && <TableCell className="text-right font-mono text-emerald-600">{row.totalPaid.toLocaleString()}</TableCell>}
+                  {isColVisible('remaining') && (
+                    <TableCell className="text-right font-mono">
+                      {row.totalRemaining > 0
+                        ? <span className="text-amber-600 font-semibold">{row.totalRemaining.toLocaleString()}</span>
+                        : <span className="text-muted-foreground">0</span>}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right">
                     {row.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{row.pending}</Badge>}
                   </TableCell>
@@ -251,9 +257,9 @@ function GroupedSummaryTable({
                               <TableHead className="text-xs py-2">Site</TableHead>
                               <TableHead className="text-xs py-2">Hub</TableHead>
                               <TableHead className="text-xs py-2">Activity</TableHead>
-                              <TableHead className="text-xs py-2 text-right">Requested</TableHead>
-                              <TableHead className="text-xs py-2 text-right">Paid</TableHead>
-                              <TableHead className="text-xs py-2 text-right">Remaining</TableHead>
+                              {isColVisible('total_requested') && <TableHead className="text-xs py-2 text-right">Requested</TableHead>}
+                              {isColVisible('total_paid') && <TableHead className="text-xs py-2 text-right">Paid</TableHead>}
+                              {isColVisible('remaining') && <TableHead className="text-xs py-2 text-right">Remaining</TableHead>}
                               <TableHead className="text-xs py-2">Status</TableHead>
                               <TableHead className="text-xs py-2 text-center">Details</TableHead>
                             </TableRow>
@@ -268,9 +274,9 @@ function GroupedSummaryTable({
                                   <TableCell className="text-xs py-2 max-w-[160px] truncate">{req.siteName}</TableCell>
                                   <TableCell className="text-xs py-2 whitespace-nowrap">{req.hubName || '—'}</TableCell>
                                   <TableCell className="text-xs py-2 max-w-[110px] truncate text-muted-foreground">{req.activityType || '—'}</TableCell>
-                                  <TableCell className="text-xs py-2 text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                                  <TableCell className="text-xs py-2 text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
-                                  <TableCell className="text-xs py-2 text-right font-mono">{rem > 0 ? <span className="text-amber-600">{rem.toLocaleString()}</span> : '0'}</TableCell>
+                                  {isColVisible('total_requested') && <TableCell className="text-xs py-2 text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>}
+                                  {isColVisible('total_paid') && <TableCell className="text-xs py-2 text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>}
+                                  {isColVisible('remaining') && <TableCell className="text-xs py-2 text-right font-mono">{rem > 0 ? <span className="text-amber-600">{rem.toLocaleString()}</span> : '0'}</TableCell>}
                                   <TableCell className="text-xs py-2">{getStatusBadge(req.status, req.metadata)}</TableCell>
                                   <TableCell className="text-xs py-2 text-center">
                                     <Button

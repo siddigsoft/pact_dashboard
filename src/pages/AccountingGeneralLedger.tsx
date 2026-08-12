@@ -18,10 +18,12 @@ import {
   useGlBootstrapQuery,
   useGlLedgerQuery,
 } from '@/hooks/useAccountingQueries';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 const PAGE_SIZE = 100;
 
 export default function AccountingGeneralLedger() {
+  const isColVisible = useColumnVisibility('accounting-general-ledger');
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
@@ -328,9 +330,9 @@ export default function AccountingGeneralLedger() {
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Date</th>
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground w-20">Entry#</th>
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground">Description</th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Debit</th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Credit</th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Balance</th>
+                    {isColVisible('debit') && <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Debit</th>}
+                    {isColVisible('credit') && <th className="text-right px-4 py-2 font-medium text-muted-foreground w-28">Credit</th>}
+                    {isColVisible('balance') && <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Balance</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -340,9 +342,9 @@ export default function AccountingGeneralLedger() {
                       <td className="px-4 py-1.5 text-muted-foreground">{selectedPeriod?.start_date}</td>
                       <td className="px-4 py-1.5" />
                       <td className="px-4 py-1.5 italic text-muted-foreground">Opening Balance · الرصيد الافتتاحي</td>
-                      <td className="px-4 py-1.5 text-right" />
-                      <td className="px-4 py-1.5 text-right" />
-                      <td className="px-4 py-1.5 text-right font-medium">{formatNumber(openingBalance)}</td>
+                      {isColVisible('debit') && <td className="px-4 py-1.5 text-right" />}
+                      {isColVisible('credit') && <td className="px-4 py-1.5 text-right" />}
+                      {isColVisible('balance') && <td className="px-4 py-1.5 text-right font-medium">{formatNumber(openingBalance)}</td>}
                     </tr>
                   )}
                   {paged.map((l, i) => (
@@ -353,15 +355,9 @@ export default function AccountingGeneralLedger() {
                         <div>{l.line_description ?? l.description_en}</div>
                         {l.description_ar && <div className="text-muted-foreground text-[10px]" dir="rtl">{l.description_ar}</div>}
                       </td>
-                      <td className="px-4 py-1.5 text-right text-rose-700 dark:text-rose-400 tabular-nums">
-                        {l.debit_credit === 'DR' ? formatNumber(l.functional_amount) : ''}
-                      </td>
-                      <td className="px-4 py-1.5 text-right text-emerald-700 dark:text-emerald-400 tabular-nums">
-                        {l.debit_credit === 'CR' ? formatNumber(l.functional_amount) : ''}
-                      </td>
-                      <td className={cn('px-4 py-1.5 text-right font-medium tabular-nums', l.runningBalance < 0 ? 'text-rose-700' : 'text-slate-700 dark:text-slate-300')}>
-                        {formatNumber(l.runningBalance)}
-                      </td>
+                      {isColVisible('debit') && <td className="px-4 py-1.5 text-right text-rose-700 dark:text-rose-400 tabular-nums">{l.debit_credit === 'DR' ? formatNumber(l.functional_amount) : ''}</td>}
+                      {isColVisible('credit') && <td className="px-4 py-1.5 text-right text-emerald-700 dark:text-emerald-400 tabular-nums">{l.debit_credit === 'CR' ? formatNumber(l.functional_amount) : ''}</td>}
+                      {isColVisible('balance') && <td className={cn('px-4 py-1.5 text-right font-medium tabular-nums', l.runningBalance < 0 ? 'text-rose-700' : 'text-slate-700 dark:text-slate-300')}>{formatNumber(l.runningBalance)}</td>}
                     </tr>
                   ))}
                   {/* Closing balance row on last page */}
@@ -370,9 +366,9 @@ export default function AccountingGeneralLedger() {
                       <td className="px-4 py-2" />
                       <td className="px-4 py-2" />
                       <td className="px-4 py-2 font-semibold text-indigo-700 dark:text-indigo-400">Closing Balance · الرصيد الختامي</td>
-                      <td className="px-4 py-2 text-right font-semibold text-rose-700 tabular-nums">{formatNumber(totalDR)}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-emerald-700 tabular-nums">{formatNumber(totalCR)}</td>
-                      <td className="px-4 py-2 text-right font-bold tabular-nums text-indigo-700 dark:text-indigo-400">{formatNumber(closingBalance)}</td>
+                      {isColVisible('debit') && <td className="px-4 py-2 text-right font-semibold text-rose-700 tabular-nums">{formatNumber(totalDR)}</td>}
+                      {isColVisible('credit') && <td className="px-4 py-2 text-right font-semibold text-emerald-700 tabular-nums">{formatNumber(totalCR)}</td>}
+                      {isColVisible('balance') && <td className="px-4 py-2 text-right font-bold tabular-nums text-indigo-700 dark:text-indigo-400">{formatNumber(closingBalance)}</td>}
                     </tr>
                   )}
                 </tbody>

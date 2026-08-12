@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import { useRestrictedAction } from "@/hooks/useRestrictedAction";
 import { PageAccessDenied } from "@/components/access/PageAccessDenied";
 import { 
@@ -73,6 +74,7 @@ const formatCurrencyCents = (cents: number, currency: string = 'SDG') => {
 };
 
 const Finance: React.FC = () => {
+  const isColVisible = useColumnVisibility('finance-hub');
   const appContext = useAppContext();
   const [searchParams] = useSearchParams();
   const cycleContextMmpId = searchParams.get('mmpId') || null;
@@ -1973,20 +1975,20 @@ const Finance: React.FC = () => {
                           <thead>
                             <tr className="border-b">
                               <th className="text-left py-2 px-2 font-medium text-muted-foreground">Project</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>
-                              {exchangeRate && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
+                              {isColVisible('inflow') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>}
+                              {isColVisible('outflow') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>}
+                              {isColVisible('net') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>}
+                              {exchangeRate && isColVisible('net') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
                             </tr>
                           </thead>
                           <tbody>
                             {csData.projectBreakdown.map((p, idx) => (
                               <tr key={p.project} className="border-b last:border-b-0" data-testid={`row-project-${idx}`}>
                                 <td className="py-2 px-2">{p.project}</td>
-                                <td className="py-2 px-2 text-right text-green-600">{formatCurrency(p.inflow)}</td>
-                                <td className="py-2 px-2 text-right text-red-600">{formatCurrency(p.outflow)}</td>
-                                <td className="py-2 px-2 text-right font-medium">{formatCurrency(p.net)}</td>
-                                {exchangeRate && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(p.net, exchangeRate.rate))}</td>}
+                                {isColVisible('inflow') && <td className="py-2 px-2 text-right text-green-600">{formatCurrency(p.inflow)}</td>}
+                                {isColVisible('outflow') && <td className="py-2 px-2 text-right text-red-600">{formatCurrency(p.outflow)}</td>}
+                                {isColVisible('net') && <td className="py-2 px-2 text-right font-medium">{formatCurrency(p.net)}</td>}
+                                {exchangeRate && isColVisible('net') && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(p.net, exchangeRate.rate))}</td>}
                               </tr>
                             ))}
                           </tbody>
@@ -2011,20 +2013,20 @@ const Finance: React.FC = () => {
                           <thead>
                             <tr className="border-b">
                               <th className="text-left py-2 px-2 font-medium text-muted-foreground">Hub</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>
-                              {exchangeRate && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
+                              {isColVisible('inflow') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>}
+                              {isColVisible('outflow') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>}
+                              {isColVisible('net') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>}
+                              {exchangeRate && isColVisible('net') && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
                             </tr>
                           </thead>
                           <tbody>
                             {csData.hubBreakdown.map((h, idx) => (
                               <tr key={h.hub} className="border-b last:border-b-0" data-testid={`row-hub-${idx}`}>
                                 <td className="py-2 px-2">{h.hub}</td>
-                                <td className="py-2 px-2 text-right text-green-600">{formatCurrency(h.inflow)}</td>
-                                <td className="py-2 px-2 text-right text-red-600">{formatCurrency(h.outflow)}</td>
-                                <td className="py-2 px-2 text-right font-medium">{formatCurrency(h.net)}</td>
-                                {exchangeRate && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(h.net, exchangeRate.rate))}</td>}
+                                {isColVisible('inflow') && <td className="py-2 px-2 text-right text-green-600">{formatCurrency(h.inflow)}</td>}
+                                {isColVisible('outflow') && <td className="py-2 px-2 text-right text-red-600">{formatCurrency(h.outflow)}</td>}
+                                {isColVisible('net') && <td className="py-2 px-2 text-right font-medium">{formatCurrency(h.net)}</td>}
+                                {exchangeRate && isColVisible('net') && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(h.net, exchangeRate.rate))}</td>}
                               </tr>
                             ))}
                           </tbody>

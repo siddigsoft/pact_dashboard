@@ -18,6 +18,7 @@ import { Progress } from '@/components/ui/progress';
 import TransactionSearch, { type SearchFilters } from '@/components/wallet/TransactionSearch';
 import PaymentMethodsCard from '@/components/wallet/PaymentMethodsCard';
 import { exportTransactionsToCSV, exportTransactionsToPDF, exportWithdrawalsToCSV, exportWithdrawalsToPDF } from '@/lib/wallet/export';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { 
   Wallet as WalletIcon, 
   TrendingUp, 
@@ -70,6 +71,7 @@ const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => 
 };
 
 const WalletPage = () => {
+  const isColVisible = useColumnVisibility('wallet');
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
   const { 
@@ -1234,7 +1236,7 @@ const WalletPage = () => {
                           <TableHead>Site Visit ID</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
+                          {isColVisible('amount') && <TableHead className="text-right">Amount</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1249,9 +1251,11 @@ const WalletPage = () => {
                             <TableCell className="text-sm text-muted-foreground">
                               {format(new Date(transaction.createdAt), 'MMM dd, yyyy')}
                             </TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums text-green-600">
-                              +{formatCurrency(transaction.amount, transaction.currency)}
-                            </TableCell>
+                            {isColVisible('amount') && (
+                              <TableCell className="text-right font-semibold tabular-nums text-green-600">
+                                +{formatCurrency(transaction.amount, transaction.currency)}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1353,8 +1357,8 @@ const WalletPage = () => {
                           <TableHead className="w-[120px]">Type</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-right">Balance After</TableHead>
+                          {isColVisible('amount') && <TableHead className="text-right">Amount</TableHead>}
+                          {isColVisible('balance') && <TableHead className="text-right">Balance After</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1374,15 +1378,19 @@ const WalletPage = () => {
                             <TableCell className="text-sm text-muted-foreground">
                               {format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}
                             </TableCell>
-                            <TableCell className={`text-right font-semibold tabular-nums ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {transaction.amount >= 0 ? '+' : ''}
-                              {formatCurrency(transaction.amount, transaction.currency)}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums font-medium">
-                              {transaction.balanceAfter !== undefined
-                                ? formatCurrency(transaction.balanceAfter, transaction.currency)
-                                : '-'}
-                            </TableCell>
+                            {isColVisible('amount') && (
+                              <TableCell className={`text-right font-semibold tabular-nums ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {transaction.amount >= 0 ? '+' : ''}
+                                {formatCurrency(transaction.amount, transaction.currency)}
+                              </TableCell>
+                            )}
+                            {isColVisible('balance') && (
+                              <TableCell className="text-right tabular-nums font-medium">
+                                {transaction.balanceAfter !== undefined
+                                  ? formatCurrency(transaction.balanceAfter, transaction.currency)
+                                  : '-'}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1568,7 +1576,7 @@ const WalletPage = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Status</TableHead>
-                          <TableHead>Amount</TableHead>
+                          {isColVisible('amount') && <TableHead>Amount</TableHead>}
                           <TableHead>Reason</TableHead>
                           <TableHead>Method</TableHead>
                           <TableHead>Requested</TableHead>
@@ -1612,9 +1620,11 @@ const WalletPage = () => {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="font-semibold tabular-nums">
-                              {formatCurrency(request.amount, request.currency)}
-                            </TableCell>
+                            {isColVisible('amount') && (
+                              <TableCell className="font-semibold tabular-nums">
+                                {formatCurrency(request.amount, request.currency)}
+                              </TableCell>
+                            )}
                             <TableCell className="max-w-xs truncate">
                               {request.requestReason || '-'}
                             </TableCell>
