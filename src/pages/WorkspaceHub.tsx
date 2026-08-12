@@ -2474,6 +2474,13 @@ export default function WorkspaceHub() {
               </div>
             </div>
           )}
+
+          {/* Single scroll region: everything below the app navbar scrolls together.
+              The toolbar row stays pinned (position: sticky) so search/filter/view
+              controls stay reachable once the masthead and KPI tiles scroll away —
+              that's what gives the file list back its room instead of being squeezed
+              under a tall block of fixed chrome. */}
+          <div className="flex-1 overflow-y-auto">
           {/* Breadcrumb bar */}
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
@@ -2594,8 +2601,8 @@ export default function WorkspaceHub() {
 
           {/* KPI tiles — each reports a number and filters the view; click again to clear */}
           {breadcrumbs.length === 0 && selectedFolderId !== '__trash__' && (
-            <div className="px-8 pt-4 pb-1 flex-shrink-0">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="px-8 pt-3 pb-1 flex-shrink-0">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
                 {[
                   { id: '__all__', label: 'All Files', value: stats.total, caption: `${fmtSize(stats.totalSize)} in the workspace`, icon: Folders, from: '#0284c7', to: '#1e40af' },
                   { id: '__pinned__', label: 'Starred', value: stats.pinned, caption: 'pinned for quick access', icon: Star, from: '#d97706', to: '#c2410c' },
@@ -2609,18 +2616,18 @@ export default function WorkspaceHub() {
                       key={tile.id}
                       onClick={() => setSelectedFolderId(active ? '__all__' : tile.id)}
                       className={cn(
-                        'relative overflow-hidden rounded-xl p-4 text-left text-white transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] group',
+                        'relative overflow-hidden rounded-xl p-3 text-left text-white transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] group',
                         active && 'ring-2 ring-white ring-offset-2 ring-offset-[#f3f6f9] dark:ring-offset-[#080c16]'
                       )}
                       style={{ background: `linear-gradient(to bottom right, ${tile.from}, ${tile.to})` }}
                     >
                       <div className="flex items-start justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-[0.11em] text-white/90" style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}>{tile.label}</span>
-                        <TileIcon className="h-4 w-4 text-white/80 flex-shrink-0" />
+                        <TileIcon className="h-3.5 w-3.5 text-white/80 flex-shrink-0" />
                       </div>
-                      <p className="mt-2 text-[1.75rem] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{tile.value}</p>
-                      <p className="mt-1.5 text-[11px] text-white/75 truncate">{tile.caption}</p>
-                      <TileIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-white/10 transition-transform duration-200 group-hover:scale-110 pointer-events-none" />
+                      <p className="mt-1 text-xl leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{tile.value}</p>
+                      <p className="mt-1 text-[10.5px] text-white/75 truncate">{tile.caption}</p>
+                      <TileIcon className="absolute -bottom-4 -right-4 h-20 w-20 text-white/10 transition-transform duration-200 group-hover:scale-110 pointer-events-none" />
                     </button>
                   );
                 })}
@@ -2628,8 +2635,8 @@ export default function WorkspaceHub() {
             </div>
           )}
 
-          {/* Inline search + secondary controls */}
-          <div className="flex items-center gap-3 px-8 py-3 flex-shrink-0 flex-wrap">
+          {/* Inline search + secondary controls — sticky: stays put as the masthead/tiles scroll away */}
+          <div className="sticky top-0 z-20 flex items-center gap-3 px-8 py-3 flex-wrap bg-[#f3f6f9]/95 dark:bg-[#080c16]/95 backdrop-blur-sm border-b border-slate-900/[0.06] dark:border-slate-100/[0.08]">
             <div className="flex items-center gap-2 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.06)] rounded-lg px-4 py-2 flex-1 max-w-md focus-within:border-[#2865eb]/40 focus-within:ring-[3px] focus-within:ring-[#2865eb]/15 transition-all">
               <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
               <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…"
@@ -2654,8 +2661,7 @@ export default function WorkspaceHub() {
             </div>
           </div>
 
-          {/* File area */}
-          <div className="flex-1 overflow-y-auto">
+          {/* File area — the scroll region is the wrapper opened above */}
             {selectedFolderId === '__trash__' ? (
               <div className="p-5 space-y-4">
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-200">
