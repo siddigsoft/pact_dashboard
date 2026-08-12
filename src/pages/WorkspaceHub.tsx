@@ -2042,11 +2042,11 @@ export default function WorkspaceHub() {
         </td>
         {/* Size */}
         <td className="py-3 pr-4 hidden md:table-cell">
-          <span className="text-sm text-gray-500">{fmtSize(file.file_size)}</span>
+          <span className="text-xs text-gray-500 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtSize(file.file_size)}</span>
         </td>
         {/* Modified */}
         <td className="py-3 pr-4 hidden md:table-cell">
-          <span className="text-sm text-gray-500">{fmtRelative(file.updated_at)}</span>
+          <span className="text-xs text-gray-500 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtRelative(file.updated_at)}</span>
         </td>
         {/* By */}
         <td className="py-3 pr-4 hidden sm:table-cell">
@@ -2135,7 +2135,7 @@ export default function WorkspaceHub() {
         draggable
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
-        className={cn('flex flex-col rounded-xl border bg-card cursor-default hover:shadow-md hover:border-[#1D3461]/30 transition-all group relative overflow-hidden select-none',
+        className={cn('flex flex-col rounded-xl border border-blue-100 dark:border-blue-900 bg-white dark:bg-[#0f1422] cursor-default hover:shadow-md hover:border-[#2865eb]/40 hover:-translate-y-0.5 transition-all ease-[cubic-bezier(0.16,1,0.3,1)] group relative overflow-hidden select-none',
           isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : '',
           isBulkSelected && 'ring-2 ring-[#1D3461] border-[#1D3461]',
           dragFileId === file.id && 'opacity-40')}>
@@ -2281,10 +2281,10 @@ export default function WorkspaceHub() {
     <NavBadgeCountsProvider>
     <WorkspaceAccessGate>
     <TooltipProvider>
-      <div className="flex h-screen bg-white dark:bg-background overflow-hidden">
+      <div className="flex h-screen bg-[#f3f6f9] dark:bg-[#080c16] overflow-hidden">
 
         {/* ══ Left Sidebar ════════════════════════════════════════════════ */}
-        <div className="w-60 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 dark:bg-card overflow-y-auto">
+        <div className="w-60 flex-shrink-0 border-r border-blue-100 dark:border-blue-900 flex flex-col bg-white dark:bg-[#0f1422] overflow-y-auto">
           {/* Sidebar header — Notion style */}
           <div className="px-4 pt-5 pb-3">
             {/* Back to main app */}
@@ -2321,13 +2321,13 @@ export default function WorkspaceHub() {
             </button>
             <button onClick={() => setSelectedFolderId('__recent__')}
               className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-0.5 transition-colors',
-                selectedFolderId === '__recent__' ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : '')}>
+                selectedFolderId === '__recent__' ? 'bg-[#2865eb]/10 dark:bg-[#1D3461] text-[#2865eb] dark:text-white font-semibold' : '')}>
               <Clock className="w-3.5 h-3.5 flex-shrink-0" /> Recent
               {Math.min(20, allFiles.length) > 0 && <span className="ml-auto text-[10px] text-gray-400">{Math.min(20, allFiles.length)}</span>}
             </button>
             <button onClick={() => setSelectedFolderId('__pinned__')}
               className={cn('w-full flex items-center gap-1.5 text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-muted rounded px-2 py-1.5 cursor-pointer mb-3 transition-colors',
-                selectedFolderId === '__pinned__' ? 'bg-gray-200 dark:bg-[#1D3461] text-gray-900 dark:text-white font-medium' : '')}>
+                selectedFolderId === '__pinned__' ? 'bg-[#2865eb]/10 dark:bg-[#1D3461] text-[#2865eb] dark:text-white font-semibold' : '')}>
               <Star className="w-3.5 h-3.5 flex-shrink-0" /> Starred
               {stats.pinned > 0 && <span className="ml-auto text-[10px] text-gray-400">{stats.pinned}</span>}
             </button>
@@ -2470,25 +2470,30 @@ export default function WorkspaceHub() {
             </div>
           )}
 
-          {/* Header — Notion style */}
-          <div className="px-8 pt-8 pb-4 border-b border-gray-100 flex-shrink-0">
+          {/* Masthead */}
+          <div className="px-8 pt-6 pb-1 flex-shrink-0">
             <div className="flex items-start justify-between mb-1">
               <div className="min-w-0">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-foreground">{currentFolderName}</h1>
-                <p className="text-sm text-gray-400 mt-0.5">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  PACT Workspace
+                </p>
+                <h1 className="text-[1.75rem] font-bold leading-[1.1] tracking-[-0.03em] text-slate-900 dark:text-foreground" style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}>
+                  {currentFolderName}
+                </h1>
+                <p className="text-[11px] text-muted-foreground mt-1.5 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                   {displayedFiles.length} file{displayedFiles.length !== 1 ? 's' : ''}
-                  {displayedFiles.length > 0 && ` · ${fmtSize(displayedFiles.reduce((s, f) => s + f.file_size, 0))}`}
-                  {displayedFiles.length > 0 && ` · Last updated ${fmtRelative(displayedFiles[0]?.updated_at ?? '')}`}
+                  {displayedFiles.length > 0 && ` / ${fmtSize(displayedFiles.reduce((s, f) => s + f.file_size, 0))}`}
+                  {displayedFiles.length > 0 && ` / updated ${fmtRelative(displayedFiles[0]?.updated_at ?? '')}`}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-4 flex-wrap justify-end">
                 {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
-                  <button className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg px-3 py-1.5 hover:bg-blue-50/60 dark:hover:bg-blue-950/40 active:scale-[0.98] transition-all" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
                     <Share2 className="h-3 w-3" /> Share
                   </button>
                 )}
                 <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
-                  <SelectTrigger className="h-8 w-28 text-xs border-gray-200 text-gray-500 gap-1"><Filter className="h-3 w-3 flex-shrink-0" /><SelectValue placeholder="Filter" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-28 text-xs bg-white dark:bg-[#0f1422] border-blue-100 dark:border-blue-900 text-slate-600 dark:text-slate-300 gap-1"><Filter className="h-3 w-3 flex-shrink-0" /><SelectValue placeholder="Filter" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs">All Types</SelectItem>
                     <SelectItem value="image" className="text-xs">🖼 Images</SelectItem>
@@ -2500,29 +2505,69 @@ export default function WorkspaceHub() {
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={v => setSortBy(v as any)}>
-                  <SelectTrigger className="h-8 w-32 text-xs border-gray-200 text-gray-500 gap-1"><ArrowUpDown className="h-3 w-3 flex-shrink-0" /><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-32 text-xs bg-white dark:bg-[#0f1422] border-blue-100 dark:border-blue-900 text-slate-600 dark:text-slate-300 gap-1"><ArrowUpDown className="h-3 w-3 flex-shrink-0" /><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="date" className="text-xs">Date Modified</SelectItem>
                     <SelectItem value="name" className="text-xs">Name</SelectItem>
                     <SelectItem value="size" className="text-xs">Size</SelectItem>
                   </SelectContent>
                 </Select>
-                <button className="flex items-center gap-1.5 text-xs bg-gray-900 text-white rounded-md px-3 py-1.5 hover:bg-gray-700 transition-colors" onClick={() => setUploadOpen(true)}>
-                  <Upload className="h-3 w-3" /> Upload
+                <button
+                  className="flex items-center gap-1.5 text-xs font-semibold text-white rounded-lg px-3.5 py-2 bg-gradient-to-br from-sky-600 to-blue-700 shadow-lg shadow-blue-600/25 hover:brightness-110 hover:-translate-y-px active:scale-[0.98] transition-all ease-[cubic-bezier(0.16,1,0.3,1)]"
+                  style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}
+                  onClick={() => setUploadOpen(true)}
+                >
+                  <Upload className="h-3.5 w-3.5" /> Upload
                 </button>
               </div>
             </div>
           </div>
 
+          {/* KPI tiles — each reports a number and filters the view; click again to clear */}
+          {breadcrumbs.length === 0 && selectedFolderId !== '__trash__' && (
+            <div className="px-8 pt-4 pb-1 flex-shrink-0">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { id: '__all__', label: 'All Files', value: stats.total, caption: `${fmtSize(stats.totalSize)} in the workspace`, icon: Folders, from: '#0284c7', to: '#1e40af' },
+                  { id: '__pinned__', label: 'Starred', value: stats.pinned, caption: 'pinned for quick access', icon: Star, from: '#d97706', to: '#c2410c' },
+                  { id: '__mine__', label: 'My Files', value: stats.mine, caption: 'uploaded by you', icon: User, from: '#059669', to: '#115e59' },
+                  { id: '__task_docs__', label: 'Task Documents', value: totalTaskAttachments, caption: `across ${taskDocsRaw.length} task${taskDocsRaw.length !== 1 ? 's' : ''}`, icon: CheckCircle2, from: '#6366f1', to: '#4338ca' },
+                ].map(tile => {
+                  const TileIcon = tile.icon;
+                  const active = selectedFolderId === tile.id;
+                  return (
+                    <button
+                      key={tile.id}
+                      onClick={() => setSelectedFolderId(active ? '__all__' : tile.id)}
+                      className={cn(
+                        'relative overflow-hidden rounded-xl p-4 text-left text-white transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] group',
+                        active && 'ring-2 ring-white ring-offset-2 ring-offset-[#f3f6f9] dark:ring-offset-[#080c16]'
+                      )}
+                      style={{ background: `linear-gradient(to bottom right, ${tile.from}, ${tile.to})` }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.11em] text-white/90" style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}>{tile.label}</span>
+                        <TileIcon className="h-4 w-4 text-white/80 flex-shrink-0" />
+                      </div>
+                      <p className="mt-2 text-[1.75rem] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{tile.value}</p>
+                      <p className="mt-1.5 text-[11px] text-white/75 truncate">{tile.caption}</p>
+                      <TileIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-white/10 transition-transform duration-200 group-hover:scale-110 pointer-events-none" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Inline search + secondary controls */}
           <div className="flex items-center gap-3 px-8 py-3 flex-shrink-0 flex-wrap">
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-muted rounded-lg px-4 py-2 flex-1 max-w-md">
+            <div className="flex items-center gap-2 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.06)] rounded-lg px-4 py-2 flex-1 max-w-md focus-within:border-[#2865eb]/40 focus-within:ring-[3px] focus-within:ring-[#2865eb]/15 transition-all">
               <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
               <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files…"
                 className="bg-transparent border-0 text-sm flex-1 placeholder:text-gray-400 h-auto p-0 focus-visible:ring-0 shadow-none" />
             </div>
             <Select value={secFilter} onValueChange={v => setSecFilter(v as any)}>
-              <SelectTrigger className="h-8 w-36 text-xs border-gray-200"><SelectValue placeholder="All Levels" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-xs bg-white dark:bg-[#0f1422] border-blue-100 dark:border-blue-900"><SelectValue placeholder="All Levels" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all" className="text-xs">All Levels</SelectItem>
                 {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => (
@@ -2530,11 +2575,11 @@ export default function WorkspaceHub() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center border border-gray-200 rounded-lg p-0.5">
-              <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors', viewMode === 'list' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700')}>
+            <div className="flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
+              <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'list' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
                 <List className="h-3.5 w-3.5" />
               </button>
-              <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors', viewMode === 'grid' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700')}>
+              <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'grid' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
                 <Grid className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -2737,31 +2782,31 @@ export default function WorkspaceHub() {
                   </>
                 ) : (
                   <>
-                    <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-[#1D3461]/10 to-[#0F2041]/5 flex items-center justify-center border-2 border-dashed border-[#1D3461]/20">
-                      <Folder className="h-12 w-12 text-[#1D3461]/30" />
+                    <div className="h-16 w-16 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 flex items-center justify-center">
+                      <FolderOpen className="h-8 w-8 text-[#2865eb]" />
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-semibold text-foreground">No files here yet</p>
-                      <p className="text-xs mt-1 text-muted-foreground">Upload your first file to get started</p>
-                    </div>
-                    <div className="flex flex-col items-center gap-2">
-                      <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] gap-1.5 shadow-sm" onClick={() => setUploadOpen(true)}>
-                        <Upload className="h-3.5 w-3.5" />Upload Files
-                      </Button>
-                      <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
-                        <span>or drag &amp; drop files anywhere in this area</span>
+                      <p className="text-[0.9375rem] font-bold text-slate-900 dark:text-foreground" style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}>
+                        {currentFolderName === 'All Files' ? 'Start your workspace' : `"${currentFolderName}" is empty`}
+                      </p>
+                      <p className="text-xs mt-1.5 text-muted-foreground max-w-[42ch] leading-relaxed">
+                        Drag files or whole folders anywhere on this screen — nested folder structures are recreated automatically. Each upload gets a security level so only the right people see it.
                       </p>
                     </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <Button size="sm" className="bg-[#2865eb] hover:bg-[#1e52c9] text-white gap-1.5 shadow-sm active:scale-[0.98]" onClick={() => setUploadOpen(true)}>
+                        <Upload className="h-3.5 w-3.5" />Upload Files
+                      </Button>
+                    </div>
                   </>
-                
                 )}
               </div>
             ) : (
-              <div>
+              <div className="mx-6 mb-6 mt-2 rounded-xl bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.05),0_16px_40px_-24px_rgb(15_23_42/0.3)] pb-4">
                 {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
                 {currentSubFolders.length > 0 && (
-                  <div className="px-8 pt-4 pb-2">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-2">Folders</p>
+                  <div className="px-6 pt-4 pb-2">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 px-2" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
                     {currentSubFolders.map(sub => {
                       const subFileCount = fileCounts[sub.id] ?? 0;
                       const subChildCount = (childMap[sub.id] ?? []).length;
@@ -2807,12 +2852,12 @@ export default function WorkspaceHub() {
                 {/* ── Files ────────────────────────────────────────────────── */}
                 {displayedFiles.length > 0 && (<>
                   {currentSubFolders.length > 0 && (
-                    <div className="px-10 pt-2 pb-1">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Files</p>
+                    <div className="px-8 pt-2 pb-1">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Files</p>
                     </div>
                   )}
                   {viewMode === 'list' ? (
-                    <div className="px-8 pt-2">
+                    <div className="px-6 pt-2">
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
@@ -2838,7 +2883,7 @@ export default function WorkspaceHub() {
 
                 {/* Empty files state when sub-folders exist */}
                 {displayedFiles.length === 0 && currentSubFolders.length > 0 && (
-                  <div className="flex flex-col items-center py-8 gap-2 text-muted-foreground">
+                  <div className="flex flex-col items-center py-8 gap-2 text-muted-foreground border-t border-slate-900/[0.07] dark:border-slate-100/[0.07] mx-6 mt-2">
                     <p className="text-xs">No files directly in this folder</p>
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mt-1" onClick={() => setUploadOpen(true)}>
                       <Upload className="h-3 w-3" />Add files here
