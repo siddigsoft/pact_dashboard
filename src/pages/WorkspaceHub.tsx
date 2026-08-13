@@ -2201,7 +2201,69 @@ export default function WorkspaceHub() {
     '#1D3461','#0D9488','#16A34A','#7C3AED',
     '#DC2626','#EA580C','#D97706','#DB2777','#475569',
   ];
-  const FOLDER_ICONS = ['📁','🗂️','📂','📊','📋','📝','📌','⭐','💼','🌍','🔒','📅','✅','🔖','🚨','👥','📈','💡','🎯','🏠'];
+  const FOLDER_ICONS = ['📁','🗂️','📂','📊','📋','📝','📌','⭐','💼','🌍','🔒','📅','✅','🔖','🚨','👥','📈','💡','🎯','🏠','🤝','🌾','🏥','💊','🏫','🛡️','🚑','🏗️','💰','🇺🇳','🇺🇸','🇶🇦','🇬🇧','🇪🇺'];
+
+  // UN agencies and major donor organisations — stored as "org:ABBREV"
+  const ORG_ICONS: { key: string; label: string; bg: string; fg: string; title: string }[] = [
+    // UN system
+    { key: 'org:UN',    label: 'UN',    bg: '#009EDB', fg: '#fff', title: 'United Nations' },
+    { key: 'org:UNDP',  label: 'UNDP',  bg: '#418FDE', fg: '#fff', title: 'UN Development Programme' },
+    { key: 'org:UNICEF',label: 'UNICEF',bg: '#00AEEF', fg: '#fff', title: 'UN Children\'s Fund' },
+    { key: 'org:UNHCR', label: 'UNHCR', bg: '#0072BC', fg: '#fff', title: 'UN Refugee Agency' },
+    { key: 'org:WFP',   label: 'WFP',   bg: '#F5A623', fg: '#1a1a1a', title: 'World Food Programme' },
+    { key: 'org:WHO',   label: 'WHO',   bg: '#009ADE', fg: '#fff', title: 'World Health Organization' },
+    { key: 'org:OCHA',  label: 'OCHA',  bg: '#1CABE2', fg: '#fff', title: 'UN Office for the Coordination of Humanitarian Affairs' },
+    { key: 'org:FAO',   label: 'FAO',   bg: '#4D9200', fg: '#fff', title: 'Food and Agriculture Organization' },
+    { key: 'org:IOM',   label: 'IOM',   bg: '#00539F', fg: '#fff', title: 'International Organization for Migration' },
+    { key: 'org:UNOPS', label: 'UNOPS', bg: '#014E91', fg: '#fff', title: 'UN Office for Project Services' },
+    { key: 'org:UNFPA', label: 'UNFPA', bg: '#009FDA', fg: '#fff', title: 'UN Population Fund' },
+    { key: 'org:UNOCHA',label: 'UNOCHA',bg: '#1F6B75', fg: '#fff', title: 'UN OCHA' },
+    // Financial / development
+    { key: 'org:WB',    label: 'WB',    bg: '#009FDA', fg: '#fff', title: 'World Bank' },
+    { key: 'org:IMF',   label: 'IMF',   bg: '#D4AC2B', fg: '#1a1a1a', title: 'International Monetary Fund' },
+    { key: 'org:IFC',   label: 'IFC',   bg: '#006B3C', fg: '#fff', title: 'International Finance Corporation' },
+    { key: 'org:ADB',   label: 'ADB',   bg: '#D0021B', fg: '#fff', title: 'Asian Development Bank' },
+    // US government
+    { key: 'org:USAID', label: 'USAID', bg: '#BA0C2F', fg: '#fff', title: 'US Agency for International Development' },
+    { key: 'org:BHA',   label: 'BHA',   bg: '#002147', fg: '#fff', title: 'Bureau for Humanitarian Assistance (USAID)' },
+    { key: 'org:STATE', label: 'STATE', bg: '#1B3A6B', fg: '#fff', title: 'US Department of State' },
+    // Gulf / regional
+    { key: 'org:QF',    label: 'QF',    bg: '#8B1A4A', fg: '#fff', title: 'Qatar Foundation' },
+    { key: 'org:QFFD',  label: 'QFFD',  bg: '#5C1230', fg: '#fff', title: 'Qatar Fund for Development' },
+    { key: 'org:KAFD',  label: 'KAFD',  bg: '#006C35', fg: '#fff', title: 'King Abdullah Fund for Development' },
+    { key: 'org:UAE',   label: 'UAE',   bg: '#007749', fg: '#fff', title: 'UAE Aid / UAE Ministry of Foreign Affairs' },
+    // European donors
+    { key: 'org:ECHO',  label: 'ECHO',  bg: '#003399', fg: '#fff', title: 'EU Humanitarian Aid (ECHO)' },
+    { key: 'org:EU',    label: 'EU',    bg: '#003399', fg: '#FFD700', title: 'European Union' },
+    { key: 'org:FCDO',  label: 'FCDO',  bg: '#C8102E', fg: '#fff', title: 'UK Foreign Commonwealth & Development Office' },
+    { key: 'org:GIZ',   label: 'GIZ',   bg: '#004F39', fg: '#fff', title: 'German Development Agency' },
+    // Other notable orgs
+    { key: 'org:IRC',   label: 'IRC',   bg: '#E2231A', fg: '#fff', title: 'International Rescue Committee' },
+    { key: 'org:ICRC',  label: 'ICRC',  bg: '#C60C30', fg: '#fff', title: 'International Committee of the Red Cross' },
+    { key: 'org:MSF',   label: 'MSF',   bg: '#E2231A', fg: '#fff', title: 'Médecins Sans Frontières' },
+    { key: 'org:CARE',  label: 'CARE',  bg: '#0073BD', fg: '#fff', title: 'CARE International' },
+    { key: 'org:NRC',   label: 'NRC',   bg: '#D62B1F', fg: '#fff', title: 'Norwegian Refugee Council' },
+    { key: 'org:PACT',  label: 'PACT',  bg: '#1D3461', fg: '#fff', title: 'PACT' },
+  ];
+
+  /** Render a small org-badge icon for use in sidebar / preview */
+  function OrgBadge({ orgKey, size = 'sm' }: { orgKey: string; size?: 'xs' | 'sm' | 'lg' }) {
+    const cfg = ORG_ICONS.find(o => o.key === orgKey);
+    if (!cfg) return null;
+    const cls = size === 'xs'
+      ? 'text-[7px] px-[3px] h-[14px] min-w-[18px]'
+      : size === 'lg'
+        ? 'text-[11px] px-1.5 h-6 min-w-[32px] rounded-md'
+        : 'text-[8px] px-1 h-4 min-w-[22px]';
+    return (
+      <span className={`${cls} rounded font-bold flex items-center justify-center flex-shrink-0 tracking-tight leading-none`}
+        style={{ background: cfg.bg, color: cfg.fg }}
+        title={cfg.title}
+      >
+        {cfg.label}
+      </span>
+    );
+  }
 
   function FolderNode({ folder, depth }: { folder: WFolder; depth: number }) {
     const children = childMap[folder.id] ?? [];
@@ -2232,9 +2294,11 @@ export default function WorkspaceHub() {
             </button>
           ) : <span className="w-3 flex-shrink-0" />}
 
-          {/* Folder icon — custom emoji or colored folder */}
+          {/* Folder icon — org badge, custom emoji, or colored folder */}
           {isFolderLocked ? (
             <Lock className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-amber-300' : 'text-amber-500')} />
+          ) : folder.icon?.startsWith('org:') ? (
+            <OrgBadge orgKey={folder.icon} size="xs" />
           ) : folder.icon && /[^\u0000-\u007F]/.test(folder.icon) ? (
             <span className="text-sm flex-shrink-0 leading-none">{folder.icon}</span>
           ) : (
@@ -2243,7 +2307,7 @@ export default function WorkspaceHub() {
             </span>
           )}
 
-          <span className="flex-1 text-xs font-medium truncate">{folder.name.replace(/^folder\s+/i, '').trim()}</span>
+          <span className="flex-1 text-xs font-medium truncate" title={folder.name}>{folder.name.replace(/^folder\s+/i, '').trim()}</span>
           {isDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">Drop</span>}
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
@@ -2693,7 +2757,7 @@ export default function WorkspaceHub() {
       <div className="flex h-screen bg-[#f3f6f9] dark:bg-[#080c16] overflow-hidden">
 
         {/* ══ Left Sidebar ════════════════════════════════════════════════ */}
-        <div className="w-60 flex-shrink-0 border-r border-blue-100 dark:border-blue-900 flex flex-col bg-white dark:bg-[#0f1422] overflow-y-auto">
+        <div className="w-72 flex-shrink-0 border-r border-blue-100 dark:border-blue-900 flex flex-col bg-white dark:bg-[#0f1422] overflow-y-auto">
           {/* Sidebar header — Notion style */}
           <div className="px-4 pt-5 pb-3">
             {/* Back to main app */}
@@ -3821,7 +3885,10 @@ export default function WorkspaceHub() {
         <Dialog open={!!folderCustomizeTarget} onOpenChange={open => { if (!open) setFolderCustomizeTarget(null); }}>
           <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl border-0 shadow-xl">
             <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-5 py-4 flex items-center gap-3">
-              <span className="text-2xl">{customIcon || '📁'}</span>
+              {customIcon?.startsWith('org:')
+                ? <OrgBadge orgKey={customIcon} size="lg" />
+                : <span className="text-2xl">{customIcon || '📁'}</span>
+              }
               <div>
                 <p className="text-white font-bold text-sm">{folderCustomizeTarget?.name}</p>
                 <p className="text-blue-200 text-[11px]">Choose a color and icon</p>
@@ -3846,7 +3913,7 @@ export default function WorkspaceHub() {
               </div>
               {/* Icon picker */}
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Icon</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">General Icons</p>
                 <div className="flex flex-wrap gap-1.5">
                   {FOLDER_ICONS.map(ic => (
                     <button key={ic} onClick={() => setCustomIcon(customIcon === ic ? '' : ic)}
@@ -3862,10 +3929,42 @@ export default function WorkspaceHub() {
                   </button>
                 </div>
               </div>
+
+              {/* Organisation icons */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">UN Agencies</p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {ORG_ICONS.slice(0, 12).map(org => (
+                    <button key={org.key} onClick={() => setCustomIcon(customIcon === org.key ? '' : org.key)}
+                      title={org.title}
+                      className={cn('h-8 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all hover:scale-105 min-w-[2.5rem]',
+                        customIcon === org.key ? 'ring-2 ring-offset-1 ring-[#1D3461]' : 'opacity-90 hover:opacity-100')}
+                      style={{ background: org.bg, color: org.fg }}>
+                      {org.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Donors &amp; Partners</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ORG_ICONS.slice(12).map(org => (
+                    <button key={org.key} onClick={() => setCustomIcon(customIcon === org.key ? '' : org.key)}
+                      title={org.title}
+                      className={cn('h-8 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all hover:scale-105 min-w-[2.5rem]',
+                        customIcon === org.key ? 'ring-2 ring-offset-1 ring-[#1D3461]' : 'opacity-90 hover:opacity-100')}
+                      style={{ background: org.bg, color: org.fg }}>
+                      {org.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Preview */}
               <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2">
                 <span className="text-[11px] text-slate-400 font-medium">Preview:</span>
-                <span className="text-sm">{customIcon || ''}</span>
+                {customIcon?.startsWith('org:')
+                  ? <OrgBadge orgKey={customIcon} size="sm" />
+                  : <span className="text-sm">{customIcon || ''}</span>
+                }
                 <span className="text-xs font-semibold" style={{ color: customColor }}>{folderCustomizeTarget?.name}</span>
               </div>
             </div>
