@@ -21,7 +21,8 @@
     "backfill-storage": "node scripts/backfill_storage_to_db.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:registry": "vitest run src/lib/__tests__/registry-drift.test.ts --reporter=verbose"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.6.2",
