@@ -683,11 +683,18 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     }
     setAdvanceSaving(true);
     try {
+      // Build a description that stamps the campaign name so Finance Hub staff
+      // can identify which campaign originated this advance request.
+      const descParts = [
+        `[Campaign: ${selectedCampaign.campaign_name}]`,
+        advanceForm.description?.trim(),
+      ].filter(Boolean);
+
       const { error } = await supabase.from('advance_requests').insert({
         project_id:       selectedCampaign.project_id,
         site_name:        advanceForm.site_name || selectedCampaign.campaign_name,
         requested_amount: parseFloat(advanceForm.requested_amount),
-        description:      advanceForm.description || null,
+        description:      descParts.join(' — '),
         expense_category: advanceForm.expense_category || 'transport',
         status:           'pending',
       });

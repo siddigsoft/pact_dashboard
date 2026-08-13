@@ -4,7 +4,7 @@ import {
   Loader2, TrendingUp, FileText, Info,
   DollarSign, CreditCard, BarChart3, ArrowLeftRight,
   RefreshCw, Layers, ClipboardList, CalendarCheck,
-  Activity, Users, Receipt, Copy,
+  Activity, Users, Receipt, Copy, Wallet,
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
@@ -23,13 +23,15 @@ const SalaryRetainerPanel      = lazy(() => import('./SalaryRetainerReport'));
 const MonthEndPanel            = lazy(() => import('./MonthEndFinancialSummary'));
 const EnumeratorFeesPanel      = lazy(() => import('./EnumeratorFeesReport'));
 const DuplicatePaymentsPanel   = lazy(() => import('./DuplicatePaymentsReport'));
+const CampaignAdvancesPanel    = lazy(() => import('@/components/finance/CampaignAdvancesPanel'));
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type FinSection = 'operations' | 'reports';
 type FinTab =
   | 'budget' | 'financial-ops' | 'admin-wallets' | 'reconciliation' | 'subscriptions'
   | 'wallet-reports' | 'advance-report' | 'cost-predictions' | 'exchange-rates'
-  | 'salary-retainer' | 'month-end' | 'enumerator-fees' | 'duplicate-payments';
+  | 'salary-retainer' | 'month-end' | 'enumerator-fees' | 'duplicate-payments'
+  | 'campaign-advances';
 
 interface TabDef { id: FinTab; label: string; icon: React.ElementType; description: string }
 interface SectionDef { id: FinSection; label: string; icon: React.ElementType; color: string; description: string; tabs: TabDef[] }
@@ -58,6 +60,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'subscriptions', label: 'Subscriptions', icon: Layers,
         description: 'Manage organisation subscription plans — track renewal dates, billing cycles, costs, and ensure subscriptions are reviewed before automatic renewal.',
+      },
+      {
+        id: 'campaign-advances', label: 'Campaign Advances', icon: Wallet,
+        description: 'Review and approve advance requests submitted from Village Campaigns — approve, reject, and mark payments as paid so field teams can be disbursed.',
       },
     ],
   },
@@ -167,6 +173,7 @@ export default function FinanceHub() {
         {tab === 'salary-retainer'     && <Suspense fallback={<PanelLoader />}><SalaryRetainerPanel /></Suspense>}
         {tab === 'month-end'           && <Suspense fallback={<PanelLoader />}><MonthEndPanel /></Suspense>}
         {tab === 'enumerator-fees'     && <Suspense fallback={<PanelLoader />}><EnumeratorFeesPanel /></Suspense>}
+        {tab === 'campaign-advances'   && <Suspense fallback={<PanelLoader />}><CampaignAdvancesPanel /></Suspense>}
       </div>
     </HubLayout>
   );
