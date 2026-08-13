@@ -188,6 +188,26 @@ function SecBadge({ level, size = 'sm' }: { level: SecurityLevel; size?: 'xs' | 
   );
 }
 
+// ─── My access badge ──────────────────────────────────────────────────────────
+// Shown next to a folder or file when the current user has an explicit
+// permission grant for that item in workspace_permissions.
+
+const ACCESS_BADGE_CLS: Record<AccessLevel, string> = {
+  owner:     'bg-purple-50 text-purple-700 border-purple-200',
+  editor:    'bg-blue-50 text-blue-700 border-blue-200',
+  commenter: 'bg-teal-50 text-teal-700 border-teal-200',
+  viewer:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+  no_access: 'bg-red-50 text-red-600 border-red-200',
+};
+
+function MyAccessBadge({ level }: { level: AccessLevel }) {
+  return (
+    <span className={`inline-flex items-center text-[8px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 leading-none ${ACCESS_BADGE_CLS[level]}`}>
+      {ACCESS_CFG[level].label}
+    </span>
+  );
+}
+
 // ─── Share dialog ─────────────────────────────────────────────────────────────
 
 function UserPickerCombobox({ profiles, value, onChange }: {
@@ -1869,6 +1889,32 @@ export default function WorkspaceHub() {
     );
   }, [myPermissions, isSuperAdmin]);
 
+  // Effective access level maps — derived from myPermissions so badges stay in sync.
+  // Direct-user grants take precedence over all_staff grants for the same item.
+  const myFolderAccessMap = useMemo(() => {
+    const map = new Map<string, AccessLevel>();
+    // all_staff first (lower priority)
+    for (const p of myPermissions) {
+      if (p.folder_id && p.grantee_type === 'all_staff') map.set(p.folder_id, p.access_level);
+    }
+    // direct-user second (overwrites all_staff)
+    for (const p of myPermissions) {
+      if (p.folder_id && p.grantee_type === 'user') map.set(p.folder_id, p.access_level);
+    }
+    return map;
+  }, [myPermissions]);
+
+  const myFileAccessMap = useMemo(() => {
+    const map = new Map<string, AccessLevel>();
+    for (const p of myPermissions) {
+      if (p.file_id && p.grantee_type === 'all_staff') map.set(p.file_id, p.access_level);
+    }
+    for (const p of myPermissions) {
+      if (p.file_id && p.grantee_type === 'user') map.set(p.file_id, p.access_level);
+    }
+    return map;
+  }, [myPermissions]);
+
   const refetch = useCallback(() => {
     refetchFolders(); refetchFiles(); refetchMyPermissions();
     if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); }
@@ -2524,6 +2570,9 @@ export default function WorkspaceHub() {
           <span className="flex-1 text-xs font-medium truncate" title={folder.name}>{folder.name.replace(/^folder\s+/i, '').trim()}</span>
           {isDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">Drop</span>}
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
+          {!isSuperAdmin && myFolderAccessMap.has(folder.id) && (
+            <MyAccessBadge level={myFolderAccessMap.get(folder.id)!} />
+          )}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
           {/* Hide management actions when user has an explicit viewer grant on this folder */}
@@ -2721,6 +2770,9 @@ export default function WorkspaceHub() {
                 {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
                 {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
                 {!file.allow_download && <span title="Downloads disabled"><Ban className="h-3 w-3 text-orange-400 flex-shrink-0" /></span>}
+                {!isSuperAdmin && myFileAccessMap.has(file.id) && (
+                  <MyAccessBadge level={myFileAccessMap.get(file.id)!} />
+                )}
               </div>
               {file.tags.length > 0 && (
                 <div className="flex items-center gap-1 mt-0.5">
@@ -2915,6 +2967,9 @@ export default function WorkspaceHub() {
             <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0', secCfg.bg, secCfg.text)}>
               {secCfg.label}
             </span>
+            {!isSuperAdmin && myFileAccessMap.has(file.id) && (
+              <MyAccessBadge level={myFileAccessMap.get(file.id)!} />
+            )}
             {file.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
             {file.password_hash && !isLocked && <LockOpen className="h-3 w-3 text-green-500 flex-shrink-0" />}
             {!file.allow_download && <Ban className="h-3 w-3 text-orange-500 flex-shrink-0" />}
@@ -3634,6 +3689,9 @@ export default function WorkspaceHub() {
                           <span className="flex-1 text-sm text-gray-700 dark:text-foreground truncate" title={sub.name.replace(/^folder\s+/i, '').trim()}>
                             {sub.name.replace(/^folder\s+/i, '').trim()}
                           </span>
+                          {!isSuperAdmin && myFolderAccessMap.has(sub.id) && (
+                            <MyAccessBadge level={myFolderAccessMap.get(sub.id)!} />
+                          )}
                           <span className="text-xs text-gray-400 flex-shrink-0">
                             {subFileCount > 0 && subFileCount}
                           </span>
