@@ -1971,6 +1971,21 @@ export default function WorkspaceHub() {
 
   // ── Displayed files ───────────────────────────────────────────────────────
 
+  // Must be declared BEFORE displayedFiles / filteredFiles that reference it.
+  // ── All descendant folder IDs for the selected folder (recursive) ─────────
+  // Used to expand file search to cover the full subtree, not just direct children.
+  const descendantFolderIds = useMemo(() => {
+    if (!selectedFolderId || VIRTUAL_VIEWS.has(selectedFolderId)) return new Set<string>();
+    const result = new Set<string>();
+    const queue = [selectedFolderId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      result.add(id);
+      for (const child of (childMap[id] ?? [])) queue.push(child.id);
+    }
+    return result;
+  }, [selectedFolderId, childMap]);
+
   const lockedFolderIdSet = useMemo(() =>
     new Set(folders.filter(f => f.password_hash && !unlockedFolderIds.has(f.id)).map(f => f.id)),
   [folders, unlockedFolderIds]);
@@ -2034,20 +2049,6 @@ export default function WorkspaceHub() {
       f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q)
     );
   }, [visibleFolders, searchQuery]);
-
-  // ── All descendant folder IDs for the selected folder (recursive) ─────────
-  // Used to expand file search to cover the full subtree, not just direct children.
-  const descendantFolderIds = useMemo(() => {
-    if (!selectedFolderId || VIRTUAL_VIEWS.has(selectedFolderId)) return new Set<string>();
-    const result = new Set<string>();
-    const queue = [selectedFolderId];
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      result.add(id);
-      for (const child of (childMap[id] ?? [])) queue.push(child.id);
-    }
-    return result;
-  }, [selectedFolderId, childMap]);
 
   // ── Folder actions ────────────────────────────────────────────────────────
 
