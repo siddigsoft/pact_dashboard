@@ -204,11 +204,28 @@ export default function WorkspaceFolderShare() {
 
       const f = folder as ShareFolder;
 
-      // Check if the user can see this folder at all
+      // Check clearance level
       if (!canAccess(f.security_level)) {
         setError('You do not have permission to view this folder. Please sign in or contact the folder owner.');
         setLoading(false);
         return;
+      }
+
+      // Check explicit no_access grant — applies to authenticated users only.
+      // Unauthenticated guests cannot have named permission grants.
+      if (userId) {
+        const { data: noPerm } = await supabase
+          .from('workspace_permissions')
+          .select('id')
+          .eq('folder_id', f.id)
+          .eq('grantee_id', userId)
+          .eq('access_level', 'no_access')
+          .maybeSingle();
+        if (noPerm) {
+          setError('You do not have permission to view this folder. Please contact the folder owner.');
+          setLoading(false);
+          return;
+        }
       }
 
       // Set root folder on first load
