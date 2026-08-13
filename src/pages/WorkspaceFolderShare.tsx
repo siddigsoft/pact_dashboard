@@ -132,6 +132,7 @@ export default function WorkspaceFolderShare() {
   // Auth state
   const [userId, setUserId] = useState<string | null>(null);
   const [userClearance, setUserClearance] = useState<SecurityLevel>('public');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
   // Data
@@ -166,12 +167,13 @@ export default function WorkspaceFolderShare() {
           .eq('id', uid)
           .maybeSingle();
         const role = prof?.role ?? '';
-        const isSuperAdmin = role === 'superAdmin' || role === 'super_admin' || role === 'Super Admin';
-        const isAdmin = isSuperAdmin || role === 'admin' || role === 'Admin';
+        const isSuper = role === 'superAdmin' || role === 'super_admin' || role === 'Super Admin';
+        const isAdmin = isSuper || role === 'admin' || role === 'Admin';
         const assignedClearance = clr?.clearance_level as SecurityLevel | null;
+        setIsSuperAdmin(isSuper);
         setUserClearance(
-          isSuperAdmin ? 'top_secret' :
-          isAdmin ? (assignedClearance ?? 'confidential') :
+          isSuper  ? 'top_secret' :
+          isAdmin  ? (assignedClearance ?? 'confidential') :
           (assignedClearance ?? 'internal')
         );
       }
@@ -211,17 +213,25 @@ export default function WorkspaceFolderShare() {
         return;
       }
 
-      // Check explicit no_access grant — applies to authenticated users only.
+      // Check explicit no_access grant — applies to authenticated, non-super-admin users only.
+      // Super admins are never blocked by no_access (matches WorkspaceHub policy).
       // Unauthenticated guests cannot have named permission grants.
-      if (userId) {
-        const { data: noPerm } = await supabase
+      if (userId && !isSuperAdmin) {
+        // Include every ancestor folder (from breadcrumbs) plus the current folder.
+        // This enforces the same cascading denial semantics as WorkspaceHub's BFS walk:
+        // a denial on any ancestor blocks access to all descendants.
+        const folderIdsToCheck = [...crumbs.map(c => c.id), f.id];
+        const folderOrClause = folderIdsToCheck.map(id => `folder_id.eq.${id}`).join(',');
+
+        const { data: deniedPerms } = await supabase
           .from('workspace_permissions')
           .select('id')
-          .eq('folder_id', f.id)
-          .eq('grantee_id', userId)
+          .or(folderOrClause)                                          // any ancestor or current folder
+          .or(`grantee_id.eq.${userId},grantee_type.eq.all_staff`)   // direct user OR all_staff grant
           .eq('access_level', 'no_access')
-          .maybeSingle();
-        if (noPerm) {
+          .limit(1);
+
+        if (deniedPerms && deniedPerms.length > 0) {
           setError('You do not have permission to view this folder. Please contact the folder owner.');
           setLoading(false);
           return;
@@ -264,7 +274,7 @@ export default function WorkspaceFolderShare() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authChecked, userClearance, userId]);
+  }, [authChecked, userClearance, userId, isSuperAdmin]);
 
   function canAccess(level: SecurityLevel): boolean {
     return CLEARANCE_ORDER[level] <= CLEARANCE_ORDER[userClearance];
