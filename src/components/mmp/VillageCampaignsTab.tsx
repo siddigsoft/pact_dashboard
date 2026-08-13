@@ -20,7 +20,7 @@ import {
   BarChart3, Calendar, ClipboardList, CheckCircle2, AlertCircle,
   Download, Eye, RefreshCw, Home, Building2, UserCheck, FileText,
   ArrowRight, TrendingUp, Activity, Camera, ImageIcon, X, ChevronDown, ChevronUp,
-  DollarSign, Wallet, CreditCard, Truck, BadgeDollarSign
+  DollarSign, Wallet, CreditCard, Truck, BadgeDollarSign, Send
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -130,6 +130,8 @@ interface SiteEntry {
   fee_paid_status?: string | null;
   fee_paid_amount?: number | null;
   status: string;
+  dispatched_at?: string | null;
+  dispatched_by?: string | null;
   additional_data?: Record<string, any>;
 }
 
@@ -269,6 +271,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   const [siteEntries, setSiteEntries] = useState<SiteEntry[]>([]);
   const [feeEdits, setFeeEdits] = useState<Record<string, { transport_fee: string; enumerator_fee: string }>>({});
   const [feesSaving, setFeesSaving] = useState<Record<string, boolean>>({});
+  const [dispatching, setDispatching] = useState<Record<string, boolean>>({});
+  const [dispatchingAll, setDispatchingAll] = useState(false);
 
   // ── Advances state ────────────────────────────────────────────────────────
   const [advances, setAdvances] = useState<AdvanceRequest[]>([]);
@@ -404,7 +408,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     // ── Load site entries for this campaign (fee/dispatch data) ───────────────
     const { data: seRows } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, status, additional_data')
+      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, status, dispatched_at, dispatched_by, additional_data')
       .filter('additional_data->>campaign_id', 'eq', campaignId);
     setSiteEntries((seRows || []) as SiteEntry[]);
     // Initialize fee edit inputs from current values
@@ -683,6 +687,69 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       toast({ title: 'Error saving fees', description: e.message, variant: 'destructive' });
     } finally {
       setFeesSaving(s => ({ ...s, [entryId]: false }));
+    }
+  };
+
+  // ── Dispatch site entry to field team pickup queue ────────────────────────
+  const dispatchEntry = async (entry: SiteEntry) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const now = new Date().toISOString();
+    setDispatching(d => ({ ...d, [entry.id]: true }));
+    try {
+      const additionalData = {
+        ...(entry.additional_data || {}),
+        cost_status: 'dispatched',
+        dispatched_at: now,
+        dispatched_by: user.id,
+      };
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
+        .eq('id', entry.id);
+      if (error) throw error;
+      setSiteEntries(es => es.map(e => e.id === entry.id
+        ? { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData }
+        : e
+      ));
+      toast({ title: 'Dispatched', description: `${entry.site_name} is now in the field team pickup queue.` });
+    } catch (e: any) {
+      toast({ title: 'Dispatch failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDispatching(d => ({ ...d, [entry.id]: false }));
+    }
+  };
+
+  const dispatchAll = async () => {
+    const pending = siteEntries.filter(e => (e.status || '').toLowerCase() !== 'dispatched');
+    if (!pending.length) { toast({ title: 'All entries already dispatched' }); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setDispatchingAll(true);
+    try {
+      const now = new Date().toISOString();
+      const results = await Promise.allSettled(pending.map(e => {
+        const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
+        return supabase.from('mmp_site_entries')
+          .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
+          .eq('id', e.id);
+      }));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.length - failed;
+      setSiteEntries(es => es.map(e => {
+        if (!pending.find(p => p.id === e.id)) return e;
+        const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
+        return { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData };
+      }));
+      if (failed > 0) {
+        toast({ title: `${succeeded} dispatched, ${failed} failed`, variant: 'destructive' });
+      } else {
+        toast({ title: `${succeeded} site${succeeded !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Dispatch All failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDispatchingAll(false);
     }
   };
 
@@ -1577,6 +1644,27 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
               </Card>
             </div>
           )}
+          {/* Dispatch All header */}
+          {canManage && siteEntries.length > 0 && (
+            <div className="flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2 border">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  {siteEntries.filter(e => (e.status || '').toLowerCase() === 'dispatched').length}
+                </span>
+                {' / '}{siteEntries.length} dispatched to field teams
+              </p>
+              <Button
+                type="button" size="sm"
+                className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                disabled={dispatchingAll || siteEntries.every(e => (e.status || '').toLowerCase() === 'dispatched')}
+                onClick={dispatchAll}
+              >
+                {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                Dispatch All
+              </Button>
+            </div>
+          )}
+
           {siteEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
               <DollarSign className="h-10 w-10 opacity-25" />
@@ -1594,6 +1682,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     <TableHead className="text-right">Enumerator Fee (SDG)</TableHead>
                     <TableHead>Payment Status</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
+                    <TableHead>Dispatch</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -1601,6 +1690,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                   {siteEntries.map(e => {
                     const edit = feeEdits[e.id] || { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
                     const isSavingFee = feesSaving[e.id];
+                    const isDispatching = dispatching[e.id];
+                    const isDispatched = (e.status || '').toLowerCase() === 'dispatched';
                     const payStatus = e.fee_paid_status;
                     return (
                       <TableRow key={e.id}>
@@ -1630,11 +1721,31 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                         <TableCell className="text-right tabular-nums text-xs">
                           {e.fee_paid_amount ? `SDG ${Number(e.fee_paid_amount).toLocaleString()}` : '—'}
                         </TableCell>
+                        {/* Dispatch status + action */}
                         <TableCell>
-                          <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
-                            disabled={isSavingFee} onClick={() => saveFee(e.id)}>
-                            {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                          </Button>
+                          {isDispatched ? (
+                            <Badge className="text-[10px] border-0 bg-blue-100 text-blue-700 gap-1">
+                              <Send className="h-2.5 w-2.5" />Dispatched
+                            </Badge>
+                          ) : (
+                            <Badge className="text-[10px] border-0 bg-amber-100 text-amber-700">
+                              Pending
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                              disabled={isSavingFee} onClick={() => saveFee(e.id)}>
+                              {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                            </Button>
+                            {canManage && !isDispatched && (
+                              <Button type="button" size="sm" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
+                                disabled={isDispatching} onClick={() => dispatchEntry(e)}>
+                                {isDispatching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
