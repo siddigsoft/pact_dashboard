@@ -217,44 +217,20 @@ export default function WorkspaceFolderShare() {
       // Super admins are never blocked by no_access (matches WorkspaceHub policy).
       // Unauthenticated guests cannot have named permission grants.
       if (userId && !isSuperAdmin) {
-        // Build the full ancestor ID list before checking permissions.
-        // For in-page navigation, breadcrumbs already carry every ancestor visited.
-        // For direct links to a nested folder (crumbs is empty), we must resolve the
-        // parent chain from the DB so a user denied on an ancestor cannot bypass the
-        // check by opening a child folder's UUID or short-code URL directly.
-        let ancestorIds: string[];
-        if (crumbs.length > 0) {
-          ancestorIds = crumbs.map(c => c.id);
-        } else {
-          // Walk up the parent_folder_id chain (depth-limited as a safety guard)
-          ancestorIds = [];
-          let parentId: string | null = f.parent_folder_id;
-          let depth = 0;
-          while (parentId && depth < 20) {
-            const { data: anc } = await supabase
-              .from('workspace_folders')
-              .select('id, parent_folder_id')
-              .eq('id', parentId)
-              .maybeSingle();
-            if (!anc) break;
-            ancestorIds.push(anc.id as string);
-            parentId = anc.parent_folder_id as string | null;
-            depth++;
-          }
-        }
+        // Delegate ancestor resolution + permission check to a security-definer RPC.
+        // The RPC uses a recursive CTE with UNION (cycle-safe, no depth cap) to
+        // collect the full ancestor chain, then checks workspace_permissions for any
+        // no_access row matching the user (direct or all_staff grant) against any
+        // ancestor or the folder itself.
+        //
+        // We FAIL CLOSED: if the RPC call errors we deny access rather than
+        // continuing and potentially leaking folder contents.
+        const { data: isDenied, error: permErr } = await supabase.rpc(
+          'check_folder_no_access',
+          { p_folder_id: f.id, p_user_id: userId }
+        );
 
-        const folderIdsToCheck = [...ancestorIds, f.id];
-        const folderOrClause = folderIdsToCheck.map(id => `folder_id.eq.${id}`).join(',');
-
-        const { data: deniedPerms } = await supabase
-          .from('workspace_permissions')
-          .select('id')
-          .or(folderOrClause)                                          // any ancestor or current folder
-          .or(`grantee_id.eq.${userId},grantee_type.eq.all_staff`)   // direct user OR all_staff grant
-          .eq('access_level', 'no_access')
-          .limit(1);
-
-        if (deniedPerms && deniedPerms.length > 0) {
+        if (permErr || isDenied === true) {
           setError('You do not have permission to view this folder. Please contact the folder owner.');
           setLoading(false);
           return;
