@@ -129,6 +129,10 @@ interface SiteEntry {
   enumerator_fee: number;
   fee_paid_status?: string | null;
   fee_paid_amount?: number | null;
+  fee_paid_at?: string | null;
+  fee_paid_by?: string | null;
+  fee_payment_method?: string | null;
+  fee_payment_notes?: string | null;
   status: string;
   dispatched_at?: string | null;
   dispatched_by?: string | null;
@@ -280,6 +284,12 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   const [advanceSaving, setAdvanceSaving] = useState(false);
   const [advanceForm, setAdvanceForm] = useState({ requested_amount: '', description: '', expense_category: 'transport', site_name: '' });
 
+  // ── Mark Paid state ───────────────────────────────────────────────────────
+  const [payDialog, setPayDialog] = useState<{ open: boolean; entry: SiteEntry | null }>({ open: false, entry: null });
+  const [payForm, setPayForm]   = useState({ amount: '', notes: '', method: 'cash' });
+  const [paying, setPaying]     = useState(false);
+  const [payingAll, setPayingAll] = useState(false);
+
   // ── Load reference data ───────────────────────────────────────────────────
 
   const loadProfiles = useCallback(async () => {
@@ -408,7 +418,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     // ── Load site entries for this campaign (fee/dispatch data) ───────────────
     const { data: seRows } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, status, dispatched_at, dispatched_by, additional_data')
+      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, fee_paid_at, fee_paid_by, fee_payment_method, fee_payment_notes, status, dispatched_at, dispatched_by, additional_data')
       .filter('additional_data->>campaign_id', 'eq', campaignId);
     setSiteEntries((seRows || []) as SiteEntry[]);
     // Initialize fee edit inputs from current values
@@ -787,6 +797,111 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       toast({ title: 'Dispatch All failed', description: e.message, variant: 'destructive' });
     } finally {
       setDispatchingAll(false);
+    }
+  };
+
+  // ── Mark fee as paid ─────────────────────────────────────────────────────
+  const markPaid = async () => {
+    const entry = payDialog.entry;
+    if (!entry) return;
+    const amount = parseFloat(payForm.amount);
+    if (!amount || amount <= 0) {
+      toast({ title: 'Enter a valid amount', variant: 'destructive' }); return;
+    }
+    setPaying(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          fee_paid_status:   'paid',
+          fee_paid_amount:   amount,
+          fee_paid_at:       new Date().toISOString(),
+          fee_paid_by:       user.id,
+          fee_payment_method: payForm.method || 'cash',
+          fee_payment_notes: payForm.notes || null,
+        })
+        .eq('id', entry.id);
+      if (error) throw error;
+      setSiteEntries(es => es.map(e => e.id === entry.id
+        ? { ...e, fee_paid_status: 'paid', fee_paid_amount: amount, fee_paid_at: new Date().toISOString(), fee_paid_by: user.id, fee_payment_method: payForm.method, fee_payment_notes: payForm.notes || null }
+        : e
+      ));
+      toast({ title: 'Payment recorded', description: `${entry.site_name} — SDG ${amount.toLocaleString()}` });
+      setPayDialog({ open: false, entry: null });
+    } catch (e: any) {
+      toast({ title: 'Error recording payment', description: e.message, variant: 'destructive' });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  // ── Mark all unpaid entries as paid (bulk) ────────────────────────────────
+  const markAllPaid = async () => {
+    const unpaid = siteEntries.filter(e => e.fee_paid_status !== 'paid');
+    if (!unpaid.length) { toast({ title: 'All entries already paid' }); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setPayingAll(true);
+    try {
+      const now = new Date().toISOString();
+      const results = await Promise.allSettled(
+        unpaid.map(e => {
+          const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
+          return supabase.from('mmp_site_entries').update({
+            fee_paid_status: 'paid',
+            fee_paid_amount: total,
+            fee_paid_at: now,
+            fee_paid_by: user.id,
+            fee_payment_method: 'cash',
+          }).eq('id', e.id).then(({ error }) => {
+            if (error) throw error;
+            return { id: e.id, amount: total };
+          });
+        })
+      );
+      const successes = results
+        .filter((r): r is PromiseFulfilledResult<{ id: string; amount: number }> => r.status === 'fulfilled')
+        .map(r => r.value);
+      const failCount = results.length - successes.length;
+      if (successes.length > 0) {
+        const successMap = new Map(successes.map(s => [s.id, s]));
+        setSiteEntries(es => es.map(e => {
+          const s = successMap.get(e.id);
+          if (!s) return e;
+          return { ...e, fee_paid_status: 'paid', fee_paid_amount: s.amount, fee_paid_at: now, fee_paid_by: user.id };
+        }));
+      }
+      if (failCount > 0 && successes.length === 0) {
+        toast({ title: 'Mark All Paid failed', description: `All ${failCount} updates failed.`, variant: 'destructive' });
+      } else if (failCount > 0) {
+        toast({ title: `${successes.length} marked paid, ${failCount} failed`, variant: 'destructive' });
+      } else {
+        toast({ title: `${successes.length} entr${successes.length !== 1 ? 'ies' : 'y'} marked paid` });
+      }
+    } catch (e: any) {
+      toast({ title: 'Mark All Paid failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setPayingAll(false);
+    }
+  };
+
+  // ── Revert paid entry back to unpaid ─────────────────────────────────────
+  const revertPaid = async (entryId: string) => {
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_notes: null })
+        .eq('id', entryId);
+      if (error) throw error;
+      setSiteEntries(es => es.map(e => e.id === entryId
+        ? { ...e, fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_notes: null }
+        : e
+      ));
+      toast({ title: 'Payment reverted to unpaid' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
   };
 
@@ -1660,7 +1775,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
         <TabsContent value="costs" className="mt-4 space-y-4">
           {/* Summary cards */}
           {siteEntries.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card>
                 <CardContent className="p-3 text-center">
                   <p className="text-[11px] text-muted-foreground mb-0.5 flex items-center justify-center gap-1"><Truck className="h-3 w-3" />Transport Budget</p>
@@ -1679,26 +1794,50 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                   <p className="text-base font-bold text-emerald-700 tabular-nums">SDG {siteEntries.reduce((s, e) => s + (e.transport_fee || 0) + (e.enumerator_fee || 0), 0).toLocaleString()}</p>
                 </CardContent>
               </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground mb-0.5 flex items-center justify-center gap-1"><CreditCard className="h-3 w-3" />Total Paid</p>
+                  <p className="text-base font-bold text-emerald-600 tabular-nums">
+                    SDG {siteEntries.filter(e => e.fee_paid_status === 'paid').reduce((s, e) => s + (e.fee_paid_amount || 0), 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{siteEntries.filter(e => e.fee_paid_status === 'paid').length} / {siteEntries.length} entries</p>
+                </CardContent>
+              </Card>
             </div>
           )}
-          {/* Dispatch All header — dispatched_at is the authoritative lifecycle marker */}
+          {/* Action header bar — Dispatch All + Mark All Paid */}
           {canManage && siteEntries.length > 0 && (
-            <div className="flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2 border">
-              <p className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  {siteEntries.filter(e => !!e.dispatched_at).length}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 rounded-lg px-3 py-2 border">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>
+                  <span className="font-semibold text-foreground">{siteEntries.filter(e => !!e.dispatched_at).length}</span>
+                  {' / '}{siteEntries.length} dispatched
                 </span>
-                {' / '}{siteEntries.length} dispatched to field teams
-              </p>
-              <Button
-                type="button" size="sm"
-                className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                disabled={dispatchingAll || siteEntries.every(e => !!e.dispatched_at)}
-                onClick={dispatchAll}
-              >
-                {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                Dispatch All
-              </Button>
+                <span>
+                  <span className="font-semibold text-foreground">{siteEntries.filter(e => e.fee_paid_status === 'paid').length}</span>
+                  {' / '}{siteEntries.length} paid
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button" size="sm"
+                  className="h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                  disabled={payingAll || siteEntries.every(e => e.fee_paid_status === 'paid')}
+                  onClick={markAllPaid}
+                >
+                  {payingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3 w-3" />}
+                  Mark All Paid
+                </Button>
+                <Button
+                  type="button" size="sm"
+                  className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                  disabled={dispatchingAll || siteEntries.every(e => !!e.dispatched_at)}
+                  onClick={dispatchAll}
+                >
+                  {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                  Dispatch All
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1778,6 +1917,25 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                               disabled={isSavingFee} onClick={() => saveFee(e.id)}>
                               {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                             </Button>
+                            {canManage && payStatus !== 'paid' && (
+                              <Button type="button" size="sm"
+                                className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => {
+                                  const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
+                                  setPayForm({ amount: String(total), notes: '', method: 'cash' });
+                                  setPayDialog({ open: true, entry: e });
+                                }}>
+                                <CreditCard className="h-3 w-3" />
+                              </Button>
+                            )}
+                            {canManage && payStatus === 'paid' && (
+                              <Button type="button" size="sm" variant="ghost"
+                                className="h-6 text-[10px] px-2 text-muted-foreground hover:text-destructive"
+                                title="Revert to unpaid"
+                                onClick={() => revertPaid(e.id)}>
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
                             {canManage && !isDispatched && (
                               <Button type="button" size="sm" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
                                 disabled={isDispatching} onClick={() => dispatchEntry(e)}>
@@ -2419,6 +2577,54 @@ function TeamRegistryDialog({
             <Button variant="outline" onClick={() => setShowCreateTeam(false)}>Cancel</Button>
             <Button onClick={onSubmitTeam} disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Create Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Mark Fee Paid Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={payDialog.open} onOpenChange={open => setPayDialog(d => ({ ...d, open }))}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-emerald-600" /> Record Fee Payment
+            </DialogTitle>
+            <DialogDescription>
+              {payDialog.entry?.site_name} — total due: SDG {((payDialog.entry?.transport_fee || 0) + (payDialog.entry?.enumerator_fee || 0)).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount Paid (SDG) *</Label>
+              <Input type="number" min="0" placeholder="0" value={payForm.amount}
+                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Payment Method</Label>
+              <Select value={payForm.method} onValueChange={v => setPayForm(f => ({ ...f, method: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  <SelectItem value="wallet">App Wallet</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea value={payForm.notes}
+                onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. receipt number, batch reference…" rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialog({ open: false, entry: null })}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={markPaid} disabled={paying || !payForm.amount}>
+              {paying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Confirm Payment
             </Button>
           </DialogFooter>
         </DialogContent>
