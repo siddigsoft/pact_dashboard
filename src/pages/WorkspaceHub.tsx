@@ -766,7 +766,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
       setFiles(initialEntries);
       checkDuplicates(initialEntries.map(e => e.file));
     }
-    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); setDuplicates([]); }
+    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); setDuplicates([]); setSecLevel('internal'); }
   }, [open, initialEntries]);
 
   function checkDuplicates(newFiles: File[]) {
@@ -2140,13 +2140,16 @@ export default function WorkspaceHub() {
 
   async function bulkDeleteFiles() {
     const ids = [...selectedFileIds];
-    const toDelete = allFiles.filter(f => ids.includes(f.id));
+    const toDelete = allFiles.filter(f => ids.includes(f.id) && canManageFile(f));
+    const skipped = ids.length - toDelete.length;
+    if (toDelete.length === 0) { toast({ title: 'Nothing to delete', description: 'You do not have permission to delete the selected files.', variant: 'destructive' }); return; }
     const results = await Promise.all(toDelete.map(f => supabase.from('workspace_files').update({ archived: true }).eq('id', f.id)));
     const failed = results.filter(r => r.error);
     if (failed.length > 0) { toast({ title: 'Some files could not be moved to trash', description: failed[0].error?.message, variant: 'destructive' }); return; }
     setSelectedFileIds(new Set());
     refetchFiles();
-    toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved to trash` });
+    const movedCount = toDelete.length;
+    toast({ title: `${movedCount} file${movedCount !== 1 ? 's' : ''} moved to trash${skipped > 0 ? ` (${skipped} skipped — no permission)` : ''}` });
   }
 
   async function bulkMoveFiles() {
@@ -2154,13 +2157,18 @@ export default function WorkspaceHub() {
     setBulkMoving(true);
     const ids = [...selectedFileIds];
     const targetFolder = bulkMoveFolderId === '__root__' ? null : bulkMoveFolderId;
-    await Promise.all(ids.map(id => supabase.from('workspace_files').update({ folder_id: targetFolder, updated_at: new Date().toISOString() }).eq('id', id)));
+    const moveResults = await Promise.all(ids.map(id => supabase.from('workspace_files').update({ folder_id: targetFolder, updated_at: new Date().toISOString() }).eq('id', id)));
+    const moveFailed = moveResults.filter(r => r.error);
     setSelectedFileIds(new Set());
     setBulkMoveOpen(false);
     setBulkMoveFolderId('__root__');
     setBulkMoving(false);
     refetchFiles();
-    toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved` });
+    if (moveFailed.length > 0) {
+      toast({ title: `${ids.length - moveFailed.length} moved, ${moveFailed.length} failed`, description: moveFailed[0].error?.message, variant: 'destructive' });
+    } else {
+      toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved` });
+    }
   }
 
   const lastSelectedIdxRef = useRef<number>(-1);
@@ -2180,8 +2188,6 @@ export default function WorkspaceHub() {
 
   async function togglePinFile(file: WFile) {
     const next = !file.is_pinned;
-    // Optimistic update
-    refetchFiles();
     const { error } = await supabase.from('workspace_files').update({ is_pinned: next, updated_at: new Date().toISOString() }).eq('id', file.id);
     if (error) { toast({ title: 'Failed to update pin', description: error.message, variant: 'destructive' }); return; }
     if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, is_pinned: next } : null);
@@ -2210,7 +2216,7 @@ export default function WorkspaceHub() {
   }
 
   async function directDeleteFile(file: WFile) {
-    if (!window.confirm(`Permanently archive "${file.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Move "${file.name}" to trash? You can restore it from the Trash folder.`)) return;
     await _archiveFile(file);
     toast({ title: `"${file.name}" removed` });
   }
@@ -2942,12 +2948,6 @@ export default function WorkspaceHub() {
           dragFileId === file.id && 'opacity-40')}>
 
         {/* Thumbnail / icon area */}
-        {(() => {
-          const isPdf = file.mime_type === 'application/pdf' || file.extension?.toLowerCase() === 'pdf';
-          const isVideo = file.mime_type?.startsWith('video/');
-          const thumbH = gridSize === 'lg' ? 'h-44' : gridSize === 'sm' ? 'h-20' : 'h-28';
-          return null; // consumed below
-        })()}
         <div className="relative overflow-hidden flex-shrink-0">
           {(() => {
             const isPdf = file.mime_type === 'application/pdf' || file.extension?.toLowerCase() === 'pdf';
@@ -3984,9 +3984,9 @@ export default function WorkspaceHub() {
                                           )}
                                           <DropdownMenuItem onClick={() => { setMoveTarget(f); setMoveFolderId(f.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          {(isSuperAdmin || f.created_by === userId) && (
-                                            <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
-                                          )}
+                                          {isSuperAdmin
+                                            ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
+                                            : (f.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
                                         </>}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
