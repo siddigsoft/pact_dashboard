@@ -1837,7 +1837,14 @@ export default function WorkspaceHub() {
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
     else if (selectedFolderId === '__all__') { /* no-op: show every visible file */ }
-    else if (selectedFolderId) files = files.filter(f => f.folder_id === selectedFolderId);
+    else if (selectedFolderId) {
+      // When a search query is active, expand to include ALL descendant folders so
+      // files nested inside subfolders are discoverable. Without a query (normal
+      // browsing) only direct children of the selected folder are shown.
+      files = searchQuery.trim() && descendantFolderIds.size > 1
+        ? files.filter(f => f.folder_id && descendantFolderIds.has(f.folder_id))
+        : files.filter(f => f.folder_id === selectedFolderId);
+    }
     else files = files.filter(f => !f.folder_id); // null = root only (no folder)
     // Hide files that belong to locked folders (uploader/admin bypass)
     files = files.filter(f => isOwnerOrAdmin(f) || !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
@@ -1871,6 +1878,20 @@ export default function WorkspaceHub() {
       f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q)
     );
   }, [visibleFolders, searchQuery]);
+
+  // ── All descendant folder IDs for the selected folder (recursive) ─────────
+  // Used to expand file search to cover the full subtree, not just direct children.
+  const descendantFolderIds = useMemo(() => {
+    if (!selectedFolderId || VIRTUAL_VIEWS.has(selectedFolderId)) return new Set<string>();
+    const result = new Set<string>();
+    const queue = [selectedFolderId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      result.add(id);
+      for (const child of (childMap[id] ?? [])) queue.push(child.id);
+    }
+    return result;
+  }, [selectedFolderId, childMap]);
 
   // ── Folder actions ────────────────────────────────────────────────────────
 
@@ -3335,8 +3356,42 @@ export default function WorkspaceHub() {
               </div>
             ) : (
               <div className="mx-6 mb-6 mt-2 rounded-xl bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 shadow-[0_1px_2px_rgb(15_23_42/0.05),0_16px_40px_-24px_rgb(15_23_42/0.3)] pb-4">
+                {/* ── Folder search results ────────────────────────────── */}
+                {searchQuery.trim() && folderSearchResults.length > 0 && (
+                  <div className="px-6 pt-4 pb-2">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] px-2 mb-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                      Matching folders
+                    </p>
+                    {folderSearchResults.map(folder => {
+                      const isLocked = !!folder.password_hash && !unlockedFolderIds.has(folder.id);
+                      const secCfg   = SEC_CFG[folder.security_level];
+                      const count    = fileCounts[folder.id] ?? 0;
+                      return (
+                        <button
+                          key={folder.id}
+                          onClick={() => { setSelectedFolderId(folder.id); setSearchQuery(''); }}
+                          className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors text-left"
+                        >
+                          {isLocked
+                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                            : folder.icon && /[^\u0000-\u007F]/.test(folder.icon)
+                              ? <span className="text-sm leading-none flex-shrink-0">{folder.icon}</span>
+                              : <Folder className="h-3.5 w-3.5 text-[#2865eb] flex-shrink-0" />}
+                          <span className="flex-1 text-sm text-gray-800 dark:text-foreground font-medium truncate">
+                            {folder.name.replace(/^folder\s+/i, '').trim()}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">{count} file{count !== 1 ? 's' : ''}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold flex-shrink-0 ${secCfg ? `${secCfg.bg} ${secCfg.text} ${secCfg.border}` : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                            {secCfg?.label ?? folder.security_level}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
-                {currentSubFolders.length > 0 && (
+                {!searchQuery.trim() && currentSubFolders.length > 0 && (
                   <div className="px-6 pt-4 pb-2">
                     <div className="flex items-center justify-between px-2 mb-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
