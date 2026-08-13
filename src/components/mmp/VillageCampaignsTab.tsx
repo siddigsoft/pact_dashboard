@@ -728,23 +728,43 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     setDispatchingAll(true);
     try {
       const now = new Date().toISOString();
-      const results = await Promise.allSettled(pending.map(e => {
-        const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
-        return supabase.from('mmp_site_entries')
-          .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
-          .eq('id', e.id);
-      }));
-      const failed = results.filter(r => r.status === 'rejected').length;
-      const succeeded = results.length - failed;
-      setSiteEntries(es => es.map(e => {
-        if (!pending.find(p => p.id === e.id)) return e;
-        const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
-        return { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData };
-      }));
-      if (failed > 0) {
-        toast({ title: `${succeeded} dispatched, ${failed} failed`, variant: 'destructive' });
+      // Run all updates concurrently; Supabase resolves (not rejects) on DB errors
+      // so we must inspect each result's .error field, not just the Promise status.
+      const results = await Promise.allSettled(
+        pending.map(async e => {
+          const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
+          const { error } = await supabase
+            .from('mmp_site_entries')
+            .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
+            .eq('id', e.id);
+          if (error) throw error; // escalate so allSettled marks this as 'rejected'
+          return e.id; // return the id of the successfully dispatched entry
+        })
+      );
+
+      // Collect only the IDs that truly succeeded (fulfilled + no thrown error)
+      const succeededIds = new Set<string>(
+        results
+          .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+          .map(r => r.value)
+      );
+      const failCount = results.length - succeededIds.size;
+
+      // Only flip local state for entries that were confirmed dispatched in the DB
+      if (succeededIds.size > 0) {
+        setSiteEntries(es => es.map(e => {
+          if (!succeededIds.has(e.id)) return e;
+          const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
+          return { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData };
+        }));
+      }
+
+      if (failCount > 0 && succeededIds.size === 0) {
+        toast({ title: 'Dispatch All failed', description: `All ${failCount} update${failCount !== 1 ? 's' : ''} were rejected by the server.`, variant: 'destructive' });
+      } else if (failCount > 0) {
+        toast({ title: `${succeededIds.size} dispatched, ${failCount} failed`, description: 'Failed rows remain pending — check permissions and retry.', variant: 'destructive' });
       } else {
-        toast({ title: `${succeeded} site${succeeded !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
+        toast({ title: `${succeededIds.size} site${succeededIds.size !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
       }
     } catch (e: any) {
       toast({ title: 'Dispatch All failed', description: e.message, variant: 'destructive' });
