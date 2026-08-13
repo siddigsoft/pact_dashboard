@@ -83,28 +83,30 @@ export default function CampaignAdvancesPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch all advance_requests
+      // 1. Only fetch rows that have campaign_id set — these are definitively from Village Campaigns.
+      //    Rows without campaign_id are legacy/non-campaign advances and are excluded from this queue.
       const { data: rows, error } = await supabase
         .from('advance_requests')
-        .select('id, project_id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+        .select('id, campaign_id, project_id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+        .not('campaign_id', 'is', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       const list = (rows || []) as CampaignAdvance[];
 
-      // 2. Enrich with campaign/project names via project_id → adhoc_campaigns
-      const projectIds = [...new Set(list.map(r => r.project_id).filter(Boolean))] as string[];
-      const campaignMap: Record<string, { campaign_name: string; project_name: string }> = {};
+      // 2. Enrich with campaign name + project name by joining adhoc_campaigns on its PK (id),
+      //    NOT on project_id — project_id is non-unique across campaigns.
+      const campaignIds = [...new Set(list.map(r => r.campaign_id).filter(Boolean))] as string[];
+      const campaignById: Record<string, { campaign_name: string; project_name: string }> = {};
 
-      if (projectIds.length > 0) {
+      if (campaignIds.length > 0) {
         const { data: campaigns } = await supabase
           .from('adhoc_campaigns')
-          .select('project_id, campaign_name, project:project_id(name)')
-          .in('project_id', projectIds)
-          .is('deleted_at', null);
+          .select('id, campaign_name, project:project_id(name)')
+          .in('id', campaignIds);
 
         for (const c of (campaigns || []) as any[]) {
-          campaignMap[c.project_id] = {
+          campaignById[c.id] = {
             campaign_name: c.campaign_name,
             project_name:  c.project?.name || '—',
           };
@@ -113,8 +115,8 @@ export default function CampaignAdvancesPanel() {
 
       setAdvances(list.map(r => ({
         ...r,
-        campaign_name: r.project_id ? campaignMap[r.project_id]?.campaign_name : undefined,
-        project_name:  r.project_id ? campaignMap[r.project_id]?.project_name  : undefined,
+        campaign_name: r.campaign_id ? campaignById[r.campaign_id]?.campaign_name : undefined,
+        project_name:  r.campaign_id ? campaignById[r.campaign_id]?.project_name  : undefined,
       })));
     } catch (e: any) {
       toast({ title: 'Error loading campaign advances', description: e.message, variant: 'destructive' });

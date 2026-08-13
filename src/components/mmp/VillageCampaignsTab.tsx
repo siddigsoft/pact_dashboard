@@ -416,13 +416,20 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   }, []);
 
   // ── Load advance requests for this campaign ───────────────────────────────
-  const loadAdvances = useCallback(async (projectId?: string) => {
-    if (!projectId) { setAdvances([]); return; }
-    const { data } = await supabase
+  const loadAdvances = useCallback(async (projectId?: string, campaignId?: string) => {
+    if (!projectId && !campaignId) { setAdvances([]); return; }
+    let q = supabase
       .from('advance_requests')
       .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
-      .eq('project_id', projectId)
       .order('created_at', { ascending: false });
+    // Prefer exact campaign_id match; fall back to project_id for legacy rows that
+    // pre-date the campaign_id column.
+    if (campaignId) {
+      q = q.eq('campaign_id', campaignId);
+    } else {
+      q = q.eq('project_id', projectId!);
+    }
+    const { data } = await q;
     setAdvances((data || []) as AdvanceRequest[]);
   }, []);
 
@@ -436,7 +443,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   useEffect(() => {
     if (selectedCampaign) {
       loadCampaignDetail(selectedCampaign.id);
-      loadAdvances(selectedCampaign.project_id);
+      // Pass campaign_id as the primary filter; project_id as legacy fallback
+      loadAdvances(selectedCampaign.project_id, selectedCampaign.id);
     } else {
       setSiteEntries([]);
       setAdvances([]);
@@ -691,7 +699,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       ].filter(Boolean);
 
       const { error } = await supabase.from('advance_requests').insert({
-        project_id:       selectedCampaign.project_id,
+        campaign_id:      selectedCampaign.id,          // authoritative FK — unique per campaign
+        project_id:       selectedCampaign.project_id,  // kept for legacy queries
         site_name:        advanceForm.site_name || selectedCampaign.campaign_name,
         requested_amount: parseFloat(advanceForm.requested_amount),
         description:      descParts.join(' — '),
@@ -701,7 +710,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       if (error) throw error;
       toast({ title: 'Advance request submitted' });
       setShowNewAdvance(false);
-      await loadAdvances(selectedCampaign.project_id);
+      await loadAdvances(selectedCampaign.project_id, selectedCampaign.id);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally {
