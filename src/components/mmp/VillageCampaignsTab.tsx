@@ -418,18 +418,20 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   // ── Load advance requests for this campaign ───────────────────────────────
   const loadAdvances = useCallback(async (projectId?: string, campaignId?: string) => {
     if (!projectId && !campaignId) { setAdvances([]); return; }
-    let q = supabase
+    // Fetch both:
+    //   a) Rows attributed to this campaign via the campaign_id FK (new rows + backfilled)
+    //   b) Legacy rows that predate the campaign_id column: campaign_id IS NULL
+    //      and project_id matches — these are shown until manually resolved
+    // The OR filter covers both cases in one query.
+    const orParts: string[] = [];
+    if (campaignId)  orParts.push(`campaign_id.eq.${campaignId}`);
+    if (projectId)   orParts.push(`and(campaign_id.is.null,project_id.eq.${projectId})`);
+
+    const { data } = await supabase
       .from('advance_requests')
       .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+      .or(orParts.join(','))
       .order('created_at', { ascending: false });
-    // Prefer exact campaign_id match; fall back to project_id for legacy rows that
-    // pre-date the campaign_id column.
-    if (campaignId) {
-      q = q.eq('campaign_id', campaignId);
-    } else {
-      q = q.eq('project_id', projectId!);
-    }
-    const { data } = await q;
     setAdvances((data || []) as AdvanceRequest[]);
   }, []);
 

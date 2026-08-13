@@ -28,6 +28,7 @@ import { format, parseISO } from 'date-fns';
 
 interface CampaignAdvance {
   id: string;
+  campaign_id: string | null;
   project_id: string | null;
   site_name: string | null;
   requested_amount: number;
@@ -39,6 +40,8 @@ interface CampaignAdvance {
   // enriched
   campaign_name?: string;
   project_name?: string;
+  /** true when campaign_id is null — row predates the FK column */
+  is_legacy?: boolean;
 }
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'paid' | 'rejected';
@@ -83,20 +86,32 @@ export default function CampaignAdvancesPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Only fetch rows that have campaign_id set — these are definitively from Village Campaigns.
-      //    Rows without campaign_id are legacy/non-campaign advances and are excluded from this queue.
-      const { data: rows, error } = await supabase
-        .from('advance_requests')
-        .select('id, campaign_id, project_id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
-        .not('campaign_id', 'is', null)
-        .order('created_at', { ascending: false });
+      // Fetch in two passes:
+      // Pass A — attributed rows: campaign_id IS NOT NULL (new + backfilled rows)
+      // Pass B — unattributed legacy rows: campaign_id IS NULL but project_id IS NOT NULL
+      //   These pre-date the campaign_id FK column; the migration backfills unambiguous
+      //   ones but leaves ambiguous multi-campaign projects as NULL so staff resolve them.
+      const [attrRes, legacyRes] = await Promise.all([
+        supabase
+          .from('advance_requests')
+          .select('id, campaign_id, project_id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+          .not('campaign_id', 'is', null)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('advance_requests')
+          .select('id, campaign_id, project_id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+          .is('campaign_id', null)
+          .not('project_id', 'is', null)
+          .order('created_at', { ascending: false }),
+      ]);
 
-      if (error) throw error;
-      const list = (rows || []) as CampaignAdvance[];
+      if (attrRes.error) throw attrRes.error;
 
-      // 2. Enrich with campaign name + project name by joining adhoc_campaigns on its PK (id),
-      //    NOT on project_id — project_id is non-unique across campaigns.
-      const campaignIds = [...new Set(list.map(r => r.campaign_id).filter(Boolean))] as string[];
+      const attributed = (attrRes.data || []) as CampaignAdvance[];
+      const legacy     = (legacyRes.data || []) as CampaignAdvance[];
+
+      // Enrich attributed rows: join adhoc_campaigns on id (PK), not project_id
+      const campaignIds = [...new Set(attributed.map(r => r.campaign_id).filter(Boolean))] as string[];
       const campaignById: Record<string, { campaign_name: string; project_name: string }> = {};
 
       if (campaignIds.length > 0) {
@@ -113,11 +128,32 @@ export default function CampaignAdvancesPanel() {
         }
       }
 
-      setAdvances(list.map(r => ({
+      // For legacy rows try to find a project name via project_id (best effort)
+      const legacyProjectIds = [...new Set(legacy.map(r => r.project_id).filter(Boolean))] as string[];
+      const projectById: Record<string, string> = {};
+      if (legacyProjectIds.length > 0) {
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id, name')
+          .in('id', legacyProjectIds);
+        for (const p of (projects || []) as any[]) projectById[p.id] = p.name;
+      }
+
+      const enrichedAttr = attributed.map(r => ({
         ...r,
+        is_legacy:     false,
         campaign_name: r.campaign_id ? campaignById[r.campaign_id]?.campaign_name : undefined,
         project_name:  r.campaign_id ? campaignById[r.campaign_id]?.project_name  : undefined,
-      })));
+      }));
+
+      const enrichedLegacy = legacy.map(r => ({
+        ...r,
+        is_legacy:     true,
+        campaign_name: undefined,
+        project_name:  r.project_id ? projectById[r.project_id] : undefined,
+      }));
+
+      setAdvances([...enrichedAttr, ...enrichedLegacy]);
     } catch (e: any) {
       toast({ title: 'Error loading campaign advances', description: e.message, variant: 'destructive' });
     } finally {
@@ -193,13 +229,18 @@ export default function CampaignAdvancesPanel() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const filtered = statusFilter === 'all'
-    ? advances
-    : advances.filter(a => a.status === statusFilter);
+  // Attributed rows have a definitive campaign_id; legacy rows pre-date the FK column.
+  const attributedAdvances = advances.filter(a => !a.is_legacy);
+  const legacyAdvances     = advances.filter(a =>  a.is_legacy);
 
-  const pendingCount  = advances.filter(a => a.status === 'pending').length;
-  const approvedCount = advances.filter(a => a.status === 'approved').length;
-  const totalRequested = advances
+  // Status filter applies only to attributed rows; legacy rows always show in their own section.
+  const filtered = statusFilter === 'all'
+    ? attributedAdvances
+    : attributedAdvances.filter(a => a.status === statusFilter);
+
+  const pendingCount  = attributedAdvances.filter(a => a.status === 'pending').length;
+  const approvedCount = attributedAdvances.filter(a => a.status === 'approved').length;
+  const totalRequested = attributedAdvances
     .filter(a => a.status === 'pending' || a.status === 'approved')
     .reduce((s, a) => s + (a.requested_amount || 0), 0);
 
@@ -378,6 +419,100 @@ export default function CampaignAdvancesPanel() {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {/* Unattributed legacy rows — campaign_id was null before migration backfill */}
+      {legacyAdvances.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-amber-800">
+                {legacyAdvances.length} Unattributed advance{legacyAdvances.length !== 1 ? 's' : ''}
+              </p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                These requests were submitted before campaign tracking was added and could not be
+                automatically attributed — their project maps to multiple campaigns. Review each
+                one and approve or reject with context from the description.
+              </p>
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Project / Site</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Amount (SDG)</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {legacyAdvances.map(adv => (
+                    <TableRow key={adv.id} className="bg-amber-50/30">
+                      <TableCell>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{adv.site_name || '—'}</p>
+                          {adv.project_name && (
+                            <p className="text-[10px] text-amber-700 flex items-center gap-0.5 mt-0.5">
+                              <Building2 className="h-2.5 w-2.5" />{adv.project_name}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {CATEGORY_LABELS[adv.expense_category || ''] || adv.expense_category || '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">
+                        {adv.description || '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-sm">
+                        {(adv.requested_amount || 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {fmt(adv.created_at)}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${STATUS_COLORS[adv.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {adv.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {adv.status === 'pending' && (
+                            <>
+                              <Button size="sm" variant="outline"
+                                className="h-7 text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => openAction(adv, 'approve')}>
+                                <CheckCircle2 className="h-3 w-3 mr-1" />Approve
+                              </Button>
+                              <Button size="sm" variant="outline"
+                                className="h-7 text-[11px] border-red-300 text-red-600 hover:bg-red-50"
+                                onClick={() => openAction(adv, 'reject')}>
+                                <XCircle className="h-3 w-3 mr-1" />Reject
+                              </Button>
+                            </>
+                          )}
+                          {adv.status === 'approved' && (
+                            <Button size="sm" variant="outline"
+                              className="h-7 text-[11px] border-blue-300 text-blue-700 hover:bg-blue-50"
+                              onClick={() => openAction(adv, 'pay')}>
+                              <DollarSign className="h-3 w-3 mr-1" />Mark Paid
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Action dialog */}
