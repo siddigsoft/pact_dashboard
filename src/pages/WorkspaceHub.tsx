@@ -1763,6 +1763,18 @@ export default function WorkspaceHub() {
     );
   }, [myPermissions, isSuperAdmin]);
 
+  // Folders where the user has an explicit 'viewer' (read-only) grant —
+  // they can SEE the folder but must NOT be able to rename, delete, or change settings,
+  // even if their system role is admin.  Super admin is never downgraded.
+  const viewerRestrictedFolderIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>();
+    return new Set(
+      myPermissions
+        .filter(p => p.folder_id && (p.access_level === 'viewer' || p.access_level === 'read_only'))
+        .map(p => p.folder_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
   const refetch = useCallback(() => {
     refetchFolders(); refetchFiles(); refetchMyPermissions();
     if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); }
@@ -2312,7 +2324,8 @@ export default function WorkspaceHub() {
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
-          {isAdmin && (
+          {/* Hide management actions when user has an explicit viewer grant on this folder */}
+          {isAdmin && !viewerRestrictedFolderIds.has(folder.id) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                 <button className={cn('opacity-50 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0', isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-muted text-muted-foreground')}>
