@@ -892,11 +892,11 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     try {
       const { error } = await supabase
         .from('mmp_site_entries')
-        .update({ fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_notes: null })
+        .update({ fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_method: null, fee_payment_notes: null })
         .eq('id', entryId);
       if (error) throw error;
       setSiteEntries(es => es.map(e => e.id === entryId
-        ? { ...e, fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_notes: null }
+        ? { ...e, fee_paid_status: 'unpaid', fee_paid_amount: null, fee_paid_at: null, fee_paid_by: null, fee_payment_method: null, fee_payment_notes: null }
         : e
       ));
       toast({ title: 'Payment reverted to unpaid' });
@@ -2462,6 +2462,54 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Mark Fee Paid Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={payDialog.open} onOpenChange={open => setPayDialog(d => ({ ...d, open }))}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-emerald-600" /> Record Fee Payment
+            </DialogTitle>
+            <DialogDescription>
+              {payDialog.entry?.site_name} — total due: SDG {((payDialog.entry?.transport_fee || 0) + (payDialog.entry?.enumerator_fee || 0)).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount Paid (SDG) *</Label>
+              <Input type="number" min="0" placeholder="0" value={payForm.amount}
+                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Payment Method</Label>
+              <Select value={payForm.method} onValueChange={v => setPayForm(f => ({ ...f, method: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  <SelectItem value="wallet">App Wallet</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea value={payForm.notes}
+                onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. receipt number, batch reference…" rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialog({ open: false, entry: null })}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={markPaid} disabled={paying || !payForm.amount}>
+              {paying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2577,54 +2625,6 @@ function TeamRegistryDialog({
             <Button variant="outline" onClick={() => setShowCreateTeam(false)}>Cancel</Button>
             <Button onClick={onSubmitTeam} disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Create Team
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Mark Fee Paid Dialog ──────────────────────────────────────────────── */}
-      <Dialog open={payDialog.open} onOpenChange={open => setPayDialog(d => ({ ...d, open }))}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-emerald-600" /> Record Fee Payment
-            </DialogTitle>
-            <DialogDescription>
-              {payDialog.entry?.site_name} — total due: SDG {((payDialog.entry?.transport_fee || 0) + (payDialog.entry?.enumerator_fee || 0)).toLocaleString()}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Amount Paid (SDG) *</Label>
-              <Input type="number" min="0" placeholder="0" value={payForm.amount}
-                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Payment Method</Label>
-              <Select value={payForm.method} onValueChange={v => setPayForm(f => ({ ...f, method: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                  <SelectItem value="wallet">App Wallet</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Notes <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
-              <Textarea value={payForm.notes}
-                onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="e.g. receipt number, batch reference…" rows={2} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayDialog({ open: false, entry: null })}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={markPaid} disabled={paying || !payForm.amount}>
-              {paying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Confirm Payment
             </Button>
           </DialogFooter>
         </DialogContent>
