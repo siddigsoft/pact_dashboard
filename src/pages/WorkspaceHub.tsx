@@ -1640,6 +1640,7 @@ export default function WorkspaceHub() {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<WFile | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'details'>('list');
+  const [gridSize, setGridSize]   = useState<'sm' | 'md' | 'lg'>('md');
   const [clearanceManagerOpen, setClearanceManagerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [secFilter, setSecFilter] = useState<SecurityLevel | 'all'>('all');
@@ -1931,6 +1932,19 @@ export default function WorkspaceHub() {
     refetchFolders(); refetchFiles(); refetchMyPermissions();
     if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); }
   }, [refetchFolders, refetchFiles, refetchMyPermissions, refetchArchived, refetchArchivedFolders, selectedFolderId]);
+
+  // ── Real-time: auto-refresh when any user creates / edits / deletes ────────
+  useEffect(() => {
+    const channel = supabase.channel('workspace_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_folders' }, () => {
+        refetchFolders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_files' }, () => {
+        refetchFiles();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetchFolders, refetchFiles]);
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
@@ -2924,17 +2938,69 @@ export default function WorkspaceHub() {
           dragFileId === file.id && 'opacity-40')}>
 
         {/* Thumbnail / icon area */}
+        {(() => {
+          const isPdf = file.mime_type === 'application/pdf' || file.extension?.toLowerCase() === 'pdf';
+          const isVideo = file.mime_type?.startsWith('video/');
+          const thumbH = gridSize === 'lg' ? 'h-44' : gridSize === 'sm' ? 'h-20' : 'h-28';
+          return null; // consumed below
+        })()}
         <div className="relative overflow-hidden flex-shrink-0">
-          {isImage ? (
-            <div className="h-28 bg-muted/20">
-              <img src={file.public_url!} alt={file.name} className="w-full h-full object-cover"
-                onError={e => { (e.target as HTMLImageElement).parentElement!.className = 'h-28 bg-muted/20 flex items-center justify-center'; (e.target as HTMLImageElement).replaceWith((() => { const d = document.createElement('div'); d.innerHTML = ''; return d; })()); }} />
-            </div>
-          ) : (
-            <div className="h-20 bg-gradient-to-br from-[#1D3461]/5 to-[#1D3461]/10 flex items-center justify-center">
-              <Icon className="h-9 w-9 text-[#1D3461]/60" />
-            </div>
-          )}
+          {(() => {
+            const isPdf = file.mime_type === 'application/pdf' || file.extension?.toLowerCase() === 'pdf';
+            const isVideo = file.mime_type?.startsWith('video/');
+            const thumbH = gridSize === 'lg' ? 'h-44' : gridSize === 'sm' ? 'h-20' : 'h-28';
+            if (isImage) {
+              return (
+                <div className={`${thumbH} bg-muted/20`}>
+                  <img src={file.public_url!} alt={file.name} className="w-full h-full object-cover"
+                    onError={e => {
+                      const el = e.target as HTMLImageElement;
+                      el.parentElement!.className = `${thumbH} bg-gradient-to-br from-[#1D3461]/5 to-[#1D3461]/10 flex items-center justify-center`;
+                      el.remove();
+                    }} />
+                </div>
+              );
+            }
+            if (isPdf && file.public_url) {
+              return (
+                <div className={`${thumbH} bg-red-50 relative overflow-hidden`}>
+                  <iframe src={`${file.public_url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+                    className="w-full h-full pointer-events-none border-0 scale-[1.02] origin-top-left"
+                    title={file.name}
+                    onError={() => {}} />
+                  <div className="absolute bottom-1.5 right-1.5 text-[9px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded">PDF</div>
+                </div>
+              );
+            }
+            if (isPdf) {
+              // PDF without accessible URL — show a paper-style mock
+              return (
+                <div className={`${thumbH} bg-gradient-to-b from-red-50 to-red-100/60 flex flex-col items-center justify-center gap-1`}>
+                  <div className="w-10 h-12 bg-white border border-red-200 rounded-sm shadow-sm flex items-center justify-center">
+                    <span className="text-[10px] font-black text-red-600 tracking-wide">PDF</span>
+                  </div>
+                </div>
+              );
+            }
+            if (isVideo && file.public_url) {
+              return (
+                <div className={`${thumbH} bg-black relative`}>
+                  <video src={file.public_url} className="w-full h-full object-cover" muted preload="metadata"
+                    onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 1; }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full bg-black/50 flex items-center justify-center">
+                      <span className="text-white text-xs ml-0.5">▶</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className={`${thumbH} bg-gradient-to-br from-[#1D3461]/5 to-[#1D3461]/10 flex items-center justify-center`}>
+                <Icon className="h-9 w-9 text-[#1D3461]/60" />
+              </div>
+            );
+          })()}
           {/* Checkbox overlay */}
           <button onClick={e => toggleFileSelection(file.id, e)} className="absolute top-1.5 left-1.5 z-10">
             {isBulkSelected
@@ -3435,6 +3501,25 @@ export default function WorkspaceHub() {
                 <TooltipContent side="bottom" className="text-xs">Grid</TooltipContent>
               </Tooltip>
             </div>
+            {/* Grid size picker — only visible in grid mode */}
+            {viewMode === 'grid' && (
+              <div className="flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5 ml-1">
+                {(['sm', 'md', 'lg'] as const).map(s => (
+                  <Tooltip key={s}>
+                    <TooltipTrigger asChild>
+                      <button onClick={() => setGridSize(s)}
+                        className={cn('p-1.5 rounded transition-colors text-[10px] font-bold leading-none w-6',
+                          gridSize === s ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
+                        {s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L'}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      {s === 'sm' ? 'Small icons' : s === 'md' ? 'Medium icons' : 'Large icons'}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* File area — the scroll region is the wrapper opened above */}
@@ -3909,7 +3994,10 @@ export default function WorkspaceHub() {
                       </table>
                     </div>
                   ) : (
-                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    <div className={cn('p-4 grid gap-3',
+                      gridSize === 'lg' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3' :
+                      gridSize === 'sm' ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7' :
+                                         'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5')}>
                       {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
                     </div>
                   )}
@@ -4337,8 +4425,8 @@ export default function WorkspaceHub() {
 
         {/* ── Folder Customize Dialog ────────────────────────────────────────── */}
         <Dialog open={!!folderCustomizeTarget} onOpenChange={open => { if (!open) setFolderCustomizeTarget(null); }}>
-          <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl border-0 shadow-xl">
-            <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-5 py-4 flex items-center gap-3">
+          <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl border-0 shadow-xl max-h-[88vh] flex flex-col">
+            <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-5 py-4 flex items-center gap-3 flex-shrink-0">
               {customIcon?.startsWith('org:')
                 ? <OrgBadge orgKey={customIcon} size="lg" />
                 : <span className="text-2xl">{customIcon || '📁'}</span>
@@ -4348,7 +4436,7 @@ export default function WorkspaceHub() {
                 <p className="text-blue-200 text-[11px]">Choose a color and icon</p>
               </div>
             </div>
-            <div className="p-5 space-y-5">
+            <div className="p-5 space-y-5 overflow-y-auto flex-1 min-h-0">
               {/* Color swatches */}
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Color</p>
