@@ -809,6 +809,10 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   };
 
   // ── Mark fee as paid ─────────────────────────────────────────────────────
+  // The UPDATE includes .eq('fee_paid_status', 'unpaid') as an optimistic lock.
+  // If another Finance user paid first the WHERE clause matches 0 rows; we fetch
+  // the fresh DB record and surface an "Already recorded by [name]" toast instead
+  // of silently overwriting their entry.
   const markPaid = async () => {
     const entry = payDialog.entry;
     if (!entry) return;
@@ -820,20 +824,44 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase
+      const now = new Date().toISOString();
+      const { data: updated, error } = await supabase
         .from('mmp_site_entries')
         .update({
-          fee_paid_status:   'paid',
-          fee_paid_amount:   amount,
-          fee_paid_at:       new Date().toISOString(),
-          fee_paid_by:       user.id,
+          fee_paid_status:    'paid',
+          fee_paid_amount:    amount,
+          fee_paid_at:        now,
+          fee_paid_by:        user.id,
           fee_payment_method: payForm.method || 'cash',
-          fee_payment_notes: payForm.notes || null,
+          fee_payment_notes:  payForm.notes || null,
         })
-        .eq('id', entry.id);
+        .eq('id', entry.id)
+        .eq('fee_paid_status', 'unpaid')   // optimistic lock — 0 rows if already paid
+        .select('id');
       if (error) throw error;
+
+      if (!updated || updated.length === 0) {
+        // Another user already recorded payment — fetch the winner's record
+        const { data: fresh } = await supabase
+          .from('mmp_site_entries')
+          .select('fee_paid_status, fee_paid_amount, fee_paid_at, fee_paid_by, fee_payment_method, fee_payment_notes')
+          .eq('id', entry.id)
+          .single();
+        if (fresh) {
+          setSiteEntries(es => es.map(e => e.id === entry.id ? { ...e, ...fresh } : e));
+          const recorder = profileName((fresh as any).fee_paid_by ?? undefined);
+          toast({
+            title: 'Already recorded',
+            description: `This entry was already marked paid by ${recorder} — local view refreshed.`,
+            variant: 'destructive',
+          });
+        }
+        setPayDialog({ open: false, entry: null });
+        return;
+      }
+
       setSiteEntries(es => es.map(e => e.id === entry.id
-        ? { ...e, fee_paid_status: 'paid', fee_paid_amount: amount, fee_paid_at: new Date().toISOString(), fee_paid_by: user.id, fee_payment_method: payForm.method, fee_payment_notes: payForm.notes || null }
+        ? { ...e, fee_paid_status: 'paid', fee_paid_amount: amount, fee_paid_at: now, fee_paid_by: user.id, fee_payment_method: payForm.method, fee_payment_notes: payForm.notes || null }
         : e
       ));
       toast({ title: 'Payment recorded', description: `${entry.site_name} — SDG ${amount.toLocaleString()}` });
@@ -846,6 +874,9 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   };
 
   // ── Mark all unpaid entries as paid (bulk) ────────────────────────────────
+  // Each UPDATE is guarded by .eq('fee_paid_status', 'unpaid') so concurrent
+  // clicks from two Finance users can't double-record. Rows that return 0
+  // updated are counted as "skipped" (already paid) rather than failures.
   const markAllPaid = async () => {
     const unpaid = siteEntries.filter(e => e.fee_paid_status !== 'paid');
     if (!unpaid.length) { toast({ title: 'All entries already paid' }); return; }
@@ -854,25 +885,36 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     setPayingAll(true);
     try {
       const now = new Date().toISOString();
+      type Result = { id: string; amount: number; skipped: boolean };
       const results = await Promise.allSettled(
-        unpaid.map(e => {
+        unpaid.map(async (e): Promise<Result> => {
           const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
-          return supabase.from('mmp_site_entries').update({
-            fee_paid_status: 'paid',
-            fee_paid_amount: total,
-            fee_paid_at: now,
-            fee_paid_by: user.id,
-            fee_payment_method: 'cash',
-          }).eq('id', e.id).then(({ error }) => {
-            if (error) throw error;
-            return { id: e.id, amount: total };
-          });
+          const { data: updated, error } = await supabase
+            .from('mmp_site_entries')
+            .update({
+              fee_paid_status: 'paid',
+              fee_paid_amount: total,
+              fee_paid_at: now,
+              fee_paid_by: user.id,
+              fee_payment_method: 'cash',
+            })
+            .eq('id', e.id)
+            .eq('fee_paid_status', 'unpaid')  // optimistic lock
+            .select('id');
+          if (error) throw error;
+          // 0 rows → already paid by another user; not an error, just skip
+          return { id: e.id, amount: total, skipped: !updated || updated.length === 0 };
         })
       );
+
       const successes = results
-        .filter((r): r is PromiseFulfilledResult<{ id: string; amount: number }> => r.status === 'fulfilled')
+        .filter((r): r is PromiseFulfilledResult<Result> => r.status === 'fulfilled' && !r.value.skipped)
         .map(r => r.value);
-      const failCount = results.length - successes.length;
+      const skipped = results
+        .filter((r): r is PromiseFulfilledResult<Result> => r.status === 'fulfilled' && r.value.skipped)
+        .length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
       if (successes.length > 0) {
         const successMap = new Map(successes.map(s => [s.id, s]));
         setSiteEntries(es => es.map(e => {
@@ -881,10 +923,15 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           return { ...e, fee_paid_status: 'paid', fee_paid_amount: s.amount, fee_paid_at: now, fee_paid_by: user.id };
         }));
       }
-      if (failCount > 0 && successes.length === 0) {
+
+      if (failCount > 0 && successes.length === 0 && skipped === 0) {
         toast({ title: 'Mark All Paid failed', description: `All ${failCount} updates failed.`, variant: 'destructive' });
       } else if (failCount > 0) {
-        toast({ title: `${successes.length} marked paid, ${failCount} failed`, variant: 'destructive' });
+        toast({ title: `${successes.length} marked paid, ${failCount} failed`, description: skipped ? `${skipped} already paid by another user.` : undefined, variant: 'destructive' });
+      } else if (skipped > 0 && successes.length === 0) {
+        toast({ title: 'Already paid', description: `All ${skipped} entr${skipped !== 1 ? 'ies' : 'y'} were already recorded by another user.`, variant: 'destructive' });
+      } else if (skipped > 0) {
+        toast({ title: `${successes.length} marked paid`, description: `${skipped} were already recorded by another user.` });
       } else {
         toast({ title: `${successes.length} entr${successes.length !== 1 ? 'ies' : 'y'} marked paid` });
       }
