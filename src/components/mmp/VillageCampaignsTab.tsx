@@ -186,6 +186,14 @@ function statusColor(s: string) {
   return map[s] || 'bg-gray-100 text-gray-600';
 }
 
+function fmtPayMethod(m?: string | null) {
+  const labels: Record<string, string> = {
+    cash: 'Cash', bank_transfer: 'Bank Transfer',
+    mobile_money: 'Mobile Money', wallet: 'App Wallet', other: 'Other',
+  };
+  return m ? (labels[m] || m) : null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface VillageCampaignsTabProps {
@@ -1892,9 +1900,29 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                           />
                         </TableCell>
                         <TableCell>
-                          <Badge className={`text-[10px] border-0 ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                            {payStatus || 'unpaid'}
-                          </Badge>
+                          <div className="flex flex-col gap-0.5">
+                            <Badge className={`text-[10px] border-0 self-start ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                              {payStatus || 'unpaid'}
+                            </Badge>
+                            {payStatus === 'paid' && (
+                              <div className="flex flex-col gap-0 leading-tight">
+                                <span className="text-[9px] text-muted-foreground">
+                                  {profileName(e.fee_paid_by ?? undefined)}
+                                </span>
+                                <span className="text-[9px] text-muted-foreground tabular-nums">
+                                  {fmtDate(e.fee_paid_at ?? undefined)}
+                                  {fmtPayMethod(e.fee_payment_method) && (
+                                    <> · {fmtPayMethod(e.fee_payment_method)}</>
+                                  )}
+                                </span>
+                                {e.fee_payment_notes && (
+                                  <span className="text-[9px] text-muted-foreground italic truncate max-w-[160px]" title={e.fee_payment_notes}>
+                                    {e.fee_payment_notes}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs">
                           {e.fee_paid_amount ? `SDG ${Number(e.fee_paid_amount).toLocaleString()}` : '—'}
