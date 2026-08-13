@@ -217,10 +217,33 @@ export default function WorkspaceFolderShare() {
       // Super admins are never blocked by no_access (matches WorkspaceHub policy).
       // Unauthenticated guests cannot have named permission grants.
       if (userId && !isSuperAdmin) {
-        // Include every ancestor folder (from breadcrumbs) plus the current folder.
-        // This enforces the same cascading denial semantics as WorkspaceHub's BFS walk:
-        // a denial on any ancestor blocks access to all descendants.
-        const folderIdsToCheck = [...crumbs.map(c => c.id), f.id];
+        // Build the full ancestor ID list before checking permissions.
+        // For in-page navigation, breadcrumbs already carry every ancestor visited.
+        // For direct links to a nested folder (crumbs is empty), we must resolve the
+        // parent chain from the DB so a user denied on an ancestor cannot bypass the
+        // check by opening a child folder's UUID or short-code URL directly.
+        let ancestorIds: string[];
+        if (crumbs.length > 0) {
+          ancestorIds = crumbs.map(c => c.id);
+        } else {
+          // Walk up the parent_folder_id chain (depth-limited as a safety guard)
+          ancestorIds = [];
+          let parentId: string | null = f.parent_folder_id;
+          let depth = 0;
+          while (parentId && depth < 20) {
+            const { data: anc } = await supabase
+              .from('workspace_folders')
+              .select('id, parent_folder_id')
+              .eq('id', parentId)
+              .maybeSingle();
+            if (!anc) break;
+            ancestorIds.push(anc.id as string);
+            parentId = anc.parent_folder_id as string | null;
+            depth++;
+          }
+        }
+
+        const folderIdsToCheck = [...ancestorIds, f.id];
         const folderOrClause = folderIdsToCheck.map(id => `folder_id.eq.${id}`).join(',');
 
         const { data: deniedPerms } = await supabase
