@@ -225,9 +225,11 @@ export default function WorkspaceFolderShare() {
         //
         // We FAIL CLOSED: if the RPC call errors we deny access rather than
         // continuing and potentially leaking folder contents.
+        // The RPC derives the subject from auth.uid() server-side — no user ID
+        // is passed from the client, preventing spoofed lookups.
         const { data: isDenied, error: permErr } = await supabase.rpc(
           'check_folder_no_access',
-          { p_folder_id: f.id, p_user_id: userId }
+          { p_folder_id: f.id }
         );
 
         if (permErr || isDenied === true) {
