@@ -49,6 +49,40 @@ export async function r2Delete(keys: string | string[]): Promise<void> {
   await Promise.all(list.map(key => sign('delete', { key })));
 }
 
+/** Stored on task JSON so we can tell R2 keys from old Supabase public URLs. */
+export const R2_REF_PREFIX = 'r2:';
+
+export function toR2Ref(key: string): string {
+  return `${R2_REF_PREFIX}${key}`;
+}
+
+export function parseR2Ref(url: string): string | null {
+  return url.startsWith(R2_REF_PREFIX) ? url.slice(R2_REF_PREFIX.length) : null;
+}
+
+export function supabaseWorkspacePathFromUrl(url: string): string | null {
+  const m = url.match(/\/workspace-files\/(.+)$/);
+  return m ? decodeURIComponent(m[1].split('?')[0]) : null;
+}
+
+/** Open a stored file URL (R2 ref or legacy public URL) in a new tab. */
+export async function openStoredFile(url: string): Promise<void> {
+  const key = parseR2Ref(url);
+  const href = key ? await r2SignedUrl(key) : url;
+  window.open(href, '_blank', 'noopener,noreferrer');
+}
+
+/** Best-effort delete of a stored file URL. */
+export async function deleteStoredFile(url: string): Promise<void> {
+  const r2Key = parseR2Ref(url);
+  if (r2Key) {
+    await r2Delete(r2Key);
+    return;
+  }
+  const path = supabaseWorkspacePathFromUrl(url);
+  if (path) await supabase.storage.from('workspace-files').remove([path]);
+}
+
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
 
 export function isZipFile(file: File): boolean {

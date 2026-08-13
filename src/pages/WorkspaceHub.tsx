@@ -37,7 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { r2Upload, r2SignedUrl, r2Delete, isZipFile, r2ExtractZip, MAX_ZIP_BYTES } from '@/lib/r2Storage';
+import { r2Upload, r2SignedUrl, r2Delete, isZipFile, r2ExtractZip, MAX_ZIP_BYTES, openStoredFile } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -1770,7 +1770,7 @@ export default function WorkspaceHub() {
     if (isSuperAdmin) return new Set<string>();
     return new Set(
       myPermissions
-        .filter(p => p.folder_id && (p.access_level === 'viewer' || p.access_level === 'read_only'))
+        .filter(p => p.folder_id && p.access_level === 'viewer')
         .map(p => p.folder_id as string)
     );
   }, [myPermissions, isSuperAdmin]);
@@ -3257,7 +3257,7 @@ export default function WorkspaceHub() {
                             const isPdf = ext === 'pdf';
                             const isDoc = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext);
                             return (
-                              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                              <a key={idx} href={att.url} onClick={e => { e.preventDefault(); openStoredFile(att.url); }}
                                 className="flex items-center gap-2 px-3 py-2 rounded-xl border hover:bg-muted/30 hover:shadow-sm transition-all group"
                                 data-testid={`task-doc-link-${task.taskId}-${idx}`}
                               >

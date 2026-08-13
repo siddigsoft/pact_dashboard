@@ -47,6 +47,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { r2Upload, r2Delete, toR2Ref, parseR2Ref, openStoredFile } from '@/lib/r2Storage';
 import { useUser } from '@/context/user/UserContext';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, materialiseDailyTasks,
@@ -562,20 +563,16 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
       setUploadingAttachments(true);
       try {
         for (const f of attachments) {
-          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const path = `task-attachments/${createdTaskId}/${Date.now()}_${safeName}`;
-          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
-          if (upErr) throw new Error(`${f.name}: ${upErr.message}`);
-          uploadedPaths.push(path);
-          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
-          uploadedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
+          const { key } = await r2Upload(f);
+          uploadedPaths.push(key);
+          uploadedAttachments.push({ name: f.name, url: toR2Ref(key), uploadedAt: new Date().toISOString() });
         }
         if (onPatchAttachments) {
           await onPatchAttachments(createdTaskId, uploadedAttachments);
         }
       } catch (attErr: any) {
         if (uploadedPaths.length > 0) {
-          try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
+          try { await r2Delete(uploadedPaths); } catch { /* best effort */ }
         }
         toast({
           title: 'Task created, but attachments failed',
@@ -1678,17 +1675,13 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, isDeleting, c
       const uploadedPaths: string[] = [];
       try {
         for (const f of newFiles) {
-          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const path = `task-attachments/${task.id}/${Date.now()}_${safeName}`;
-          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
-          if (upErr) throw upErr;
-          uploadedPaths.push(path);
-          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
-          mergedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
+          const { key } = await r2Upload(f);
+          uploadedPaths.push(key);
+          mergedAttachments.push({ name: f.name, url: toR2Ref(key), uploadedAt: new Date().toISOString() });
         }
       } catch {
         if (uploadedPaths.length > 0) {
-          try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best-effort */ }
+          try { await r2Delete(uploadedPaths); } catch { /* best-effort */ }
         }
         toast({ title: 'Attachment upload failed', description: 'Task metadata was not saved. Please try again.', variant: 'destructive' });
         setUploadingEditAttachments(false);
@@ -2330,7 +2323,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, isDeleting, c
                   {existingAttachments.map((a, i) => (
                     <div key={`existing-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
                       <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />
-                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 font-medium flex-1 truncate hover:underline">{a.name}</a>
+                      <a href={a.url} onClick={e => { e.preventDefault(); openStoredFile(a.url); }} className="text-xs text-blue-600 font-medium flex-1 truncate hover:underline">{a.name}</a>
                       <span className="text-[10px] text-slate-400 shrink-0">Saved</span>
                       <button
                         type="button"
@@ -4101,8 +4094,7 @@ function TaskAttachmentsBlock({ task, currentUserId }: { task: PersonalTask; cur
               <a
                 key={i}
                 href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={e => { e.preventDefault(); openStoredFile(a.url); }}
                 data-testid={`link-attachment-${i}`}
                 className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-all group"
               >
@@ -4185,7 +4177,8 @@ function ShareTaskAttachmentsDialog({
     setSubmitting(true);
     try {
       for (const a of attachments) {
-        const storagePath = a.url.split('/workspace-files/')[1] ?? `task-attachments/${task.id}/${a.name}`;
+        const r2Key = parseR2Ref(a.url);
+        const storagePath = r2Key ?? (a.url.split('/workspace-files/')[1] ?? `task-attachments/${task.id}/${a.name}`);
         const ext = a.name.split('.').pop()?.toLowerCase() ?? '';
         const { data: file, error: fErr } = await supabase
           .from('workspace_files')
@@ -4194,7 +4187,8 @@ function ShareTaskAttachmentsDialog({
             name: a.name,
             description: `Shared from task: ${task.title}`,
             storage_path: storagePath,
-            public_url: a.url,
+            public_url: r2Key ? null : a.url,
+            storage_provider: r2Key ? 'r2' : 'supabase',
             file_size: 0,
             mime_type: 'application/octet-stream',
             extension: ext,

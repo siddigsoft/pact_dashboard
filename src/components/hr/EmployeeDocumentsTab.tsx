@@ -134,14 +134,6 @@ export default function EmployeeDocumentsTab({
       const { error: upErr } = await supabase.storage.from('staff-contracts').upload(path, file, { upsert: false });
       if (upErr) throw upErr;
 
-      // Mirror to workspace-files bucket so it appears in the Workspace Hub folder (non-fatal)
-      if (hrFolderName) {
-        supabase.storage.from('workspace-files').upload(path, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: true,
-        }).catch(() => { /* best effort */ });
-      }
-
       const { error: insErr } = await supabase.from('hr_employee_documents').insert({
         profile_id: userId, doc_type: uploadType, doc_name: file.name,
         file_path: path, file_size: file.size, file_mime: file.type || null,
