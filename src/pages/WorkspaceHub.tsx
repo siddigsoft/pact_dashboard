@@ -1890,26 +1890,36 @@ export default function WorkspaceHub() {
   }, [myPermissions, isSuperAdmin]);
 
   // Effective access level maps — derived from myPermissions so badges stay in sync.
+  // Expired grants are excluded (expires_at in the past) so a lapsed Owner badge
+  // can't mislead users about their current access.
   // Direct-user grants take precedence over all_staff grants for the same item.
   const myFolderAccessMap = useMemo(() => {
+    const now = new Date();
+    const active = myPermissions.filter(p =>
+      !p.expires_at || new Date(p.expires_at) > now
+    );
     const map = new Map<string, AccessLevel>();
     // all_staff first (lower priority)
-    for (const p of myPermissions) {
+    for (const p of active) {
       if (p.folder_id && p.grantee_type === 'all_staff') map.set(p.folder_id, p.access_level);
     }
     // direct-user second (overwrites all_staff)
-    for (const p of myPermissions) {
+    for (const p of active) {
       if (p.folder_id && p.grantee_type === 'user') map.set(p.folder_id, p.access_level);
     }
     return map;
   }, [myPermissions]);
 
   const myFileAccessMap = useMemo(() => {
+    const now = new Date();
+    const active = myPermissions.filter(p =>
+      !p.expires_at || new Date(p.expires_at) > now
+    );
     const map = new Map<string, AccessLevel>();
-    for (const p of myPermissions) {
+    for (const p of active) {
       if (p.file_id && p.grantee_type === 'all_staff') map.set(p.file_id, p.access_level);
     }
-    for (const p of myPermissions) {
+    for (const p of active) {
       if (p.file_id && p.grantee_type === 'user') map.set(p.file_id, p.access_level);
     }
     return map;
@@ -3637,6 +3647,9 @@ export default function WorkspaceHub() {
                           <span className="flex-1 text-sm text-gray-800 dark:text-foreground font-medium truncate">
                             {folder.name.replace(/^folder\s+/i, '').trim()}
                           </span>
+                          {!isSuperAdmin && myFolderAccessMap.has(folder.id) && (
+                            <MyAccessBadge level={myFolderAccessMap.get(folder.id)!} />
+                          )}
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">{count} file{count !== 1 ? 's' : ''}</span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold flex-shrink-0 ${secCfg ? `${secCfg.bg} ${secCfg.text} ${secCfg.border}` : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                             {secCfg?.label ?? folder.security_level}
@@ -3785,6 +3798,9 @@ export default function WorkspaceHub() {
                                     </div>
                                     {f.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
                                     {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                                    {!isSuperAdmin && myFileAccessMap.has(f.id) && (
+                                      <MyAccessBadge level={myFileAccessMap.get(f.id)!} />
+                                    )}
                                   </div>
                                 </td>
                                 {/* Security */}
