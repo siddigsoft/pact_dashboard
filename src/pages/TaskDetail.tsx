@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { r2Upload, toR2Ref, openStoredFile, deleteStoredFile } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useUser } from '@/context/user/UserContext';
 import {
@@ -47,7 +48,7 @@ export default function TaskDetail() {
   const { toast } = useToast();
   const { notify } = useTaskNotifications();
 
-  const isAdmin = hasRole('admin') || hasRole('super_admin');
+  const isAdmin = hasRole('Admin') || hasRole('SuperAdmin');
 
   const [activeTab, setActiveTab] = useState<'message' | 'log_note' | 'whatsapp' | 'activity'>('message');
   const [draft, setDraft] = useState('');
@@ -402,14 +403,10 @@ export default function TaskDetail() {
       const uploaded: OutputFile[] = [];
       const failures: string[] = [];
       for (const f of files) {
-        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `task-attachments/${id}/output/${Date.now()}_${safeName}`;
-        const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
-        if (upErr) { failures.push(`${f.name}: ${upErr.message}`); continue; }
-        const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
+        const { key } = await r2Upload(f);
         uploaded.push({
           name: f.name,
-          url: urlData?.publicUrl ?? '',
+          url: toR2Ref(key),
           uploadedAt: new Date().toISOString(),
           uploadedBy: currentUser?.id,
         });
@@ -444,13 +441,7 @@ export default function TaskDetail() {
       if (!id) throw new Error('Missing task id');
       const existing = ((task?.output_files as OutputFile[] | null) ?? []);
       const next = existing.filter(f => f.url !== fileUrl);
-      // Best-effort removal of the storage object — derive path from URL.
-      const marker = '/workspace-files/';
-      const idx = fileUrl.indexOf(marker);
-      if (idx >= 0) {
-        const path = fileUrl.slice(idx + marker.length).split('?')[0];
-        try { await supabase.storage.from('workspace-files').remove([path]); } catch { /* best effort */ }
-      }
+      try { await deleteStoredFile(fileUrl); } catch { /* best effort */ }
       const { error } = await supabase
         .from('personal_tasks')
         .update({ output_files: next, updated_at: new Date().toISOString() })
@@ -1408,8 +1399,7 @@ export default function TaskDetail() {
                               <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                               <a
                                 href={f.url}
-                                target="_blank"
-                                rel="noreferrer"
+                                onClick={e => { e.preventDefault(); openStoredFile(f.url); }}
                                 className="text-[#1D3461] underline truncate flex-1"
                                 data-testid={`link-output-file-${f.name}`}
                               >
@@ -1828,7 +1818,7 @@ export default function TaskDetail() {
             if (task.assigned_to) {
               rows.push({
                 id: task.assigned_to,
-                name: primaryProfile?.full_name ?? primaryProfile?.email ?? 'Primary assignee',
+                name: primaryProfile?.full_name ?? 'Primary assignee',
                 role: 'Primary',
                 planned: (task.estimated_hours as number | null) ?? null,
                 actual: (task.actual_hours as number | null) ?? null,
@@ -2007,10 +1997,17 @@ export default function TaskDetail() {
         open={openPromptOpen}
         onOpenChange={(v) => { if (!v) dismissPrompt(); else setOpenPromptOpen(v); }}
         taskTitle={(task.title as string) ?? 'this task'}
+        hasOutput={!!((task.output_text as string | null)?.trim()) || (((task.output_files as unknown[]) ?? []).length > 0)}
+        hasOwnHours={(() => {
+          const uid = currentUser?.id;
+          if (!uid) return false;
+          if (task.assigned_to === uid && typeof task.actual_hours === 'number') return true;
+          const cos = (task.co_assignees as Array<{ id: string; actual_hours?: number | null }> | undefined) ?? [];
+          return cos.some(c => c.id === uid && typeof c.actual_hours === 'number');
+        })()}
         onStartTimer={handlePromptStartTimer}
         onJumpToHours={handlePromptJumpToHours}
         onJumpToOutput={handlePromptJumpToOutput}
-        onDismiss={dismissPrompt}
       />
     </div>
   );

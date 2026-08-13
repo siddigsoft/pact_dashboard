@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { r2Delete, parseR2Ref, supabaseWorkspacePathFromUrl } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 import type { RewardDeduction } from '@/utils/rewardCalc';
@@ -1199,10 +1200,7 @@ export function usePersonalTasks(userId: string | undefined) {
         const { data: row } = await supabase.from('personal_tasks').select('tools').eq('id', id).maybeSingle();
         const atts = parseAttachments((row?.tools as string | null) ?? null);
         const paths = atts
-          .map(a => {
-            const m = a.url.match(/\/workspace-files\/(.+)$/);
-            return m ? decodeURIComponent(m[1].split('?')[0]) : null;
-          })
+          .map(a => parseR2Ref(a.url) ?? supabaseWorkspacePathFromUrl(a.url))
           .filter((p): p is string => !!p);
         if (paths.length > 0) {
           // Don't delete a storage object that's also referenced by workspace_files
@@ -1222,14 +1220,17 @@ export function usePersonalTasks(userId: string | undefined) {
           for (const t of otherTasks ?? []) {
             const otherAtts = parseAttachments((t.tools as string | null) ?? null);
             for (const a of otherAtts) {
-              const m = a.url.match(/\/workspace-files\/(.+)$/);
-              if (m) otherTaskReferenced.add(decodeURIComponent(m[1].split('?')[0]));
+              const p = parseR2Ref(a.url) ?? supabaseWorkspacePathFromUrl(a.url);
+              if (p) otherTaskReferenced.add(p);
             }
           }
 
           const toRemove = paths.filter(p => !wfReferenced.has(p) && !otherTaskReferenced.has(p));
           if (toRemove.length > 0) {
-            await supabase.storage.from('workspace-files').remove(toRemove);
+            const r2Keys = toRemove.filter(p => atts.some(a => parseR2Ref(a.url) === p));
+            const supabasePaths = toRemove.filter(p => !r2Keys.includes(p));
+            if (r2Keys.length > 0) await r2Delete(r2Keys);
+            if (supabasePaths.length > 0) await supabase.storage.from('workspace-files').remove(supabasePaths);
           }
         }
       } catch { /* best-effort cleanup; never block delete */ }

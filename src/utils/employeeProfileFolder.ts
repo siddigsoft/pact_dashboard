@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { r2Upload, r2Delete } from '@/lib/r2Storage';
 import { generateEmployeeCV, type CVContext } from './employeeCvExport';
 
 export const PROFILE_BUCKET = 'staff-contracts';
@@ -120,32 +121,48 @@ async function upsertWorkspaceFile(
   folderId: string,
   fileName: string,
   storagePath: string,
-  publicUrl: string | null,
+  _publicUrl: string | null,
   fileSizeBytes: number,
   createdBy: string | null,
   description: string | null,
   mimeType?: string,
   extraTags?: string[],
 ): Promise<void> {
-  const { data: existing } = await supabase
+  let { data: existing } = await supabase
     .from('workspace_files')
-    .select('id')
+    .select('id, storage_path, storage_provider')
     .eq('storage_path', storagePath)
     .maybeSingle();
+  if (!existing) {
+    const byName = await supabase
+      .from('workspace_files')
+      .select('id, storage_path, storage_provider')
+      .eq('folder_id', folderId)
+      .eq('name', fileName)
+      .maybeSingle();
+    existing = byName.data;
+  }
 
   if (existing?.id) {
+    const oldPath = (existing as { storage_path?: string }).storage_path;
+    const oldProvider = (existing as { storage_provider?: string }).storage_provider;
     await supabase
       .from('workspace_files')
       .update({
         name: fileName,
         folder_id: folderId,
-        public_url: publicUrl,
+        storage_path: storagePath,
+        public_url: null,
+        storage_provider: 'r2',
         file_size: fileSizeBytes,
         last_modified_by: createdBy,
         updated_at: new Date().toISOString(),
         description,
       })
       .eq('id', existing.id);
+    if (oldProvider === 'r2' && oldPath && oldPath !== storagePath) {
+      try { await r2Delete(oldPath); } catch { /* best effort */ }
+    }
   } else {
     const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
     const tags = ['hr', 'profile', ...(extraTags ?? [])];
@@ -155,18 +172,17 @@ async function upsertWorkspaceFile(
       name: fileName,
       description,
       storage_path: storagePath,
-      public_url: publicUrl,
+      public_url: null,
+      storage_provider: 'r2',
       file_size: fileSizeBytes,
       created_by: createdBy,
       last_modified_by: createdBy,
       tags,
-      // Required fields (proven by WorkspaceHub's own insert)
       version: 1,
       allow_download: false,
       archived: false,
     };
 
-    // Optional schema-stable fields — add gracefully
     if (mimeType) {
       payload.mime_type  = mimeType;
       payload.extension  = ext;
@@ -179,7 +195,7 @@ async function upsertWorkspaceFile(
 // ── HR document → Workspace sync ─────────────────────────────────────────────
 
 /**
- * Copies all hr_employee_documents for a user into the workspace-files bucket
+ * Copies all hr_employee_documents for a user into R2
  * and registers each in workspace_files so they appear in the Workspace Hub folder.
  * Called from syncProfileFolder (and can be called independently after uploads).
  */
@@ -195,19 +211,15 @@ export async function syncHrDocsToWorkspace(
 
     if (!hrDocs || hrDocs.length === 0) return;
 
-    // Which paths are already registered?
     const { data: existingFiles } = await supabase
       .from('workspace_files')
-      .select('storage_path')
+      .select('storage_path, name')
       .eq('folder_id', empFolderId);
-    const registeredPaths = new Set((existingFiles || []).map((f: any) => f.storage_path));
+    const registeredNames = new Set((existingFiles || []).map((f: any) => f.name));
 
     for (const doc of hrDocs) {
-      const wsPath = doc.file_path; // same path key, different bucket
+      if (registeredNames.has(doc.doc_name)) continue;
 
-      if (registeredPaths.has(wsPath)) continue; // already in workspace — skip entirely
-
-      // Download from staff-contracts
       const { data: blob, error: dlErr } = await supabase.storage
         .from('staff-contracts')
         .download(doc.file_path);
@@ -216,25 +228,15 @@ export async function syncHrDocsToWorkspace(
         continue;
       }
 
-      // Upload to workspace-files bucket
-      const { error: upErr } = await supabase.storage
-        .from('workspace-files')
-        .upload(wsPath, blob, {
-          contentType: doc.file_mime || 'application/octet-stream',
-          upsert: true,
-        });
-      if (upErr) {
-        console.warn('[profileFolder] workspace-files upload failed:', doc.doc_name, upErr.message);
-        continue;
-      }
+      const file = new File([blob], doc.doc_name, { type: doc.file_mime || blob.type || 'application/octet-stream' });
+      const { key } = await r2Upload(file);
 
-      // Register in workspace_files table (blob is guaranteed in scope here)
       const docLabel = (doc.doc_type || 'other').replace(/_/g, ' ')
         .replace(/\b\w/g, (c: string) => c.toUpperCase());
       await upsertWorkspaceFile(
         empFolderId,
         doc.doc_name,
-        wsPath,
+        key,
         null,
         doc.file_size ?? blob.size,
         user.id,
@@ -242,7 +244,7 @@ export async function syncHrDocsToWorkspace(
         doc.file_mime || undefined,
         ['hr-document', doc.doc_type],
       ).catch(e => console.warn('[profileFolder] HR doc register failed:', doc.doc_name, e.message));
-      registeredPaths.add(wsPath);
+      registeredNames.add(doc.doc_name);
     }
   } catch (e: any) {
     console.warn('[profileFolder] syncHrDocsToWorkspace error:', e.message);
@@ -258,7 +260,7 @@ export async function syncHrDocsToWorkspace(
  */
 async function syncAvatarToWorkspace(
   user: { id: string; avatar?: string | null; name?: string | null },
-  folderName: string,
+  _folderName: string,
   folderId: string,
 ): Promise<void> {
   if (!user.avatar || !folderId) return;
@@ -269,9 +271,8 @@ async function syncAvatarToWorkspace(
     if (!match) return;
     const avatarStoragePath = decodeURIComponent(match[1]);
     const ext = avatarStoragePath.split('.').pop()?.toLowerCase() || 'jpg';
-    const wsStoragePath = `${HR_ROOT}/${folderName}/PROFILE_PHOTO.${ext}`;
+    const photoName = `PROFILE_PHOTO.${ext}`;
 
-    // Download from avatars bucket
     const { data: blob, error: dlErr } = await supabase.storage
       .from('avatars')
       .download(avatarStoragePath);
@@ -280,20 +281,14 @@ async function syncAvatarToWorkspace(
       return;
     }
 
-    // Upload to workspace-files bucket
-    await supabase.storage
-      .from('workspace-files')
-      .upload(wsStoragePath, blob, { contentType: `image/${ext}`, upsert: true });
-
-    const { data: urlData } = supabase.storage
-      .from('workspace-files')
-      .getPublicUrl(wsStoragePath);
+    const file = new File([blob], photoName, { type: `image/${ext}` });
+    const { key } = await r2Upload(file);
 
     await upsertWorkspaceFile(
       folderId,
-      `PROFILE_PHOTO.${ext}`,
-      wsStoragePath,
-      urlData?.publicUrl ?? null,
+      photoName,
+      key,
+      null,
       blob.size,
       user.id,
       'Profile photo',
@@ -320,7 +315,6 @@ export async function syncProfileFolder(
     const folderName   = computeFolderName(user);
     const folderPath   = getEmployeeFolderPath(folderName);
     const summaryPath  = getSummaryStoragePath(folderName);
-    const wsSummaryPath = summaryPath;
 
     // 1. Generate PDF bytes
     const result = await generateEmployeeCV(user, ctx, { returnBytes: true });
@@ -337,19 +331,9 @@ export async function syncProfileFolder(
       });
     if (upErr) throw upErr;
 
-    // 3. Upload to workspace-files bucket so Workspace Hub can serve it
-    await supabase.storage
-      .from('workspace-files')
-      .upload(wsSummaryPath, pdfBytes, {
-        contentType:  'application/pdf',
-        upsert:       true,
-        cacheControl: '0',
-      });
-
-    const { data: urlData } = supabase.storage
-      .from('workspace-files')
-      .getPublicUrl(wsSummaryPath);
-    const publicUrl = urlData?.publicUrl ?? null;
+    // 3. Upload to R2 so Workspace Hub can serve it
+    const summaryFile = new File([pdfBytes as any], 'PROFILE_SUMMARY.pdf', { type: 'application/pdf' });
+    const { key: r2SummaryKey } = await r2Upload(summaryFile);
 
     // 4. Ensure Workspace Hub folder hierarchy: HR > Profiles > {Country} > {folderName}
     const countryFolderName = getCountryFolderName(user.employeeId);
@@ -369,8 +353,8 @@ export async function syncProfileFolder(
       await upsertWorkspaceFile(
         empFolderId,
         'PROFILE_SUMMARY.pdf',
-        wsSummaryPath,
-        publicUrl,
+        r2SummaryKey,
+        null,
         pdfBytes.byteLength,
         user.id,
         `Auto-generated profile summary for ${user.name || user.employeeId}`,

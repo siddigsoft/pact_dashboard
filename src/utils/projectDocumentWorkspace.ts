@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import { r2Upload, r2Delete } from '@/lib/r2Storage';
 
-const WORKSPACE_BUCKET = 'workspace-files';
 const PROJECTS_ROOT = 'Projects';
 
 function sanitizeFolderName(name: string): string {
@@ -68,7 +68,6 @@ async function upsertWorkspaceFile(params: {
   folderId: string;
   fileName: string;
   storagePath: string;
-  publicUrl: string | null;
   fileSize: number;
   mimeType: string | null;
   createdBy: string;
@@ -86,7 +85,8 @@ async function upsertWorkspaceFile(params: {
       .update({
         name: params.fileName,
         folder_id: params.folderId,
-        public_url: params.publicUrl,
+        public_url: null,
+        storage_provider: 'r2',
         file_size: params.fileSize,
         last_modified_by: params.createdBy,
         updated_at: new Date().toISOString(),
@@ -105,7 +105,8 @@ async function upsertWorkspaceFile(params: {
     name: params.fileName,
     description: params.description,
     storage_path: params.storagePath,
-    public_url: params.publicUrl,
+    public_url: null,
+    storage_provider: 'r2',
     file_size: params.fileSize,
     mime_type: params.mimeType,
     extension: ext || null,
@@ -175,31 +176,21 @@ export async function mirrorProjectDocumentToWorkspace(input: {
     ? sanitizeFileName(input.label.trim())
     : `${sanitizeFileName(input.label.trim())}.${ext}`;
 
-  const storagePath = `Projects/${input.projectId}/${input.uploaderId}/${Date.now()}_${sanitizeFileName(input.file.name)}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(WORKSPACE_BUCKET)
-    .upload(storagePath, input.file, {
-      contentType: input.file.type || 'application/octet-stream',
-      upsert: false,
-    });
-  if (uploadError) throw uploadError;
-
-  const { data: urlData } = supabase.storage.from(WORKSPACE_BUCKET).getPublicUrl(storagePath);
+  // Same R2 path as Workspace Hub uploads (key under caller's user-id prefix).
+  const { key: storagePath } = await r2Upload(input.file);
 
   try {
     await upsertWorkspaceFile({
       folderId: uploaderFolderId,
       fileName: displayName,
       storagePath,
-      publicUrl: urlData?.publicUrl ?? null,
       fileSize: input.file.size,
       mimeType: input.file.type || null,
       createdBy: input.uploaderId,
       description: `Project document — ${projectName}`,
     });
   } catch (err) {
-    await supabase.storage.from(WORKSPACE_BUCKET).remove([storagePath]).catch(() => undefined);
+    try { await r2Delete(storagePath); } catch { /* best effort */ }
     throw err;
   }
 }
