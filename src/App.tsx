@@ -7,7 +7,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { isSupabaseConfigured, supabase } from './integrations/supabase/client';
 import { ConfigurationError } from './components/ConfigurationError';
-import { isMobileApp } from './utils/platformDetection';
 import { SessionGuard } from './components/SessionGuard';
 
 // Import AppProviders
@@ -827,17 +826,6 @@ function App() {
     }
   }, []);
 
-
-  // Set platform attribute for mobile-specific styling
-  useEffect(() => {
-    const platform = isMobileApp() ? 'mobile' : 'web';
-    document.body.setAttribute('data-platform', platform);
-    
-    // Also add class for CSS support queries
-    if (platform === 'mobile') {
-      document.body.classList.add('mobile-app');
-    }
-  }, []);
 
   // ── Public PDM Report — bypass ALL session/auth/mobile guards ──────────────
   // This route has its own login gate (DCTPDMPublicPage) and must NEVER be

@@ -1266,10 +1266,12 @@
 
     return (
       <>
-        <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
+        <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-white dark:border-gray-800 dark:bg-slate-950">
 
-        {/* h-14 matches the Navbar exactly so the two bottom hairlines read as one strip */}
-        <SidebarHeader className="border-b border-slate-200/70 px-3 py-0">
+        {/* h-14 matches the Navbar so the logo sits on the header's baseline. No
+            border-b: the Navbar's rule stops at the sidebar divider, leaving this
+            one unbroken full-height panel — the Workspace Hub's connected look. */}
+        <SidebarHeader className="px-3 py-0">
           <div className="flex h-14 items-center gap-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate group-data-[collapsible=icon]:hidden">
@@ -1538,7 +1540,7 @@
               );
             };
 
-            const renderSubGroups = (subGroups: typeof financeSubGroups) =>
+            const renderSubGroups = (subGroups: SubGroup[]) =>
               subGroups.sort((a, b) => a.order - b.order).map(subGroup => {
                 const isSubCollapsed = collapsedGroups.has(subGroup.id);
                 return (
