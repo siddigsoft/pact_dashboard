@@ -1968,7 +1968,7 @@ export default function WorkspaceHub() {
       if (sortBy === 'size') return b.file_size - a.file_size;
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance]);
+  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
