@@ -1810,6 +1810,35 @@ export default function WorkspaceHub() {
     );
   }, [myPermissions, isSuperAdmin]);
 
+  // ── Cascade No Access through the folder tree ─────────────────────────────
+  // A denial on a parent folder must propagate to every descendant automatically.
+  // We BFS from every directly-denied folder ID using the raw (unfiltered) folders
+  // list so the walk covers the full tree regardless of clearance level.
+  // Super admins are never in deniedFolderIds so this set stays empty for them.
+  const allDeniedFolderIds = useMemo(() => {
+    if (isSuperAdmin || deniedFolderIds.size === 0) return deniedFolderIds;
+    // Build parent → [childId, …] from the full unfiltered folder list
+    const childrenOf: Record<string, string[]> = {};
+    for (const f of folders) {
+      if (f.parent_folder_id) {
+        (childrenOf[f.parent_folder_id] ??= []).push(f.id);
+      }
+    }
+    // BFS starting from every directly-denied folder
+    const result = new Set<string>(deniedFolderIds);
+    const queue = [...deniedFolderIds];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const childId of (childrenOf[id] ?? [])) {
+        if (!result.has(childId)) {
+          result.add(childId);
+          queue.push(childId);
+        }
+      }
+    }
+    return result;
+  }, [deniedFolderIds, folders, isSuperAdmin]);
+
   // ── Rename permission helpers ─────────────────────────────────────────────
   // Only the item's creator or a super admin may rename files/folders.
   // Admins who did not create the item cannot rename it.
@@ -1851,12 +1880,13 @@ export default function WorkspaceHub() {
   // Folder creator always sees their own folder UNLESS they have been explicitly denied.
   const visibleFolders = useMemo(() =>
     folders.filter(f => {
-      // Explicit "No Access" block always wins (except super admin)
-      if (deniedFolderIds.has(f.id)) return false;
+      // Deny if the folder itself or any ancestor is explicitly blocked.
+      // allDeniedFolderIds already contains the transitive closure of denials.
+      if (allDeniedFolderIds.has(f.id)) return false;
       return isSuperAdmin || f.created_by === userId ||
         CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance];
     }),
-  [folders, isSuperAdmin, userId, effectiveClearance, deniedFolderIds]);
+  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds]);
 
   const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
@@ -1894,8 +1924,13 @@ export default function WorkspaceHub() {
     // The uploader (created_by === userId) ALWAYS keeps access to their file
     // unless ownership has been transferred. Admins and superadmins also bypass.
     const isOwnerOrAdmin = (f: WFile) => isSuperAdmin || f.created_by === userId;
-    // Explicit no_access denials always win — even for file owners (except super admin)
+    // Explicit no_access denials on the file itself always win (except super admin)
     files = files.filter(f => !deniedFileIds.has(f.id));
+    // Also exclude files whose containing folder (or any ancestor) is denied.
+    // allDeniedFolderIds carries the transitive closure — no BFS needed here.
+    if (!isSuperAdmin) {
+      files = files.filter(f => !f.folder_id || !allDeniedFolderIds.has(f.folder_id));
+    }
     // Enforce security clearance — hide files above user's clearance level (uploader/admin bypass)
     files = files.filter(f => isOwnerOrAdmin(f) || CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
