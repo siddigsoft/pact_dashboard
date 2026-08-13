@@ -194,11 +194,15 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   // ── Form state — campaign wizard ──────────────────────────────────────────
   const [wizardStep, setWizardStep] = useState(1);
   const [campaignForm, setCampaignForm] = useState({
-    campaign_name: '', state: '', locality: '', start_date: '', end_date: '',
+    campaign_name: '', start_date: '', end_date: '',
     status: 'active' as Campaign['status'],
     project_id: '', mmp_file_id: '',
     coordinator_id: '', supervisor_id: '',
   });
+  // Multi-state/locality: each row is one state + one locality pair
+  const [coverageAreas, setCoverageAreas] = useState<{ state: string; locality: string }[]>([
+    { state: '', locality: '' },
+  ]);
   const [wizardVillages, setWizardVillages] = useState<{ village_name: string; village_code: string; hh_target: string; state: string; locality: string }[]>([
     { village_name: '', village_code: 'VLG-01', hh_target: '', state: '', locality: '' },
   ]);
@@ -382,10 +386,24 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     return p?.full_name || p?.username || '—';
   };
 
-  const localities = useMemo(() =>
-    sudanStates.find(s => s.name === campaignForm.state)?.localities || [],
-    [campaignForm.state]
-  );
+  // Localities for a given state (reusable helper)
+  const localitiesForState = useCallback((stateName: string) =>
+    sudanStates.find(s => s.name === stateName)?.localities.map(l => l.name) || [],
+  []);
+
+  // Distinct states selected across all coverage areas (for village dropdowns in Step 2)
+  const coverageStates = useMemo(() =>
+    [...new Set(coverageAreas.map(a => a.state).filter(Boolean))],
+  [coverageAreas]);
+
+  // Supervisors: filter to supervisor-role users only
+  const supervisors = useMemo(() =>
+    profiles.filter(p => p.role && (
+      p.role.toLowerCase() === 'supervisor' ||
+      p.role.toLowerCase().includes('supervisor') ||
+      p.role.toLowerCase() === 'field_supervisor'
+    )),
+  [profiles]);
 
   const filteredLogs = useMemo(() => dailyLogs.filter(l => {
     if (logFilterTeam !== 'all' && l.team_id !== logFilterTeam) return false;
@@ -413,16 +431,23 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     setSaving(true);
     try {
       // 1. Insert campaign
+      // Derive state/locality summary from coverage areas for the campaign row
+      const validAreas = coverageAreas.filter(a => a.state);
+      const primaryState    = validAreas[0]?.state    || null;
+      const primaryLocality = validAreas[0]?.locality || null;
+      // Store all states as a comma-joined string if multiple (backward compat with text column)
+      const allStates    = validAreas.length > 1 ? validAreas.map(a => a.state).join(', ')    : primaryState;
+      const allLocalities = validAreas.length > 1 ? validAreas.map(a => a.locality).filter(Boolean).join(', ') : primaryLocality;
       const { data: camp, error: campErr } = await supabase
         .from('adhoc_campaigns')
         .insert({
           campaign_name:  campaignForm.campaign_name.trim(),
-          state:          campaignForm.state || null,
-          locality:       campaignForm.locality || null,
+          state:          allStates,
+          locality:       allLocalities,
           start_date:     campaignForm.start_date || null,
           end_date:       campaignForm.end_date   || null,
           status:         campaignForm.status,
-          project_id:     campaignForm.project_id     || null,
+          project_id:     (campaignForm.project_id && campaignForm.project_id !== '__none__') ? campaignForm.project_id : null,
           mmp_file_id:    campaignForm.mmp_file_id    || null,
           coordinator_id: campaignForm.coordinator_id || null,
           supervisor_id:  campaignForm.supervisor_id  || null,
@@ -481,7 +506,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 
   const resetWizard = () => {
     setWizardStep(1);
-    setCampaignForm({ campaign_name:'', state:'', locality:'', start_date:'', end_date:'', status:'active', project_id:'', mmp_file_id:'', coordinator_id:'', supervisor_id:'' });
+    setCampaignForm({ campaign_name:'', start_date:'', end_date:'', status:'active', project_id:'', mmp_file_id:'', coordinator_id:'', supervisor_id:'' });
+    setCoverageAreas([{ state:'', locality:'' }]);
     setWizardVillages([{ village_name:'', village_code:'VLG-01', hh_target:'', state:'', locality:'' }]);
     setWizardTeams([]);
   };
@@ -790,7 +816,14 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 
         {/* ── Create Campaign Wizard ────────────────────────────────────────── */}
         <Dialog open={showCreateCampaign} onOpenChange={setShowCreateCampaign}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={e => {
+              // Prevent Radix Select portals from triggering dialog close
+              const target = e.target as Element;
+              if (target?.closest?.('[data-radix-popper-content-wrapper]')) e.preventDefault();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Create Village Campaign — Step {wizardStep} of 3</DialogTitle>
               <DialogDescription>
@@ -820,22 +853,6 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     </Select>
                   </div>
                   <div>
-                    <Label>State</Label>
-                    <Select value={campaignForm.state} onValueChange={v => setCampaignForm(f => ({ ...f, state: v, locality: '' }))}>
-                      <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
-                      <SelectContent>{sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  {campaignForm.state && localities.length > 0 && (
-                    <div>
-                      <Label>Locality</Label>
-                      <Select value={campaignForm.locality} onValueChange={v => setCampaignForm(f => ({ ...f, locality: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Select locality" /></SelectTrigger>
-                        <SelectContent>{localities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  <div>
                     <Label>Start Date</Label>
                     <Input type="date" value={campaignForm.start_date} onChange={e => setCampaignForm(f => ({ ...f, start_date: e.target.value }))} />
                   </div>
@@ -854,7 +871,12 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     <Label>Supervisor</Label>
                     <Select value={campaignForm.supervisor_id} onValueChange={v => setCampaignForm(f => ({ ...f, supervisor_id: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select supervisor" /></SelectTrigger>
-                      <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || p.username}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        {supervisors.length === 0
+                          ? <div className="px-3 py-2 text-xs text-muted-foreground">No supervisor-role users found</div>
+                          : supervisors.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || p.username}</SelectItem>)
+                        }
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -862,10 +884,51 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     <Select value={campaignForm.project_id} onValueChange={v => setCampaignForm(f => ({ ...f, project_id: v }))}>
                       <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </div>
+                  {/* ── Multi-state/locality coverage areas ── */}
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label>Coverage Areas <span className="text-[10px] font-normal text-muted-foreground ml-1">(campaign spans these states &amp; localities)</span></Label>
+                    </div>
+                    <div className="space-y-2">
+                      {coverageAreas.map((area, idx) => {
+                        const areaLocalities = localitiesForState(area.state);
+                        return (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <div className="flex-1">
+                              <Select value={area.state || '__none__'} onValueChange={v => setCoverageAreas(areas => areas.map((a, i) => i === idx ? { state: v === '__none__' ? '' : v, locality: '' } : a))}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select state" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Select state…</SelectItem>
+                                  {sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex-1">
+                              <Select value={area.locality || '__none__'} onValueChange={v => setCoverageAreas(areas => areas.map((a, i) => i === idx ? { ...a, locality: v === '__none__' ? '' : v } : a))} disabled={!area.state}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select locality" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Select locality…</SelectItem>
+                                  {areaLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {coverageAreas.length > 1 && (
+                              <button type="button" className="text-red-400 hover:text-red-600 transition-colors" onClick={() => setCoverageAreas(areas => areas.filter((_, i) => i !== idx))}>
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCoverageAreas(areas => [...areas, { state:'', locality:'' }])}>
+                        <Plus className="h-3 w-3" /> Add Another State / Locality
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -874,30 +937,80 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             {/* Step 2: Villages */}
             {wizardStep === 2 && (
               <div className="space-y-3">
-                {wizardVillages.map((v, idx) => (
-                  <div key={idx} className="grid gap-2 sm:grid-cols-5 items-end p-3 border rounded-lg bg-muted/20">
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs">Village Name *</Label>
-                      <Input value={v.village_name} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_name: e.target.value } : r))} placeholder="Village name" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Code</Label>
-                      <Input value={v.village_code} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_code: e.target.value } : r))} placeholder="VLG-01" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">HH Target</Label>
-                      <Input type="number" min="0" value={v.hh_target} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, hh_target: e.target.value } : r))} placeholder="0" />
-                    </div>
-                    <div className="flex gap-1">
-                      {wizardVillages.length > 1 && (
-                        <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500" onClick={() => setWizardVillages(vs => vs.filter((_, i) => i !== idx))}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
+                {coverageStates.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    <MapPin className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                    <span>Coverage: <strong>{coverageAreas.filter(a => a.state).map(a => a.locality ? `${a.state} › ${a.locality}` : a.state).join(' · ')}</strong> — assign each village to one of these areas.</span>
                   </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state:'', locality:'' }])}>
+                )}
+                {wizardVillages.map((v, idx) => {
+                  const vilageStateLocalities = v.state ? localitiesForState(v.state) : [];
+                  // Offer only the states from coverage areas (if defined), otherwise all states
+                  const stateOptions = coverageStates.length > 0 ? coverageStates : sudanStates.map(s => s.name);
+                  // Pre-fill locality options from coverage areas when state matches
+                  const localityOptions = v.state
+                    ? (coverageAreas.filter(a => a.state === v.state && a.locality).map(a => a.locality).length > 0
+                        ? coverageAreas.filter(a => a.state === v.state && a.locality).map(a => a.locality)
+                        : vilageStateLocalities)
+                    : [];
+                  return (
+                    <div key={idx} className="p-3 border rounded-lg bg-muted/20 space-y-2">
+                      {/* Row 1: Name, Code, HH Target, Remove */}
+                      <div className="grid gap-2 sm:grid-cols-5 items-end">
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs">Village Name *</Label>
+                          <Input value={v.village_name} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_name: e.target.value } : r))} placeholder="Village name" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Code</Label>
+                          <Input value={v.village_code} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_code: e.target.value } : r))} placeholder="VLG-01" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">HH Target</Label>
+                          <Input type="number" min="0" value={v.hh_target} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, hh_target: e.target.value } : r))} placeholder="0" />
+                        </div>
+                        <div className="flex gap-1 items-end pb-0.5">
+                          {wizardVillages.length > 1 && (
+                            <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500" onClick={() => setWizardVillages(vs => vs.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Row 2: State + Locality */}
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">State</Label>
+                          <Select
+                            value={v.state || '__none__'}
+                            onValueChange={val => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, state: val === '__none__' ? '' : val, locality: '' } : r))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select state" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select state…</SelectItem>
+                              {stateOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Locality</Label>
+                          <Select
+                            value={v.locality || '__none__'}
+                            onValueChange={val => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, locality: val === '__none__' ? '' : val } : r))}
+                            disabled={!v.state}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select locality" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select locality…</SelectItem>
+                              {localityOptions.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state: coverageStates[0] || '', locality:'' }])}>
                   <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Village
                 </Button>
               </div>
@@ -924,10 +1037,10 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                         </div>
                         <div>
                           <Label className="text-xs">Villages (blank = all)</Label>
-                          <Select value={ta.village_ids[0] || ''} onValueChange={v => setWizardTeams(ts => ts.map((r, i) => i === idx ? { ...r, village_ids: v ? [v] : [] } : r))}>
+                          <Select value={ta.village_ids[0] || '__none__'} onValueChange={v => setWizardTeams(ts => ts.map((r, i) => i === idx ? { ...r, village_ids: v && v !== '__none__' ? [v] : [] } : r))}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All villages" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">All villages</SelectItem>
+                              <SelectItem value="__none__">All villages</SelectItem>
                               {wizardVillages.filter(v => v.village_name).map((v, vi) => <SelectItem key={vi} value={v.village_code}>{v.village_name}</SelectItem>)}
                             </SelectContent>
                           </Select>
@@ -1475,14 +1588,23 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>State</Label>
-                <Select value={villageForm.state} onValueChange={v => setVillageForm(f => ({ ...f, state: v, locality: '' }))}>
+                <Select value={villageForm.state || '__none__'} onValueChange={v => setVillageForm(f => ({ ...f, state: v === '__none__' ? '' : v, locality: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
-                  <SelectContent>{sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select state…</SelectItem>
+                    {sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Locality</Label>
-                <Input value={villageForm.locality} onChange={e => setVillageForm(f => ({ ...f, locality: e.target.value }))} placeholder="Locality" />
+                <Select value={villageForm.locality || '__none__'} onValueChange={v => setVillageForm(f => ({ ...f, locality: v === '__none__' ? '' : v }))} disabled={!villageForm.state}>
+                  <SelectTrigger><SelectValue placeholder={villageForm.state ? 'Select locality' : 'Select state first'} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select locality…</SelectItem>
+                    {localitiesForState(villageForm.state).map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
