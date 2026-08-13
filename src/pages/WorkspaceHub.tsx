@@ -499,8 +499,9 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`${window.location.origin}/view/${file.short_code || file.id}`}
+                    value={`/view/${file.short_code || file.id.slice(0, 8)}`}
                     className="h-7 text-[10px] bg-background font-mono"
+                    title={`${window.location.origin}/view/${file.short_code || file.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
@@ -525,8 +526,9 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`}
+                    value={`/ws/${folder.short_code || folder.id.slice(0, 8)}`}
                     className="h-7 text-[10px] bg-background font-mono"
+                    title={`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
@@ -2182,9 +2184,25 @@ export default function WorkspaceHub() {
     refetchFiles();
   }
 
+  // ── Super Admin direct delete ─────────────────────────────────────────────
+  // Super Admin bypasses the request queue and deletes immediately.
+  async function directDeleteFolder(folder: WFolder) {
+    if (!window.confirm(`Permanently delete "${folder.name}" and all its contents? This cannot be undone.`)) return;
+    const { error } = await supabase.from('workspace_folders').delete().eq('id', folder.id);
+    if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
+    if (selectedFolderId === folder.id) setSelectedFolderId(null);
+    refetchFolders(); refetchFiles();
+    toast({ title: `"${folder.name}" deleted` });
+  }
+
+  async function directDeleteFile(file: WFile) {
+    if (!window.confirm(`Permanently archive "${file.name}"? This cannot be undone.`)) return;
+    await _archiveFile(file);
+    toast({ title: `"${file.name}" removed` });
+  }
+
   // ── Delete request system ─────────────────────────────────────────────────
-  // No user can directly delete a file or folder. They submit a request; the
-  // folder owner (or super admin for root items) approves or rejects it.
+  // Non-admin users submit a request; Super Admin approves or rejects it.
 
   async function requestDeleteFile(file: WFile) {
     const folder = file.folder_id ? folders.find(f => f.id === file.folder_id) : null;
@@ -2610,13 +2628,19 @@ export default function WorkspaceHub() {
                   <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                  <Key className="h-3.5 w-3.5 mr-2" />{folder.password_hash ? 'Change Password' : 'Set Password'}
-                </DropdownMenuItem>
+                {isSuperAdmin && (
+                  <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                    <Key className="h-3.5 w-3.5 mr-2" />{folder.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
                 <DropdownMenuSeparator />
-                {(isSuperAdmin || folder.created_by === userId) && (
+                {isSuperAdmin ? (
+                  <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(folder)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder
+                  </DropdownMenuItem>
+                ) : (
                   <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(folder)}>
                     <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
                   </DropdownMenuItem>
@@ -2848,9 +2872,11 @@ export default function WorkspaceHub() {
                 )}
                 <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                  <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
-                </DropdownMenuItem>
+                {isSuperAdmin && (
+                  <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                    <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
               </>}
@@ -2867,7 +2893,9 @@ export default function WorkspaceHub() {
                     ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                     : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
+                {isSuperAdmin
+                  ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
+                  : <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>}
               </>}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -2939,9 +2967,11 @@ export default function WorkspaceHub() {
                   )}
                   <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                    <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
-                  </DropdownMenuItem>
+                  {isSuperAdmin && (
+                    <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                      <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
                 </>}
@@ -2958,9 +2988,9 @@ export default function WorkspaceHub() {
                       ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                       : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                   </DropdownMenuItem>
-                  {(isSuperAdmin || file.created_by === userId) && (
-                    <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
-                  )}
+                  {isSuperAdmin
+                    ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
+                    : (file.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
                 </>}
               </DropdownMenuContent>
             </DropdownMenu>
