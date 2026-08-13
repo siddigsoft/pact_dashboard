@@ -40,6 +40,7 @@ interface ShareFolder {
   color: string;
   icon: string;
   password_hash: string | null;
+  short_code: string | null;
 }
 
 interface ShareFile {
@@ -88,6 +89,38 @@ function getFileIcon(file: ShareFile) {
   if (mime.includes('word') || mime.includes('document') || ['docx','doc'].includes(ext))
     return { Icon: FileText, color: '#3b82f6' };
   return { Icon: FileText, color: '#64748b' };
+}
+
+// ─── Windows-style Folder Icon ────────────────────────────────────────────────
+
+function FolderSvgIcon({ color = '#E8A415', icon = '', size = 72 }: { color?: string; icon?: string; size?: number }) {
+  const h = Math.round(size * 0.82);
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: h }}>
+      <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" width={size} height={h}>
+        {/* Drop shadow */}
+        <ellipse cx="48" cy="78" rx="36" ry="4" fill="black" fillOpacity="0.08" />
+        {/* Folder back body */}
+        <rect x="2" y="22" width="92" height="52" rx="7" fill={color} />
+        {/* Tab */}
+        <path d="M2 22 Q2 14 9 14 L36 14 Q43 14 45 22 Z" fill={color} opacity="0.82" />
+        {/* Front face overlay */}
+        <rect x="2" y="28" width="92" height="46" rx="7" fill="white" fillOpacity="0.11" />
+        {/* Top shine strip */}
+        <rect x="6" y="30" width="84" height="9" rx="4" fill="white" fillOpacity="0.22" />
+        {/* Bottom depth line */}
+        <rect x="6" y="68" width="84" height="4" rx="2" fill="black" fillOpacity="0.06" />
+      </svg>
+      {icon && (
+        <div
+          className="absolute inset-0 flex items-end justify-end pointer-events-none select-none"
+          style={{ paddingRight: 8, paddingBottom: 10, fontSize: Math.round(size * 0.3) }}
+        >
+          {icon}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -153,13 +186,15 @@ export default function WorkspaceFolderShare() {
     setError(null);
 
     try {
-      // Load folder metadata
-      const { data: folder, error: folderErr } = await supabase
+      // Load folder metadata — param may be a UUID or a short_code
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetFolderId);
+      const baseQ = supabase
         .from('workspace_folders')
-        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash')
-        .eq('id', targetFolderId)
-        .eq('archived', false)
-        .maybeSingle();
+        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash, short_code')
+        .eq('archived', false);
+      const { data: folder, error: folderErr } = await (
+        isUUID ? baseQ.eq('id', targetFolderId) : baseQ.eq('short_code', targetFolderId)
+      ).maybeSingle();
 
       if (folderErr || !folder) {
         setError('Folder not found or this link has expired.');
@@ -184,11 +219,11 @@ export default function WorkspaceFolderShare() {
       setCurrentFolder(f);
       setBreadcrumbs(crumbs);
 
-      // Load subfolders
+      // Load subfolders — always use the resolved UUID (f.id)
       const { data: subs } = await supabase
         .from('workspace_folders')
-        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash')
-        .eq('parent_folder_id', targetFolderId)
+        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash, short_code')
+        .eq('parent_folder_id', f.id)
         .eq('archived', false)
         .order('name');
 
@@ -408,33 +443,30 @@ export default function WorkspaceFolderShare() {
               />
             </div>
 
-            {/* Sub-folders */}
+            {/* Sub-folders — Windows Explorer icon grid */}
             {filteredFolders.length > 0 && (
               <section className="mb-6">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                   Folders ({filteredFolders.length})
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1">
                   {filteredFolders.map(sub => (
                     <button
                       key={sub.id}
                       onClick={() => navigateInto(sub)}
-                      className="group flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-white hover:border-[#1D3461]/40 hover:shadow-sm transition-all text-left"
+                      className="group flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-[#1D3461]/6 active:bg-[#1D3461]/10 transition-all text-center select-none"
                     >
-                      <div
-                        className="h-10 w-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                        style={{ background: (sub.color || '#1D3461') + '15' }}
-                      >
-                        {sub.icon || '📁'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-[#1D3461] transition-colors">{sub.name}</p>
-                        {sub.description && <p className="text-[11px] text-slate-400 truncate">{sub.description}</p>}
-                        <span className={`mt-0.5 inline-flex text-[9px] font-bold px-1.5 py-0 rounded-full ${SEC_COLOR[sub.security_level]}`}>
-                          {SEC_LABEL[sub.security_level]}
-                        </span>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-[#1D3461] transition-colors flex-shrink-0" />
+                      <FolderSvgIcon
+                        color={sub.color || '#E8A415'}
+                        icon={sub.icon || ''}
+                        size={72}
+                      />
+                      <p className="text-[11px] font-medium text-slate-700 group-hover:text-[#1D3461] leading-tight line-clamp-2 w-full transition-colors" title={sub.name}>
+                        {sub.name}
+                      </p>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${SEC_COLOR[sub.security_level]}`}>
+                        {SEC_LABEL[sub.security_level]}
+                      </span>
                     </button>
                   ))}
                 </div>

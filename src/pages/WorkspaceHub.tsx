@@ -505,13 +505,13 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`${window.location.origin}/workspace/share/folder/${folder.id}`}
+                    value={`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`}
                     className="h-7 text-[10px] bg-background font-mono"
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
                     onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/workspace/share/folder/${folder.id}`);
+                      navigator.clipboard.writeText(`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`);
                       toast({ title: 'Folder link copied to clipboard' });
                     }}
                   >
@@ -519,7 +519,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                   </Button>
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
-                    onClick={() => window.open(`/workspace/share/folder/${folder.id}`, '_blank')}
+                    onClick={() => window.open(`/workspace/share/folder/${folder.short_code || folder.id}`, '_blank')}
                   >
                     <ExternalLink className="h-3 w-3" />Open
                   </Button>
@@ -2006,6 +2006,7 @@ export default function WorkspaceHub() {
       name: newFolderName.trim(), description: newFolderDesc.trim() || null,
       security_level: enforcedLevel, created_by: userId,
       parent_folder_id: selectedFolder?.id ?? null,
+      short_code: generateShortCode(),
     });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     refetchFolders(); setNewFolderOpen(false); setNewFolderName(''); setNewFolderDesc(''); setNewFolderSec('internal');
@@ -2017,6 +2018,7 @@ export default function WorkspaceHub() {
       name: `${folder.name} (Copy)`, description: folder.description,
       security_level: folder.security_level, created_by: userId,
       parent_folder_id: folder.parent_folder_id, color: folder.color, icon: folder.icon,
+      short_code: generateShortCode(),
     }).select().single();
     if (error || !newFolder) { toast({ title: 'Duplicate failed', description: error?.message, variant: 'destructive' }); return; }
     // Copy files from the source folder into the new one
@@ -2554,9 +2556,11 @@ export default function WorkspaceHub() {
                 <DropdownMenuSeparator />
                 <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(folder)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
-                </DropdownMenuItem>
+                {(isSuperAdmin || folder.created_by === userId) && (
+                  <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(folder)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -2891,7 +2895,9 @@ export default function WorkspaceHub() {
                       ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                       : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
+                  {(isSuperAdmin || file.created_by === userId) && (
+                    <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
+                  )}
                 </>}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3783,7 +3789,9 @@ export default function WorkspaceHub() {
                                           )}
                                           <DropdownMenuItem onClick={() => { setMoveTarget(f); setMoveFolderId(f.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
+                                          {(isSuperAdmin || f.created_by === userId) && (
+                                            <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
+                                          )}
                                         </>}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
