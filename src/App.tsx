@@ -163,6 +163,7 @@ const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
+const WorkspaceFolderShare = lazy(() => import('./pages/WorkspaceFolderShare'));
 const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
 const IntegrationsSettings = lazy(() => import('./pages/IntegrationsSettings'));
 const ChangelogPage = lazy(() => import('./pages/Changelog'));
@@ -503,6 +504,7 @@ const AuthGuard = ({ children }) => {
     !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report', '/staff-onboarding', '/privacy-policy'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
+    !location.pathname.startsWith('/workspace/share/') &&
     !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill')) &&
     !location.pathname.startsWith('/s/') &&
     !location.pathname.startsWith('/ext/')
@@ -533,6 +535,7 @@ const AppRoutes = () => {
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
+      <Route path="/workspace/share/folder/:folderId" element={<WorkspaceFolderShare />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
       <Route path="/s/:id" element={<SurveyFill />} />
       <Route path="/ext/:token" element={<ExternalContributorPage />} />

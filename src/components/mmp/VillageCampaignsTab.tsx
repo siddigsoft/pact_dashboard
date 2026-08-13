@@ -19,7 +19,8 @@ import {
   Plus, Pencil, Trash2, Loader2, ChevronLeft, MapPin, Users, Target,
   BarChart3, Calendar, ClipboardList, CheckCircle2, AlertCircle,
   Download, Eye, RefreshCw, Home, Building2, UserCheck, FileText,
-  ArrowRight, TrendingUp, Activity, Camera, ImageIcon, X, ChevronDown, ChevronUp
+  ArrowRight, TrendingUp, Activity, Camera, ImageIcon, X, ChevronDown, ChevronUp,
+  DollarSign, Wallet, CreditCard, Truck, BadgeDollarSign
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -120,6 +121,29 @@ interface DailyLog {
   submitted_by_name?: string;
 }
 
+interface SiteEntry {
+  id: string;
+  site_name: string;
+  site_code?: string;
+  transport_fee: number;
+  enumerator_fee: number;
+  fee_paid_status?: string | null;
+  fee_paid_amount?: number | null;
+  status: string;
+  additional_data?: Record<string, any>;
+}
+
+interface AdvanceRequest {
+  id: string;
+  site_name?: string | null;
+  requested_amount: number;
+  total_paid_amount?: number | null;
+  status: string;
+  created_at: string;
+  description?: string | null;
+  expense_category?: string | null;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function pct(covered: number, target: number) {
@@ -194,11 +218,15 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   // ── Form state — campaign wizard ──────────────────────────────────────────
   const [wizardStep, setWizardStep] = useState(1);
   const [campaignForm, setCampaignForm] = useState({
-    campaign_name: '', state: '', locality: '', start_date: '', end_date: '',
+    campaign_name: '', start_date: '', end_date: '',
     status: 'active' as Campaign['status'],
     project_id: '', mmp_file_id: '',
     coordinator_id: '', supervisor_id: '',
   });
+  // Multi-state/locality: each row is one state + one locality pair
+  const [coverageAreas, setCoverageAreas] = useState<{ state: string; locality: string }[]>([
+    { state: '', locality: '' },
+  ]);
   const [wizardVillages, setWizardVillages] = useState<{ village_name: string; village_code: string; hh_target: string; state: string; locality: string }[]>([
     { village_name: '', village_code: 'VLG-01', hh_target: '', state: '', locality: '' },
   ]);
@@ -236,6 +264,17 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   const [logFilterTeam, setLogFilterTeam]     = useState('all');
   const [logFilterVillage, setLogFilterVillage] = useState('all');
   const [campaignStatusFilter, setCampaignStatusFilter] = useState('all');
+
+  // ── Costs & Fees state ────────────────────────────────────────────────────
+  const [siteEntries, setSiteEntries] = useState<SiteEntry[]>([]);
+  const [feeEdits, setFeeEdits] = useState<Record<string, { transport_fee: string; enumerator_fee: string }>>({});
+  const [feesSaving, setFeesSaving] = useState<Record<string, boolean>>({});
+
+  // ── Advances state ────────────────────────────────────────────────────────
+  const [advances, setAdvances] = useState<AdvanceRequest[]>([]);
+  const [showNewAdvance, setShowNewAdvance] = useState(false);
+  const [advanceSaving, setAdvanceSaving] = useState(false);
+  const [advanceForm, setAdvanceForm] = useState({ requested_amount: '', description: '', expense_category: 'transport', site_name: '' });
 
   // ── Load reference data ───────────────────────────────────────────────────
 
@@ -361,6 +400,30 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     setVillages(vils);
     setAssignments(assigns);
     setDailyLogs(logs);
+
+    // ── Load site entries for this campaign (fee/dispatch data) ───────────────
+    const { data: seRows } = await supabase
+      .from('mmp_site_entries')
+      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, status, additional_data')
+      .filter('additional_data->>campaign_id', 'eq', campaignId);
+    setSiteEntries((seRows || []) as SiteEntry[]);
+    // Initialize fee edit inputs from current values
+    const initEdits: Record<string, { transport_fee: string; enumerator_fee: string }> = {};
+    for (const e of (seRows || [])) {
+      initEdits[e.id] = { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
+    }
+    setFeeEdits(initEdits);
+  }, []);
+
+  // ── Load advance requests for this campaign ───────────────────────────────
+  const loadAdvances = useCallback(async (projectId?: string) => {
+    if (!projectId) { setAdvances([]); return; }
+    const { data } = await supabase
+      .from('advance_requests')
+      .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    setAdvances((data || []) as AdvanceRequest[]);
   }, []);
 
   useEffect(() => {
@@ -371,8 +434,14 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   }, [loadProfiles, loadProjects, loadTeams, loadCampaigns]);
 
   useEffect(() => {
-    if (selectedCampaign) loadCampaignDetail(selectedCampaign.id);
-  }, [selectedCampaign, loadCampaignDetail]);
+    if (selectedCampaign) {
+      loadCampaignDetail(selectedCampaign.id);
+      loadAdvances(selectedCampaign.project_id);
+    } else {
+      setSiteEntries([]);
+      setAdvances([]);
+    }
+  }, [selectedCampaign, loadCampaignDetail, loadAdvances]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -382,10 +451,24 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     return p?.full_name || p?.username || '—';
   };
 
-  const localities = useMemo(() =>
-    sudanStates.find(s => s.name === campaignForm.state)?.localities || [],
-    [campaignForm.state]
-  );
+  // Localities for a given state (reusable helper)
+  const localitiesForState = useCallback((stateName: string) =>
+    sudanStates.find(s => s.name === stateName)?.localities.map(l => l.name) || [],
+  []);
+
+  // Distinct states selected across all coverage areas (for village dropdowns in Step 2)
+  const coverageStates = useMemo(() =>
+    [...new Set(coverageAreas.map(a => a.state).filter(Boolean))],
+  [coverageAreas]);
+
+  // Supervisors: filter to supervisor-role users only
+  const supervisors = useMemo(() =>
+    profiles.filter(p => p.role && (
+      p.role.toLowerCase() === 'supervisor' ||
+      p.role.toLowerCase().includes('supervisor') ||
+      p.role.toLowerCase() === 'field_supervisor'
+    )),
+  [profiles]);
 
   const filteredLogs = useMemo(() => dailyLogs.filter(l => {
     if (logFilterTeam !== 'all' && l.team_id !== logFilterTeam) return false;
@@ -413,16 +496,23 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     setSaving(true);
     try {
       // 1. Insert campaign
+      // Derive state/locality summary from coverage areas for the campaign row
+      const validAreas = coverageAreas.filter(a => a.state);
+      const primaryState    = validAreas[0]?.state    || null;
+      const primaryLocality = validAreas[0]?.locality || null;
+      // Store all states as a comma-joined string if multiple (backward compat with text column)
+      const allStates    = validAreas.length > 1 ? validAreas.map(a => a.state).join(', ')    : primaryState;
+      const allLocalities = validAreas.length > 1 ? validAreas.map(a => a.locality).filter(Boolean).join(', ') : primaryLocality;
       const { data: camp, error: campErr } = await supabase
         .from('adhoc_campaigns')
         .insert({
           campaign_name:  campaignForm.campaign_name.trim(),
-          state:          campaignForm.state || null,
-          locality:       campaignForm.locality || null,
+          state:          allStates,
+          locality:       allLocalities,
           start_date:     campaignForm.start_date || null,
           end_date:       campaignForm.end_date   || null,
           status:         campaignForm.status,
-          project_id:     campaignForm.project_id     || null,
+          project_id:     (campaignForm.project_id && campaignForm.project_id !== '__none__') ? campaignForm.project_id : null,
           mmp_file_id:    campaignForm.mmp_file_id    || null,
           coordinator_id: campaignForm.coordinator_id || null,
           supervisor_id:  campaignForm.supervisor_id  || null,
@@ -464,7 +554,30 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           }
         }
         if (teamInserts.length > 0) {
-          await supabase.from('adhoc_village_teams').insert(teamInserts);
+          const { data: insertedAssignments } = await supabase
+            .from('adhoc_village_teams')
+            .insert(teamInserts)
+            .select('id, village_id, team_id');
+          // Auto-create mmp_site_entries so each assignment participates in fee/dispatch flow
+          for (const asn of (insertedAssignments || [])) {
+            const vil = (vils || []).find((v: any) => v.id === asn.village_id);
+            const vilForm = validVillages.find(v => v.village_code === (vil as any)?.village_code);
+            const team = allTeams.find(t => t.id === asn.team_id);
+            await createSiteEntryForAssignment({
+              assignmentId:     asn.id,
+              campaignId:       camp.id,
+              campaignName:     campaignForm.campaign_name.trim(),
+              mmpFileId:        campaignForm.mmp_file_id || null,
+              projectId:        (campaignForm.project_id && campaignForm.project_id !== '__none__') ? campaignForm.project_id : null,
+              villageId:        asn.village_id,
+              villageName:      vilForm?.village_name || (vil as any)?.village_code || asn.village_id,
+              villageCode:      vilForm?.village_code,
+              villageState:     vilForm?.state,
+              villageLocality:  vilForm?.locality,
+              teamId:           asn.team_id,
+              teamName:         team?.team_name,
+            });
+          }
         }
       }
 
@@ -481,9 +594,112 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 
   const resetWizard = () => {
     setWizardStep(1);
-    setCampaignForm({ campaign_name:'', state:'', locality:'', start_date:'', end_date:'', status:'active', project_id:'', mmp_file_id:'', coordinator_id:'', supervisor_id:'' });
+    setCampaignForm({ campaign_name:'', start_date:'', end_date:'', status:'active', project_id:'', mmp_file_id:'', coordinator_id:'', supervisor_id:'' });
+    setCoverageAreas([{ state:'', locality:'' }]);
     setWizardVillages([{ village_name:'', village_code:'VLG-01', hh_target:'', state:'', locality:'' }]);
     setWizardTeams([]);
+  };
+
+  // ── Create mmp_site_entry for a village-team assignment ───────────────────
+  /** Inserts an mmp_site_entries row so the assignment participates in the
+   *  existing fee / dispatch / payment-tracking flow, then links it back via
+   *  adhoc_village_teams.site_entry_id. */
+  const createSiteEntryForAssignment = async (params: {
+    assignmentId: string;
+    campaignId: string;
+    campaignName: string;
+    mmpFileId?: string | null;
+    projectId?: string | null;
+    villageId: string;
+    villageName: string;
+    villageCode?: string;
+    villageState?: string;
+    villageLocality?: string;
+    teamId: string;
+    teamName?: string;
+  }) => {
+    const { data: entry, error } = await supabase
+      .from('mmp_site_entries')
+      .insert({
+        mmp_file_id:    params.mmpFileId    || null,
+        site_name:      params.villageName,
+        site_code:      params.villageCode  || null,
+        state:          params.villageState  || null,
+        locality:       params.villageLocality || null,
+        transport_fee:  0,
+        enumerator_fee: 0,
+        status:         'pending',
+        additional_data: {
+          source:         'village_campaign',
+          campaign_id:    params.campaignId,
+          campaign_name:  params.campaignName,
+          village_id:     params.villageId,
+          team_id:        params.teamId,
+          team_name:      params.teamName || null,
+          assignment_id:  params.assignmentId,
+        },
+      })
+      .select('id')
+      .single();
+    if (error) { console.error('[site_entry] create error:', error.message); return; }
+    if (entry?.id) {
+      await supabase
+        .from('adhoc_village_teams')
+        .update({ site_entry_id: entry.id })
+        .eq('id', params.assignmentId);
+    }
+  };
+
+  // ── Save fee edits for a site entry ──────────────────────────────────────
+  const saveFee = async (entryId: string) => {
+    const edit = feeEdits[entryId];
+    if (!edit) return;
+    setFeesSaving(s => ({ ...s, [entryId]: true }));
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          transport_fee:  parseFloat(edit.transport_fee)  || 0,
+          enumerator_fee: parseFloat(edit.enumerator_fee) || 0,
+        })
+        .eq('id', entryId);
+      if (error) throw error;
+      setSiteEntries(es => es.map(e => e.id === entryId
+        ? { ...e, transport_fee: parseFloat(edit.transport_fee)||0, enumerator_fee: parseFloat(edit.enumerator_fee)||0 }
+        : e
+      ));
+      toast({ title: 'Fees updated' });
+    } catch (e: any) {
+      toast({ title: 'Error saving fees', description: e.message, variant: 'destructive' });
+    } finally {
+      setFeesSaving(s => ({ ...s, [entryId]: false }));
+    }
+  };
+
+  // ── Submit new advance request ────────────────────────────────────────────
+  const submitAdvance = async () => {
+    if (!selectedCampaign?.project_id || !advanceForm.requested_amount) {
+      toast({ title: 'Amount required', variant: 'destructive' }); return;
+    }
+    setAdvanceSaving(true);
+    try {
+      const { error } = await supabase.from('advance_requests').insert({
+        project_id:       selectedCampaign.project_id,
+        site_name:        advanceForm.site_name || selectedCampaign.campaign_name,
+        requested_amount: parseFloat(advanceForm.requested_amount),
+        description:      advanceForm.description || null,
+        expense_category: advanceForm.expense_category || 'transport',
+        status:           'pending',
+      });
+      if (error) throw error;
+      toast({ title: 'Advance request submitted' });
+      setShowNewAdvance(false);
+      await loadAdvances(selectedCampaign.project_id);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAdvanceSaving(false);
+    }
   };
 
   // ── Add village to existing campaign ─────────────────────────────────────
@@ -521,13 +737,36 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     }
     setSaving(true);
     try {
-      const { error } = await supabase.from('adhoc_village_teams').insert({
-        campaign_id:        selectedCampaign.id,
-        village_id:         assignForm.village_id,
-        team_id:            assignForm.team_id,
-        hh_target_for_team: assignForm.hh_target_for_team ? parseInt(assignForm.hh_target_for_team) : null,
-      });
+      const { data: assignment, error } = await supabase
+        .from('adhoc_village_teams')
+        .insert({
+          campaign_id:        selectedCampaign.id,
+          village_id:         assignForm.village_id,
+          team_id:            assignForm.team_id,
+          hh_target_for_team: assignForm.hh_target_for_team ? parseInt(assignForm.hh_target_for_team) : null,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
+      // Auto-create mmp_site_entry so assignment participates in fee/dispatch flow
+      const vil = villages.find(v => v.id === assignForm.village_id);
+      const team = allTeams.find(t => t.id === assignForm.team_id);
+      if (assignment?.id && vil) {
+        await createSiteEntryForAssignment({
+          assignmentId:    assignment.id,
+          campaignId:      selectedCampaign.id,
+          campaignName:    selectedCampaign.campaign_name,
+          mmpFileId:       selectedCampaign.mmp_file_id,
+          projectId:       selectedCampaign.project_id,
+          villageId:       vil.id,
+          villageName:     vil.village_name,
+          villageCode:     vil.village_code,
+          villageState:    vil.state,
+          villageLocality: vil.locality,
+          teamId:          assignForm.team_id,
+          teamName:        team?.team_name,
+        });
+      }
       toast({ title: 'Team assigned' });
       setShowAssignTeam(false);
       setAssignForm({ team_id:'', village_id:'', hh_target_for_team:'' });
@@ -790,7 +1029,14 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 
         {/* ── Create Campaign Wizard ────────────────────────────────────────── */}
         <Dialog open={showCreateCampaign} onOpenChange={setShowCreateCampaign}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={e => {
+              // Prevent Radix Select portals from triggering dialog close
+              const target = e.target as Element;
+              if (target?.closest?.('[data-radix-popper-content-wrapper]')) e.preventDefault();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Create Village Campaign — Step {wizardStep} of 3</DialogTitle>
               <DialogDescription>
@@ -820,22 +1066,6 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     </Select>
                   </div>
                   <div>
-                    <Label>State</Label>
-                    <Select value={campaignForm.state} onValueChange={v => setCampaignForm(f => ({ ...f, state: v, locality: '' }))}>
-                      <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
-                      <SelectContent>{sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  {campaignForm.state && localities.length > 0 && (
-                    <div>
-                      <Label>Locality</Label>
-                      <Select value={campaignForm.locality} onValueChange={v => setCampaignForm(f => ({ ...f, locality: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Select locality" /></SelectTrigger>
-                        <SelectContent>{localities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  <div>
                     <Label>Start Date</Label>
                     <Input type="date" value={campaignForm.start_date} onChange={e => setCampaignForm(f => ({ ...f, start_date: e.target.value }))} />
                   </div>
@@ -854,7 +1084,12 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     <Label>Supervisor</Label>
                     <Select value={campaignForm.supervisor_id} onValueChange={v => setCampaignForm(f => ({ ...f, supervisor_id: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select supervisor" /></SelectTrigger>
-                      <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || p.username}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        {supervisors.length === 0
+                          ? <div className="px-3 py-2 text-xs text-muted-foreground">No supervisor-role users found</div>
+                          : supervisors.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || p.username}</SelectItem>)
+                        }
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -862,10 +1097,51 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     <Select value={campaignForm.project_id} onValueChange={v => setCampaignForm(f => ({ ...f, project_id: v }))}>
                       <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </div>
+                  {/* ── Multi-state/locality coverage areas ── */}
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label>Coverage Areas <span className="text-[10px] font-normal text-muted-foreground ml-1">(campaign spans these states &amp; localities)</span></Label>
+                    </div>
+                    <div className="space-y-2">
+                      {coverageAreas.map((area, idx) => {
+                        const areaLocalities = localitiesForState(area.state);
+                        return (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <div className="flex-1">
+                              <Select value={area.state || '__none__'} onValueChange={v => setCoverageAreas(areas => areas.map((a, i) => i === idx ? { state: v === '__none__' ? '' : v, locality: '' } : a))}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select state" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Select state…</SelectItem>
+                                  {sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex-1">
+                              <Select value={area.locality || '__none__'} onValueChange={v => setCoverageAreas(areas => areas.map((a, i) => i === idx ? { ...a, locality: v === '__none__' ? '' : v } : a))} disabled={!area.state}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select locality" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Select locality…</SelectItem>
+                                  {areaLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {coverageAreas.length > 1 && (
+                              <button type="button" className="text-red-400 hover:text-red-600 transition-colors" onClick={() => setCoverageAreas(areas => areas.filter((_, i) => i !== idx))}>
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCoverageAreas(areas => [...areas, { state:'', locality:'' }])}>
+                        <Plus className="h-3 w-3" /> Add Another State / Locality
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -874,30 +1150,80 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             {/* Step 2: Villages */}
             {wizardStep === 2 && (
               <div className="space-y-3">
-                {wizardVillages.map((v, idx) => (
-                  <div key={idx} className="grid gap-2 sm:grid-cols-5 items-end p-3 border rounded-lg bg-muted/20">
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs">Village Name *</Label>
-                      <Input value={v.village_name} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_name: e.target.value } : r))} placeholder="Village name" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Code</Label>
-                      <Input value={v.village_code} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_code: e.target.value } : r))} placeholder="VLG-01" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">HH Target</Label>
-                      <Input type="number" min="0" value={v.hh_target} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, hh_target: e.target.value } : r))} placeholder="0" />
-                    </div>
-                    <div className="flex gap-1">
-                      {wizardVillages.length > 1 && (
-                        <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500" onClick={() => setWizardVillages(vs => vs.filter((_, i) => i !== idx))}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
+                {coverageStates.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    <MapPin className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                    <span>Coverage: <strong>{coverageAreas.filter(a => a.state).map(a => a.locality ? `${a.state} › ${a.locality}` : a.state).join(' · ')}</strong> — assign each village to one of these areas.</span>
                   </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state:'', locality:'' }])}>
+                )}
+                {wizardVillages.map((v, idx) => {
+                  const vilageStateLocalities = v.state ? localitiesForState(v.state) : [];
+                  // Offer only the states from coverage areas (if defined), otherwise all states
+                  const stateOptions = coverageStates.length > 0 ? coverageStates : sudanStates.map(s => s.name);
+                  // Pre-fill locality options from coverage areas when state matches
+                  const localityOptions = v.state
+                    ? (coverageAreas.filter(a => a.state === v.state && a.locality).map(a => a.locality).length > 0
+                        ? coverageAreas.filter(a => a.state === v.state && a.locality).map(a => a.locality)
+                        : vilageStateLocalities)
+                    : [];
+                  return (
+                    <div key={idx} className="p-3 border rounded-lg bg-muted/20 space-y-2">
+                      {/* Row 1: Name, Code, HH Target, Remove */}
+                      <div className="grid gap-2 sm:grid-cols-5 items-end">
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs">Village Name *</Label>
+                          <Input value={v.village_name} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_name: e.target.value } : r))} placeholder="Village name" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Code</Label>
+                          <Input value={v.village_code} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, village_code: e.target.value } : r))} placeholder="VLG-01" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">HH Target</Label>
+                          <Input type="number" min="0" value={v.hh_target} onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, hh_target: e.target.value } : r))} placeholder="0" />
+                        </div>
+                        <div className="flex gap-1 items-end pb-0.5">
+                          {wizardVillages.length > 1 && (
+                            <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500" onClick={() => setWizardVillages(vs => vs.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Row 2: State + Locality */}
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">State</Label>
+                          <Select
+                            value={v.state || '__none__'}
+                            onValueChange={val => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, state: val === '__none__' ? '' : val, locality: '' } : r))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select state" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select state…</SelectItem>
+                              {stateOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Locality</Label>
+                          <Select
+                            value={v.locality || '__none__'}
+                            onValueChange={val => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, locality: val === '__none__' ? '' : val } : r))}
+                            disabled={!v.state}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select locality" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select locality…</SelectItem>
+                              {localityOptions.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state: coverageStates[0] || '', locality:'' }])}>
                   <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Village
                 </Button>
               </div>
@@ -924,10 +1250,10 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                         </div>
                         <div>
                           <Label className="text-xs">Villages (blank = all)</Label>
-                          <Select value={ta.village_ids[0] || ''} onValueChange={v => setWizardTeams(ts => ts.map((r, i) => i === idx ? { ...r, village_ids: v ? [v] : [] } : r))}>
+                          <Select value={ta.village_ids[0] || '__none__'} onValueChange={v => setWizardTeams(ts => ts.map((r, i) => i === idx ? { ...r, village_ids: v && v !== '__none__' ? [v] : [] } : r))}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All villages" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">All villages</SelectItem>
+                              <SelectItem value="__none__">All villages</SelectItem>
                               {wizardVillages.filter(v => v.village_name).map((v, vi) => <SelectItem key={vi} value={v.village_code}>{v.village_name}</SelectItem>)}
                             </SelectContent>
                           </Select>
@@ -1077,6 +1403,8 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           <TabsTrigger value="villages" className="text-xs gap-1.5"><MapPin className="h-3.5 w-3.5" />Villages</TabsTrigger>
           <TabsTrigger value="teams" className="text-xs gap-1.5"><Users className="h-3.5 w-3.5" />Teams</TabsTrigger>
           <TabsTrigger value="logs" className="text-xs gap-1.5"><Activity className="h-3.5 w-3.5" />Daily Logs</TabsTrigger>
+          <TabsTrigger value="costs" className="text-xs gap-1.5"><Truck className="h-3.5 w-3.5" />Costs &amp; Fees</TabsTrigger>
+          <TabsTrigger value="advances" className="text-xs gap-1.5"><Wallet className="h-3.5 w-3.5" />Advances</TabsTrigger>
           <TabsTrigger value="report" className="text-xs gap-1.5"><FileText className="h-3.5 w-3.5" />Completion</TabsTrigger>
         </TabsList>
 
@@ -1204,6 +1532,160 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
               </div>
             );
           })}
+        </TabsContent>
+
+        {/* COSTS & FEES */}
+        <TabsContent value="costs" className="mt-4 space-y-4">
+          {/* Summary cards */}
+          {siteEntries.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground mb-0.5 flex items-center justify-center gap-1"><Truck className="h-3 w-3" />Transport Budget</p>
+                  <p className="text-base font-bold text-primary tabular-nums">SDG {siteEntries.reduce((s, e) => s + (e.transport_fee || 0), 0).toLocaleString()}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground mb-0.5 flex items-center justify-center gap-1"><BadgeDollarSign className="h-3 w-3" />Enumerator Fees</p>
+                  <p className="text-base font-bold text-purple-700 tabular-nums">SDG {siteEntries.reduce((s, e) => s + (e.enumerator_fee || 0), 0).toLocaleString()}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground mb-0.5 flex items-center justify-center gap-1"><DollarSign className="h-3 w-3" />Combined Total</p>
+                  <p className="text-base font-bold text-emerald-700 tabular-nums">SDG {siteEntries.reduce((s, e) => s + (e.transport_fee || 0) + (e.enumerator_fee || 0), 0).toLocaleString()}</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          {siteEntries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+              <DollarSign className="h-10 w-10 opacity-25" />
+              <p className="font-medium text-sm">No fee records yet</p>
+              <p className="text-xs text-center max-w-xs">Assign a team to a village — a transport & enumerator fee record is created automatically for each assignment.</p>
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Village / Site</TableHead>
+                    <TableHead>Team</TableHead>
+                    <TableHead className="text-right">Transport Fee (SDG)</TableHead>
+                    <TableHead className="text-right">Enumerator Fee (SDG)</TableHead>
+                    <TableHead>Payment Status</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {siteEntries.map(e => {
+                    const edit = feeEdits[e.id] || { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
+                    const isSavingFee = feesSaving[e.id];
+                    const payStatus = e.fee_paid_status;
+                    return (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-xs font-medium">{e.site_name}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{e.additional_data?.team_name || '—'}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number" min="0"
+                            value={edit.transport_fee}
+                            onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, transport_fee: ev.target.value } }))}
+                            className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number" min="0"
+                            value={edit.enumerator_fee}
+                            onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, enumerator_fee: ev.target.value } }))}
+                            className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`text-[10px] border-0 ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {payStatus || 'unpaid'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">
+                          {e.fee_paid_amount ? `SDG ${Number(e.fee_paid_amount).toLocaleString()}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                            disabled={isSavingFee} onClick={() => saveFee(e.id)}>
+                            {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ADVANCES */}
+        <TabsContent value="advances" className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Advance Requests</p>
+              {!selectedCampaign?.project_id && (
+                <p className="text-xs text-amber-600 mt-0.5">Link a project to this campaign to create advance requests</p>
+              )}
+            </div>
+            {selectedCampaign?.project_id && canManage && (
+              <Button size="sm" className="h-8 gap-1.5" onClick={() => { setAdvanceForm({ requested_amount:'', description:'', expense_category:'transport', site_name:'' }); setShowNewAdvance(true); }}>
+                <Plus className="h-3.5 w-3.5" /> New Advance Request
+              </Button>
+            )}
+          </div>
+          {advances.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+              <Wallet className="h-10 w-10 opacity-25" />
+              <p className="font-medium text-sm">{selectedCampaign?.project_id ? 'No advance requests yet' : 'No linked project'}</p>
+              <p className="text-xs text-center max-w-xs">
+                {selectedCampaign?.project_id
+                  ? 'Create the first advance request using the button above.'
+                  : 'Edit this campaign and link it to a project to enable advance requests.'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Site / Village</TableHead>
+                    <TableHead className="text-right">Requested (SDG)</TableHead>
+                    <TableHead className="text-right">Paid (SDG)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {advances.map(a => (
+                    <TableRow key={a.id}>
+                      <TableCell className="text-xs">{a.description || '—'}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px]">{a.expense_category || '—'}</Badge></TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{a.site_name || '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">{Number(a.requested_amount).toLocaleString()}</TableCell>
+                      <TableCell className="text-right tabular-nums text-emerald-600">{a.total_paid_amount ? Number(a.total_paid_amount).toLocaleString() : '—'}</TableCell>
+                      <TableCell>
+                        <Badge className={`text-[10px] border-0 ${['approved','paid'].includes(a.status) ? 'bg-emerald-100 text-emerald-700' : a.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {a.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{fmtDate(a.created_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
 
         {/* DAILY LOGS */}
@@ -1475,14 +1957,23 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>State</Label>
-                <Select value={villageForm.state} onValueChange={v => setVillageForm(f => ({ ...f, state: v, locality: '' }))}>
+                <Select value={villageForm.state || '__none__'} onValueChange={v => setVillageForm(f => ({ ...f, state: v === '__none__' ? '' : v, locality: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
-                  <SelectContent>{sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select state…</SelectItem>
+                    {sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Locality</Label>
-                <Input value={villageForm.locality} onChange={e => setVillageForm(f => ({ ...f, locality: e.target.value }))} placeholder="Locality" />
+                <Select value={villageForm.locality || '__none__'} onValueChange={v => setVillageForm(f => ({ ...f, locality: v === '__none__' ? '' : v }))} disabled={!villageForm.state}>
+                  <SelectTrigger><SelectValue placeholder={villageForm.state ? 'Select locality' : 'Select state first'} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select locality…</SelectItem>
+                    {localitiesForState(villageForm.state).map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -1760,6 +2251,61 @@ function TeamRegistryDialog({
             <Button variant="outline" onClick={() => setShowCreateTeam(false)}>Cancel</Button>
             <Button onClick={onSubmitTeam} disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Create Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── New Advance Request Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showNewAdvance} onOpenChange={setShowNewAdvance}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Advance Request</DialogTitle>
+            <DialogDescription>Request a cash advance for campaign field operations</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount (SDG) *</Label>
+              <Input type="number" min="0" placeholder="0" value={advanceForm.requested_amount}
+                onChange={e => setAdvanceForm(f => ({ ...f, requested_amount: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Expense Category</Label>
+              <Select value={advanceForm.expense_category} onValueChange={v => setAdvanceForm(f => ({ ...f, expense_category: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transport">Transport / Fuel</SelectItem>
+                  <SelectItem value="enumerator_fees">Enumerator Fees</SelectItem>
+                  <SelectItem value="accommodation">Accommodation</SelectItem>
+                  <SelectItem value="meals">Meal Per Diem</SelectItem>
+                  <SelectItem value="supplies">Field Supplies</SelectItem>
+                  <SelectItem value="communication">Communication</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Site / Village <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
+              <Select value={advanceForm.site_name || '__none__'}
+                onValueChange={v => setAdvanceForm(f => ({ ...f, site_name: v === '__none__' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder="All villages / general" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">General (all villages)</SelectItem>
+                  {villages.map(v => <SelectItem key={v.id} value={v.village_name}>{v.village_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Description / Justification</Label>
+              <Textarea value={advanceForm.description}
+                onChange={e => setAdvanceForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Briefly describe what this advance will be used for…" rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewAdvance(false)}>Cancel</Button>
+            <Button onClick={submitAdvance} disabled={advanceSaving || !advanceForm.requested_amount}>
+              {advanceSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Submit Request
             </Button>
           </DialogFooter>
         </DialogContent>

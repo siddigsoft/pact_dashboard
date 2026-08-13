@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft, HelpCircle,
+  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -107,11 +107,11 @@ const CLEARANCE_ORDER: Record<SecurityLevel, number> = {
 const SEC_CFG: Record<SecurityLevel, {
   label: string; icon: React.ElementType; bg: string; text: string; border: string; desc: string;
 }> = {
-  public:       { label: 'Public',       icon: Globe,      bg: 'bg-emerald-100',  text: 'text-emerald-700', border: 'border-emerald-200', desc: 'All PACT staff can view' },
-  internal:     { label: 'Internal',     icon: Users,      bg: 'bg-blue-100',     text: 'text-blue-700',    border: 'border-blue-200',    desc: 'Specific roles & departments' },
-  confidential: { label: 'Confidential', icon: Shield,     bg: 'bg-amber-100',    text: 'text-amber-700',   border: 'border-amber-200',   desc: 'Explicit permission required' },
-  restricted:   { label: 'Restricted',   icon: Lock,       bg: 'bg-orange-100',   text: 'text-orange-700',  border: 'border-orange-200',  desc: 'Senior management only' },
-  top_secret:   { label: 'Top Secret',   icon: Key,        bg: 'bg-red-100',      text: 'text-red-700',     border: 'border-red-200',     desc: 'Super admin + explicit grant' },
+  public:       { label: 'Public',       icon: Globe,      bg: 'bg-emerald-100',  text: 'text-emerald-700', border: 'border-emerald-200', desc: 'All authenticated PACT staff can view and download with no individual permission needed. Best for templates, announcements, and non-sensitive shared resources.' },
+  internal:     { label: 'Internal',     icon: Users,      bg: 'bg-blue-100',     text: 'text-blue-700',    border: 'border-blue-200',    desc: 'Limited to specific roles, departments, or hubs as configured. Staff outside the permitted groups are blocked. Best for team documents and operational files shared within defined groups.' },
+  confidential: { label: 'Confidential', icon: Shield,     bg: 'bg-amber-100',    text: 'text-amber-700',   border: 'border-amber-200',   desc: 'Requires an explicit per-user or per-role permission grant to access. No default access even for senior staff. Best for HR records, financial data, and partner-facing agreements.' },
+  restricted:   { label: 'Restricted',   icon: Lock,       bg: 'bg-orange-100',   text: 'text-orange-700',  border: 'border-orange-200',  desc: 'Visible only to Senior Management and Super Admins. Field staff, coordinators, and supervisors cannot see this content. Best for executive plans, budget decisions, and board materials.' },
+  top_secret:   { label: 'Top Secret',   icon: Key,        bg: 'bg-red-100',      text: 'text-red-700',     border: 'border-red-200',     desc: 'Highest clearance — only Super Admins and individually approved users may access. Every view is logged in the audit trail. Best for legal documents, audit evidence, and highly sensitive operational data.' },
 };
 
 const ACCESS_CFG: Record<AccessLevel, { label: string; icon: React.ElementType; desc: string; color: string }> = {
@@ -448,6 +448,207 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
               })}
             </div>
           )}
+
+          {/* External / guest sharing link */}
+          <div className="border rounded-xl p-3 space-y-2 bg-muted/20">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <ExternalLink className="h-3.5 w-3.5" />External / Guest Access
+            </p>
+            {file ? (
+              <>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Share this link with external guests or partners. Recipients need a PACT account to open the file unless the security level is set to{' '}
+                  <span className="font-semibold text-emerald-600">Public</span>. For truly public access, change the security level above first.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/view/${file.short_code || file.id}`}
+                    className="h-7 text-[10px] bg-background font-mono"
+                  />
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/view/${file.short_code || file.id}`);
+                      toast({ title: 'Link copied to clipboard' });
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />Copy
+                  </Button>
+                </div>
+              </>
+            ) : folder ? (
+              <>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Share this folder with guests or partners. Anyone with the link can see the folder contents they have clearance for.{' '}
+                  {folder.security_level === 'public'
+                    ? <span>Since this folder is <span className="font-semibold text-emerald-600">Public</span>, all files marked Public will be visible without a PACT account.</span>
+                    : <span>Recipients will need to <span className="font-semibold">sign in</span> to view files above Public level — grant them access in the panel above first.</span>
+                  }
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/workspace/share/folder/${folder.id}`}
+                    className="h-7 text-[10px] bg-background font-mono"
+                  />
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/workspace/share/folder/${folder.id}`);
+                      toast({ title: 'Folder link copied to clipboard' });
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />Copy
+                  </Button>
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
+                    onClick={() => window.open(`/workspace/share/folder/${folder.id}`, '_blank')}
+                  >
+                    <ExternalLink className="h-3 w-3" />Open
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                  Sub-folders can also be shared independently — right-click any sub-folder and choose <span className="font-semibold">Share / Manage Access</span> to get its own link.
+                </p>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Clearance Manager Dialog ─────────────────────────────────────────────────
+
+function ClearanceManagerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+
+  const { data: profiles = [] } = useQuery<ProfileOption[]>({
+    queryKey: ['profiles_for_clearance'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').limit(500).order('full_name');
+      return (data ?? []) as ProfileOption[];
+    },
+    enabled: open,
+  });
+
+  const { data: clearances = [], refetch: refetchClearances } = useQuery<{ user_id: string; clearance_level: SecurityLevel }[]>({
+    queryKey: ['workspace_clearances_all'],
+    queryFn: async () => {
+      const { data } = await supabase.from('workspace_security_clearances').select('user_id, clearance_level');
+      return (data ?? []) as { user_id: string; clearance_level: SecurityLevel }[];
+    },
+    enabled: open,
+  });
+
+  const clearanceMap = useMemo(() => {
+    const m: Record<string, SecurityLevel> = {};
+    clearances.forEach(c => { m[c.user_id] = c.clearance_level; });
+    return m;
+  }, [clearances]);
+
+  async function setClearance(profileId: string, level: SecurityLevel) {
+    const { error } = await (supabase as any).from('workspace_security_clearances').upsert(
+      { user_id: profileId, clearance_level: level },
+      { onConflict: 'user_id' }
+    );
+    if (error) { toast({ title: 'Failed to update clearance', description: error.message, variant: 'destructive' }); return; }
+    qc.invalidateQueries({ queryKey: ['workspace_clearances_all'] });
+    refetchClearances();
+    const name = profiles.find(p => p.id === profileId)?.full_name ?? profileId.slice(0, 8);
+    toast({ title: 'Clearance updated', description: `${name} → ${SEC_CFG[level].label}` });
+  }
+
+  const filtered = profiles.filter(p =>
+    !search.trim() || (p.full_name ?? '').toLowerCase().includes(search.toLowerCase()) || (p.role ?? '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-3">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserCog className="h-4 w-4 text-[#1D3461]" />
+            Security Clearance Manager
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Assign clearance levels to users. Users only see files and folders at or below their clearance. Super Admins always have Top Secret access regardless.
+          </p>
+        </DialogHeader>
+
+        {/* Level legend */}
+        <div className="grid grid-cols-5 gap-1.5 flex-shrink-0">
+          {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
+            const Icon = cfg.icon;
+            return (
+              <div key={level} className={cn('flex flex-col items-center gap-0.5 p-2 rounded-xl border text-center', cfg.bg, cfg.border)}>
+                <Icon className={cn('h-3.5 w-3.5', cfg.text)} />
+                <span className={cn('text-[10px] font-bold leading-tight', cfg.text)}>{cfg.label}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 border rounded-lg px-3 py-1.5 bg-muted/30 flex-shrink-0">
+          <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users…"
+            className="bg-transparent text-sm flex-1 outline-none placeholder:text-muted-foreground" />
+        </div>
+
+        {/* User list */}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+          {filtered.map(p => {
+            const currentLevel = clearanceMap[p.id] ?? 'internal';
+            const cfg = SEC_CFG[currentLevel];
+            const Icon = cfg.icon;
+            return (
+              <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:bg-muted/20 transition-colors">
+                <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
+                  <User className="h-3.5 w-3.5 text-[#1D3461]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate">{p.full_name ?? '—'}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g, ' ') ?? 'No role'}</p>
+                </div>
+                <Select value={currentLevel} onValueChange={v => setClearance(p.id, v as SecurityLevel)}>
+                  <SelectTrigger className={cn('h-7 w-40 text-[11px] gap-1 border-2', cfg.border, cfg.bg)}>
+                    <SelectValue>
+                      <span className={cn('flex items-center gap-1 font-semibold', cfg.text)}>
+                        <Icon className="h-3 w-3 flex-shrink-0" />{cfg.label}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, lcfg]) => {
+                      const LIcon = lcfg.icon;
+                      return (
+                        <SelectItem key={level} value={level} className="text-xs">
+                          <span className={cn('flex items-center gap-1.5 font-medium', lcfg.text)}>
+                            <LIcon className="h-3.5 w-3.5 flex-shrink-0" />{lcfg.label}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="text-center py-8 text-xs text-muted-foreground">No users match your search</div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between flex-shrink-0 pt-1 border-t">
+          <p className="text-[10px] text-muted-foreground max-w-xs leading-snug">
+            Default clearance for unlisted users is <span className="font-semibold">Internal</span>. Changes take effect on next login.
+          </p>
+          <Button size="sm" variant="outline" onClick={onClose}>Done</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -499,9 +700,10 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialEntries }: {
+function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
   folderId: string | null; folderName: string; open: boolean; onClose: () => void;
   currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
+  existingFiles?: WFile[];
 }) {
   const { toast } = useToast();
   const fileRef   = useRef<HTMLInputElement>(null);
@@ -515,6 +717,8 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const [currentUploadingName, setCurrentUploadingName] = useState('');
   const [extractZips, setExtractZips] = useState(true);
   const cancelledRef = useRef(false);
+  type DuplicateInfo = { file: File; match: WFile; action: 'rename' | 'both' };
+  const [duplicates, setDuplicates] = useState<DuplicateInfo[]>([]);
 
   const hasZipSelected = files.some(item => isZipFile(item.file));
 
@@ -522,16 +726,50 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   useEffect(() => {
     if (open && initialEntries && initialEntries.length > 0) {
       setFiles(initialEntries);
+      checkDuplicates(initialEntries.map(e => e.file));
     }
-    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); }
+    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); setDuplicates([]); }
   }, [open, initialEntries]);
 
+  function checkDuplicates(newFiles: File[]) {
+    const folderFiles = existingFiles.filter(ef => ef.folder_id === folderId);
+    const found: DuplicateInfo[] = [];
+    for (const f of newFiles) {
+      const match = folderFiles.find(ef =>
+        ef.name.toLowerCase() === f.name.toLowerCase() &&
+        ef.file_size === f.size &&
+        (ef.mime_type ?? '') === (f.type ?? '')
+      );
+      if (match) found.push({ file: f, match, action: 'rename' });
+    }
+    if (found.length > 0) setDuplicates(prev => {
+      const existing = new Set(prev.map(d => d.file.name.toLowerCase()));
+      return [...prev, ...found.filter(d => !existing.has(d.file.name.toLowerCase()))];
+    });
+  }
+
+  function setDuplicateAction(fileName: string, action: 'rename' | 'both') {
+    setDuplicates(prev => prev.map(d => d.file.name === fileName ? { ...d, action } : d));
+  }
+
+  function buildFinalName(name: string, usedNames: Set<string>): string {
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext  = dot > 0 ? name.slice(dot) : '';
+    let i = 2;
+    let candidate = `${base} (${i})${ext}`;
+    while (usedNames.has(candidate.toLowerCase())) { i++; candidate = `${base} (${i})${ext}`; }
+    return candidate;
+  }
+
   const addFiles = (raw: FileList | File[]) => {
-    const entries = Array.from(raw).map(f => ({
+    const newFiles = Array.from(raw);
+    const entries = newFiles.map(f => ({
       file: f,
       relativePath: (f as any).webkitRelativePath || f.name,
     }));
     setFiles(prev => [...prev, ...entries]);
+    checkDuplicates(newFiles);
   };
 
   async function handleUpload() {
@@ -606,9 +844,14 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
         }
         const { key: path } = await withTimeout(r2Upload(f), 600000);
         pendingOrphanPaths.push(path);
-        const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
+        // Apply duplicate rename resolution if needed
+        const dupEntry = duplicates.find(d => d.file === f || (d.file.name === f.name && d.file.size === f.size));
+        const usedNames = new Set(existingFiles.filter(ef => ef.folder_id === targetFolderId).map(ef => ef.name.toLowerCase()));
+        const finalName = dupEntry?.action === 'rename' ? buildFinalName(f.name, usedNames) : f.name;
+        setCurrentUploadingName(finalName);
+        const ext = finalName.split('.').pop()?.toLowerCase() ?? null;
         const insertPayload = {
-          folder_id: targetFolderId, name: f.name, description: description || null,
+          folder_id: targetFolderId, name: finalName, description: description || null,
           storage_path: path, public_url: null, storage_provider: 'r2',
           file_size: f.size, mime_type: f.type, extension: ext,
           security_level: secLevel, created_by: currentUserId, last_modified_by: currentUserId,
@@ -710,7 +953,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
             onDrop={async e => {
               e.preventDefault();
               const entries = await readDroppedItems(e.dataTransfer);
-              if (entries.length > 0) setFiles(prev => [...prev, ...entries]);
+              if (entries.length > 0) addFiles(entries.map(en => en.file));
             }}
           >
             <Upload className="h-7 w-7 text-[#1D3461]/40 mx-auto mb-2" />
@@ -768,6 +1011,33 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
               <div className="px-3 py-1.5 border-t bg-muted/10 text-[10px] text-muted-foreground">
                 {files.length} file{files.length !== 1 ? 's' : ''} · {fmtSize(files.reduce((s, f) => s + f.file.size, 0))} total
               </div>
+            </div>
+          )}
+
+          {/* Duplicate detection warning */}
+          {duplicates.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2.5">
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                {duplicates.length} Duplicate{duplicates.length !== 1 ? 's' : ''} Detected — same name, size &amp; type already exist in this folder
+              </p>
+              {duplicates.map(d => (
+                <div key={d.file.name} className="flex items-center justify-between gap-2 pl-1">
+                  <span className="text-[11px] font-medium text-amber-900 dark:text-amber-200 truncate flex-1">{d.file.name}</span>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateAction(d.file.name, 'rename')}
+                      className={cn('text-[10px] px-2 py-0.5 rounded border font-semibold transition-all', d.action === 'rename' ? 'bg-amber-600 text-white border-amber-600' : 'border-amber-300 text-amber-700 hover:bg-amber-100')}
+                    >Auto-rename</button>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateAction(d.file.name, 'both')}
+                      className={cn('text-[10px] px-2 py-0.5 rounded border font-semibold transition-all', d.action === 'both' ? 'bg-amber-600 text-white border-amber-600' : 'border-amber-300 text-amber-700 hover:bg-amber-100')}
+                    >Keep both</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -1267,7 +1537,8 @@ export default function WorkspaceHub() {
     staleTime: 60_000,
   });
 
-  const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : (myClearance ?? 'internal');
+  // Admins default to 'confidential' clearance if not explicitly set; regular staff default to 'internal'
+  const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : isAdmin ? (myClearance ?? 'confidential') : (myClearance ?? 'internal');
 
   // ── Task Documents ─────────────────────────────────────────────────────────
   const { data: taskDocsRaw = [] } = useQuery<TaskDocEntry[]>({
@@ -1328,7 +1599,8 @@ export default function WorkspaceHub() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<WFile | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'details'>('list');
+  const [clearanceManagerOpen, setClearanceManagerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [secFilter, setSecFilter] = useState<SecurityLevel | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'pdf' | 'excel' | 'word' | 'zip' | 'other'>('all');
@@ -1455,17 +1727,71 @@ export default function WorkspaceHub() {
     staleTime: 120_000,
   });
 
-  const refetch = useCallback(() => { refetchFolders(); refetchFiles(); if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); } }, [refetchFolders, refetchFiles, refetchArchived, refetchArchivedFolders, selectedFolderId]);
+  // ── My explicit permission grants/denials ────────────────────────────────
+  // Fetches rows in workspace_permissions where THIS user is the grantee (by user id or all_staff).
+  // This is used to enforce "No Access" blocks regardless of clearance level.
+  const { data: myPermissions = [], refetch: refetchMyPermissions } = useQuery<WPermission[]>({
+    queryKey: ['workspace_my_permissions', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data } = await supabase
+        .from('workspace_permissions')
+        .select('*')
+        .or(`grantee_id.eq.${userId},grantee_type.eq.all_staff`);
+      return (data ?? []) as WPermission[];
+    },
+    enabled: !!userId,
+    staleTime: 60_000,
+  });
+
+  // Sets of IDs the current user has been explicitly denied (no_access) — superAdmin is never blocked
+  const deniedFolderIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>();
+    return new Set(
+      myPermissions
+        .filter(p => p.folder_id && p.access_level === 'no_access')
+        .map(p => p.folder_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
+  const deniedFileIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>();
+    return new Set(
+      myPermissions
+        .filter(p => p.file_id && p.access_level === 'no_access')
+        .map(p => p.file_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
+  // Folders where the user has an explicit 'viewer' (read-only) grant —
+  // they can SEE the folder but must NOT be able to rename, delete, or change settings,
+  // even if their system role is admin.  Super admin is never downgraded.
+  const viewerRestrictedFolderIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>();
+    return new Set(
+      myPermissions
+        .filter(p => p.folder_id && (p.access_level === 'viewer' || p.access_level === 'read_only'))
+        .map(p => p.folder_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
+  const refetch = useCallback(() => {
+    refetchFolders(); refetchFiles(); refetchMyPermissions();
+    if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); }
+  }, [refetchFolders, refetchFiles, refetchMyPermissions, refetchArchived, refetchArchivedFolders, selectedFolderId]);
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
-  // Filter folders by security clearance — folder creator and admins always see their own folders
+  // Filter folders by security clearance AND explicit no_access denials.
+  // Folder creator always sees their own folder UNLESS they have been explicitly denied.
   const visibleFolders = useMemo(() =>
-    folders.filter(f =>
-      isSuperAdmin || isAdmin || f.created_by === userId ||
-      CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]
-    ),
-  [folders, isSuperAdmin, isAdmin, userId, effectiveClearance]);
+    folders.filter(f => {
+      // Explicit "No Access" block always wins (except super admin)
+      if (deniedFolderIds.has(f.id)) return false;
+      return isSuperAdmin || f.created_by === userId ||
+        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance];
+    }),
+  [folders, isSuperAdmin, userId, effectiveClearance, deniedFolderIds]);
 
   const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
@@ -1502,7 +1828,9 @@ export default function WorkspaceHub() {
     let files = allFiles;
     // The uploader (created_by === userId) ALWAYS keeps access to their file
     // unless ownership has been transferred. Admins and superadmins also bypass.
-    const isOwnerOrAdmin = (f: WFile) => isSuperAdmin || isAdmin || f.created_by === userId;
+    const isOwnerOrAdmin = (f: WFile) => isSuperAdmin || f.created_by === userId;
+    // Explicit no_access denials always win — even for file owners (except super admin)
+    files = files.filter(f => !deniedFileIds.has(f.id));
     // Enforce security clearance — hide files above user's clearance level (uploader/admin bypass)
     files = files.filter(f => isOwnerOrAdmin(f) || CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
@@ -1534,6 +1862,15 @@ export default function WorkspaceHub() {
       return b.updated_at.localeCompare(a.updated_at);
     });
   }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance]);
+
+  // ── Folder search results ────────────────────────────────────────────────
+  const folderSearchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return visibleFolders.filter(f =>
+      f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q)
+    );
+  }, [visibleFolders, searchQuery]);
 
   // ── Folder actions ────────────────────────────────────────────────────────
 
@@ -1876,7 +2213,69 @@ export default function WorkspaceHub() {
     '#1D3461','#0D9488','#16A34A','#7C3AED',
     '#DC2626','#EA580C','#D97706','#DB2777','#475569',
   ];
-  const FOLDER_ICONS = ['📁','🗂️','📂','📊','📋','📝','📌','⭐','💼','🌍','🔒','📅','✅','🔖','🚨','👥','📈','💡','🎯','🏠'];
+  const FOLDER_ICONS = ['📁','🗂️','📂','📊','📋','📝','📌','⭐','💼','🌍','🔒','📅','✅','🔖','🚨','👥','📈','💡','🎯','🏠','🤝','🌾','🏥','💊','🏫','🛡️','🚑','🏗️','💰','🇺🇳','🇺🇸','🇶🇦','🇬🇧','🇪🇺'];
+
+  // UN agencies and major donor organisations — stored as "org:ABBREV"
+  const ORG_ICONS: { key: string; label: string; bg: string; fg: string; title: string }[] = [
+    // UN system
+    { key: 'org:UN',    label: 'UN',    bg: '#009EDB', fg: '#fff', title: 'United Nations' },
+    { key: 'org:UNDP',  label: 'UNDP',  bg: '#418FDE', fg: '#fff', title: 'UN Development Programme' },
+    { key: 'org:UNICEF',label: 'UNICEF',bg: '#00AEEF', fg: '#fff', title: 'UN Children\'s Fund' },
+    { key: 'org:UNHCR', label: 'UNHCR', bg: '#0072BC', fg: '#fff', title: 'UN Refugee Agency' },
+    { key: 'org:WFP',   label: 'WFP',   bg: '#F5A623', fg: '#1a1a1a', title: 'World Food Programme' },
+    { key: 'org:WHO',   label: 'WHO',   bg: '#009ADE', fg: '#fff', title: 'World Health Organization' },
+    { key: 'org:OCHA',  label: 'OCHA',  bg: '#1CABE2', fg: '#fff', title: 'UN Office for the Coordination of Humanitarian Affairs' },
+    { key: 'org:FAO',   label: 'FAO',   bg: '#4D9200', fg: '#fff', title: 'Food and Agriculture Organization' },
+    { key: 'org:IOM',   label: 'IOM',   bg: '#00539F', fg: '#fff', title: 'International Organization for Migration' },
+    { key: 'org:UNOPS', label: 'UNOPS', bg: '#014E91', fg: '#fff', title: 'UN Office for Project Services' },
+    { key: 'org:UNFPA', label: 'UNFPA', bg: '#009FDA', fg: '#fff', title: 'UN Population Fund' },
+    { key: 'org:UNOCHA',label: 'UNOCHA',bg: '#1F6B75', fg: '#fff', title: 'UN OCHA' },
+    // Financial / development
+    { key: 'org:WB',    label: 'WB',    bg: '#009FDA', fg: '#fff', title: 'World Bank' },
+    { key: 'org:IMF',   label: 'IMF',   bg: '#D4AC2B', fg: '#1a1a1a', title: 'International Monetary Fund' },
+    { key: 'org:IFC',   label: 'IFC',   bg: '#006B3C', fg: '#fff', title: 'International Finance Corporation' },
+    { key: 'org:ADB',   label: 'ADB',   bg: '#D0021B', fg: '#fff', title: 'Asian Development Bank' },
+    // US government
+    { key: 'org:USAID', label: 'USAID', bg: '#BA0C2F', fg: '#fff', title: 'US Agency for International Development' },
+    { key: 'org:BHA',   label: 'BHA',   bg: '#002147', fg: '#fff', title: 'Bureau for Humanitarian Assistance (USAID)' },
+    { key: 'org:STATE', label: 'STATE', bg: '#1B3A6B', fg: '#fff', title: 'US Department of State' },
+    // Gulf / regional
+    { key: 'org:QF',    label: 'QF',    bg: '#8B1A4A', fg: '#fff', title: 'Qatar Foundation' },
+    { key: 'org:QFFD',  label: 'QFFD',  bg: '#5C1230', fg: '#fff', title: 'Qatar Fund for Development' },
+    { key: 'org:KAFD',  label: 'KAFD',  bg: '#006C35', fg: '#fff', title: 'King Abdullah Fund for Development' },
+    { key: 'org:UAE',   label: 'UAE',   bg: '#007749', fg: '#fff', title: 'UAE Aid / UAE Ministry of Foreign Affairs' },
+    // European donors
+    { key: 'org:ECHO',  label: 'ECHO',  bg: '#003399', fg: '#fff', title: 'EU Humanitarian Aid (ECHO)' },
+    { key: 'org:EU',    label: 'EU',    bg: '#003399', fg: '#FFD700', title: 'European Union' },
+    { key: 'org:FCDO',  label: 'FCDO',  bg: '#C8102E', fg: '#fff', title: 'UK Foreign Commonwealth & Development Office' },
+    { key: 'org:GIZ',   label: 'GIZ',   bg: '#004F39', fg: '#fff', title: 'German Development Agency' },
+    // Other notable orgs
+    { key: 'org:IRC',   label: 'IRC',   bg: '#E2231A', fg: '#fff', title: 'International Rescue Committee' },
+    { key: 'org:ICRC',  label: 'ICRC',  bg: '#C60C30', fg: '#fff', title: 'International Committee of the Red Cross' },
+    { key: 'org:MSF',   label: 'MSF',   bg: '#E2231A', fg: '#fff', title: 'Médecins Sans Frontières' },
+    { key: 'org:CARE',  label: 'CARE',  bg: '#0073BD', fg: '#fff', title: 'CARE International' },
+    { key: 'org:NRC',   label: 'NRC',   bg: '#D62B1F', fg: '#fff', title: 'Norwegian Refugee Council' },
+    { key: 'org:PACT',  label: 'PACT',  bg: '#1D3461', fg: '#fff', title: 'PACT' },
+  ];
+
+  /** Render a small org-badge icon for use in sidebar / preview */
+  function OrgBadge({ orgKey, size = 'sm' }: { orgKey: string; size?: 'xs' | 'sm' | 'lg' }) {
+    const cfg = ORG_ICONS.find(o => o.key === orgKey);
+    if (!cfg) return null;
+    const cls = size === 'xs'
+      ? 'text-[7px] px-[3px] h-[14px] min-w-[18px]'
+      : size === 'lg'
+        ? 'text-[11px] px-1.5 h-6 min-w-[32px] rounded-md'
+        : 'text-[8px] px-1 h-4 min-w-[22px]';
+    return (
+      <span className={`${cls} rounded font-bold flex items-center justify-center flex-shrink-0 tracking-tight leading-none`}
+        style={{ background: cfg.bg, color: cfg.fg }}
+        title={cfg.title}
+      >
+        {cfg.label}
+      </span>
+    );
+  }
 
   function FolderNode({ folder, depth }: { folder: WFolder; depth: number }) {
     const children = childMap[folder.id] ?? [];
@@ -1907,9 +2306,11 @@ export default function WorkspaceHub() {
             </button>
           ) : <span className="w-3 flex-shrink-0" />}
 
-          {/* Folder icon — custom emoji or colored folder */}
+          {/* Folder icon — org badge, custom emoji, or colored folder */}
           {isFolderLocked ? (
             <Lock className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-amber-300' : 'text-amber-500')} />
+          ) : folder.icon?.startsWith('org:') ? (
+            <OrgBadge orgKey={folder.icon} size="xs" />
           ) : folder.icon && /[^\u0000-\u007F]/.test(folder.icon) ? (
             <span className="text-sm flex-shrink-0 leading-none">{folder.icon}</span>
           ) : (
@@ -1918,15 +2319,16 @@ export default function WorkspaceHub() {
             </span>
           )}
 
-          <span className="flex-1 text-xs font-medium truncate">{folder.name.replace(/^folder\s+/i, '').trim()}</span>
+          <span className="flex-1 text-xs font-medium truncate" title={folder.name}>{folder.name.replace(/^folder\s+/i, '').trim()}</span>
           {isDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">Drop</span>}
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
-          {isAdmin && (
+          {/* Hide management actions when user has an explicit viewer grant on this folder */}
+          {isAdmin && !viewerRestrictedFolderIds.has(folder.id) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                <button className={cn('opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0', isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-muted text-muted-foreground')}>
+                <button className={cn('opacity-50 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0', isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-muted text-muted-foreground')}>
                   <MoreVertical className="h-2.5 w-2.5" />
                 </button>
               </DropdownMenuTrigger>
@@ -1939,6 +2341,9 @@ export default function WorkspaceHub() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
                   <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
+                  <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -2139,7 +2544,7 @@ export default function WorkspaceHub() {
         </td>
         {/* Actions */}
         <td className="py-3 pr-4">
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity justify-end">
             {(file.allow_download || canManageFile(file)) && !file.password_hash && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2248,7 +2653,7 @@ export default function WorkspaceHub() {
             </span>
           )}
           {/* Quick actions on hover */}
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                 <button className="h-6 w-6 rounded bg-white/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shadow-sm">
@@ -2365,7 +2770,7 @@ export default function WorkspaceHub() {
       <div className="flex h-screen bg-[#f3f6f9] dark:bg-[#080c16] overflow-hidden">
 
         {/* ══ Left Sidebar ════════════════════════════════════════════════ */}
-        <div className="w-60 flex-shrink-0 border-r border-blue-100 dark:border-blue-900 flex flex-col bg-white dark:bg-[#0f1422] overflow-y-auto">
+        <div className="w-72 flex-shrink-0 border-r border-blue-100 dark:border-blue-900 flex flex-col bg-white dark:bg-[#0f1422] overflow-y-auto">
           {/* Sidebar header — Notion style */}
           <div className="px-4 pt-5 pb-3">
             {/* Back to main app */}
@@ -2607,6 +3012,20 @@ export default function WorkspaceHub() {
                     <SelectItem value="size" className="text-xs">Size</SelectItem>
                   </SelectContent>
                 </Select>
+                {isSuperAdmin && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 border border-[#1D3461]/30 bg-white text-[#1D3461] hover:bg-[#1D3461]/5 active:scale-[0.98] transition-all"
+                        style={{ fontFamily: "'Manrope', system-ui, sans-serif" }}
+                        onClick={() => setClearanceManagerOpen(true)}
+                      >
+                        <UserCog className="h-3.5 w-3.5" /> Clearances
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">Manage per-user security clearance levels</TooltipContent>
+                  </Tooltip>
+                )}
                 <button
                   id="tour-upload-btn"
                   className="flex items-center gap-1.5 text-xs font-semibold text-white rounded-lg px-3.5 py-2 bg-gradient-to-br from-sky-600 to-blue-700 shadow-lg shadow-blue-600/25 hover:brightness-110 hover:-translate-y-px active:scale-[0.98] transition-all ease-[cubic-bezier(0.16,1,0.3,1)]"
@@ -2672,12 +3091,30 @@ export default function WorkspaceHub() {
               </SelectContent>
             </Select>
             <div id="tour-view-toggle" className="flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
-              <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'list' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
-                <List className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'grid' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
-                <Grid className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => setViewMode('list')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'list' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
+                    <List className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">List</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => setViewMode('details')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'details' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
+                    <Table2 className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Details</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => setViewMode('grid')} className={cn('p-1.5 rounded transition-colors active:scale-[0.98]', viewMode === 'grid' ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}>
+                    <Grid className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Grid</TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
@@ -2901,7 +3338,15 @@ export default function WorkspaceHub() {
                 {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
                 {currentSubFolders.length > 0 && (
                   <div className="px-6 pt-4 pb-2">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 px-2" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
+                    <div className="flex items-center justify-between px-2 mb-1">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
+                      <button
+                        onClick={() => setNewFolderOpen(true)}
+                        className="flex items-center gap-0.5 text-[10px] font-semibold text-[#2865eb] hover:text-[#1e52c9] transition-colors"
+                      >
+                        <FolderPlus className="h-3 w-3" /> New
+                      </button>
+                    </div>
                     {currentSubFolders.map(sub => {
                       const subFileCount = fileCounts[sub.id] ?? 0;
                       const subChildCount = (childMap[sub.id] ?? []).length;
@@ -2969,6 +3414,134 @@ export default function WorkspaceHub() {
                         </tbody>
                       </table>
                     </div>
+                  ) : viewMode === 'details' ? (
+                    <div className="px-6 pt-2">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden lg:table-cell">Security</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Type</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Size</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden sm:table-cell">Modified</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden xl:table-cell">Tags</th>
+                            <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 hidden sm:table-cell">By</th>
+                            <th className="pb-3" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {displayedFiles.map(f => {
+                            const secCfg = SEC_CFG[f.security_level];
+                            const SecIcon = secCfg.icon;
+                            const isSelected = selectedFile?.id === f.id;
+                            const isBulkSelected = selectedFileIds.has(f.id);
+                            const isLocked = !!f.password_hash && !unlockedIds.has(f.id);
+                            const isImage = f.mime_type?.startsWith('image/') && f.public_url;
+                            const ext = (f.extension ?? f.name.split('.').pop() ?? '').toUpperCase().slice(0, 3) || '?';
+                            const mime = f.mime_type ?? '';
+                            const fext = (f.extension ?? '').toLowerCase();
+                            const typeColor = mime.startsWith('image/') ? '#a855f7'
+                              : (mime === 'application/pdf' || fext === 'pdf') ? '#ef4444'
+                              : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(fext)) ? '#22c55e'
+                              : (mime.includes('word') || mime.includes('document') || ['docx','doc'].includes(fext)) ? '#3b82f6'
+                              : (mime.includes('zip') || mime.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(fext)) ? '#f59e0b'
+                              : '#64748b';
+                            return (
+                              <tr key={f.id}
+                                onClick={() => openFile(f)}
+                                draggable
+                                onDragStart={e => { e.dataTransfer.setData('fileId', f.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(f.id); }}
+                                onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
+                                className={cn('group cursor-pointer hover:bg-gray-50 dark:hover:bg-muted/30 transition-colors select-none',
+                                  isSelected && 'bg-blue-50/60 dark:bg-[#1D3461]/5',
+                                  isBulkSelected && 'bg-blue-50 dark:bg-[#1D3461]/8',
+                                  dragFileId === f.id && 'opacity-40')}>
+                                {/* Name */}
+                                <td className="py-2.5 pr-4">
+                                  <div className="flex items-center gap-2.5">
+                                    {isImage ? (
+                                      <img src={f.public_url!} alt={f.name} className="h-6 w-6 rounded object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                    ) : (
+                                      <div className="h-6 w-6 rounded flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: typeColor }}>{ext}</div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <span className="text-sm font-medium text-gray-800 dark:text-foreground truncate block" title={f.name}>{f.name}</span>
+                                      {f.description && <span className="text-[10px] text-muted-foreground truncate block">{f.description}</span>}
+                                    </div>
+                                    {f.is_pinned && <Star className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                                    {isLocked && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                                  </div>
+                                </td>
+                                {/* Security */}
+                                <td className="py-2.5 pr-4 hidden lg:table-cell">
+                                  <span className={cn('inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap', secCfg.bg, secCfg.text)}>
+                                    <SecIcon className="h-2.5 w-2.5" />{secCfg.label}
+                                  </span>
+                                </td>
+                                {/* Type */}
+                                <td className="py-2.5 pr-4 hidden md:table-cell">
+                                  <span className="text-[11px] text-muted-foreground">{f.extension?.toUpperCase() ?? f.mime_type?.split('/')[1]?.toUpperCase() ?? '—'}</span>
+                                </td>
+                                {/* Size */}
+                                <td className="py-2.5 pr-4 hidden md:table-cell">
+                                  <span className="text-xs text-gray-500 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtSize(f.file_size)}</span>
+                                </td>
+                                {/* Modified */}
+                                <td className="py-2.5 pr-4 hidden sm:table-cell">
+                                  <span className="text-xs text-gray-500 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtRelative(f.updated_at)}</span>
+                                </td>
+                                {/* Tags */}
+                                <td className="py-2.5 pr-4 hidden xl:table-cell">
+                                  {f.tags.length > 0 ? (
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {f.tags.slice(0, 3).map(t => <span key={t} className="text-[9px] px-1.5 py-0 rounded-full bg-blue-100 text-blue-700 font-medium">{t}</span>)}
+                                      {f.tags.length > 3 && <span className="text-[9px] text-muted-foreground">+{f.tags.length - 3}</span>}
+                                    </div>
+                                  ) : <span className="text-[11px] text-muted-foreground">—</span>}
+                                </td>
+                                {/* By */}
+                                <td className="py-2.5 hidden sm:table-cell">
+                                  <span className="text-sm text-gray-500 truncate">{f._uploaderName ?? '—'}</span>
+                                </td>
+                                {/* Actions */}
+                                <td className="py-2.5 pr-2">
+                                  <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity justify-end">
+                                    {(f.allow_download || canManageFile(f)) && !f.password_hash && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <button onClick={e => { e.stopPropagation(); openFileAs(f, 'download'); }} className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                                            <Download className="h-3.5 w-3.5" />
+                                          </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">Download</TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                        <button className="p-1 rounded text-gray-400 hover:text-gray-700 transition-colors">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
+                                        <DropdownMenuItem onSelect={() => openFileDetails(f)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+                                        {(!f.password_hash || unlockedIds.has(f.id) || canManageFile(f)) && <OpenAsSubMenu file={f} />}
+                                        {canManageFile(f) && <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: f.id, currentName: f.name }); setRenameValue(f.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                                          <DropdownMenuItem onClick={() => { setMoveTarget(f); setMoveFolderId(f.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+                                        </>}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {displayedFiles.map(f => <FileCard key={f.id} file={f} />)}
@@ -3012,18 +3585,19 @@ export default function WorkspaceHub() {
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
           initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}
+          existingFiles={allFiles}
         />
 
         {/* New folder dialog */}
         <Dialog open={newFolderOpen} onOpenChange={v => !v && setNewFolderOpen(false)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
+          <DialogContent className="max-w-sm max-h-[85vh] flex flex-col overflow-hidden">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
                 <FolderPlus className="h-4 w-4 text-[#1D3461]" />
                 New Folder
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
               <div>
                 <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Folder name…" className="text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && createFolder()} />
               </div>
@@ -3039,26 +3613,46 @@ export default function WorkspaceHub() {
                     Floor set by ancestor folder — cannot go below <span className="font-bold">{SEC_CFG[ancestorSecFloor].label}</span>
                   </p>
                 )}
-                <div className="grid grid-cols-3 gap-1.5">
+                {/* Compact single-row options — description shown only for selected */}
+                <div className="space-y-1">
                   {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
                     const Icon = cfg.icon;
                     const belowFloor = CLEARANCE_ORDER[level as SecurityLevel] < CLEARANCE_ORDER[ancestorSecFloor];
+                    const isSelected = newFolderSec === level;
                     return (
-                      <button key={level}
-                        disabled={belowFloor}
-                        onClick={() => !belowFloor && setNewFolderSec(level as SecurityLevel)}
-                        title={belowFloor ? `Cannot set below ancestor floor (${SEC_CFG[ancestorSecFloor].label})` : undefined}
-                        className={cn('flex flex-col items-center gap-1 p-2 rounded-xl border text-[10px] font-semibold transition-all',
-                          belowFloor ? 'opacity-30 cursor-not-allowed border-border' :
-                          newFolderSec === level ? `${cfg.bg} ${cfg.text} ${cfg.border} border-2` : 'border-border hover:bg-muted/30')}>
-                        <Icon className="h-4 w-4" />{cfg.label}
-                      </button>
+                      <div key={level}>
+                        <button
+                          type="button"
+                          disabled={belowFloor}
+                          onClick={() => !belowFloor && setNewFolderSec(level as SecurityLevel)}
+                          title={belowFloor ? `Cannot set below ancestor floor (${SEC_CFG[ancestorSecFloor].label})` : undefined}
+                          className={cn(
+                            'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-all',
+                            belowFloor ? 'opacity-30 cursor-not-allowed border-border' :
+                            isSelected ? `${cfg.bg} ${cfg.border} border-2` : 'border-border hover:bg-muted/30',
+                          )}>
+                          <div className={cn('h-6 w-6 rounded-md flex items-center justify-center flex-shrink-0', isSelected ? cfg.bg : 'bg-muted/60')}>
+                            <Icon className={cn('h-3 w-3', isSelected ? cfg.text : 'text-muted-foreground')} />
+                          </div>
+                          <span className={cn('text-xs font-semibold flex-1', isSelected ? cfg.text : 'text-foreground')}>{cfg.label}</span>
+                          <div className={cn('h-3.5 w-3.5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
+                            isSelected ? `${cfg.border} ${cfg.bg}` : 'border-border')}>
+                            {isSelected && <div className={cn('h-1.5 w-1.5 rounded-full', cfg.text.replace('text-', 'bg-'))} />}
+                          </div>
+                        </button>
+                        {/* Description expands only for the selected level */}
+                        {isSelected && (
+                          <p className={cn('text-[10px] leading-snug px-2.5 pt-1.5 pb-0.5 rounded-b-lg -mt-0.5 border-x border-b', cfg.border, cfg.text, 'opacity-80')}>
+                            {cfg.desc}
+                          </p>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0 pt-2">
               <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
               <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={createFolder} disabled={!newFolderName.trim()}>
                 Create Folder
@@ -3298,11 +3892,22 @@ export default function WorkspaceHub() {
           />
         )}
 
+        {/* Clearance Manager Dialog — super admin only */}
+        {isSuperAdmin && (
+          <ClearanceManagerDialog
+            open={clearanceManagerOpen}
+            onClose={() => setClearanceManagerOpen(false)}
+          />
+        )}
+
         {/* ── Folder Customize Dialog ────────────────────────────────────────── */}
         <Dialog open={!!folderCustomizeTarget} onOpenChange={open => { if (!open) setFolderCustomizeTarget(null); }}>
           <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl border-0 shadow-xl">
             <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-5 py-4 flex items-center gap-3">
-              <span className="text-2xl">{customIcon || '📁'}</span>
+              {customIcon?.startsWith('org:')
+                ? <OrgBadge orgKey={customIcon} size="lg" />
+                : <span className="text-2xl">{customIcon || '📁'}</span>
+              }
               <div>
                 <p className="text-white font-bold text-sm">{folderCustomizeTarget?.name}</p>
                 <p className="text-blue-200 text-[11px]">Choose a color and icon</p>
@@ -3327,7 +3932,7 @@ export default function WorkspaceHub() {
               </div>
               {/* Icon picker */}
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Icon</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">General Icons</p>
                 <div className="flex flex-wrap gap-1.5">
                   {FOLDER_ICONS.map(ic => (
                     <button key={ic} onClick={() => setCustomIcon(customIcon === ic ? '' : ic)}
@@ -3343,10 +3948,42 @@ export default function WorkspaceHub() {
                   </button>
                 </div>
               </div>
+
+              {/* Organisation icons */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">UN Agencies</p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {ORG_ICONS.slice(0, 12).map(org => (
+                    <button key={org.key} onClick={() => setCustomIcon(customIcon === org.key ? '' : org.key)}
+                      title={org.title}
+                      className={cn('h-8 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all hover:scale-105 min-w-[2.5rem]',
+                        customIcon === org.key ? 'ring-2 ring-offset-1 ring-[#1D3461]' : 'opacity-90 hover:opacity-100')}
+                      style={{ background: org.bg, color: org.fg }}>
+                      {org.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Donors &amp; Partners</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ORG_ICONS.slice(12).map(org => (
+                    <button key={org.key} onClick={() => setCustomIcon(customIcon === org.key ? '' : org.key)}
+                      title={org.title}
+                      className={cn('h-8 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all hover:scale-105 min-w-[2.5rem]',
+                        customIcon === org.key ? 'ring-2 ring-offset-1 ring-[#1D3461]' : 'opacity-90 hover:opacity-100')}
+                      style={{ background: org.bg, color: org.fg }}>
+                      {org.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Preview */}
               <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2">
                 <span className="text-[11px] text-slate-400 font-medium">Preview:</span>
-                <span className="text-sm">{customIcon || ''}</span>
+                {customIcon?.startsWith('org:')
+                  ? <OrgBadge orgKey={customIcon} size="sm" />
+                  : <span className="text-sm">{customIcon || ''}</span>
+                }
                 <span className="text-xs font-semibold" style={{ color: customColor }}>{folderCustomizeTarget?.name}</span>
               </div>
             </div>

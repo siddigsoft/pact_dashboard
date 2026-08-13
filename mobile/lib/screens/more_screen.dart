@@ -24,6 +24,7 @@ import 'hub_management_screen.dart';
 import 'incident_report_screen.dart';
 import 'mmp_cycle_close_screen.dart';
 import 'mmp_management_screen.dart';
+import 'village_campaigns_screen.dart';
 import 'monitoring_plan_screen.dart';
 import 'profile_screen.dart';
 import 'projects_screen.dart';
@@ -224,6 +225,12 @@ class _MoreScreenState extends State<MoreScreen> {
           Icons.description,
           'MMP Management',
           () => _navigateToScreen(const MmpManagementScreen()),
+        ),
+      if (_canSeeProgrammeOps)
+        _MoreItem(
+          Icons.home_work_outlined,
+          'Village Campaigns',
+          () => _navigateToScreen(const VillageCampaignsScreen()),
         ),
       if (_showAllForAdmin)
         _MoreItem(
