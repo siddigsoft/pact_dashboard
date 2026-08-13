@@ -913,6 +913,41 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
     }
   };
 
+  // ── Export Costs & Fees to Excel ─────────────────────────────────────────
+  const exportFeesExcel = () => {
+    if (!siteEntries.length || !selectedCampaign) return;
+    const headers = [
+      'Village / Site', 'Team', 'Transport Fee (SDG)', 'Enumerator Fee (SDG)',
+      'Total Due (SDG)', 'Paid Status', 'Paid Amount (SDG)', 'Payment Date',
+      'Payment Method', 'Notes', 'Recorded By', 'Dispatch Status',
+    ];
+    const rows = siteEntries.map(e => [
+      e.site_name,
+      e.additional_data?.team_name || '',
+      e.transport_fee ?? 0,
+      e.enumerator_fee ?? 0,
+      (e.transport_fee ?? 0) + (e.enumerator_fee ?? 0),
+      e.fee_paid_status || 'unpaid',
+      e.fee_paid_status === 'paid' ? (e.fee_paid_amount ?? '') : '',
+      e.fee_paid_at ? fmtDate(e.fee_paid_at) : '',
+      fmtPayMethod(e.fee_payment_method) || '',
+      e.fee_payment_notes || '',
+      profileName(e.fee_paid_by ?? undefined),
+      e.dispatched_at ? 'Dispatched' : 'Pending',
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = [
+      { wch: 26 }, { wch: 20 }, { wch: 18 }, { wch: 18 },
+      { wch: 15 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
+      { wch: 16 }, { wch: 32 }, { wch: 24 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Fee Payments');
+    const dateStr = format(new Date(), 'yyyyMMdd');
+    const safeName = selectedCampaign.campaign_name.replace(/[^\w-]/g, '_');
+    XLSX.writeFile(wb, `${safeName}_fees_${dateStr}.xlsx`);
+  };
+
   // ── Submit new advance request ────────────────────────────────────────────
   const submitAdvance = async () => {
     if (!selectedCampaign?.project_id || !advanceForm.requested_amount) {
@@ -1811,6 +1846,16 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                   <p className="text-[10px] text-muted-foreground">{siteEntries.filter(e => e.fee_paid_status === 'paid').length} / {siteEntries.length} entries</p>
                 </CardContent>
               </Card>
+            </div>
+          )}
+          {/* Export button — visible to all, not gated on canManage */}
+          {siteEntries.length > 0 && (
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline"
+                className="h-7 gap-1.5 text-xs"
+                onClick={exportFeesExcel}>
+                <Download className="h-3.5 w-3.5" />Export to Excel
+              </Button>
             </div>
           )}
           {/* Action header bar — Dispatch All + Mark All Paid */}
