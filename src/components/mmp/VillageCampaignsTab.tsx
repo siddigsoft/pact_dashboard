@@ -691,25 +691,37 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   };
 
   // ── Dispatch site entry to field team pickup queue ────────────────────────
+  // Routes through a security-definer RPC that enforces coordinator/admin
+  // authorization server-side and guards against re-dispatching already-
+  // dispatched entries (dispatched_at IS NULL check in the UPDATE WHERE clause).
   const dispatchEntry = async (entry: SiteEntry) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const now = new Date().toISOString();
+    // Guard: entry must not already have a dispatched_at (lifecycle safety)
+    if (entry.dispatched_at) {
+      toast({ title: 'Already dispatched', description: entry.site_name });
+      return;
+    }
     setDispatching(d => ({ ...d, [entry.id]: true }));
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const now = new Date().toISOString();
       const additionalData = {
         ...(entry.additional_data || {}),
         cost_status: 'dispatched',
         dispatched_at: now,
         dispatched_by: user.id,
       };
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
-        .eq('id', entry.id);
+      const { data, error } = await supabase.rpc('dispatch_campaign_site_entry', {
+        p_site_id: entry.id,
+        p_additional_data: additionalData,
+      });
       if (error) throw error;
+      // The RPC returns { success, message? } — treat success:false as failure
+      if (!data?.success) throw new Error(data?.message || 'Server rejected dispatch');
+      // Use server-returned dispatched_at for accuracy
+      const serverAt: string = data.dispatched_at ?? now;
       setSiteEntries(es => es.map(e => e.id === entry.id
-        ? { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData }
+        ? { ...e, status: 'Dispatched', dispatched_at: serverAt, dispatched_by: user.id, additional_data: additionalData }
         : e
       ));
       toast({ title: 'Dispatched', description: `${entry.site_name} is now in the field team pickup queue.` });
@@ -721,50 +733,55 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   };
 
   const dispatchAll = async () => {
-    const pending = siteEntries.filter(e => (e.status || '').toLowerCase() !== 'dispatched');
+    // Only target entries that have never been dispatched (dispatched_at IS NULL)
+    // — entries that are Accepted/in-progress/completed retain their dispatched_at
+    // and must not be overwritten even if their status has moved on.
+    const pending = siteEntries.filter(e => !e.dispatched_at);
     if (!pending.length) { toast({ title: 'All entries already dispatched' }); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setDispatchingAll(true);
     try {
       const now = new Date().toISOString();
-      // Run all updates concurrently; Supabase resolves (not rejects) on DB errors
-      // so we must inspect each result's .error field, not just the Promise status.
+      // Call the security-definer RPC for each entry. The RPC re-checks
+      // dispatched_at IS NULL server-side so concurrent dispatches are safe.
+      // Supabase resolves (not rejects) on logic failures, so we must inspect
+      // both the error field AND data.success before counting a win.
+      type SuccessPayload = { id: string; dispatched_at: string; additionalData: Record<string, any> };
       const results = await Promise.allSettled(
-        pending.map(async e => {
+        pending.map(async (e): Promise<SuccessPayload> => {
           const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
-          const { error } = await supabase
-            .from('mmp_site_entries')
-            .update({ status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData })
-            .eq('id', e.id);
-          if (error) throw error; // escalate so allSettled marks this as 'rejected'
-          return e.id; // return the id of the successfully dispatched entry
+          const { data, error } = await supabase.rpc('dispatch_campaign_site_entry', {
+            p_site_id: e.id,
+            p_additional_data: additionalData,
+          });
+          if (error) throw error;
+          if (!data?.success) throw new Error(data?.message || 'Server rejected dispatch');
+          return { id: e.id, dispatched_at: data.dispatched_at ?? now, additionalData };
         })
       );
 
-      // Collect only the IDs that truly succeeded (fulfilled + no thrown error)
-      const succeededIds = new Set<string>(
-        results
-          .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-          .map(r => r.value)
-      );
-      const failCount = results.length - succeededIds.size;
+      // Only update local state for confirmed successes
+      const successes = results
+        .filter((r): r is PromiseFulfilledResult<SuccessPayload> => r.status === 'fulfilled')
+        .map(r => r.value);
+      const failCount = results.length - successes.length;
 
-      // Only flip local state for entries that were confirmed dispatched in the DB
-      if (succeededIds.size > 0) {
+      if (successes.length > 0) {
+        const successMap = new Map(successes.map(s => [s.id, s]));
         setSiteEntries(es => es.map(e => {
-          if (!succeededIds.has(e.id)) return e;
-          const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
-          return { ...e, status: 'Dispatched', dispatched_at: now, dispatched_by: user.id, additional_data: additionalData };
+          const s = successMap.get(e.id);
+          if (!s) return e;
+          return { ...e, status: 'Dispatched', dispatched_at: s.dispatched_at, dispatched_by: user.id, additional_data: s.additionalData };
         }));
       }
 
-      if (failCount > 0 && succeededIds.size === 0) {
+      if (failCount > 0 && successes.length === 0) {
         toast({ title: 'Dispatch All failed', description: `All ${failCount} update${failCount !== 1 ? 's' : ''} were rejected by the server.`, variant: 'destructive' });
       } else if (failCount > 0) {
-        toast({ title: `${succeededIds.size} dispatched, ${failCount} failed`, description: 'Failed rows remain pending — check permissions and retry.', variant: 'destructive' });
+        toast({ title: `${successes.length} dispatched, ${failCount} failed`, description: 'Failed rows remain pending — check permissions and retry.', variant: 'destructive' });
       } else {
-        toast({ title: `${succeededIds.size} site${succeededIds.size !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
+        toast({ title: `${successes.length} site${successes.length !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
       }
     } catch (e: any) {
       toast({ title: 'Dispatch All failed', description: e.message, variant: 'destructive' });
@@ -1664,19 +1681,19 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
               </Card>
             </div>
           )}
-          {/* Dispatch All header */}
+          {/* Dispatch All header — dispatched_at is the authoritative lifecycle marker */}
           {canManage && siteEntries.length > 0 && (
             <div className="flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2 border">
               <p className="text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">
-                  {siteEntries.filter(e => (e.status || '').toLowerCase() === 'dispatched').length}
+                  {siteEntries.filter(e => !!e.dispatched_at).length}
                 </span>
                 {' / '}{siteEntries.length} dispatched to field teams
               </p>
               <Button
                 type="button" size="sm"
                 className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                disabled={dispatchingAll || siteEntries.every(e => (e.status || '').toLowerCase() === 'dispatched')}
+                disabled={dispatchingAll || siteEntries.every(e => !!e.dispatched_at)}
                 onClick={dispatchAll}
               >
                 {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
@@ -1711,7 +1728,9 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                     const edit = feeEdits[e.id] || { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
                     const isSavingFee = feesSaving[e.id];
                     const isDispatching = dispatching[e.id];
-                    const isDispatched = (e.status || '').toLowerCase() === 'dispatched';
+                    // dispatched_at is the lifecycle marker — once set it stays set even
+                    // if status later advances to Accepted/completed/in-progress
+                    const isDispatched = !!e.dispatched_at;
                     const payStatus = e.fee_paid_status;
                     return (
                       <TableRow key={e.id}>
