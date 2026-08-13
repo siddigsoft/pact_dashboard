@@ -2642,9 +2642,12 @@ export default function WorkspaceHub() {
                   <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {isSuperAdmin && (
+                {(isSuperAdmin || folder.created_by === userId) && (
                   <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                    <Key className="h-3.5 w-3.5 mr-2" />{folder.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                    <Key className="h-3.5 w-3.5 mr-2" />
+                    {folder.password_hash
+                      ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password')
+                      : 'Set Password'}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
@@ -2886,9 +2889,10 @@ export default function WorkspaceHub() {
                 )}
                 <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {isSuperAdmin && (
+                {(isSuperAdmin || file.created_by === userId) && (
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                    <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                    <Key className="h-3.5 w-3.5 mr-2" />
+                    {file.password_hash ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password') : 'Set Password'}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
@@ -3033,9 +3037,10 @@ export default function WorkspaceHub() {
                   )}
                   <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  {isSuperAdmin && (
+                  {(isSuperAdmin || file.created_by === userId) && (
                     <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                      <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change / Reset Password' : 'Set Password'}
+                      <Key className="h-3.5 w-3.5 mr-2" />
+                      {file.password_hash ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password') : 'Set Password'}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
