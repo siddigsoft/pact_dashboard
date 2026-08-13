@@ -96,6 +96,22 @@ interface WActivity {
   user_id: string | null; action: string; metadata: Record<string, any>;
   created_at: string; _userName?: string;
 }
+interface WDeleteRequest {
+  id: string;
+  type: 'file' | 'folder';
+  target_id: string;
+  target_name: string;
+  folder_id: string | null;
+  folder_name: string | null;
+  folder_owner_id: string | null;
+  requested_by: string;
+  requested_at: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  _requesterName?: string;
+}
 interface ProfileOption { id: string; full_name: string | null; role: string | null; }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -1537,8 +1553,10 @@ export default function WorkspaceHub() {
     staleTime: 60_000,
   });
 
-  // Admins default to 'confidential' clearance if not explicitly set; regular staff default to 'internal'
-  const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : isAdmin ? (myClearance ?? 'confidential') : (myClearance ?? 'internal');
+  // Clearance is always based on the explicit assignment from workspace_security_clearances.
+  // Admins are NOT given a free 'confidential' default — they see only what their assigned level
+  // permits, same as all other staff. Only super admins bypass clearance entirely.
+  const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : (myClearance ?? 'internal');
 
   // ── Task Documents ─────────────────────────────────────────────────────────
   const { data: taskDocsRaw = [] } = useQuery<TaskDocEntry[]>({
@@ -1616,6 +1634,8 @@ export default function WorkspaceHub() {
   const [bulkMoving, setBulkMoving] = useState(false);
   const [shareFolderTarget, setShareFolderTarget] = useState<WFolder | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
+  const [deleteReqPanelOpen, setDeleteReqPanelOpen] = useState(false);
+  const [deleteReqNotes, setDeleteReqNotes] = useState('');
   const [renameTarget, setRenameTarget] = useState<{ type: 'file' | 'folder'; id: string; currentName: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
@@ -1727,6 +1747,33 @@ export default function WorkspaceHub() {
     staleTime: 120_000,
   });
 
+  // ── Pending delete requests (for this user's folders, or all if super admin) ──
+  const { data: pendingDeleteRequests = [], refetch: refetchDeleteRequests } = useQuery<WDeleteRequest[]>({
+    queryKey: ['workspace_delete_requests', userId, isSuperAdmin],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('workspace_delete_requests')
+        .select('*')
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: false });
+      if (error || !data) return [];
+      // Enrich with requester names
+      const requesterIds = [...new Set(data.map((r: any) => r.requested_by).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (requesterIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', requesterIds);
+        (profiles ?? []).forEach((p: any) => { nameMap[p.id] = p.full_name ?? 'Unknown'; });
+      }
+      return data.map((r: any) => ({ ...r, _requesterName: nameMap[r.requested_by] ?? 'Unknown' })) as WDeleteRequest[];
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  });
+
   // ── My explicit permission grants/denials ────────────────────────────────
   // Fetches rows in workspace_permissions where THIS user is the grantee (by user id or all_staff).
   // This is used to enforce "No Access" blocks regardless of clearance level.
@@ -1762,6 +1809,24 @@ export default function WorkspaceHub() {
         .map(p => p.file_id as string)
     );
   }, [myPermissions, isSuperAdmin]);
+
+  // ── Rename permission helpers ─────────────────────────────────────────────
+  // Only the item's creator or a super admin may rename files/folders.
+  // Admins who did not create the item cannot rename it.
+  const canRenameFile = useCallback((file: WFile): boolean => {
+    if (isSuperAdmin) return true;
+    if (file.created_by === userId) return true;
+    // Folder owner may also rename files inside their own folder
+    if (file.folder_id) {
+      const parent = folders.find(f => f.id === file.folder_id);
+      if (parent?.created_by === userId) return true;
+    }
+    return false;
+  }, [isSuperAdmin, userId, folders]);
+
+  const canRenameFolder = useCallback((folder: WFolder): boolean =>
+    isSuperAdmin || folder.created_by === userId,
+  [isSuperAdmin, userId]);
 
   // Folders where the user has an explicit 'viewer' (read-only) grant —
   // they can SEE the folder but must NOT be able to rename, delete, or change settings,
@@ -2014,14 +2079,93 @@ export default function WorkspaceHub() {
     toast({ title: next ? 'File pinned' : 'File unpinned', description: file.name });
   }
 
-  async function deleteFile(file: WFile) {
-    // Archive only — do NOT remove from storage; permanent deletion happens in the Recycle Bin
+  // ── Internal archive helper (called only from approveDeleteRequest) ──────────
+  async function _archiveFile(file: WFile) {
     const { error } = await supabase.from('workspace_files').update({ archived: true }).eq('id', file.id);
-    if (error) { toast({ title: 'Failed to remove file', description: error.message, variant: 'destructive' }); return; }
+    if (error) throw error;
     await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: {} });
     if (selectedFile?.id === file.id) setSelectedFile(null);
     refetchFiles();
-    toast({ title: 'File moved to Recycle Bin', description: 'You can restore it from the Trash tab.' });
+  }
+
+  // ── Delete request system ─────────────────────────────────────────────────
+  // No user can directly delete a file or folder. They submit a request; the
+  // folder owner (or super admin for root items) approves or rejects it.
+
+  async function requestDeleteFile(file: WFile) {
+    const folder = file.folder_id ? folders.find(f => f.id === file.folder_id) : null;
+    const { error } = await supabase.from('workspace_delete_requests').insert({
+      type:            'file',
+      target_id:       file.id,
+      target_name:     file.name,
+      folder_id:       file.folder_id ?? null,
+      folder_name:     folder?.name ?? null,
+      folder_owner_id: folder?.created_by ?? null,
+      requested_by:    userId,
+    });
+    if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
+    refetchDeleteRequests();
+    toast({
+      title: 'Delete request submitted',
+      description: folder
+        ? `The folder owner will be notified to approve or reject this request.`
+        : 'A workspace admin will review your request.',
+    });
+  }
+
+  async function requestDeleteFolder(folder: WFolder) {
+    const parent = folder.parent_folder_id ? folders.find(f => f.id === folder.parent_folder_id) : null;
+    const { error } = await supabase.from('workspace_delete_requests').insert({
+      type:            'folder',
+      target_id:       folder.id,
+      target_name:     folder.name,
+      folder_id:       folder.parent_folder_id ?? null,
+      folder_name:     parent?.name ?? null,
+      folder_owner_id: parent?.created_by ?? null,
+      requested_by:    userId,
+    });
+    if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
+    refetchDeleteRequests();
+    toast({
+      title: 'Delete request submitted',
+      description: 'The folder owner will review your request.',
+    });
+  }
+
+  async function approveDeleteRequest(req: WDeleteRequest) {
+    try {
+      if (req.type === 'file') {
+        const file = allFiles.find(f => f.id === req.target_id);
+        if (file) await _archiveFile(file);
+        else {
+          // File may already be gone — mark approved anyway
+          await supabase.from('workspace_files').update({ archived: true }).eq('id', req.target_id);
+        }
+      } else {
+        await supabase.from('workspace_folders').delete().eq('id', req.target_id);
+        refetchFolders(); refetchFiles();
+      }
+      await supabase.from('workspace_delete_requests').update({
+        status:      'approved',
+        reviewed_by:  userId,
+        reviewed_at:  new Date().toISOString(),
+      }).eq('id', req.id);
+      refetchDeleteRequests();
+      toast({ title: `"${req.target_name}" deleted`, description: 'Delete request approved.' });
+    } catch (e: any) {
+      toast({ title: 'Failed to approve deletion', description: e.message, variant: 'destructive' });
+    }
+  }
+
+  async function rejectDeleteRequest(req: WDeleteRequest, notes: string) {
+    await supabase.from('workspace_delete_requests').update({
+      status:       'rejected',
+      reviewed_by:  userId,
+      reviewed_at:  new Date().toISOString(),
+      review_notes: notes.trim() || null,
+    }).eq('id', req.id);
+    refetchDeleteRequests();
+    toast({ title: 'Delete request rejected', description: `"${req.target_name}" will not be deleted.` });
   }
 
   async function changeFileSecurity(file: WFile, level: SecurityLevel) {
@@ -2354,9 +2498,11 @@ export default function WorkspaceHub() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
-                <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
-                  <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
-                </DropdownMenuItem>
+                {canRenameFolder(folder) && (
+                  <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
+                    <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
                   <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
                 </DropdownMenuItem>
@@ -2373,11 +2519,9 @@ export default function WorkspaceHub() {
                 <DropdownMenuSeparator />
                 <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600" onClick={async () => {
-                  await supabase.from('workspace_folders').delete().eq('id', folder.id);
-                  refetchFolders(); refetchFiles();
-                  toast({ title: 'Folder deleted' });
-                }}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder</DropdownMenuItem>
+                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(folder)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -2597,7 +2741,9 @@ export default function WorkspaceHub() {
               {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
               {canManageFile(file) && <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                {canRenameFile(file) && (
+                  <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -2619,7 +2765,7 @@ export default function WorkspaceHub() {
                     ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                     : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
               </>}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -2686,7 +2832,9 @@ export default function WorkspaceHub() {
                 {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
                 {canManageFile(file) && <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                  {canRenameFile(file) && (
+                    <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -2708,7 +2856,7 @@ export default function WorkspaceHub() {
                       ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                       : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+                  <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
                 </>}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2823,6 +2971,19 @@ export default function WorkspaceHub() {
                   title="Manage Access"
                 >
                   <Key className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {/* Delete-request badge — visible to folder owners and super admins */}
+              {pendingDeleteRequests.length > 0 && (
+                <button
+                  onClick={() => setDeleteReqPanelOpen(true)}
+                  className="relative flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 transition-colors"
+                  title={`${pendingDeleteRequests.length} pending delete request${pendingDeleteRequests.length !== 1 ? 's' : ''}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                    {pendingDeleteRequests.length > 9 ? '9+' : pendingDeleteRequests.length}
+                  </span>
                 </button>
               )}
             </div>
@@ -3582,10 +3743,12 @@ export default function WorkspaceHub() {
                                         {(!f.password_hash || unlockedIds.has(f.id) || canManageFile(f)) && <OpenAsSubMenu file={f} />}
                                         {canManageFile(f) && <>
                                           <DropdownMenuSeparator />
-                                          <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: f.id, currentName: f.name }); setRenameValue(f.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                                          {canRenameFile(f) && (
+                                            <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: f.id, currentName: f.name }); setRenameValue(f.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
+                                          )}
                                           <DropdownMenuItem onClick={() => { setMoveTarget(f); setMoveFolderId(f.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+                                          <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>
                                         </>}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
@@ -3832,6 +3995,75 @@ export default function WorkspaceHub() {
         </Dialog>
 
         {/* ── Rename Dialog ──────────────────────────────────────────────── */}
+        {/* ── Delete Request Approval Panel ────────────────────────────── */}
+        <Dialog open={deleteReqPanelOpen} onOpenChange={setDeleteReqPanelOpen}>
+          <DialogContent className="max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+            <DialogHeader className="flex-shrink-0">
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="h-4 w-4 text-amber-600" />
+                Pending Delete Requests
+                {pendingDeleteRequests.length > 0 && (
+                  <span className="ml-1 text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                    {pendingDeleteRequests.length}
+                  </span>
+                )}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Review requests to delete files or folders in your workspace. Approving permanently archives the item.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto space-y-3 py-2">
+              {pendingDeleteRequests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                  <Trash2 className="h-8 w-8 opacity-20" />
+                  <p className="text-sm">No pending delete requests</p>
+                </div>
+              ) : pendingDeleteRequests.map(req => (
+                <div key={req.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    {req.type === 'folder'
+                      ? <Folder className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      : <FileText className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{req.target_name}</p>
+                      {req.folder_name && (
+                        <p className="text-[11px] text-muted-foreground">in {req.folder_name}</p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Requested by <span className="font-medium">{req._requesterName}</span>
+                        {' · '}{fmtRelative(req.requested_at)}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold flex-shrink-0 ${req.type === 'folder' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      {req.type}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="h-7 text-[11px] bg-red-600 hover:bg-red-700 text-white flex-1"
+                      onClick={() => { approveDeleteRequest(req); }}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" />Approve & Delete
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] border-gray-300 text-gray-600 flex-1"
+                      onClick={() => rejectDeleteRequest(req, '')}
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <DialogFooter className="flex-shrink-0">
+              <Button variant="outline" size="sm" onClick={() => setDeleteReqPanelOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!renameTarget} onOpenChange={open => { if (!open) { setRenameTarget(null); setRenameValue(''); } }}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
