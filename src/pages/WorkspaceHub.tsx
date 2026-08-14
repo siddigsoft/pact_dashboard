@@ -2016,6 +2016,35 @@ export default function WorkspaceHub() {
     };
   }, []);
 
+  // ── Preview pane: persist selected file id to localStorage ────────────────
+  useEffect(() => {
+    if (previewFile) {
+      localStorage.setItem('ws_preview_file_id', previewFile.id);
+    } else {
+      localStorage.removeItem('ws_preview_file_id');
+    }
+  }, [previewFile?.id]);
+
+  // ── Preview pane: restore selected file after files load ──────────────────
+  // Runs once when allFiles becomes non-empty. If a stored id exists and the
+  // file is still present (not deleted/archived), reopen it in the pane.
+  const previewRestoredRef = useRef(false);
+  useEffect(() => {
+    if (previewRestoredRef.current) return;          // already ran
+    if (!previewPaneOpen) return;                    // pane is closed — nothing to restore
+    if (allFiles.length === 0) return;               // files not loaded yet
+    previewRestoredRef.current = true;
+    const storedId = localStorage.getItem('ws_preview_file_id');
+    if (!storedId) return;
+    const match = allFiles.find(f => f.id === storedId);
+    if (match) {
+      setPreviewFile(match);
+    } else {
+      // File was deleted or is no longer accessible — clear stale key
+      localStorage.removeItem('ws_preview_file_id');
+    }
+  }, [allFiles, previewPaneOpen]);
+
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
   // Filter folders by security clearance AND explicit no_access denials.
