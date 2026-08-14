@@ -1764,6 +1764,7 @@ export default function WorkspaceHub() {
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderDesc, setNewFolderDesc] = useState('');
   const [newFolderSec, setNewFolderSec] = useState<SecurityLevel>('internal');
+  const [creatingFolder, setCreatingFolder] = useState(false);
   // ── Bulk selection state ──────────────────────────────────────────────────
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
@@ -2512,19 +2513,45 @@ export default function WorkspaceHub() {
   const selectedFolder = selectedFolderId ? folders.find(f => f.id === selectedFolderId) : null;
 
   async function createFolder() {
-    if (!newFolderName.trim()) return;
-    // Enforce ancestor floor — never save a level below the most restrictive ancestor
-    const enforcedLevel: SecurityLevel =
-      CLEARANCE_ORDER[newFolderSec] >= CLEARANCE_ORDER[ancestorSecFloor] ? newFolderSec : ancestorSecFloor;
-    const { error } = await supabase.from('workspace_folders').insert({
-      name: newFolderName.trim(), description: newFolderDesc.trim() || null,
-      security_level: enforcedLevel, created_by: userId,
-      parent_folder_id: selectedFolder?.id ?? null,
-      short_code: generateShortCode(),
-    });
-    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    refetchFolders(); setNewFolderOpen(false); setNewFolderName(''); setNewFolderDesc(''); setNewFolderSec('internal');
-    toast({ title: 'Folder created' });
+    // Guard: ignore duplicate calls from Enter key + button click racing each other
+    if (!newFolderName.trim() || creatingFolder) return;
+    setCreatingFolder(true);
+    try {
+      // Enforce ancestor floor — never save a level below the most restrictive ancestor
+      const enforcedLevel: SecurityLevel =
+        CLEARANCE_ORDER[newFolderSec] >= CLEARANCE_ORDER[ancestorSecFloor] ? newFolderSec : ancestorSecFloor;
+      const { data: newRow, error } = await supabase
+        .from('workspace_folders')
+        .insert({
+          name: newFolderName.trim(), description: newFolderDesc.trim() || null,
+          security_level: enforcedLevel, created_by: userId,
+          parent_folder_id: selectedFolder?.id ?? null,
+          short_code: generateShortCode(),
+        })
+        .select('*')
+        .single();
+      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+
+      // Optimistic update: inject the new folder into the React Query cache immediately
+      // so it appears in the sidebar and grid without waiting for a network refetch.
+      if (newRow) {
+        qc.setQueryData<WFolder[]>(['workspace_folders', userId], old =>
+          [...(old ?? []), newRow as WFolder].sort((a, b) => a.name.localeCompare(b.name))
+        );
+      }
+
+      // Close and reset the dialog right away (user sees the folder instantly above)
+      setNewFolderOpen(false);
+      setNewFolderName('');
+      setNewFolderDesc('');
+      setNewFolderSec('internal');
+      toast({ title: 'Folder created' });
+
+      // Background sync — brings in any concurrent changes from other users
+      refetchFolders();
+    } finally {
+      setCreatingFolder(false);
+    }
   }
 
   async function duplicateFolder(folder: WFolder) {
@@ -5173,8 +5200,10 @@ export default function WorkspaceHub() {
             </div>
             <DialogFooter className="flex-shrink-0 pt-2">
               <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
-              <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={createFolder} disabled={!newFolderName.trim()}>
-                Create Folder
+              <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={createFolder} disabled={!newFolderName.trim() || creatingFolder}>
+                {creatingFolder
+                  ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Creating…</>
+                  : 'Create Folder'}
               </Button>
             </DialogFooter>
           </DialogContent>
