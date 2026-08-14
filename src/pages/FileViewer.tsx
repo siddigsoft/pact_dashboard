@@ -126,11 +126,6 @@ export default function FileViewer() {
         setLoading(false);
         return;
       }
-      if (['top_secret', 'restricted'].includes(data.security_level)) {
-        setError('This file requires authentication to view. Please log in to the PACT Command Center.');
-        setLoading(false);
-        return;
-      }
 
       const fd = { ...data } as FileData;
       // Show the file card immediately — don't block on the R2 signed URL.

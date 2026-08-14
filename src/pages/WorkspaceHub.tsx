@@ -544,8 +544,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
             {file ? (
               <>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Share this link with external guests or partners. Recipients need a PACT account to open the file unless the security level is set to{' '}
-                  <span className="font-semibold text-emerald-600">Public</span>. For truly public access, change the security level above first.
+                  Anyone with this link can open the file — including Confidential and Top Secret files. Treat the link like a password.
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -573,11 +572,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
             ) : folder ? (
               <>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Share this folder with guests or partners. Anyone with the link can see the folder contents they have clearance for.{' '}
-                  {folder.security_level === 'public'
-                    ? <span>Since this folder is <span className="font-semibold text-emerald-600">Public</span>, all files marked Public will be visible without a PACT account.</span>
-                    : <span>Recipients will need to <span className="font-semibold">sign in</span> to view files above Public level — grant them access in the panel above first.</span>
-                  }
+                  Anyone with this link can open the folder and its contents — the same as a file share link. Recipients must be signed in. Treat the link like a password.
                 </p>
                 <div className="flex gap-2">
                   <Input
