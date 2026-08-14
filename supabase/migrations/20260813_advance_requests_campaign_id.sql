@@ -59,12 +59,21 @@ ALTER TABLE advance_requests
 UPDATE advance_requests ar
 SET    campaign_id = sub.id
 FROM  (
+  -- Only backfill rows where the project maps to exactly ONE campaign.
+  -- Projects with multiple campaigns are left NULL (Finance Hub shows them
+  -- as "Unattributed" so finance staff can resolve manually).
   SELECT ac.id, ac.project_id
   FROM   adhoc_campaigns ac
   WHERE  ac.deleted_at IS NULL
   AND    ac.project_id IS NOT NULL
-  GROUP  BY ac.project_id, ac.id
-  HAVING COUNT(*) OVER (PARTITION BY ac.project_id) = 1
+  AND    ac.project_id IN (
+    SELECT project_id
+    FROM   adhoc_campaigns
+    WHERE  deleted_at IS NULL
+    AND    project_id IS NOT NULL
+    GROUP  BY project_id
+    HAVING COUNT(*) = 1
+  )
 ) sub
 WHERE  ar.campaign_id IS NULL
 AND    ar.project_id  IS NOT NULL
