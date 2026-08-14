@@ -2687,10 +2687,48 @@ export default function WorkspaceHub() {
   }
 
   async function changeFolderSecurity(folderId: string, folderName: string, level: SecurityLevel) {
-    const { error } = await supabase.from('workspace_folders').update({ security_level: level }).eq('id', folderId);
-    if (error) { toast({ title: 'Failed to update folder security', description: error.message, variant: 'destructive' }); return; }
+    // Collect the target folder + all descendant folder IDs via BFS over the
+    // already-loaded folders list (no extra DB round-trip needed).
+    const allFolderIds: string[] = [folderId];
+    const queue = [folderId];
+    while (queue.length) {
+      const parentId = queue.shift()!;
+      const children = folders.filter(f => f.parent_folder_id === parentId).map(f => f.id);
+      allFolderIds.push(...children);
+      queue.push(...children);
+    }
+
+    // 1. Update the folder and all its descendants in one call
+    const { error: folderErr } = await supabase
+      .from('workspace_folders')
+      .update({ security_level: level })
+      .in('id', allFolderIds);
+    if (folderErr) {
+      toast({ title: 'Failed to update folder security', description: folderErr.message, variant: 'destructive' });
+      return;
+    }
+
+    // 2. Update every file that lives inside any of those folders
+    const fileIds = allFiles
+      .filter(f => f.folder_id && allFolderIds.includes(f.folder_id))
+      .map(f => f.id);
+    if (fileIds.length > 0) {
+      const { error: fileErr } = await supabase
+        .from('workspace_files')
+        .update({ security_level: level, updated_at: new Date().toISOString() })
+        .in('id', fileIds);
+      if (fileErr) {
+        toast({ title: 'Folders updated but some files failed', description: fileErr.message, variant: 'destructive' });
+      }
+    }
+
     refetchFolders();
-    toast({ title: 'Folder security updated', description: `${folderName} → ${SEC_CFG[level].label}` });
+    refetchFiles();
+    const subCount = allFolderIds.length - 1;
+    toast({
+      title: 'Security level updated',
+      description: `${folderName} + ${subCount} sub-folder${subCount !== 1 ? 's' : ''} + ${fileIds.length} file${fileIds.length !== 1 ? 's' : ''} → ${SEC_CFG[level].label}`,
+    });
   }
 
   function SecuritySubMenu({ current, onSelect }: { current: SecurityLevel; onSelect: (l: SecurityLevel) => void }) {
