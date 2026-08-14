@@ -109,12 +109,20 @@ class NotificationTriggerService {
       });
 
       if (insertedId != null) {
-        await NotificationService.showUserNotification(
-          notificationId: insertedId,
-          title: options.title,
-          body: options.message,
-          type: options.type.toString().split('.').last,
-        );
+        // Only trigger a local OS notification when the recipient is the user
+        // currently authenticated on this device.  For notifications addressed
+        // to a different user (e.g. coordinator being notified of a team-lead
+        // claim), we rely solely on the DB insert — the recipient's web bell
+        // and realtime subscription pick it up when they open the app.
+        final localUserId = _supabase.auth.currentUser?.id;
+        if (localUserId != null && localUserId == options.userId) {
+          await NotificationService.showUserNotification(
+            notificationId: insertedId,
+            title: options.title,
+            body: options.message,
+            type: options.type.toString().split('.').last,
+          );
+        }
 
         // Send email if high priority or explicitly requested
         if (options.sendEmail ||
@@ -931,6 +939,61 @@ class NotificationTriggerService {
     } catch (e) {
       debugPrint('[Notification] Error sending write-off alert: $e');
       return false;
+    }
+  }
+
+  // ==================== VILLAGE CAMPAIGN NOTIFICATIONS ====================
+
+  /// Notify the campaign coordinator that a team lead has claimed their
+  /// assigned village.  Looks up coordinator_id from adhoc_campaigns so the
+  /// caller does not need to pre-fetch it.  Non-fatal — a failure here must
+  /// never block the claim flow.
+  Future<void> villageSiteClaimed({
+    required String campaignId,
+    required String siteId,
+    required String villageName,
+    required String teamLeadName,
+    String? projectId,
+  }) async {
+    try {
+      // Resolve coordinator_id from the campaign record
+      final campaignRow = await _supabase
+          .from('adhoc_campaigns')
+          .select('coordinator_id')
+          .eq('id', campaignId)
+          .maybeSingle();
+
+      final coordinatorId = campaignRow?['coordinator_id'] as String?;
+      if (coordinatorId == null || coordinatorId.isEmpty) {
+        debugPrint(
+          '[Notification] villageSiteClaimed: no coordinator on campaign $campaignId — skipping',
+        );
+        return;
+      }
+
+      await send(
+        NotificationTriggerOptions(
+          userId: coordinatorId,
+          title: 'Village Claimed',
+          message:
+              '$teamLeadName has claimed $villageName — work can begin',
+          type: NotificationType.info,
+          category: NotificationCategory.assignments,
+          priority: NotificationPriority.high,
+          link: '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: RelatedEntityType.siteVisit,
+          projectId: projectId,
+        ),
+      );
+
+      debugPrint(
+        '[Notification] villageSiteClaimed: notified coordinator=$coordinatorId '
+        'for village=$villageName campaign=$campaignId',
+      );
+    } catch (e) {
+      // Non-fatal — claim already succeeded; log and continue.
+      debugPrint('[Notification] villageSiteClaimed error (non-fatal): $e');
     }
   }
 

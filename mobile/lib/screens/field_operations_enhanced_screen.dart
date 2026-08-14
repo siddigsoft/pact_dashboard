@@ -29,6 +29,7 @@ import 'visit_report_detail_screen.dart';
 import '../widgets/complete_visit_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../services/claim_fee_service.dart';
+import '../services/notification_trigger_service.dart';
 import '../utils/user_identity_resolver.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
@@ -2276,6 +2277,25 @@ class _MMPScreenState extends State<MMPScreen> {
           debugPrint(
             '[_claimSite] Village campaign site — skipping direct follow-up update; RPC already set Accepted',
           );
+          // Notify the campaign coordinator that work has started.
+          // Fire-and-forget: a notification failure must never fail the claim.
+          final campaignId =
+              additionalDataForClaim['campaign_id']?.toString();
+          final villageName =
+              additionalDataForClaim['village_name']?.toString() ??
+              site['site_name']?.toString() ??
+              site['siteName']?.toString() ??
+              'Unknown village';
+          if (campaignId != null) {
+            unawaited(
+              NotificationTriggerService().villageSiteClaimed(
+                campaignId: campaignId,
+                siteId: site['id'].toString(),
+                villageName: villageName,
+                teamLeadName: _userName ?? 'Team lead',
+              ),
+            );
+          }
         }
 
         if (mounted) {
