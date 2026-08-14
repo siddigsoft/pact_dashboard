@@ -67,6 +67,32 @@ interface WFolder {
 function generateShortCode(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 }
+
+const WORKSPACE_REVIEWER_ROLES = ['admin', 'Admin', 'superAdmin', 'super_admin', 'SuperAdmin'];
+
+async function notifyAdminsOfDeleteRequest(params: {
+  requesterId: string;
+  targetName: string;
+  kind: 'file' | 'folder';
+}) {
+  try {
+    const { data } = await supabase.from('profiles').select('id').in('role', WORKSPACE_REVIEWER_ROLES);
+    const recipients = [...new Set((data ?? []).map(p => p.id).filter(id => id && id !== params.requesterId))];
+    if (recipients.length === 0) return;
+    await insertNotificationsToDb(recipients.map(id => ({
+      recipient_id: id,
+      user_id: id,
+      title_en: 'Workspace delete request',
+      message_en: `A ${params.kind} delete request for "${params.targetName}" is waiting for review.`,
+      event_type: 'approvals',
+      type: 'approvals',
+      action_url: '/workspace',
+      is_read: false,
+    })));
+  } catch (e) {
+    console.warn('[WorkspaceHub] failed to notify admins of delete request', e);
+  }
+}
 interface PasswordTarget {
   id: string; name: string; password_hash: string | null; isFolder: boolean;
 }
@@ -1919,23 +1945,16 @@ export default function WorkspaceHub() {
   });
 
   // ── Pending delete requests ───────────────────────────────────────────────
-  // Super admins and admins see every pending request.
-  // Regular users only see requests for folders they own (folder_owner_id = userId).
-  // Viewers and other non-admin, non-owner users receive an empty list.
+  // Admin and Super Admin only — folder owners and requesters do not review.
   const { data: pendingDeleteRequests = [], refetch: refetchDeleteRequests } = useQuery<WDeleteRequest[]>({
-    queryKey: ['workspace_delete_requests', userId, isSuperAdmin, isAdmin],
+    queryKey: ['workspace_delete_requests', userId, isAdmin],
     queryFn: async () => {
-      if (!userId) return [];
-      let q = supabase
+      if (!userId || !isAdmin) return [];
+      const { data, error } = await supabase
         .from('workspace_delete_requests')
         .select('*')
         .eq('status', 'pending')
         .order('requested_at', { ascending: false });
-      // Non-admins only see requests targeting folders they created
-      if (!isSuperAdmin && !isAdmin) {
-        q = q.eq('folder_owner_id', userId);
-      }
-      const { data, error } = await q;
       if (error || !data) return [];
       // Enrich with requester names
       const requesterIds = [...new Set(data.map((r: any) => r.requested_by).filter(Boolean))];
@@ -1949,8 +1968,7 @@ export default function WorkspaceHub() {
       }
       return data.map((r: any) => ({ ...r, _requesterName: nameMap[r.requested_by] ?? 'Unknown' })) as WDeleteRequest[];
     },
-    // Only run for admins or users who own at least one folder
-    enabled: !!userId && (isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)),
+    enabled: !!userId && isAdmin,
     staleTime: 30_000,
   });
 
@@ -2692,7 +2710,7 @@ export default function WorkspaceHub() {
   }
 
   // ── Delete request system ─────────────────────────────────────────────────
-  // Non-admin users submit a request; Super Admin approves or rejects it.
+  // Non-admin users submit a request; Admin / Super Admin approves or rejects it.
 
   async function requestDeleteFile(file: WFile) {
     const folder = file.folder_id ? folders.find(f => f.id === file.folder_id) : null;
@@ -2707,11 +2725,10 @@ export default function WorkspaceHub() {
     });
     if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
     refetchDeleteRequests();
+    void notifyAdminsOfDeleteRequest({ requesterId: userId, targetName: file.name, kind: 'file' });
     toast({
       title: 'Delete request submitted',
-      description: folder
-        ? `The folder owner will be notified to approve or reject this request.`
-        : 'A workspace admin will review your request.',
+      description: 'An admin will review your request.',
     });
   }
 
@@ -2728,13 +2745,18 @@ export default function WorkspaceHub() {
     });
     if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
     refetchDeleteRequests();
+    void notifyAdminsOfDeleteRequest({ requesterId: userId, targetName: folder.name, kind: 'folder' });
     toast({
       title: 'Delete request submitted',
-      description: 'The folder owner will review your request.',
+      description: 'An admin will review your request.',
     });
   }
 
   async function approveDeleteRequest(req: WDeleteRequest) {
+    if (!isAdmin) {
+      toast({ title: 'Not allowed', description: 'Only admins can approve delete requests.', variant: 'destructive' });
+      return;
+    }
     try {
       if (req.type === 'file') {
         const file = allFiles.find(f => f.id === req.target_id);
@@ -2760,6 +2782,10 @@ export default function WorkspaceHub() {
   }
 
   async function rejectDeleteRequest(req: WDeleteRequest, notes: string) {
+    if (!isAdmin) {
+      toast({ title: 'Not allowed', description: 'Only admins can reject delete requests.', variant: 'destructive' });
+      return;
+    }
     await supabase.from('workspace_delete_requests').update({
       status:       'rejected',
       reviewed_by:  userId,
@@ -3763,8 +3789,8 @@ export default function WorkspaceHub() {
                   <Key className="h-3.5 w-3.5" />
                 </button>
               )}
-              {/* Delete-request badge — only admins and folder creators see this */}
-              {(isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)) && pendingDeleteRequests.length > 0 && (
+              {/* Delete-request badge — Admin and Super Admin only */}
+              {isAdmin && pendingDeleteRequests.length > 0 && (
                 <button
                   onClick={() => setDeleteReqPanelOpen(true)}
                   className="relative flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 transition-colors"
@@ -5339,7 +5365,7 @@ export default function WorkspaceHub() {
 
         {/* ── Rename Dialog ──────────────────────────────────────────────── */}
         {/* ── Delete Request Approval Panel ────────────────────────────── */}
-        <Dialog open={deleteReqPanelOpen} onOpenChange={setDeleteReqPanelOpen}>
+        <Dialog open={isAdmin && deleteReqPanelOpen} onOpenChange={setDeleteReqPanelOpen}>
           <DialogContent className="max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
             <DialogHeader className="flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
