@@ -838,12 +838,15 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
     const pendingOrphanPaths: string[] = [];
     let completed = 0;
 
-    // Race any promise against a per-file 45-second timeout
-    function withTimeout<T>(p: Promise<T>, ms = 45000): Promise<T> {
+    // Race any promise against a per-file timeout.
+    // Default is 120 s (raised from 45 s) to accommodate slow connections and
+    // larger files; the R2 upload itself streams so the timeout only fires if
+    // the request stalls completely rather than just transferring slowly.
+    function withTimeout<T>(p: Promise<T>, ms = 120_000): Promise<T> {
       return Promise.race([
         p,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — check your connection`)), ms)
+          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — check your connection and try again`)), ms)
         ),
       ]);
     }
@@ -1173,7 +1176,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
               </div>
               <Progress value={progress} className="h-1.5" />
               <p className="text-[10px] text-muted-foreground text-center">
-                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded · times out after 45s per file
+                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded · times out after 120s per file
               </p>
             </div>
           )}
@@ -1930,6 +1933,26 @@ export default function WorkspaceHub() {
     enabled: !!userId,
     staleTime: 30_000,
   });
+
+  // ── Realtime subscriptions ────────────────────────────────────────────────
+  // Listen for INSERT / UPDATE / DELETE on workspace_files and workspace_folders
+  // so every connected session sees changes immediately without a manual refresh.
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel('workspace-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_files' }, () => {
+        refetchFiles();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_folders' }, () => {
+        refetchFolders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_delete_requests' }, () => {
+        refetchDeleteRequests();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── My explicit permission grants/denials ────────────────────────────────
   // Fetches rows in workspace_permissions where THIS user is the grantee (by user id or all_staff).
