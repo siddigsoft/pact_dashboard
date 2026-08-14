@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList,
+  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, PanelRight,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -1716,6 +1716,16 @@ export default function WorkspaceHub() {
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
 
+  // ── Preview pane state ────────────────────────────────────────────────────
+  const [previewPaneOpen, setPreviewPaneOpen] = useState(() => localStorage.getItem('ws_preview_pane') === 'true');
+  const [previewFile, setPreviewFile] = useState<WFile | null>(null);
+  const [previewPaneWidth, setPreviewPaneWidth] = useState(() =>
+    Math.max(280, Math.min(700, parseInt(localStorage.getItem('ws_preview_width') || '400', 10)))
+  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrlLoading, setPreviewUrlLoading] = useState(false);
+  const previewDragRef = useRef<{ active: boolean; startX: number; startW: number }>({ active: false, startX: 0, startW: 0 });
+
   // ── Data fetching ─────────────────────────────────────────────────────────
 
   const { data: folders = [], refetch: refetchFolders } = useQuery<WFolder[]>({
@@ -1966,6 +1976,45 @@ export default function WorkspaceHub() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [refetchFolders, refetchFiles]);
+
+  // ── Preview pane: load signed URL when preview file changes ──────────────
+  useEffect(() => {
+    if (!previewFile) { setPreviewUrl(null); setPreviewUrlLoading(false); return; }
+    const mime = previewFile.mime_type ?? '';
+    const ext = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+    const isImage = mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
+    const isPdf   = mime === 'application/pdf' || ext === 'pdf';
+    if (!isImage && !isPdf) { setPreviewUrl(null); setPreviewUrlLoading(false); return; }
+    if (previewFile.storage_provider === 'r2') {
+      setPreviewUrlLoading(true);
+      setPreviewUrl(null);
+      r2SignedUrl(previewFile.storage_path)
+        .then(u => setPreviewUrl(u))
+        .catch(() => setPreviewUrl(null))
+        .finally(() => setPreviewUrlLoading(false));
+    } else {
+      setPreviewUrl(previewFile.public_url);
+      setPreviewUrlLoading(false);
+    }
+  }, [previewFile?.id, previewFile?.storage_provider, previewFile?.storage_path, previewFile?.public_url]);
+
+  // ── Preview pane: drag-to-resize mouse listeners ───────────────────────────
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!previewDragRef.current.active) return;
+      const delta = previewDragRef.current.startX - e.clientX;
+      const next  = Math.max(280, Math.min(700, previewDragRef.current.startW + delta));
+      setPreviewPaneWidth(next);
+      localStorage.setItem('ws_preview_width', String(next));
+    }
+    function onMouseUp() { previewDragRef.current.active = false; }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup',   onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup',   onMouseUp);
+    };
+  }, []);
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
@@ -2439,6 +2488,9 @@ export default function WorkspaceHub() {
       setPasswordInput('');
       setPasswordWrong(false);
       setShowPromptPwd(false);
+    } else if (previewPaneOpen) {
+      // Preview pane is open — load file into it (toggle off if same file)
+      setPreviewFile(prev => prev?.id === file.id ? null : file);
     } else {
       setSelectedFile(prev => prev?.id === file.id ? null : file);
     }
@@ -3282,7 +3334,8 @@ export default function WorkspaceHub() {
 
         {/* ══ Main Content ════════════════════════════════════════════════ */}
         <div
-          className={cn('flex-1 flex flex-col min-w-0 overflow-hidden relative', selectedFile ? 'mr-[380px]' : '')}
+          className={cn('flex-1 flex flex-col min-w-0 overflow-hidden relative')}
+          style={{ marginRight: previewPaneOpen ? previewPaneWidth : (selectedFile ? 380 : 0) }}
           onDragEnter={e => {
             if (e.dataTransfer.types.includes('Files')) {
               externalDragCounter.current++;
@@ -3557,6 +3610,26 @@ export default function WorkspaceHub() {
                 ))}
               </div>
             )}
+            {/* Preview pane toggle */}
+            <div className="ml-1 flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      const next = !previewPaneOpen;
+                      setPreviewPaneOpen(next);
+                      localStorage.setItem('ws_preview_pane', String(next));
+                      if (!next) setPreviewFile(null);
+                    }}
+                    className={cn('p-1.5 rounded transition-colors active:scale-[0.98]',
+                      previewPaneOpen ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}
+                  >
+                    <PanelRight className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Preview pane</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           {/* File area — the scroll region is the wrapper opened above */}
@@ -4054,8 +4127,175 @@ export default function WorkspaceHub() {
           </div>
         </div>
 
+        {/* ══ Preview Pane ═════════════════════════════════════════════════ */}
+        {previewPaneOpen && (
+          <div
+            className="fixed right-0 top-0 h-full border-l shadow-2xl z-[49] flex flex-col bg-background select-none"
+            style={{ width: previewPaneWidth }}
+          >
+            {/* Drag-to-resize handle */}
+            <div
+              className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10 group"
+              onMouseDown={e => {
+                previewDragRef.current = { active: true, startX: e.clientX, startW: previewPaneWidth };
+                e.preventDefault();
+              }}
+            >
+              <div className="absolute inset-0 group-hover:bg-blue-400/30 transition-colors rounded-r" />
+            </div>
+
+            {previewFile ? (<>
+              {/* Header */}
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 bg-background/95 backdrop-blur-sm">
+                {(() => {
+                  const mime = previewFile.mime_type ?? '';
+                  const ext  = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+                  const typeColor =
+                    mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext) ? '#a855f7'
+                    : (mime === 'application/pdf' || ext === 'pdf') ? '#ef4444'
+                    : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext)) ? '#22c55e'
+                    : (mime.includes('word') || ['docx','doc'].includes(ext)) ? '#3b82f6'
+                    : (mime.includes('zip') || ['zip','rar','7z'].includes(ext)) ? '#f59e0b'
+                    : '#64748b';
+                  const extLabel = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '?').toUpperCase().slice(0, 4);
+                  return (
+                    <div className="h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
+                      style={{ background: typeColor }}>
+                      {extLabel}
+                    </div>
+                  );
+                })()}
+                <span className="flex-1 text-sm font-semibold truncate text-foreground select-text">{previewFile.name}</span>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 flex-shrink-0"
+                  onClick={() => openFileAs(previewFile, 'browser')}>
+                  <ExternalLink className="h-3 w-3" />Open
+                </Button>
+                <button onClick={() => setPreviewFile(null)}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 ml-1">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Metadata strip */}
+              <div className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-muted-foreground border-b flex-shrink-0 bg-muted/20 flex-wrap">
+                <span className="tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtSize(previewFile.file_size)}</span>
+                <span className="opacity-40">·</span>
+                <span>{fmtRelative(previewFile.updated_at)}</span>
+                {previewFile._uploaderName && (<>
+                  <span className="opacity-40">·</span>
+                  <span>{previewFile._uploaderName}</span>
+                </>)}
+                <span className="ml-auto"><SecBadge level={previewFile.security_level} size="xs" /></span>
+              </div>
+
+              {/* Content area */}
+              {previewFile.password_hash && !unlockedIds.has(previewFile.id) ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6">
+                  <Lock className="h-12 w-12 opacity-20" />
+                  <p className="text-sm font-semibold">Password protected</p>
+                  <p className="text-xs text-center opacity-70">Click the file to unlock it, then click again to preview</p>
+                </div>
+              ) : previewUrlLoading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+              ) : (() => {
+                const mime = previewFile.mime_type ?? '';
+                const ext  = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+                const isImage = mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
+                const isPdf   = mime === 'application/pdf' || ext === 'pdf';
+                if (isImage && previewUrl) {
+                  return (
+                    <div className="flex-1 overflow-auto flex items-start justify-center bg-[#f0f0f0] dark:bg-muted/30 p-3">
+                      <img src={previewUrl} alt={previewFile.name}
+                        className="max-w-full h-auto object-contain rounded shadow-md select-none"
+                        draggable={false} />
+                    </div>
+                  );
+                }
+                if (isPdf && previewUrl) {
+                  return (
+                    <iframe
+                      src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
+                      className="flex-1 w-full border-0 min-h-0"
+                      title={previewFile.name}
+                    />
+                  );
+                }
+                // Non-previewable or no URL — show metadata card
+                const Icon = getFileIcon(mime);
+                const typeColor =
+                  mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext) ? '#a855f7'
+                  : (mime === 'application/pdf' || ext === 'pdf') ? '#ef4444'
+                  : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext)) ? '#22c55e'
+                  : (mime.includes('word') || ['docx','doc'].includes(ext)) ? '#3b82f6'
+                  : (mime.includes('zip') || ['zip','rar','7z'].includes(ext)) ? '#f59e0b'
+                  : '#64748b';
+                return (
+                  <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-5 p-6 text-center">
+                    <div className="h-20 w-20 rounded-2xl flex items-center justify-center shadow-inner"
+                      style={{ background: typeColor + '15', border: `2px solid ${typeColor}30` }}>
+                      <Icon className="h-10 w-10" style={{ color: typeColor }} />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground break-words">{previewFile.name}</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">{fmtSize(previewFile.file_size)}</p>
+                      {previewFile.mime_type && (
+                        <p className="text-[11px] text-muted-foreground/70">{previewFile.mime_type}</p>
+                      )}
+                    </div>
+                    {previewFile.description && (
+                      <p className="text-xs text-muted-foreground max-w-[260px] leading-relaxed border rounded-xl p-3 bg-muted/20">
+                        {previewFile.description}
+                      </p>
+                    )}
+                    {previewFile.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
+                        {previewFile.tags.map(t => (
+                          <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap justify-center">
+                      <Button size="sm" className="gap-1.5 bg-[#1D3461] hover:bg-[#0F2041]"
+                        onClick={() => openFileAs(previewFile, 'browser')}>
+                        <ExternalLink className="h-3.5 w-3.5" />Open File
+                      </Button>
+                      {previewFile.allow_download && (
+                        <Button size="sm" variant="outline" className="gap-1.5"
+                          onClick={() => openFileAs(previewFile, 'download')}>
+                          <Download className="h-3.5 w-3.5" />Download
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                      Preview not available for this file type
+                    </p>
+                  </div>
+                );
+              })()}
+            </>) : (
+              /* Empty state — pane open but no file selected */
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6 text-center">
+                <div className="h-14 w-14 rounded-2xl bg-muted/40 flex items-center justify-center">
+                  <Eye className="h-7 w-7 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">No file selected</p>
+                <p className="text-xs opacity-60 leading-relaxed max-w-[200px]">
+                  Click any file to preview its content here
+                </p>
+                <button
+                  onClick={() => { setPreviewPaneOpen(false); localStorage.setItem('ws_preview_pane', 'false'); }}
+                  className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                >
+                  Close pane
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ══ File Detail Panel ════════════════════════════════════════════ */}
-        {selectedFile && (
+        {selectedFile && !previewPaneOpen && (
           <div className="fixed right-0 top-0 h-full w-[380px] border-l shadow-2xl z-50 flex flex-col bg-background">
             <FileDetailPanel
               file={selectedFile} currentUserId={userId}
