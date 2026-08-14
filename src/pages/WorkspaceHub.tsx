@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, XCircle,
+  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, PanelRight, XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -60,7 +60,7 @@ interface WFolder {
   created_by: string | null; color: string; icon: string;
   is_system_folder: boolean; archived: boolean; created_at: string;
   password_hash: string | null;
-  short_code: string | null;
+  short_code?: string | null;
   _childCount?: number; _fileCount?: number;
 }
 
@@ -274,8 +274,10 @@ function UserPickerCombobox({ profiles, value, onChange }: {
   );
 }
 
-function ShareDialog({ file, folder, open, onClose, currentUserId }: {
+function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = true }: {
   file?: WFile; folder?: WFolder; open: boolean; onClose: () => void; currentUserId: string;
+  /** When false the dialog shows a read-only access list (folder owner view). */
+  canEdit?: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -376,8 +378,10 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 className="h-4 w-4 text-[#1D3461]" />
-            Share &amp; Permissions
+            {canEdit
+              ? <Share2 className="h-4 w-4 text-[#1D3461]" />
+              : <Users className="h-4 w-4 text-[#1D3461]" />}
+            {canEdit ? 'Share & Permissions' : 'Who Has Access'}
           </DialogTitle>
           <p className="text-sm text-muted-foreground truncate">{targetName}</p>
         </DialogHeader>
@@ -395,8 +399,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
             </div>
           )}
 
-          {/* Add new permission */}
-          <div className="border rounded-xl p-3 space-y-3">
+          {/* Add new permission — admin / editor only */}
+          {canEdit && <div className="border rounded-xl p-3 space-y-3">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Grant Access</p>
 
             <div className="grid grid-cols-2 gap-2">
@@ -459,7 +463,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
               Grant Permission
             </Button>
-          </div>
+          </div>}
 
           {/* Existing permissions */}
           {permissions.length > 0 && (
@@ -476,17 +480,33 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{granteeLabel(p)}</p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn('text-[10px] font-medium', aCfg.color)}>{aCfg.label}</span>
                         {p.expires_at && <span className={cn('text-[10px]', expired ? 'text-red-600' : 'text-muted-foreground')}>Exp: {fmtDate(p.expires_at)}</span>}
+                        {p.granted_by && (() => {
+                          const granter = profiles.find(x => x.id === p.granted_by);
+                          return <span className="text-[10px] text-muted-foreground/70">via {granter?.full_name ?? 'Admin'}</span>;
+                        })()}
                       </div>
                     </div>
-                    <button onClick={() => revokePermission(p.id)} className="p-1 rounded text-muted-foreground hover:text-red-600 transition-colors">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => revokePermission(p.id)} className="p-1 rounded text-muted-foreground hover:text-red-600 transition-colors">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Info note for read-only folder owners */}
+          {!canEdit && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-blue-50/60 border border-blue-100">
+              <Info className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                You can see who has been granted access to your folder. Contact a workspace admin to add or remove permissions.
+              </p>
             </div>
           )}
 
@@ -822,12 +842,15 @@ function UploadDialog({ folderId, folderName, folderPath, open, onClose, current
     const pendingOrphanPaths: string[] = [];
     let completed = 0;
 
-    // Race any promise against a per-file 45-second timeout
-    function withTimeout<T>(p: Promise<T>, ms = 45000): Promise<T> {
+    // Race any promise against a per-file timeout.
+    // Default is 120 s (raised from 45 s) to accommodate slow connections and
+    // larger files; the R2 upload itself streams so the timeout only fires if
+    // the request stalls completely rather than just transferring slowly.
+    function withTimeout<T>(p: Promise<T>, ms = 120_000): Promise<T> {
       return Promise.race([
         p,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — check your connection`)), ms)
+          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — check your connection and try again`)), ms)
         ),
       ]);
     }
@@ -1158,7 +1181,7 @@ function UploadDialog({ folderId, folderName, folderPath, open, onClose, current
               </div>
               <Progress value={progress} className="h-1.5" />
               <p className="text-[10px] text-muted-foreground text-center">
-                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded · times out after 45s per file
+                {Math.floor(progress * files.length / 100)}/{files.length} file{files.length !== 1 ? 's' : ''} uploaded · times out after 120s per file
               </p>
             </div>
           )}
@@ -1199,6 +1222,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [showResolvedDP, setShowResolvedDP] = useState(false);
 
   // Auto-open share dialog when external signal matches this file
   useEffect(() => {
@@ -1245,27 +1269,45 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
 
   async function submitComment() {
     if (!comment.trim()) return;
+    // Snapshot `file` before the first await so that navigating to a different
+    // file while the insert is in flight cannot corrupt the activity log,
+    // updated_at stamp, mention display name, or refetch key.
+    const targetFile = file;
     setSubmitting(true);
     try {
       const content = comment.trim();
-      const { error } = await supabase.from('workspace_comments').insert({ file_id: file.id, author_id: currentUserId, content });
+      const { error } = await supabase.from('workspace_comments').insert({ file_id: targetFile.id, author_id: currentUserId, content });
       if (error) throw error;
-      await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: currentUserId, action: 'commented', metadata: {} });
-      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', file.id);
+      await supabase.from('workspace_activity').insert({ file_id: targetFile.id, user_id: currentUserId, action: 'commented', metadata: {} });
+      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
 
       // ── @mention notifications ─────────────────────────────────────────
-      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
+      // Regex captures one or more capitalised words after @, e.g. @John or @John Smith.
+      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z]*(?:\s+[A-Za-z][A-Za-z]*)*)/g)];
       if (mentionMatches.length > 0) {
-        const names = [...new Set(mentionMatches.map(m => m[1].trim().toLowerCase()))];
+        const mentionTokenSets = mentionMatches.map(m =>
+          m[1].trim().toLowerCase().split(/\s+/)
+        );
         const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', currentUserId);
-        const mentioned = (profs ?? []).filter(p => names.some(n => p.full_name?.toLowerCase().includes(n)));
+        // A profile matches only when EVERY token in the mention phrase matches
+        // at least one whitespace-delimited word in the profile's full_name.
+        // e.g. "@Ann" → token ["ann"] — matches "Ann Ali" but NOT "Annabelle" or "Shannon".
+        // e.g. "@John Smith" → tokens ["john","smith"] — must both appear as name words.
+        const nameMatches = (fullName: string | null, tokens: string[]) => {
+          if (!fullName) return false;
+          const nameWords = fullName.toLowerCase().split(/\s+/);
+          return tokens.every(tok => nameWords.some(w => w === tok));
+        };
+        const mentioned = (profs ?? []).filter(p =>
+          mentionTokenSets.some(tokens => nameMatches(p.full_name, tokens))
+        );
         if (mentioned.length > 0) {
           await insertNotificationsToDb(
             mentioned.map(p => ({
               recipient_id: p.id,
               user_id: p.id,
               title_en: 'You were mentioned in a file comment',
-              message_en: `Someone mentioned you in a comment on "${file.name}": ${content.substring(0, 100)}`,
+              message_en: `Someone mentioned you in a comment on "${targetFile.name}": ${content.substring(0, 100)}`,
               event_type: 'mention',
               type: 'mention',
               action_url: '/workspace',
@@ -1278,6 +1320,12 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
       setComment(''); refetchComments();
     } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
     finally { setSubmitting(false); }
+  }
+
+  async function resolveComment(id: string, resolved: boolean) {
+    const { error } = await supabase.from('workspace_comments').update({ resolved }).eq('id', id);
+    if (error) { toast({ title: 'Failed to update comment', description: error.message, variant: 'destructive' }); return; }
+    refetchComments();
   }
 
   async function downloadFile() {
@@ -1363,7 +1411,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         <TabsList className="w-full rounded-none border-b bg-transparent h-9 px-4 justify-start gap-0">
           {[
             { id: 'info', label: 'Info', icon: Info },
-            { id: 'comments', label: `Comments${comments.length > 0 ? ` (${comments.length})` : ''}`, icon: MessageSquare },
+            { id: 'comments', label: `Comments${comments.filter(c => !c.resolved).length > 0 ? ` (${comments.filter(c => !c.resolved).length})` : ''}`, icon: MessageSquare },
             { id: 'versions', label: 'Versions', icon: History },
             { id: 'activity', label: 'Activity', icon: Activity },
           ].map(t => (
@@ -1391,10 +1439,10 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
               </div>
             ))}
           </div>
-          {file.tags.length > 0 && (
+          {(file.tags ?? []).length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Tags</p>
-              <div className="flex flex-wrap gap-1">{file.tags.map(t => <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full border">{t}</span>)}</div>
+              <div className="flex flex-wrap gap-1">{(file.tags ?? []).map(t => <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full border">{t}</span>)}</div>
             </div>
           )}
         </TabsContent>
@@ -1402,27 +1450,84 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         {/* Comments tab */}
         <TabsContent value="comments" className="flex-1 flex flex-col min-h-0 mt-0">
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {comments.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
-                <MessageSquare className="h-8 w-8 opacity-30" />
-                <p className="text-xs">No comments yet</p>
-              </div>
-            ) : (
-              comments.map(c => (
-                <div key={c.id} className="flex gap-2">
-                  <div className="h-6 w-6 rounded-full bg-[#1D3461]/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461]">
-                    {(c._authorName ?? '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[11px] font-semibold">{c._authorName}</span>
-                      <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
-                    </div>
-                    <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2">{c.content}</p>
-                  </div>
+            {(() => {
+              const activeComments = comments.filter(c => !c.resolved);
+              const resolvedComments = comments.filter(c => c.resolved);
+              if (comments.length === 0) return (
+                <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
+                  <MessageSquare className="h-8 w-8 opacity-30" />
+                  <p className="text-xs">No comments yet</p>
                 </div>
-              ))
-            )}
+              );
+              return (
+                <>
+                  {activeComments.length === 0 && resolvedComments.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground text-center py-1">All comments resolved</p>
+                  )}
+                  {activeComments.map(c => (
+                    <div key={c.id} className="flex gap-2 group">
+                      <div className="h-6 w-6 rounded-full bg-[#1D3461]/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461]">
+                        {(c._authorName ?? '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[11px] font-semibold">{c._authorName}</span>
+                          <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                          <button
+                            type="button"
+                            title="Mark resolved"
+                            onClick={() => resolveComment(c.id, true)}
+                            className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-emerald-600 transition-all"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2 break-words">{c.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {resolvedComments.length > 0 && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowResolvedDP(s => !s)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                      >
+                        {showResolvedDP
+                          ? <><ChevronDown className="h-3 w-3" />Hide {resolvedComments.length} resolved</>
+                          : <><ChevronRight className="h-3 w-3" />Show {resolvedComments.length} resolved</>}
+                      </button>
+                      {showResolvedDP && (
+                        <div className="mt-2 space-y-2 opacity-60">
+                          {resolvedComments.map(c => (
+                            <div key={c.id} className="flex gap-2 group">
+                              <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-emerald-700">
+                                {(c._authorName ?? '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-[11px] font-semibold line-through">{c._authorName}</span>
+                                  <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                  <button
+                                    type="button"
+                                    title="Re-open"
+                                    onClick={() => resolveComment(c.id, false)}
+                                    className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-blue-600 transition-all"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2 line-through text-muted-foreground break-words">{c.content}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div className="p-3 border-t flex gap-2">
             <Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a comment… (use @Name to notify someone)" className="text-xs min-h-[60px] resize-none" onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitComment(); }} />
@@ -1683,6 +1788,16 @@ export default function WorkspaceHub() {
   const [pendingDropEntries, setPendingDropEntries] = useState<{file: File; relativePath: string}[]>([]);
   const externalDragCounter = useRef(0);
 
+  // ── Folder grid right-click context menu state ───────────────────────────
+  const [ctxMenuFolder, setCtxMenuFolder] = useState<WFolder | null>(null);
+  const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // ── File right-click context menu state ───────────────────────────────────
+  const [ctxMenuFile, setCtxMenuFile] = useState<WFile | null>(null);
+  const [ctxMenuFilePos, setCtxMenuFilePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // ── Background (empty area) right-click context menu ──────────────────────
+  const [bgCtxOpen, setBgCtxOpen] = useState(false);
+  const [bgCtxPos, setBgCtxPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // ── Folder customization state ────────────────────────────────────────────
   const [folderCustomizeTarget, setFolderCustomizeTarget] = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
   const [customColor, setCustomColor] = useState('#1D3461');
@@ -1700,6 +1815,27 @@ export default function WorkspaceHub() {
   const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
+
+  // ── Preview pane state ────────────────────────────────────────────────────
+  const [previewPaneOpen, setPreviewPaneOpen] = useState(() => localStorage.getItem('ws_preview_pane') === 'true');
+  const [previewFile, setPreviewFile] = useState<WFile | null>(null);
+  const [previewPaneWidth, setPreviewPaneWidth] = useState(() =>
+    Math.max(280, Math.min(700, parseInt(localStorage.getItem('ws_preview_width') || '400', 10)))
+  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrlLoading, setPreviewUrlLoading] = useState(false);
+  const previewDragRef = useRef<{ active: boolean; startX: number; startW: number }>({ active: false, startX: 0, startW: 0 });
+  const [previewCommentsOpen, setPreviewCommentsOpen] = useState(true);
+  const [previewComment, setPreviewComment] = useState('');
+  const [previewCommentSubmitting, setPreviewCommentSubmitting] = useState(false);
+  const [showResolvedPV, setShowResolvedPV] = useState(false);
+  // Read the stored id NOW, at render time, before any effects run.
+  // This captures the value before the mount-time persist effect could wipe it.
+  const pendingPreviewIdRef = useRef<string | null>(
+    localStorage.getItem('ws_preview_pane') === 'true'
+      ? localStorage.getItem('ws_preview_file_id')
+      : null
+  );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
@@ -1776,16 +1912,24 @@ export default function WorkspaceHub() {
     staleTime: 120_000,
   });
 
-  // ── Pending delete requests (for this user's folders, or all if super admin) ──
+  // ── Pending delete requests ───────────────────────────────────────────────
+  // Super admins and admins see every pending request.
+  // Regular users only see requests for folders they own (folder_owner_id = userId).
+  // Viewers and other non-admin, non-owner users receive an empty list.
   const { data: pendingDeleteRequests = [], refetch: refetchDeleteRequests } = useQuery<WDeleteRequest[]>({
-    queryKey: ['workspace_delete_requests', userId, isSuperAdmin],
+    queryKey: ['workspace_delete_requests', userId, isSuperAdmin, isAdmin],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let q = supabase
         .from('workspace_delete_requests')
         .select('*')
         .eq('status', 'pending')
         .order('requested_at', { ascending: false });
+      // Non-admins only see requests targeting folders they created
+      if (!isSuperAdmin && !isAdmin) {
+        q = q.eq('folder_owner_id', userId);
+      }
+      const { data, error } = await q;
       if (error || !data) return [];
       // Enrich with requester names
       const requesterIds = [...new Set(data.map((r: any) => r.requested_by).filter(Boolean))];
@@ -1799,9 +1943,30 @@ export default function WorkspaceHub() {
       }
       return data.map((r: any) => ({ ...r, _requesterName: nameMap[r.requested_by] ?? 'Unknown' })) as WDeleteRequest[];
     },
-    enabled: !!userId,
+    // Only run for admins or users who own at least one folder
+    enabled: !!userId && (isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)),
     staleTime: 30_000,
   });
+
+  // ── Realtime subscriptions ────────────────────────────────────────────────
+  // Listen for INSERT / UPDATE / DELETE on workspace_files and workspace_folders
+  // so every connected session sees changes immediately without a manual refresh.
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel('workspace-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_files' }, () => {
+        refetchFiles();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_folders' }, () => {
+        refetchFolders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_delete_requests' }, () => {
+        refetchDeleteRequests();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── My explicit permission grants/denials ────────────────────────────────
   // Fetches rows in workspace_permissions where THIS user is the grantee (by user id or all_staff).
@@ -1839,6 +2004,26 @@ export default function WorkspaceHub() {
     );
   }, [myPermissions, isSuperAdmin]);
 
+  // ── Positive file grants ──────────────────────────────────────────────────
+  // File IDs where the current user has an active (non-expired) positive
+  // permission grant (viewer / commenter / editor / owner).  These files are
+  // visible even when the user's clearance is below the file's security_level.
+  // A denial (deniedFileIds) always wins and is checked first in displayedFiles.
+  const grantedFileIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>(); // super admin never needs a grant
+    const now = new Date();
+    return new Set(
+      myPermissions
+        .filter(p =>
+          p.file_id &&
+          p.access_level !== 'no_access' &&
+          // Active = no expiry date, OR expiry date is still in the future
+          (!p.expires_at || isBefore(now, parseISO(p.expires_at)))
+        )
+        .map(p => p.file_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
   // ── Cascade No Access through the folder tree ─────────────────────────────
   // A denial on a parent folder must propagate to every descendant automatically.
   // We BFS from every directly-denied folder ID using the raw (unfiltered) folders
@@ -1867,6 +2052,54 @@ export default function WorkspaceHub() {
     }
     return result;
   }, [deniedFolderIds, folders, isSuperAdmin]);
+
+  // ── Positive folder grants (with cascade) ────────────────────────────────
+  // Step 1: collect folder IDs where the current user has an active
+  // (non-expired) positive permission grant (viewer / commenter / editor / owner).
+  // Step 2: BFS-expand every directly-granted ID to include all descendants,
+  // mirroring the allDeniedFolderIds cascade pattern above.
+  // These folders are visible even when the user's clearance level is below the
+  // folder's security_level.  A denial always wins — allDeniedFolderIds is
+  // checked first inside visibleFolders.
+  const grantedFolderIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>(); // super admin never needs a grant
+
+    // Step 1 — direct grants
+    const now = new Date();
+    const directGrants = new Set(
+      myPermissions
+        .filter(p =>
+          p.folder_id &&
+          p.access_level !== 'no_access' &&
+          // Active = no expiry date, OR expiry date is still in the future
+          (!p.expires_at || isBefore(now, parseISO(p.expires_at)))
+        )
+        .map(p => p.folder_id as string)
+    );
+
+    if (directGrants.size === 0) return directGrants;
+
+    // Step 2 — BFS cascade to all descendants
+    // Build parent → [childId, …] map from the full unfiltered folder list
+    const childrenOf: Record<string, string[]> = {};
+    for (const f of folders) {
+      if (f.parent_folder_id) {
+        (childrenOf[f.parent_folder_id] ??= []).push(f.id);
+      }
+    }
+    const result = new Set<string>(directGrants);
+    const queue = [...directGrants];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const childId of (childrenOf[id] ?? [])) {
+        if (!result.has(childId)) {
+          result.add(childId);
+          queue.push(childId);
+        }
+      }
+    }
+    return result;
+  }, [myPermissions, isSuperAdmin, folders]);
 
   // ── Rename permission helpers ─────────────────────────────────────────────
   // Only the item's creator or a super admin may rename files/folders.
@@ -1952,19 +2185,210 @@ export default function WorkspaceHub() {
     return () => { supabase.removeChannel(channel); };
   }, [refetchFolders, refetchFiles]);
 
+  // ── Preview pane: load signed URL when preview file changes ──────────────
+  useEffect(() => {
+    if (!previewFile) { setPreviewUrl(null); setPreviewUrlLoading(false); return; }
+    const mime = previewFile.mime_type ?? '';
+    const ext = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+    const isImage = mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
+    const isPdf   = mime === 'application/pdf' || ext === 'pdf';
+    if (!isImage && !isPdf) { setPreviewUrl(null); setPreviewUrlLoading(false); return; }
+    if (previewFile.storage_provider === 'r2') {
+      setPreviewUrlLoading(true);
+      setPreviewUrl(null);
+      r2SignedUrl(previewFile.storage_path)
+        .then(u => setPreviewUrl(u))
+        .catch(() => setPreviewUrl(null))
+        .finally(() => setPreviewUrlLoading(false));
+    } else {
+      setPreviewUrl(previewFile.public_url);
+      setPreviewUrlLoading(false);
+    }
+  }, [previewFile?.id, previewFile?.storage_provider, previewFile?.storage_path, previewFile?.public_url]);
+
+  // ── Preview pane: drag-to-resize mouse listeners ───────────────────────────
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!previewDragRef.current.active) return;
+      const delta = previewDragRef.current.startX - e.clientX;
+      const next  = Math.max(280, Math.min(700, previewDragRef.current.startW + delta));
+      setPreviewPaneWidth(next);
+      localStorage.setItem('ws_preview_width', String(next));
+    }
+    function onMouseUp() { previewDragRef.current.active = false; }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup',   onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup',   onMouseUp);
+    };
+  }, []);
+
+  // ── Preview pane: comments query ─────────────────────────────────────────
+  const { data: previewComments = [], refetch: refetchPreviewComments } = useQuery<WComment[]>({
+    queryKey: ['ws_preview_comments', previewFile?.id],
+    queryFn: async () => {
+      if (!previewFile) return [];
+      const { data: comms } = await supabase
+        .from('workspace_comments')
+        .select('*')
+        .eq('file_id', previewFile.id)
+        .order('created_at', { ascending: true });
+      if (!comms || comms.length === 0) return [];
+      const authorIds = [...new Set(comms.map((c: any) => c.author_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (authorIds.length > 0) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', authorIds as string[]);
+        (profs ?? []).forEach((p: any) => { nameMap[p.id] = p.full_name ?? 'Unknown'; });
+      }
+      return comms.map((c: any) => ({
+        ...c,
+        _authorName: c.author_id ? (nameMap[c.author_id] ?? 'Unknown') : 'Guest',
+      })) as WComment[];
+    },
+    enabled: !!previewFile && (!previewFile.password_hash || unlockedIds.has(previewFile.id)),
+  });
+
+  // ── Preview pane: reset comments state when the previewed file changes ──────
+  useEffect(() => {
+    if (previewFile) {
+      setPreviewComment('');         // clear draft
+      setPreviewCommentsOpen(true);  // always start expanded for a new file
+      setShowResolvedPV(false);      // hide resolved on file switch
+    }
+  }, [previewFile?.id]);
+
+  // ── Preview pane: persist selected file id to localStorage ────────────────
+  // Only SETS the key — never clears reactively (that would wipe the stored id
+  // on mount when previewFile starts as null).  Clearing is done explicitly via
+  // closePreviewFile() at every user-initiated close site.
+  useEffect(() => {
+    if (previewFile) {
+      localStorage.setItem('ws_preview_file_id', previewFile.id);
+    }
+  }, [previewFile?.id]);
+
+  // ── Preview pane: restore selected file once files load ───────────────────
+  // pendingPreviewIdRef was populated at render time (before any effect ran),
+  // so the stored id is guaranteed to be intact here.
+  const previewRestoredRef = useRef(false);
+  useEffect(() => {
+    if (previewRestoredRef.current) return;   // already ran
+    if (!pendingPreviewIdRef.current) return; // nothing stored
+    if (allFiles.length === 0) return;        // files not loaded yet
+    previewRestoredRef.current = true;
+    const storedId = pendingPreviewIdRef.current;
+    pendingPreviewIdRef.current = null;       // consumed
+    const match = allFiles.find(f => f.id === storedId);
+    if (match) {
+      setPreviewFile(match);
+    } else {
+      // File deleted or no longer accessible — remove stale key
+      localStorage.removeItem('ws_preview_file_id');
+    }
+  }, [allFiles]);
+
+  // ── Preview pane: explicit close (clears state + localStorage) ──────────────
+  function closePreviewFile() {
+    setPreviewFile(null);
+    localStorage.removeItem('ws_preview_file_id');
+    pendingPreviewIdRef.current = null; // discard any unconsumed pending id
+  }
+
+  // ── Preview pane: submit comment ─────────────────────────────────────────
+  async function submitPreviewComment() {
+    if (!previewFile || !previewComment.trim()) return;
+    // Snapshot previewFile before the first await so that switching files or
+    // closing the pane mid-flight cannot corrupt the activity log, updated_at
+    // stamp, mention display name, or refetch key for the wrong file.
+    const targetFile = previewFile;
+    setPreviewCommentSubmitting(true);
+    try {
+      const content = previewComment.trim();
+      const { error } = await supabase.from('workspace_comments').insert({
+        file_id: targetFile.id, author_id: userId, content,
+      });
+      if (error) throw error;
+
+      // If the user navigated away while the insert was in flight, skip the
+      // metadata side-effects to avoid stamping the wrong file.
+      if (previewFile?.id !== targetFile.id) {
+        setPreviewComment('');
+        return;
+      }
+
+      await supabase.from('workspace_activity').insert({
+        file_id: targetFile.id, user_id: userId, action: 'commented', metadata: {},
+      });
+      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
+
+      // ── @mention notifications ──────────────────────────────────────────
+      // Regex captures one or more capitalised words after @, e.g. @John or @John Smith.
+      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z]*(?:\s+[A-Za-z][A-Za-z]*)*)/g)];
+      if (mentionMatches.length > 0) {
+        const mentionTokenSets = mentionMatches.map(m =>
+          m[1].trim().toLowerCase().split(/\s+/)
+        );
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', userId);
+        // A profile matches only when EVERY token in the mention phrase matches
+        // at least one whitespace-delimited word in the profile's full_name.
+        const nameMatches = (fullName: string | null, tokens: string[]) => {
+          if (!fullName) return false;
+          const nameWords = fullName.toLowerCase().split(/\s+/);
+          return tokens.every(tok => nameWords.some(w => w === tok));
+        };
+        const mentioned = (profs ?? []).filter(p =>
+          mentionTokenSets.some(tokens => nameMatches(p.full_name, tokens))
+        );
+        if (mentioned.length > 0) {
+          await insertNotificationsToDb(
+            mentioned.map(p => ({
+              recipient_id: p.id,
+              user_id: p.id,
+              title_en: 'You were mentioned in a file comment',
+              message_en: `Someone mentioned you in a comment on "${targetFile.name}": ${content.substring(0, 100)}`,
+              event_type: 'mention',
+              type: 'mention',
+              action_url: '/workspace',
+              is_read: false,
+            }))
+          );
+        }
+      }
+
+      setPreviewComment('');
+      refetchPreviewComments();
+    } catch (e: any) {
+      toast({ title: 'Error posting comment', description: e.message, variant: 'destructive' });
+    } finally {
+      setPreviewCommentSubmitting(false);
+    }
+  }
+
+  // ── Preview pane: resolve / reopen comment ───────────────────────────────
+  async function resolvePreviewComment(id: string, resolved: boolean) {
+    const { error } = await supabase.from('workspace_comments').update({ resolved }).eq('id', id);
+    if (error) { toast({ title: 'Failed to update comment', description: error.message, variant: 'destructive' }); return; }
+    refetchPreviewComments();
+  }
+
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
-  // Filter folders by security clearance AND explicit no_access denials.
-  // Folder creator always sees their own folder UNLESS they have been explicitly denied.
+  // Filter folders by security clearance, explicit grants, and no_access denials.
+  // Folder creator always sees their own folder UNLESS explicitly denied.
+  // A positive grant (viewer/commenter/editor/owner) makes a folder visible
+  // even if the user's clearance is below the folder's security_level.
+  // Denials always win — allDeniedFolderIds is checked first.
   const visibleFolders = useMemo(() =>
     folders.filter(f => {
       // Deny if the folder itself or any ancestor is explicitly blocked.
       // allDeniedFolderIds already contains the transitive closure of denials.
       if (allDeniedFolderIds.has(f.id)) return false;
       return isSuperAdmin || f.created_by === userId ||
-        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance];
+        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
+        grantedFolderIds.has(f.id); // explicit positive grant overrides clearance requirement
     }),
-  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds]);
+  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds]);
 
   const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
@@ -2024,8 +2448,16 @@ export default function WorkspaceHub() {
     if (!isSuperAdmin) {
       files = files.filter(f => !f.folder_id || !allDeniedFolderIds.has(f.folder_id));
     }
-    // Enforce security clearance — hide files above user's clearance level (uploader/admin bypass)
-    files = files.filter(f => isOwnerOrAdmin(f) || CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
+    // Enforce security clearance — hide files above user's clearance level.
+    // Uploader/admin bypass clearance entirely.
+    // An explicit positive file-level grant also overrides clearance so a user
+    // can see a specific shared file even if they lack the security level.
+    // Denials (deniedFileIds) are already filtered above and always win.
+    files = files.filter(f =>
+      isOwnerOrAdmin(f) ||
+      CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
+      grantedFileIds.has(f.id)
+    );
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
@@ -2061,7 +2493,7 @@ export default function WorkspaceHub() {
       if (sortBy === 'size') return b.file_size - a.file_size;
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
@@ -2315,10 +2747,55 @@ export default function WorkspaceHub() {
   }
 
   async function changeFolderSecurity(folderId: string, folderName: string, level: SecurityLevel) {
-    const { error } = await supabase.from('workspace_folders').update({ security_level: level }).eq('id', folderId);
-    if (error) { toast({ title: 'Failed to update folder security', description: error.message, variant: 'destructive' }); return; }
-    refetchFolders();
-    toast({ title: 'Folder security updated', description: `${folderName} → ${SEC_CFG[level].label}` });
+    // Collect the target folder + all descendant folder IDs via BFS over the
+    // already-loaded folders list (no extra DB round-trip needed).
+    const allFolderIds: string[] = [folderId];
+    const queue = [folderId];
+    while (queue.length) {
+      const parentId = queue.shift()!;
+      const children = folders.filter(f => f.parent_folder_id === parentId).map(f => f.id);
+      allFolderIds.push(...children);
+      queue.push(...children);
+    }
+
+    // 1. Update the folder and all its descendants in one call
+    const { error: folderErr } = await supabase
+      .from('workspace_folders')
+      .update({ security_level: level })
+      .in('id', allFolderIds);
+    if (folderErr) {
+      toast({ title: 'Failed to update folder security', description: folderErr.message, variant: 'destructive' });
+      return;
+    }
+
+    // 2. Update every file that lives inside any of those folders.
+    // Query the DB directly rather than filtering React state (which can be
+    // stale due to the 300s staleTime on the workspace_files query).
+    const { data: filesInFolders, error: filesFetchErr } = await supabase
+      .from('workspace_files')
+      .select('id')
+      .in('folder_id', allFolderIds)
+      .eq('archived', false);
+    if (filesFetchErr) {
+      toast({ title: 'Folders updated but could not fetch files', description: filesFetchErr.message, variant: 'destructive' });
+    }
+    const fileIds = (filesInFolders ?? []).map((f: { id: string }) => f.id);
+    if (fileIds.length > 0) {
+      const { error: fileErr } = await supabase
+        .from('workspace_files')
+        .update({ security_level: level, updated_at: new Date().toISOString() })
+        .in('id', fileIds);
+      if (fileErr) {
+        toast({ title: 'Folders updated but some files failed', description: fileErr.message, variant: 'destructive' });
+      }
+    }
+
+    await Promise.all([refetchFolders(), refetchFiles()]);
+    const subCount = allFolderIds.length - 1;
+    toast({
+      title: 'Security level updated',
+      description: `${folderName} + ${subCount} sub-folder${subCount !== 1 ? 's' : ''} + ${fileIds.length} file${fileIds.length !== 1 ? 's' : ''} → ${SEC_CFG[level].label}`,
+    });
   }
 
   function SecuritySubMenu({ current, onSelect }: { current: SecurityLevel; onSelect: (l: SecurityLevel) => void }) {
@@ -2424,6 +2901,13 @@ export default function WorkspaceHub() {
       setPasswordInput('');
       setPasswordWrong(false);
       setShowPromptPwd(false);
+    } else if (previewPaneOpen) {
+      // Preview pane is open — load file into it (toggle off if same file)
+      if (previewFile?.id === file.id) {
+        closePreviewFile();
+      } else {
+        setPreviewFile(file);
+      }
     } else {
       setSelectedFile(prev => prev?.id === file.id ? null : file);
     }
@@ -2631,7 +3115,7 @@ export default function WorkspaceHub() {
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
           {/* Hide management actions when user has an explicit viewer grant on this folder */}
-          {isAdmin && !viewerRestrictedFolderIds.has(folder.id) && (
+          {(isAdmin || folder.created_by === userId) && !viewerRestrictedFolderIds.has(folder.id) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                 <button className={cn('opacity-50 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0', isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-muted text-muted-foreground')}>
@@ -2639,20 +3123,30 @@ export default function WorkspaceHub() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
-                {canRenameFolder(folder) && (
+                {/* Admin-only actions */}
+                {isAdmin && canRenameFolder(folder) && (
                   <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
                     <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
-                  <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
-                  <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
-                  <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
+                    <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
+                    <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                  </DropdownMenuItem>
+                )}
+                {/* Share — full edit for admins, read-only for non-admin owners */}
+                {isAdmin
+                  ? <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
+                      <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
+                    </DropdownMenuItem>
+                  : <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
+                      <Users className="h-3.5 w-3.5 mr-2 text-blue-500" />Who Has Access
+                    </DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 {(isSuperAdmin || folder.created_by === userId) && (
                   <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -2662,8 +3156,8 @@ export default function WorkspaceHub() {
                       : 'Set Password'}
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
-                <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
+                {isAdmin && <DropdownMenuSeparator />}
+                {isAdmin && <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />}
                 <DropdownMenuSeparator />
                 {isSuperAdmin ? (
                   <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(folder)}>
@@ -2777,6 +3271,44 @@ export default function WorkspaceHub() {
     );
   }
 
+  // ── Windows-style folder icon (shared by sidebar grid + sub-folder grid) ────
+
+  function WinFolderSvg({ icon = '', locked = false, size = 64 }: { icon?: string; locked?: boolean; size?: number }) {
+    const h = Math.round(size * 0.82);
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: h }}>
+        <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" width={size} height={h}>
+          <ellipse cx="48" cy="78" rx="40" ry="4" fill="black" fillOpacity="0.06" />
+          {/* Tab */}
+          <path d="M6 26 L6 18 Q6 11 13 11 L39 11 Q47 11 50 20 L52 26 Z" fill="#C8973E" />
+          {/* Back body */}
+          <rect x="6" y="25" width="84" height="48" rx="7" fill="#C8973E" />
+          {/* Front face */}
+          <rect x="6" y="31" width="84" height="42" rx="7" fill="#FFB900" />
+          {/* Top highlight */}
+          <rect x="10" y="33" width="76" height="11" rx="4" fill="white" fillOpacity="0.30" />
+          {/* Mid warm glow */}
+          <rect x="6" y="31" width="84" height="24" rx="7" fill="#FFD04B" fillOpacity="0.28" />
+          {/* Bottom edge shadow */}
+          <rect x="10" y="67" width="76" height="4" rx="2" fill="#9B6800" fillOpacity="0.16" />
+          {locked && <rect x="6" y="25" width="84" height="48" rx="7" fill="#78350f" fillOpacity="0.22" />}
+        </svg>
+        {icon && !locked && /[^ -]/.test(icon) && (
+          <div className="absolute inset-0 flex items-end justify-end pointer-events-none select-none"
+            style={{ paddingRight: 7, paddingBottom: 8, fontSize: Math.round(size * 0.28) }}>
+            {icon}
+          </div>
+        )}
+        {locked && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ paddingTop: Math.round(size * 0.2) }}>
+            <span style={{ fontSize: Math.round(size * 0.28) }}>🔒</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── File card / row renderers ──────────────────────────────────────────────
 
   function FileRow({ file }: { file: WFile }) {
@@ -2811,6 +3343,7 @@ export default function WorkspaceHub() {
     return (
       <tr onClick={() => openFile(file)}
         draggable
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFile(file); setCtxMenuFilePos({ x: e.clientX, y: e.clientY }); }}
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
         className={cn('group cursor-pointer hover:bg-gray-50 dark:hover:bg-muted/30 transition-colors select-none',
@@ -2946,6 +3479,7 @@ export default function WorkspaceHub() {
     return (
       <div onClick={() => openFile(file)}
         draggable
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFile(file); setCtxMenuFilePos({ x: e.clientX, y: e.clientY }); }}
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
         className={cn('flex flex-col rounded-xl border border-blue-100 dark:border-blue-900 bg-white dark:bg-[#0f1422] cursor-default hover:shadow-md hover:border-[#2865eb]/40 hover:-translate-y-0.5 transition-all ease-[cubic-bezier(0.16,1,0.3,1)] group relative overflow-hidden select-none',
@@ -3187,8 +3721,8 @@ export default function WorkspaceHub() {
                   <Key className="h-3.5 w-3.5" />
                 </button>
               )}
-              {/* Delete-request badge — visible to folder owners and super admins */}
-              {pendingDeleteRequests.length > 0 && (
+              {/* Delete-request badge — only admins and folder creators see this */}
+              {(isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)) && pendingDeleteRequests.length > 0 && (
                 <button
                   onClick={() => setDeleteReqPanelOpen(true)}
                   className="relative flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 transition-colors"
@@ -3257,7 +3791,8 @@ export default function WorkspaceHub() {
 
         {/* ══ Main Content ════════════════════════════════════════════════ */}
         <div
-          className={cn('flex-1 flex flex-col min-w-0 overflow-hidden relative', selectedFile ? 'mr-[380px]' : '')}
+          className={cn('flex-1 flex flex-col min-w-0 overflow-hidden relative')}
+          style={{ marginRight: previewPaneOpen ? previewPaneWidth : (selectedFile ? 380 : 0) }}
           onDragEnter={e => {
             if (e.dataTransfer.types.includes('Files')) {
               externalDragCounter.current++;
@@ -3300,7 +3835,56 @@ export default function WorkspaceHub() {
               controls stay reachable once the masthead and KPI tiles scroll away —
               that's what gives the file list back its room instead of being squeezed
               under a tall block of fixed chrome. */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto relative"
+            onContextMenu={e => {
+              // Only fire on the background itself — children stop propagation
+              if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.wsBackground === 'true') {
+                e.preventDefault();
+                setBgCtxOpen(true);
+                setBgCtxPos({ x: e.clientX, y: e.clientY });
+              }
+            }}
+            onDragEnter={e => {
+              // Only react to external file drags, not internal file-card reordering
+              if (!e.dataTransfer.types.includes('Files')) return;
+              e.preventDefault();
+              externalDragCounter.current += 1;
+              if (externalDragCounter.current === 1) setIsExternalDragOver(true);
+            }}
+            onDragLeave={e => {
+              if (!e.dataTransfer.types.includes('Files')) return;
+              externalDragCounter.current -= 1;
+              if (externalDragCounter.current <= 0) {
+                externalDragCounter.current = 0;
+                setIsExternalDragOver(false);
+              }
+            }}
+            onDragOver={e => {
+              if (!e.dataTransfer.types.includes('Files')) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={async e => {
+              e.preventDefault();
+              externalDragCounter.current = 0;
+              setIsExternalDragOver(false);
+              const entries = await readDroppedItems(e.dataTransfer);
+              if (entries.length === 0) return;
+              setPendingDropEntries(entries);
+              setUploadOpen(true);
+            }}
+          >
+            {/* ── Drop overlay ─────────────────────────────────────────── */}
+            {isExternalDragOver && (
+              <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
+                style={{ background: 'rgba(29,52,97,0.10)', backdropFilter: 'blur(2px)' }}>
+                <div className="flex flex-col items-center gap-3 bg-white dark:bg-[#1a1a2e] border-2 border-dashed border-[#1D3461] rounded-3xl px-16 py-12 shadow-2xl">
+                  <Upload className="h-14 w-14 text-[#1D3461] opacity-80" />
+                  <p className="text-lg font-bold text-[#1D3461]">Drop files or folders to upload</p>
+                  <p className="text-sm text-muted-foreground">They'll be added to the current folder</p>
+                </div>
+              </div>
+            )}
           {/* Breadcrumb bar */}
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
@@ -3383,9 +3967,10 @@ export default function WorkspaceHub() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-4 flex-wrap justify-end">
-                {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
+                {(isAdmin || selectedFolder?.created_by === userId) && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
                   <button className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg px-3 py-1.5 hover:bg-blue-50/60 dark:hover:bg-blue-950/40 active:scale-[0.98] transition-all" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
-                    <Share2 className="h-3 w-3" /> Share
+                    {isAdmin ? <Share2 className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+                    {isAdmin ? ' Share' : ' Who has access'}
                   </button>
                 )}
                 <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
@@ -3531,6 +4116,26 @@ export default function WorkspaceHub() {
                 ))}
               </div>
             )}
+            {/* Preview pane toggle */}
+            <div className="ml-1 flex items-center bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg p-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      const next = !previewPaneOpen;
+                      setPreviewPaneOpen(next);
+                      localStorage.setItem('ws_preview_pane', String(next));
+                      if (!next) closePreviewFile();
+                    }}
+                    className={cn('p-1.5 rounded transition-colors active:scale-[0.98]',
+                      previewPaneOpen ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}
+                  >
+                    <PanelRight className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Preview pane</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           {/* File area — the scroll region is the wrapper opened above */}
@@ -3766,11 +4371,7 @@ export default function WorkspaceHub() {
                           onClick={() => { setSelectedFolderId(folder.id); setSearchQuery(''); }}
                           className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors text-left"
                         >
-                          {isLocked
-                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                            : folder.icon && /[^\u0000-\u007F]/.test(folder.icon)
-                              ? <span className="text-sm leading-none flex-shrink-0">{folder.icon}</span>
-                              : <Folder className="h-3.5 w-3.5 text-[#2865eb] flex-shrink-0" />}
+                          <WinFolderSvg icon={folder.icon || ''} locked={isLocked} size={20} />
                           <span className="flex-1 text-sm text-gray-800 dark:text-foreground font-medium truncate">
                             {folder.name.replace(/^folder\s+/i, '').trim()}
                           </span>
@@ -3787,67 +4388,62 @@ export default function WorkspaceHub() {
                   </div>
                 )}
 
-                {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
+                {/* ── Sub-folders — Windows Explorer icon grid ──────────── */}
                 {!searchQuery.trim() && currentSubFolders.length > 0 && (
                   <div className="px-6 pt-4 pb-2">
-                    <div className="flex items-center justify-between px-2 mb-1">
+                    <div className="flex items-center justify-between px-2 mb-3">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
-                      <button
-                        onClick={() => setNewFolderOpen(true)}
-                        className="flex items-center gap-0.5 text-[10px] font-semibold text-[#2865eb] hover:text-[#1e52c9] transition-colors"
-                      >
-                        <FolderPlus className="h-3 w-3" /> New
-                      </button>
-                    </div>
-                    {currentSubFolders.map(sub => {
-                      const subFileCount = fileCounts[sub.id] ?? 0;
-                      const subChildCount = (childMap[sub.id] ?? []).length;
-                      const secCfg = SEC_CFG[sub.security_level];
-                      const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
-                      const folderColor = sub.color || '#1D3461';
-                      return (
+                      {isAdmin && (
                         <button
-                          key={sub.id}
-                          onClick={() => setSelectedFolderId(sub.id)}
-                          onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
-                          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
-                          onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
-                          className={cn(
-                            'group w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-muted/50 transition-colors text-left',
-                            dragOverFolderId === sub.id && 'bg-gray-100 dark:bg-muted/50'
-                          )}
-                          data-testid={`subfolder-btn-${sub.id}`}
+                          onClick={() => setNewFolderOpen(true)}
+                          className="flex items-center gap-0.5 text-[10px] font-semibold text-[#2865eb] hover:text-[#1e52c9] transition-colors"
                         >
-                          {subChildCount > 0
-                            ? <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                            : <span className="w-3 flex-shrink-0" />}
-                          {isLocked
-                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                            : sub.icon && /[^\u0000-\u007F]/.test(sub.icon)
-                              ? <span className="text-sm leading-none flex-shrink-0">{sub.icon}</span>
-                              : <Folder className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />}
-                          <span className="flex-1 text-sm text-gray-700 dark:text-foreground truncate" title={sub.name.replace(/^folder\s+/i, '').trim()}>
-                            {sub.name.replace(/^folder\s+/i, '').trim()}
-                          </span>
-                          {!isSuperAdmin && myFolderAccessMap.has(sub.id) && (
-                            <MyAccessBadge level={myFolderAccessMap.get(sub.id)!} />
-                          )}
-                          <span className="text-xs text-gray-400 flex-shrink-0">
-                            {subFileCount > 0 && subFileCount}
-                          </span>
-                          {dragOverFolderId === sub.id && (
-                            <span className="text-[10px] text-[#1D3461] font-semibold flex-shrink-0">Drop</span>
-                          )}
+                          <FolderPlus className="h-3 w-3" /> New
                         </button>
-                      );
-                    })}
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10 gap-0.5">
+                      {currentSubFolders.map(sub => {
+                        const subFileCount = fileCounts[sub.id] ?? 0;
+                        const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
+                        const isDrop = dragOverFolderId === sub.id;
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => setSelectedFolderId(sub.id)}
+                            onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
+                            onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+                            onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
+                            className={cn(
+                              'group flex flex-col items-center gap-1 p-2 rounded-lg transition-all text-center select-none relative',
+                              isDrop ? 'bg-[#CCE4F7] dark:bg-blue-900/40 ring-2 ring-[#0078D4]/40' : 'hover:bg-[#E3F3FD] dark:hover:bg-blue-950/30'
+                            )}
+                            data-testid={`subfolder-btn-${sub.id}`}
+                          >
+                            <WinFolderSvg icon={sub.icon || ''} locked={isLocked} size={56} />
+                            <span className="text-[11px] font-medium text-gray-800 dark:text-foreground leading-tight line-clamp-2 w-full" title={sub.name}>
+                              {sub.name}
+                            </span>
+                            {subFileCount > 0 && (
+                              <span className="text-[9px] text-muted-foreground tabular-nums">{subFileCount}</span>
+                            )}
+                            {isDrop && (
+                              <div className="absolute inset-0 rounded-lg flex items-end justify-center pb-1 pointer-events-none">
+                                <span className="text-[9px] bg-[#0078D4] text-white px-1.5 py-0.5 rounded-full font-semibold">Move here</span>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {/* ── Files ────────────────────────────────────────────────── */}
                 {displayedFiles.length > 0 && (<>
                   {currentSubFolders.length > 0 && (
-                    <div className="px-8 pt-2 pb-1">
+                    <div className="px-8 pt-3 pb-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Files</p>
                     </div>
                   )}
@@ -4028,8 +4624,462 @@ export default function WorkspaceHub() {
           </div>
         </div>
 
+        {/* ══ Preview Pane ═════════════════════════════════════════════════ */}
+        {previewPaneOpen && (
+          <div
+            className="fixed right-0 top-0 h-full border-l shadow-2xl z-[49] flex flex-col bg-background select-none"
+            style={{ width: previewPaneWidth }}
+          >
+            {/* Drag-to-resize handle */}
+            <div
+              className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10 group"
+              onMouseDown={e => {
+                previewDragRef.current = { active: true, startX: e.clientX, startW: previewPaneWidth };
+                e.preventDefault();
+              }}
+            >
+              <div className="absolute inset-0 group-hover:bg-blue-400/30 transition-colors rounded-r" />
+            </div>
+
+            {previewFile ? (<>
+              {/* Header */}
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 bg-background/95 backdrop-blur-sm">
+                {(() => {
+                  const mime = previewFile.mime_type ?? '';
+                  const ext  = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+                  const typeColor =
+                    mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext) ? '#a855f7'
+                    : (mime === 'application/pdf' || ext === 'pdf') ? '#ef4444'
+                    : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext)) ? '#22c55e'
+                    : (mime.includes('word') || ['docx','doc'].includes(ext)) ? '#3b82f6'
+                    : (mime.includes('zip') || ['zip','rar','7z'].includes(ext)) ? '#f59e0b'
+                    : '#64748b';
+                  const extLabel = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '?').toUpperCase().slice(0, 4);
+                  return (
+                    <div className="h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
+                      style={{ background: typeColor }}>
+                      {extLabel}
+                    </div>
+                  );
+                })()}
+                <span className="flex-1 text-sm font-semibold truncate text-foreground select-text">{previewFile.name}</span>
+                {/* Only show Open when the file is unlocked — mirrors the workspace hub menu guard */}
+                {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 flex-shrink-0"
+                    onClick={() => openFileAs(previewFile, 'browser')}>
+                    <ExternalLink className="h-3 w-3" />Open
+                  </Button>
+                )}
+                <button onClick={() => closePreviewFile()}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 ml-1">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Metadata strip */}
+              <div className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-muted-foreground border-b flex-shrink-0 bg-muted/20 flex-wrap">
+                <span className="tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{fmtSize(previewFile.file_size)}</span>
+                <span className="opacity-40">·</span>
+                <span>{fmtRelative(previewFile.updated_at)}</span>
+                {previewFile._uploaderName && (<>
+                  <span className="opacity-40">·</span>
+                  <span>{previewFile._uploaderName}</span>
+                </>)}
+                <div className="flex items-center gap-2 ml-auto">
+                  {previewComments.filter(c => !c.resolved).length > 0 && (
+                    <button
+                      onClick={() => setPreviewCommentsOpen(o => !o)}
+                      className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                      {previewComments.filter(c => !c.resolved).length}
+                    </button>
+                  )}
+                  <SecBadge level={previewFile.security_level} size="xs" />
+                </div>
+              </div>
+
+              {/* Content area + Comments wrapper */}
+              <div className="flex-1 flex flex-col min-h-0">
+              {previewFile.password_hash && !unlockedIds.has(previewFile.id) ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6">
+                  <Lock className="h-12 w-12 opacity-20" />
+                  <p className="text-sm font-semibold">Password protected</p>
+                  <p className="text-xs text-center opacity-70">Click the file to unlock it, then click again to preview</p>
+                </div>
+              ) : previewUrlLoading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+              ) : (() => {
+                const mime = previewFile.mime_type ?? '';
+                const ext  = (previewFile.extension ?? previewFile.name.split('.').pop() ?? '').toLowerCase();
+                const isImage = mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
+                const isPdf   = mime === 'application/pdf' || ext === 'pdf';
+                if (isImage && previewUrl) {
+                  return (
+                    <div className="flex-1 overflow-auto flex items-start justify-center bg-[#f0f0f0] dark:bg-muted/30 p-3">
+                      <img src={previewUrl} alt={previewFile.name}
+                        className="max-w-full h-auto object-contain rounded shadow-md select-none"
+                        draggable={false} />
+                    </div>
+                  );
+                }
+                if (isPdf && previewUrl) {
+                  return (
+                    <iframe
+                      src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
+                      className="flex-1 w-full border-0 min-h-0"
+                      title={previewFile.name}
+                    />
+                  );
+                }
+                // Non-previewable or no URL — show metadata card
+                const Icon = getFileIcon(mime);
+                const typeColor =
+                  mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext) ? '#a855f7'
+                  : (mime === 'application/pdf' || ext === 'pdf') ? '#ef4444'
+                  : (mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext)) ? '#22c55e'
+                  : (mime.includes('word') || ['docx','doc'].includes(ext)) ? '#3b82f6'
+                  : (mime.includes('zip') || ['zip','rar','7z'].includes(ext)) ? '#f59e0b'
+                  : '#64748b';
+                return (
+                  <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-5 p-6 text-center">
+                    <div className="h-20 w-20 rounded-2xl flex items-center justify-center shadow-inner"
+                      style={{ background: typeColor + '15', border: `2px solid ${typeColor}30` }}>
+                      <Icon className="h-10 w-10" style={{ color: typeColor }} />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground break-words">{previewFile.name}</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">{fmtSize(previewFile.file_size)}</p>
+                      {previewFile.mime_type && (
+                        <p className="text-[11px] text-muted-foreground/70">{previewFile.mime_type}</p>
+                      )}
+                    </div>
+                    {previewFile.description && (
+                      <p className="text-xs text-muted-foreground max-w-[260px] leading-relaxed border rounded-xl p-3 bg-muted/20">
+                        {previewFile.description}
+                      </p>
+                    )}
+                    {(previewFile.tags ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
+                        {(previewFile.tags ?? []).map(t => (
+                          <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Actions only available for unlocked files */}
+                    {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                      <div className="flex gap-2 flex-wrap justify-center">
+                        <Button size="sm" className="gap-1.5 bg-[#1D3461] hover:bg-[#0F2041]"
+                          onClick={() => openFileAs(previewFile, 'browser')}>
+                          <ExternalLink className="h-3.5 w-3.5" />Open File
+                        </Button>
+                        {previewFile.allow_download && (
+                          <Button size="sm" variant="outline" className="gap-1.5"
+                            onClick={() => openFileAs(previewFile, 'download')}>
+                            <Download className="h-3.5 w-3.5" />Download
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                      Preview not available for this file type
+                    </p>
+                  </div>
+                );
+              })()}
+
+                {/* ── Comments section ─────────────────────────────────── */}
+                {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                  <div className="flex-shrink-0 border-t bg-background dark:bg-background">
+                    {/* Collapsible header */}
+                    <button
+                      type="button"
+                      onClick={() => setPreviewCommentsOpen(o => !o)}
+                      className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted/30 transition-colors"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="flex-1 text-xs font-semibold text-left text-foreground">
+                        Comments
+                        {previewComments.filter(c => !c.resolved).length > 0 && (
+                          <span className="ml-1.5 text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-bold">
+                            {previewComments.filter(c => !c.resolved).length}
+                          </span>
+                        )}
+                      </span>
+                      {previewCommentsOpen
+                        ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+                    </button>
+                    {previewCommentsOpen && (
+                      <div className="flex flex-col" style={{ maxHeight: 230 }}>
+                        {/* Comment list */}
+                        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 min-h-0">
+                          {(() => {
+                            const activePV = previewComments.filter(c => !c.resolved);
+                            const resolvedPV = previewComments.filter(c => c.resolved);
+                            if (previewComments.length === 0) return (
+                              <p className="text-[11px] text-muted-foreground text-center py-2 leading-relaxed">
+                                No comments yet
+                              </p>
+                            );
+                            return (
+                              <>
+                                {activePV.length === 0 && (
+                                  <p className="text-[11px] text-muted-foreground text-center py-1">All comments resolved</p>
+                                )}
+                                {activePV.map(c => (
+                                  <div key={c.id} className="flex gap-2 group">
+                                    <div className="h-6 w-6 rounded-full bg-[#1D3461]/10 dark:bg-[#1D3461]/30 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461] dark:text-blue-300">
+                                      {(c._authorName ?? '?')[0].toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                                        <span className="text-[11px] font-semibold text-foreground">{c._authorName}</span>
+                                        <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                        <button
+                                          type="button"
+                                          title="Mark resolved"
+                                          onClick={() => resolvePreviewComment(c.id, true)}
+                                          className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-emerald-600 transition-all"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                      <p className="text-[11px] text-foreground/80 leading-relaxed mt-0.5 break-words">{c.content}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                                {resolvedPV.length > 0 && (
+                                  <div className="pt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowResolvedPV(s => !s)}
+                                      className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                                    >
+                                      {showResolvedPV
+                                        ? <><ChevronDown className="h-3 w-3" />Hide {resolvedPV.length} resolved</>
+                                        : <><ChevronRight className="h-3 w-3" />Show {resolvedPV.length} resolved</>}
+                                    </button>
+                                    {showResolvedPV && (
+                                      <div className="mt-1.5 space-y-2 opacity-60">
+                                        {resolvedPV.map(c => (
+                                          <div key={c.id} className="flex gap-2 group">
+                                            <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-emerald-700">
+                                              {(c._authorName ?? '?')[0].toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                                <span className="text-[11px] font-semibold text-foreground line-through">{c._authorName}</span>
+                                                <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                                <button
+                                                  type="button"
+                                                  title="Re-open"
+                                                  onClick={() => resolvePreviewComment(c.id, false)}
+                                                  className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-blue-600 transition-all"
+                                                >
+                                                  <RotateCcw className="h-3 w-3" />
+                                                </button>
+                                              </div>
+                                              <p className="text-[11px] leading-relaxed mt-0.5 break-words line-through text-muted-foreground">{c.content}</p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {/* Compose area */}
+                        <div className="flex-shrink-0 px-3 pb-3 pt-1 border-t border-border/50 flex gap-2 items-end">
+                          <Textarea
+                            value={previewComment}
+                            onChange={e => setPreviewComment(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitPreviewComment(); }}
+                            placeholder="Add a comment… (Ctrl+Enter to send)"
+                            className="flex-1 text-xs min-h-[40px] max-h-[72px] resize-none rounded-lg"
+                            rows={2}
+                          />
+                          <button
+                            type="button"
+                            onClick={submitPreviewComment}
+                            disabled={!previewComment.trim() || previewCommentSubmitting}
+                            className="self-end mb-0.5 p-2 rounded-lg bg-[#1D3461] text-white disabled:opacity-40 hover:bg-[#0F2041] transition-colors flex-shrink-0"
+                          >
+                            {previewCommentSubmitting
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Send className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>{/* end content+comments wrapper */}
+            </>) : (
+              /* Empty state — pane open but no file selected */
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6 text-center">
+                <div className="h-14 w-14 rounded-2xl bg-muted/40 flex items-center justify-center">
+                  <Eye className="h-7 w-7 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">No file selected</p>
+                <p className="text-xs opacity-60 leading-relaxed max-w-[200px]">
+                  Click any file to preview its content here
+                </p>
+                <button
+                  onClick={() => { setPreviewPaneOpen(false); localStorage.setItem('ws_preview_pane', 'false'); closePreviewFile(); }}
+                  className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                >
+                  Close pane
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ File right-click context menu ═══════════════════════════════════ */}
+        {ctxMenuFile && (
+          <DropdownMenu open={!!ctxMenuFile} onOpenChange={open => { if (!open) setCtxMenuFile(null); }}>
+            <DropdownMenuTrigger asChild>
+              <div style={{ position: 'fixed', left: ctxMenuFilePos.x, top: ctxMenuFilePos.y, width: 1, height: 1, pointerEvents: 'none' }} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFile(null)}>
+              <DropdownMenuItem onSelect={() => { openFileDetails(ctxMenuFile); setCtxMenuFile(null); }}>
+                <Eye className="h-3.5 w-3.5 mr-2" />View Details
+              </DropdownMenuItem>
+              {(!ctxMenuFile.password_hash || unlockedIds.has(ctxMenuFile.id) || canManageFile(ctxMenuFile)) && (
+                <OpenAsSubMenu file={ctxMenuFile} />
+              )}
+              {canManageFile(ctxMenuFile) && <>
+                <DropdownMenuSeparator />
+                {canRenameFile(ctxMenuFile) && (
+                  <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: ctxMenuFile.id, currentName: ctxMenuFile.name }); setRenameValue(ctxMenuFile.name); }}>
+                    <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => { setMoveTarget(ctxMenuFile); setMoveFolderId(ctxMenuFile.folder_id ?? '__root__'); }}>
+                  <ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {(isSuperAdmin || ctxMenuFile.created_by === userId) && (
+                  <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: ctxMenuFile.id, name: ctxMenuFile.name, password_hash: ctxMenuFile.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                    <Key className="h-3.5 w-3.5 mr-2" />
+                    {ctxMenuFile.password_hash ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password') : 'Set Password'}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShareFileTarget(ctxMenuFile)}>
+                  <Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access
+                </DropdownMenuItem>
+              </>}
+              {(ctxMenuFile.public_url || ctxMenuFile.storage_provider === 'r2') && !['top_secret','restricted'].includes(ctxMenuFile.security_level) && ctxMenuFile.allow_download && (!ctxMenuFile.password_hash || unlockedIds.has(ctxMenuFile.id)) && (
+                <DropdownMenuItem onClick={() => setQrFile(ctxMenuFile)}>
+                  <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
+                </DropdownMenuItem>
+              )}
+              {canManageFile(ctxMenuFile) && <>
+                <DropdownMenuSeparator />
+                <SecuritySubMenu current={ctxMenuFile.security_level} onSelect={l => changeFileSecurity(ctxMenuFile, l)} />
+                <DropdownMenuItem onClick={() => toggleDownload(ctxMenuFile)}>
+                  {ctxMenuFile.allow_download
+                    ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
+                    : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
+                </DropdownMenuItem>
+                {isSuperAdmin
+                  ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
+                  : (ctxMenuFile.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
+              </>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* ══ Background right-click context menu ══════════════════════════════ */}
+        {bgCtxOpen && (
+          <DropdownMenu open={bgCtxOpen} onOpenChange={open => { if (!open) setBgCtxOpen(false); }}>
+            <DropdownMenuTrigger asChild>
+              <div style={{ position: 'fixed', left: bgCtxPos.x, top: bgCtxPos.y, width: 1, height: 1, pointerEvents: 'none' }} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setBgCtxOpen(false)}>
+              <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                <Upload className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Upload Files
+              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => setNewFolderOpen(true)}>
+                  <FolderPlus className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />New Folder
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={refetch}>
+                <RefreshCw className="h-3.5 w-3.5 mr-2" />Refresh
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* ══ Folder grid right-click context menu ══════════════════════════ */}
+        {ctxMenuFolder && (isAdmin || ctxMenuFolder.created_by === userId) && (
+          <DropdownMenu
+            open={!!ctxMenuFolder}
+            onOpenChange={open => { if (!open) setCtxMenuFolder(null); }}
+          >
+            <DropdownMenuTrigger asChild>
+              <div
+                style={{ position: 'fixed', left: ctxMenuPos.x, top: ctxMenuPos.y, width: 1, height: 1, pointerEvents: 'none' }}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFolder(null)}>
+              {isAdmin && canRenameFolder(ctxMenuFolder) && (
+                <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: ctxMenuFolder.id, currentName: ctxMenuFolder.name }); setRenameValue(ctxMenuFolder.name); }}>
+                  <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => { setCustomColor(ctxMenuFolder.color || '#1D3461'); setCustomIcon(ctxMenuFolder.icon || ''); setFolderCustomizeTarget({ id: ctxMenuFolder.id, name: ctxMenuFolder.name, color: ctxMenuFolder.color, icon: ctxMenuFolder.icon }); }}>
+                  <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
+                </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => duplicateFolder(ctxMenuFolder)}>
+                  <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                </DropdownMenuItem>
+              )}
+              {isAdmin
+                ? <DropdownMenuItem onClick={() => setShareFolderTarget(ctxMenuFolder)}>
+                    <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
+                  </DropdownMenuItem>
+                : <DropdownMenuItem onClick={() => setShareFolderTarget(ctxMenuFolder)}>
+                    <Users className="h-3.5 w-3.5 mr-2 text-blue-500" />Who Has Access
+                  </DropdownMenuItem>}
+              <DropdownMenuSeparator />
+              {(isSuperAdmin || ctxMenuFolder.created_by === userId) && (
+                <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: ctxMenuFolder.id, name: ctxMenuFolder.name, password_hash: ctxMenuFolder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                  <Key className="h-3.5 w-3.5 mr-2" />
+                  {ctxMenuFolder.password_hash
+                    ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password')
+                    : 'Set Password'}
+                </DropdownMenuItem>
+              )}
+              {isAdmin && <DropdownMenuSeparator />}
+              {isAdmin && <SecuritySubMenu current={ctxMenuFolder.security_level} onSelect={l => changeFolderSecurity(ctxMenuFolder.id, ctxMenuFolder.name, l)} />}
+              <DropdownMenuSeparator />
+              {isSuperAdmin ? (
+                <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(ctxMenuFolder)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(ctxMenuFolder)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         {/* ══ File Detail Panel ════════════════════════════════════════════ */}
-        {selectedFile && (
+        {selectedFile && !previewPaneOpen && (
           <div className="fixed right-0 top-0 h-full w-[380px] border-l shadow-2xl z-50 flex flex-col bg-background">
             <FileDetailPanel
               file={selectedFile} currentUserId={userId}
@@ -4132,7 +5182,7 @@ export default function WorkspaceHub() {
           <ShareDialog file={shareFileTarget} open={!!shareFileTarget} onClose={() => setShareFileTarget(null)} currentUserId={userId} />
         )}
         {shareFolderTarget && (
-          <ShareDialog folder={shareFolderTarget} open={!!shareFolderTarget} onClose={() => setShareFolderTarget(null)} currentUserId={userId} />
+          <ShareDialog folder={shareFolderTarget} open={!!shareFolderTarget} onClose={() => setShareFolderTarget(null)} currentUserId={userId} canEdit={isSuperAdmin || isAdmin} />
         )}
 
         {/* ── Password Unlock Prompt ────────────────────────────────────── */}

@@ -734,8 +734,31 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
         p_additional_data: additionalData,
       });
       if (error) throw error;
-      // The RPC returns { success, message? } — treat success:false as failure
-      if (!data?.success) throw new Error(data?.message || 'Server rejected dispatch');
+
+      // RPC returns success:false with 'Already dispatched' when another user
+      // beat us to it (dispatched_at IS NULL guard fired). Fetch the winner's
+      // record, sync local state, and show a friendly toast instead of an error.
+      if (!data?.success) {
+        if (data?.message === 'Already dispatched') {
+          const { data: fresh } = await supabase
+            .from('mmp_site_entries')
+            .select('status, dispatched_at, dispatched_by, additional_data')
+            .eq('id', entry.id)
+            .single();
+          if (fresh) {
+            setSiteEntries(es => es.map(e => e.id === entry.id ? { ...e, ...fresh } : e));
+            const dispatcher = profileName((fresh as any).dispatched_by ?? undefined);
+            toast({
+              title: 'Already dispatched',
+              description: `${entry.site_name} was already dispatched by ${dispatcher} — local view refreshed.`,
+              variant: 'destructive',
+            });
+          }
+          return;
+        }
+        throw new Error(data?.message || 'Server rejected dispatch');
+      }
+
       // Use server-returned dispatched_at for accuracy
       const serverAt: string = data.dispatched_at ?? now;
       setSiteEntries(es => es.map(e => e.id === entry.id
@@ -765,7 +788,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       // dispatched_at IS NULL server-side so concurrent dispatches are safe.
       // Supabase resolves (not rejects) on logic failures, so we must inspect
       // both the error field AND data.success before counting a win.
-      type SuccessPayload = { id: string; dispatched_at: string; additionalData: Record<string, any> };
+      type SuccessPayload = { id: string; dispatched_at: string; additionalData: Record<string, any>; skipped: boolean };
       const results = await Promise.allSettled(
         pending.map(async (e): Promise<SuccessPayload> => {
           const additionalData = { ...(e.additional_data || {}), cost_status: 'dispatched', dispatched_at: now, dispatched_by: user.id };
@@ -774,17 +797,27 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
             p_additional_data: additionalData,
           });
           if (error) throw error;
-          if (!data?.success) throw new Error(data?.message || 'Server rejected dispatch');
-          return { id: e.id, dispatched_at: data.dispatched_at ?? now, additionalData };
+          // RPC returns success:false + 'Already dispatched' when another user
+          // won the race — count as skipped (not a failure), sync state below.
+          if (!data?.success) {
+            if (data?.message === 'Already dispatched') {
+              return { id: e.id, dispatched_at: now, additionalData, skipped: true };
+            }
+            throw new Error(data?.message || 'Server rejected dispatch');
+          }
+          return { id: e.id, dispatched_at: data.dispatched_at ?? now, additionalData, skipped: false };
         })
       );
 
-      // Only update local state for confirmed successes
-      const successes = results
+      // Separate confirmed dispatches from skipped (already dispatched by someone else)
+      const fulfilled = results
         .filter((r): r is PromiseFulfilledResult<SuccessPayload> => r.status === 'fulfilled')
         .map(r => r.value);
-      const failCount = results.length - successes.length;
+      const successes = fulfilled.filter(r => !r.skipped);
+      const skipped   = fulfilled.filter(r =>  r.skipped).length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
 
+      // Update local state for confirmed dispatches only
       if (successes.length > 0) {
         const successMap = new Map(successes.map(s => [s.id, s]));
         setSiteEntries(es => es.map(e => {
@@ -793,13 +826,35 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           return { ...e, status: 'Dispatched', dispatched_at: s.dispatched_at, dispatched_by: user.id, additional_data: s.additionalData };
         }));
       }
+      // For skipped rows, refresh from DB to get the winner's dispatched_by
+      if (skipped > 0) {
+        const skippedIds = fulfilled.filter(r => r.skipped).map(r => r.id);
+        const { data: freshRows } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status, dispatched_at, dispatched_by, additional_data')
+          .in('id', skippedIds);
+        if (freshRows && freshRows.length > 0) {
+          const freshMap = new Map(freshRows.map((r: any) => [r.id, r]));
+          setSiteEntries(es => es.map(e => {
+            const f = freshMap.get(e.id);
+            return f ? { ...e, ...f } : e;
+          }));
+        }
+      }
 
-      if (failCount > 0 && successes.length === 0) {
+      const parts: string[] = [];
+      if (successes.length > 0) parts.push(`${successes.length} dispatched`);
+      if (skipped > 0)          parts.push(`${skipped} already dispatched by another user`);
+      if (failCount > 0)        parts.push(`${failCount} failed`);
+
+      if (failCount > 0 && successes.length === 0 && skipped === 0) {
         toast({ title: 'Dispatch All failed', description: `All ${failCount} update${failCount !== 1 ? 's' : ''} were rejected by the server.`, variant: 'destructive' });
       } else if (failCount > 0) {
-        toast({ title: `${successes.length} dispatched, ${failCount} failed`, description: 'Failed rows remain pending — check permissions and retry.', variant: 'destructive' });
+        toast({ title: parts.join(', '), description: 'Failed rows remain pending — check permissions and retry.', variant: 'destructive' });
+      } else if (skipped > 0 && successes.length === 0) {
+        toast({ title: 'All already dispatched', description: 'Every entry was dispatched by another user — local view refreshed.' });
       } else {
-        toast({ title: `${successes.length} site${successes.length !== 1 ? 's' : ''} dispatched`, description: 'Field teams can now pick them up from the mobile queue.' });
+        toast({ title: parts.join(', '), description: successes.length > 0 ? 'Field teams can now pick them up from the mobile queue.' : undefined });
       }
     } catch (e: any) {
       toast({ title: 'Dispatch All failed', description: e.message, variant: 'destructive' });
