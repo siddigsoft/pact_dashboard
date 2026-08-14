@@ -491,13 +491,28 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   }, [loadProfiles, loadProjects, loadTeams, loadCampaigns]);
 
   useEffect(() => {
+    // Reset all campaign-specific state before loading new data so stale values
+    // from the previous campaign never bleed through on a fast switch.
+    setSiteEntries([]);
+    setAdvances([]);
+    setFeeEdits({});
+    setFeesSaving({});
+    setDispatching({});
+    setApproving({});
+    setAdvanceApproving({});
+    setDispatchingAll(false);
+    setApprovingAll(false);
+    setPayingAll(false);
+    setCostsSubTab('pending');
+    setPayDialog({ open: false, entry: null });
+    setPayForm({ amount: '', notes: '', method: 'cash' });
+    setShowNewAdvance(false);
+    setAdvanceForm({ requested_amount: '', description: '', expense_category: 'transport', site_name: '' });
+
     if (selectedCampaign) {
       loadCampaignDetail(selectedCampaign.id);
       // Pass campaign_id as the primary filter; project_id as legacy fallback
       loadAdvances(selectedCampaign.project_id, selectedCampaign.id);
-    } else {
-      setSiteEntries([]);
-      setAdvances([]);
     }
   }, [selectedCampaign, loadCampaignDetail, loadAdvances]);
 
@@ -765,7 +780,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   // authorization server-side and guards against re-dispatching already-
   // dispatched entries (dispatched_at IS NULL check in the UPDATE WHERE clause).
   const dispatchEntry = async (entry: SiteEntry) => {
-    // Guard: entry must not already have a dispatched_at (lifecycle safety)
+    // Lifecycle guard: must be Approved and Costed before dispatch (mirrors RPC)
+    if (entry.status !== 'Approved and Costed') {
+      toast({ title: 'Approve entry first', description: 'Entry must be Approved & Costed before it can be dispatched.', variant: 'destructive' });
+      return;
+    }
     if (entry.dispatched_at) {
       toast({ title: 'Already dispatched', description: entry.site_name });
       return;
