@@ -1417,10 +1417,10 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
               </div>
             ))}
           </div>
-          {file.tags.length > 0 && (
+          {(file.tags ?? []).length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Tags</p>
-              <div className="flex flex-wrap gap-1">{file.tags.map(t => <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full border">{t}</span>)}</div>
+              <div className="flex flex-wrap gap-1">{(file.tags ?? []).map(t => <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full border">{t}</span>)}</div>
             </div>
           )}
         </TabsContent>
@@ -4532,9 +4532,9 @@ export default function WorkspaceHub() {
                         {previewFile.description}
                       </p>
                     )}
-                    {previewFile.tags.length > 0 && (
+                    {(previewFile.tags ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
-                        {previewFile.tags.map(t => (
+                        {(previewFile.tags ?? []).map(t => (
                           <span key={t} className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
                         ))}
                       </div>
