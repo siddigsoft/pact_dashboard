@@ -150,6 +150,9 @@ interface SiteEntry {
   status: string;
   dispatched_at?: string | null;
   dispatched_by?: string | null;
+  // accepted_by/accepted_at are what claim_site_visit actually sets on the row
+  accepted_by?: string | null;
+  accepted_at?: string | null;
   additional_data?: Record<string, any>;
 }
 
@@ -529,7 +532,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     // ── Load site entries for this campaign (fee/dispatch data) ───────────────
     const { data: seRows } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, fee_paid_at, fee_paid_by, fee_payment_method, fee_payment_notes, status, dispatched_at, dispatched_by, additional_data')
+      .select('id, site_name, site_code, transport_fee, enumerator_fee, fee_paid_status, fee_paid_amount, fee_paid_at, fee_paid_by, fee_payment_method, fee_payment_notes, status, dispatched_at, dispatched_by, accepted_by, accepted_at, additional_data')
       .filter('additional_data->>campaign_id', 'eq', campaignId);
     setSiteEntries((seRows || []) as SiteEntry[]);
     // Initialize fee edit inputs from current values
@@ -594,6 +597,52 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
       // Pass campaign_id as the primary filter; project_id as legacy fallback
       loadAdvances(selectedCampaign.project_id, selectedCampaign.id);
     }
+
+    // ── Realtime subscriptions for the selected campaign ─────────────────────
+    // Refresh daily logs when any log is inserted/updated for this campaign.
+    // Refresh site entries when any mmp_site_entries row changes for this campaign
+    // (claim status, dispatch, payment) so the Costs & Dispatch tab stays live.
+    if (!selectedCampaign) return;
+    const cid = selectedCampaign.id;
+
+    const logsChannel = supabase
+      .channel(`campaign-logs-${cid}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'adhoc_daily_logs',
+        filter: `campaign_id=eq.${cid}`,
+      }, () => {
+        loadCampaignDetail(cid);
+      })
+      .subscribe();
+
+    // mmp_site_entries has no campaign_id column — filter is not direct.
+    // Subscribe without a row filter and re-query only when relevant (cheap for
+    // small campaigns; the RLS + additional_data filter handles the rest).
+    const entriesChannel = supabase
+      .channel(`campaign-entries-${cid}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'mmp_site_entries',
+      }, async (payload) => {
+        // Check if this row belongs to the current campaign before refreshing
+        const ad = (payload.new as any)?.additional_data;
+        if (ad?.campaign_id === cid || ad?.['campaign_id'] === cid) {
+          setSiteEntries(prev => prev.map(e =>
+            e.id === (payload.new as any).id
+              ? { ...e, ...(payload.new as Partial<SiteEntry>) }
+              : e
+          ));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(logsChannel);
+      supabase.removeChannel(entriesChannel);
+    };
   }, [selectedCampaign, loadCampaignDetail, loadAdvances]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -3004,6 +3053,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                         <TableHead className="text-right">Enum Fee (SDG)</TableHead>
                         {costsSubTab === 'dispatched' && (
                           <>
+                            <TableHead>Claimed By</TableHead>
                             <TableHead>Payment Status</TableHead>
                             <TableHead className="text-right">Paid (SDG)</TableHead>
                           </>
@@ -3068,6 +3118,19 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                             {/* Payment status — Dispatched sub-tab only */}
                             {costsSubTab === 'dispatched' && (
                               <>
+                                {/* Claimed-by column — uses accepted_by/accepted_at (set by claim_site_visit RPC) */}
+                                <TableCell className="text-xs">
+                                  {e.accepted_by ? (
+                                    <div className="flex flex-col gap-0">
+                                      <span className="font-medium text-foreground">{profileName(e.accepted_by)}</span>
+                                      {e.accepted_at && (
+                                        <span className="text-[10px] text-muted-foreground tabular-nums">{fmtDate(e.accepted_at)}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground italic">unclaimed</span>
+                                  )}
+                                </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col gap-0.5">
                                     <Badge className={`text-[10px] border-0 self-start ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>

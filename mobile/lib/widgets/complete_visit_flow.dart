@@ -193,6 +193,26 @@ class CompleteVisitFlow {
         final savedStartLocation = _safeStartLocation(additionalData);
 
         final offlineDb = OfflineDb();
+
+        // If this is a village_campaign entry, persist campaign metadata so
+        // the sync path can create an adhoc_daily_logs row when back online.
+        Map<String, dynamic>? villageCampaignData;
+        if (additionalData['source'] == 'village_campaign') {
+          final campaignId   = additionalData['campaign_id']?.toString();
+          final villageId    = additionalData['village_id']?.toString();
+          final teamId       = additionalData['team_id']?.toString();
+          final assignmentId = additionalData['assignment_id']?.toString();
+          if (campaignId != null && villageId != null &&
+              teamId != null && assignmentId != null) {
+            villageCampaignData = {
+              'campaign_id':   campaignId,
+              'village_id':    villageId,
+              'team_id':       teamId,
+              'assignment_id': assignmentId,
+            };
+          }
+        }
+
         await offlineDb.queueCompleteVisit(
           visitId: site['id'].toString(),
           userId: userId ?? '',
@@ -208,6 +228,7 @@ class CompleteVisitFlow {
           state: site['state']?.toString(),
           locality: site['locality']?.toString(),
           startLocation: savedStartLocation,
+          villageCampaignData: villageCampaignData,
         );
 
         final updatedSite = Map<String, dynamic>.from(site);
@@ -267,6 +288,24 @@ class CompleteVisitFlow {
             site['additional_data'],
           );
           final savedStartLocation = _safeStartLocation(additionalData);
+
+          // Preserve campaign metadata for the offline sync path
+          Map<String, dynamic>? villageCampaignDataFallback;
+          if (additionalData['source'] == 'village_campaign') {
+            final cId = additionalData['campaign_id']?.toString();
+            final vId = additionalData['village_id']?.toString();
+            final tId = additionalData['team_id']?.toString();
+            final aId = additionalData['assignment_id']?.toString();
+            if (cId != null && vId != null && tId != null && aId != null) {
+              villageCampaignDataFallback = {
+                'campaign_id':   cId,
+                'village_id':    vId,
+                'team_id':       tId,
+                'assignment_id': aId,
+              };
+            }
+          }
+
           final offlineDb = OfflineDb();
           await offlineDb.queueCompleteVisit(
             visitId: site['id'].toString(),
@@ -283,6 +322,7 @@ class CompleteVisitFlow {
             state: site['state']?.toString(),
             locality: site['locality']?.toString(),
             startLocation: savedStartLocation,
+            villageCampaignData: villageCampaignDataFallback,
           );
           final updatedSite = Map<String, dynamic>.from(site);
           updatedSite['status'] = 'Completed';
@@ -656,6 +696,62 @@ class CompleteVisitFlow {
         } else {
           debugPrint(
             '[CompleteVisitFlow] Wallet transaction creation failed (non-critical): $walletError',
+          );
+        }
+      }
+
+      // ---------- VILLAGE CAMPAIGN: sync daily progress log ----------------
+      // When the completed site is a village campaign assignment, upsert a row
+      // into adhoc_daily_logs so the web Campaign > Daily Logs tab reflects
+      // this visit.  We use an explicit conflict-update so that if the team
+      // lead already submitted a log for this assignment today, we add to the
+      // note rather than silently failing on the UNIQUE(assignment_id, report_date)
+      // constraint.  source must be 'mobile' (only 'web' and 'mobile' are allowed).
+      if (additionalData['source'] == 'village_campaign') {
+        try {
+          final campaignId   = additionalData['campaign_id']?.toString();
+          final villageId    = additionalData['village_id']?.toString();
+          final teamId       = additionalData['team_id']?.toString();
+          final assignmentId = additionalData['assignment_id']?.toString();
+
+          if (campaignId != null && villageId != null && teamId != null && assignmentId != null) {
+            // VisitReportData does not capture HH counts for village campaigns.
+            // Use 0 here; coordinators can update via the Village Campaigns screen.
+            // This row serves as a visit-completion marker until proper counts are entered.
+            final logNotes = reportData.notes.trim().isEmpty
+                ? 'Site visit completed via mobile claim'
+                : reportData.notes.trim();
+
+            // Insert-only: if a coordinator already entered a daily log for
+            // this assignment today, do nothing — never overwrite their data.
+            // ignoreDuplicates: true → Prefer: resolution=ignore-duplicates
+            // → INSERT … ON CONFLICT DO NOTHING
+            await supabase.from('adhoc_daily_logs').upsert({
+              'campaign_id':   campaignId,
+              'assignment_id': assignmentId,
+              'village_id':    villageId,
+              'team_id':       teamId,
+              'report_date':   now.substring(0, 10), // YYYY-MM-DD
+              'hh_covered':    0,
+              'male_count':    0,
+              'female_count':  0,
+              'beneficiaries': 0,
+              'notes':         logNotes,
+              'gps_lat':       position?.latitude,
+              'gps_lng':       position?.longitude,
+              'submitted_by':  currentUserId,
+              'submitted_at':  now,
+              'source':        'mobile',
+            }, ignoreDuplicates: true, onConflict: 'assignment_id,report_date');
+
+            debugPrint(
+              '[CompleteVisitFlow] adhoc_daily_logs insert attempted (ignoreDuplicates) for assignment=$assignmentId',
+            );
+          }
+        } catch (dailyLogError) {
+          // Non-fatal: daily log sync failure should not block visit completion.
+          debugPrint(
+            '[CompleteVisitFlow] adhoc_daily_logs upsert failed (non-critical): $dailyLogError',
           );
         }
       }

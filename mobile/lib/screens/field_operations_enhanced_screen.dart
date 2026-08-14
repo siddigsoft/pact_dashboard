@@ -56,6 +56,9 @@ class _MMPScreenState extends State<MMPScreen> {
   String? _userLocalityName;
   String? _userRole;
   List<String> _userProjectIds = [];
+  /// Team IDs (from adhoc_teams) where this user is the team_lead_id.
+  /// Used to gate which village campaign dispatch entries appear in the claim queue.
+  List<String> _userLeadTeamIds = [];
   bool _isAdminOrSuperUser = false;
 
   // Tab states
@@ -185,9 +188,10 @@ class _MMPScreenState extends State<MMPScreen> {
 
           _applyProfileData(profileResponse);
 
-          // Fetch user's project memberships (for non-admin users)
+          // Fetch user's project memberships and led teams (for non-admin users)
           if (!_isAdminOrSuperUser) {
             await _fetchUserProjectMemberships();
+            await _fetchUserLeadTeams();
           }
 
           // Query actual state and locality names from database
@@ -956,6 +960,35 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
+  /// Load the IDs of all adhoc_teams where the current user is the team lead.
+  /// These IDs are used to filter village_campaign dispatched entries in
+  /// _loadAvailableSites so team leads only see assignments for their own teams.
+  Future<void> _fetchUserLeadTeams() async {
+    try {
+      if (_userId == null) return;
+      _userLeadTeamIds = [];
+
+      final response = await Supabase.instance.client
+          .from('adhoc_teams')
+          .select('id')
+          .eq('team_lead_id', _userId!);
+
+      _userLeadTeamIds = (response as List)
+          .map((t) => t['id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      debugPrint(
+        '[_fetchUserLeadTeams] User leads ${_userLeadTeamIds.length} adhoc_team(s): $_userLeadTeamIds',
+      );
+    } catch (e) {
+      debugPrint('[_fetchUserLeadTeams] Error (non-fatal): $e');
+      // Leave _userLeadTeamIds empty — village_campaign sites won't appear
+      // in the queue, which is the safe fallback.
+    }
+  }
+
   Future<void> _loadLocationNames() async {
     try {
       // Load state name from hub_states table
@@ -1068,14 +1101,31 @@ class _MMPScreenState extends State<MMPScreen> {
           .where((site) => site['accepted_by'] == null)
           .toList();
 
-      // Filter by project membership (for non-admin users)
+      // Filter by project membership (for non-admin users).
+      // Village campaign entries (additional_data.source == 'village_campaign')
+      // have mmp_file_id = NULL so they have no mmp_files.project_id.
+      // They are filtered separately: only include them when the user leads
+      // the assignment's team (additional_data.team_id is in _userLeadTeamIds).
+      // If _userLeadTeamIds is empty (team data not yet loaded or user leads
+      // no teams), village_campaign entries are excluded from the queue.
       if (!_isAdminOrSuperUser) {
         final beforeCount = filteredSites.length;
         filteredSites = filteredSites.where((site) {
+          final additionalData = _safeParseAdditionalData(
+            site['additional_data'],
+          );
+
+          if (additionalData['source'] == 'village_campaign') {
+            // Only admit entries whose team this user leads
+            final siteTeamId = additionalData['team_id']?.toString();
+            if (siteTeamId == null || siteTeamId.isEmpty) return false;
+            return _userLeadTeamIds.contains(siteTeamId);
+          }
+
           final mmpFile = site['mmp_files'] as Map<String, dynamic>? ?? {};
           final projectId = mmpFile['project_id']?.toString();
 
-          // If site has no project ID, exclude it
+          // If site has no project ID, exclude it (standard MMP behaviour)
           if (projectId == null || projectId.isEmpty) {
             return false;
           }
@@ -2137,9 +2187,21 @@ class _MMPScreenState extends State<MMPScreen> {
           'p_role_scope': roleScope,
           'p_fee_source': breakdown?.feeSource ?? 'default',
         };
-        debugPrint('[Claim] Calling claim_site_visit RPC with params: $params');
+
+        // Village campaign assignments use a team-lead-gated RPC that verifies
+        // auth.uid() == adhoc_teams.team_lead_id before delegating to claim_site_visit.
+        final additionalDataForClaim = _safeParseAdditionalData(
+          site['additional_data'],
+        );
+        final isVillageCampaignSite =
+            additionalDataForClaim['source'] == 'village_campaign';
+        final rpcName = isVillageCampaignSite
+            ? 'claim_campaign_site_visit'
+            : 'claim_site_visit';
+
+        debugPrint('[Claim] Calling $rpcName RPC with params: $params');
         final result = await Supabase.instance.client.rpc(
-          'claim_site_visit',
+          rpcName,
           params: params,
         );
 
@@ -2160,6 +2222,9 @@ class _MMPScreenState extends State<MMPScreen> {
           } else if (claimResult?['error'] == 'CLAIM_IN_PROGRESS') {
             description =
                 'Someone else is claiming this site right now. Try again in a moment.';
+          } else if (claimResult?['error'] == 'NOT_TEAM_LEAD') {
+            description =
+                'You are not the team lead for this village assignment and cannot claim it.';
           }
 
           if (mounted) {
@@ -2170,37 +2235,46 @@ class _MMPScreenState extends State<MMPScreen> {
           return;
         }
 
-        // RPC succeeded - now update to 'Accepted' so the site goes
-        // directly to My Sites > Inbox (not the Assigned tab).
-        try {
-          final now = DateTime.now().toIso8601String();
+        // RPC succeeded - for standard MMP sites, update to 'Accepted' so the
+        // site goes to My Sites > Inbox.  For village_campaign sites, the
+        // claim_campaign_site_visit RPC already sets status='Accepted' directly,
+        // so no direct table update is needed (avoids bypassing the RESTRICTIVE
+        // RLS policy that guards village_campaign rows).
+        if (!isVillageCampaignSite) {
+          try {
+            final now = DateTime.now().toIso8601String();
 
-          // Parse existing additional_data and add claim_type
-          final additionalData = _safeParseAdditionalData(
-            site['additional_data'],
-          );
-          additionalData['claim_type'] = 'self_claim';
+            // Parse existing additional_data and add claim_type
+            final additionalData = _safeParseAdditionalData(
+              site['additional_data'],
+            );
+            additionalData['claim_type'] = 'self_claim';
 
-          await Supabase.instance.client
-              .from('mmp_site_entries')
-              .update({
-                'status': 'Accepted',
-                'accepted_by': _userId,
-                'accepted_at': now,
-                'additional_data': additionalData,
-                'cost_acknowledged': true,
-                'cost_acknowledged_at': now,
-                'cost_acknowledged_by': _userId,
-                'updated_at': now,
-              })
-              .eq('id', site['id']);
+            await Supabase.instance.client
+                .from('mmp_site_entries')
+                .update({
+                  'status': 'Accepted',
+                  'accepted_by': _userId,
+                  'accepted_at': now,
+                  'additional_data': additionalData,
+                  'cost_acknowledged': true,
+                  'cost_acknowledged_at': now,
+                  'cost_acknowledged_by': _userId,
+                  'updated_at': now,
+                })
+                .eq('id', site['id']);
+            debugPrint(
+              '[_claimSite] Follow-up update succeeded for site ${site['id']}',
+            );
+          } catch (updateError) {
+            // Non-fatal: site is still claimed, just status might need manual fix
+            debugPrint(
+              '[_claimSite] Follow-up update failed for site ${site['id']}: $updateError',
+            );
+          }
+        } else {
           debugPrint(
-            '[_claimSite] Follow-up update succeeded for site ${site['id']}',
-          );
-        } catch (updateError) {
-          // Non-fatal: site is still claimed, just status might need manual fix
-          debugPrint(
-            '[_claimSite] Follow-up update failed for site ${site['id']}: $updateError',
+            '[_claimSite] Village campaign site — skipping direct follow-up update; RPC already set Accepted',
           );
         }
 

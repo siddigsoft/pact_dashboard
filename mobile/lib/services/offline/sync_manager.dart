@@ -599,6 +599,51 @@ class SyncManager {
     // 6) Create wallet transaction if visit is for a site claim
     await _createWalletTransactionIfNeeded(visit.siteEntryId);
 
+    // 7) Village campaign: insert daily log (insert-only; never overwrites
+    //    coordinator-entered data).  The payload may carry village_campaign_data
+    //    when the offline completion was queued by CompleteVisitFlow.
+    final vcData = payload?['village_campaign_data'];
+    if (vcData is Map && userId != null && userId.isNotEmpty) {
+      try {
+        final campaignId   = vcData['campaign_id']?.toString();
+        final villageId    = vcData['village_id']?.toString();
+        final teamId       = vcData['team_id']?.toString();
+        final assignmentId = vcData['assignment_id']?.toString();
+        if (campaignId != null && villageId != null &&
+            teamId != null && assignmentId != null) {
+          final reportDate = (visit.completedAt ?? DateTime.now())
+              .toIso8601String()
+              .substring(0, 10);
+          await _client.from('adhoc_daily_logs').upsert({
+            'campaign_id':   campaignId,
+            'assignment_id': assignmentId,
+            'village_id':    villageId,
+            'team_id':       teamId,
+            'report_date':   reportDate,
+            'hh_covered':    0,
+            'male_count':    0,
+            'female_count':  0,
+            'beneficiaries': 0,
+            'notes':         (visit.notes?.trim().isEmpty ?? true)
+                                ? 'Site visit completed (synced from offline)'
+                                : visit.notes!.trim(),
+            'submitted_by':  userId,
+            'submitted_at':  (visit.completedAt ?? DateTime.now()).toIso8601String(),
+            'source':        'mobile',
+          }, ignoreDuplicates: true, onConflict: 'assignment_id,report_date');
+          debugPrint(
+            '[SyncManager] _syncSiteVisitComplete: adhoc_daily_logs insert-if-absent '
+            'for assignment=$assignmentId date=$reportDate',
+          );
+        }
+      } catch (dailyLogError) {
+        // Non-fatal: daily-log sync failure does not fail the visit sync.
+        debugPrint(
+          '[SyncManager] _syncSiteVisitComplete: adhoc_daily_logs insert failed (non-critical): $dailyLogError',
+        );
+      }
+    }
+
     debugPrint(
       '[SyncManager] _syncSiteVisitComplete: done siteEntryId=${visit.siteEntryId}',
     );

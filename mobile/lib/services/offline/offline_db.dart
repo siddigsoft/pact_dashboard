@@ -355,6 +355,10 @@ class OfflineDb {
     String? state,
     String? locality,
     Map<String, dynamic>? startLocation,
+    // Village-campaign metadata — when present, the sync path also inserts an
+    // adhoc_daily_logs row (insert-only) so offline completions appear in the
+    // Campaign > Daily Logs view once the device comes back online.
+    Map<String, dynamic>? villageCampaignData,
   }) async {
     final id = 'complete_visit_${DateTime.now().millisecondsSinceEpoch}';
     final now = DateTime.now();
@@ -364,20 +368,25 @@ class OfflineDb {
       '[OfflineDb]   Notes: $notes, Photos: ${photoDataUrls?.length ?? 0}',
     );
 
+    final payload = <String, dynamic>{
+      'visit_id': visitId,
+      'user_id': userId,
+      'end_location': endLocation,
+      'notes': notes,
+      'activities': activities,
+      'duration_minutes': durationMinutes,
+      'completed_at': now.toIso8601String(),
+      'photos': photoDataUrls ?? [],
+    };
+    if (villageCampaignData != null) {
+      payload['village_campaign_data'] = villageCampaignData;
+    }
+
     // Create PendingSyncAction for sync queue
     final syncAction = PendingSyncAction(
       id: id,
       type: 'site_visit_complete',
-      payload: {
-        'visit_id': visitId,
-        'user_id': userId,
-        'end_location': endLocation,
-        'notes': notes,
-        'activities': activities,
-        'duration_minutes': durationMinutes,
-        'completed_at': now.toIso8601String(),
-        'photos': photoDataUrls ?? [],
-      },
+      payload: payload,
       timestamp: now.millisecondsSinceEpoch,
       status: 'pending',
     );
