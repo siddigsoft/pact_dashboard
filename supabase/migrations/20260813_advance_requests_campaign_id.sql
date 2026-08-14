@@ -53,41 +53,41 @@ CREATE INDEX IF NOT EXISTS idx_advance_requests_project_legacy
 ALTER TABLE advance_requests ENABLE ROW LEVEL SECURITY;
 
 -- 4a. Any authenticated user may read every row (Finance Hub, campaign tabs, reports)
-DO $$ BEGIN
+DO $outer$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE tablename = 'advance_requests' AND policyname = 'advance_requests_select_authenticated'
   ) THEN
-    EXECUTE $$
+    EXECUTE $pol$
       CREATE POLICY advance_requests_select_authenticated
         ON advance_requests FOR SELECT TO authenticated
         USING (true)
-    $$;
+    $pol$;
   END IF;
-END $$;
+END $outer$;
 
 -- 4b. Any authenticated user may insert a new advance request
-DO $$ BEGIN
+DO $outer$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE tablename = 'advance_requests' AND policyname = 'advance_requests_insert_authenticated'
   ) THEN
-    EXECUTE $$
+    EXECUTE $pol$
       CREATE POLICY advance_requests_insert_authenticated
         ON advance_requests FOR INSERT TO authenticated
         WITH CHECK (true)
-    $$;
+    $pol$;
   END IF;
-END $$;
+END $outer$;
 
 -- 4c. Only Finance / Admin / Super Admin roles may UPDATE rows (approve/reject/pay).
 --     Role is checked via the caller's profile row.
-DO $$ BEGIN
+DO $outer$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE tablename = 'advance_requests' AND policyname = 'advance_requests_update_finance_admin'
   ) THEN
-    EXECUTE $$
+    EXECUTE $pol$
       CREATE POLICY advance_requests_update_finance_admin
         ON advance_requests FOR UPDATE TO authenticated
         USING (
@@ -103,6 +103,6 @@ DO $$ BEGIN
           )
         )
         WITH CHECK (true)
-    $$;
+    $pol$;
   END IF;
-END $$;
+END $outer$;
