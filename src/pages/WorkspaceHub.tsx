@@ -1996,6 +1996,27 @@ export default function WorkspaceHub() {
     return result;
   }, [deniedFolderIds, folders, isSuperAdmin]);
 
+  // ── Positive folder grants ────────────────────────────────────────────────
+  // Folder IDs where the current user has an active (non-expired) positive
+  // permission grant (viewer / commenter / editor / owner).  These folders are
+  // visible even when the user's clearance level is below the folder's
+  // security_level.  A denial always wins — allDeniedFolderIds is checked
+  // first inside visibleFolders.
+  const grantedFolderIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>(); // super admin never needs a grant
+    const now = new Date();
+    return new Set(
+      myPermissions
+        .filter(p =>
+          p.folder_id &&
+          p.access_level !== 'no_access' &&
+          // Active = no expiry date, OR expiry date is still in the future
+          (!p.expires_at || isBefore(now, parseISO(p.expires_at)))
+        )
+        .map(p => p.folder_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
   // ── Rename permission helpers ─────────────────────────────────────────────
   // Only the item's creator or a super admin may rename files/folders.
   // Admins who did not create the item cannot rename it.
@@ -2269,17 +2290,21 @@ export default function WorkspaceHub() {
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
-  // Filter folders by security clearance AND explicit no_access denials.
-  // Folder creator always sees their own folder UNLESS they have been explicitly denied.
+  // Filter folders by security clearance, explicit grants, and no_access denials.
+  // Folder creator always sees their own folder UNLESS explicitly denied.
+  // A positive grant (viewer/commenter/editor/owner) makes a folder visible
+  // even if the user's clearance is below the folder's security_level.
+  // Denials always win — allDeniedFolderIds is checked first.
   const visibleFolders = useMemo(() =>
     folders.filter(f => {
       // Deny if the folder itself or any ancestor is explicitly blocked.
       // allDeniedFolderIds already contains the transitive closure of denials.
       if (allDeniedFolderIds.has(f.id)) return false;
       return isSuperAdmin || f.created_by === userId ||
-        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance];
+        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
+        grantedFolderIds.has(f.id); // explicit positive grant overrides clearance requirement
     }),
-  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds]);
+  [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds]);
 
   const rootFolders = visibleFolders.filter(f => !f.parent_folder_id);
   const childMap = useMemo(() => {
