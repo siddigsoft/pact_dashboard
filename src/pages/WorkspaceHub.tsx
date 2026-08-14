@@ -2854,6 +2854,44 @@ export default function WorkspaceHub() {
     );
   }
 
+  // ── Windows-style folder icon (shared by sidebar grid + sub-folder grid) ────
+
+  function WinFolderSvg({ icon = '', locked = false, size = 64 }: { icon?: string; locked?: boolean; size?: number }) {
+    const h = Math.round(size * 0.82);
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: h }}>
+        <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" width={size} height={h}>
+          <ellipse cx="48" cy="78" rx="40" ry="4" fill="black" fillOpacity="0.06" />
+          {/* Tab */}
+          <path d="M6 26 L6 18 Q6 11 13 11 L39 11 Q47 11 50 20 L52 26 Z" fill="#C8973E" />
+          {/* Back body */}
+          <rect x="6" y="25" width="84" height="48" rx="7" fill="#C8973E" />
+          {/* Front face */}
+          <rect x="6" y="31" width="84" height="42" rx="7" fill="#FFB900" />
+          {/* Top highlight */}
+          <rect x="10" y="33" width="76" height="11" rx="4" fill="white" fillOpacity="0.30" />
+          {/* Mid warm glow */}
+          <rect x="6" y="31" width="84" height="24" rx="7" fill="#FFD04B" fillOpacity="0.28" />
+          {/* Bottom edge shadow */}
+          <rect x="10" y="67" width="76" height="4" rx="2" fill="#9B6800" fillOpacity="0.16" />
+          {locked && <rect x="6" y="25" width="84" height="48" rx="7" fill="#78350f" fillOpacity="0.22" />}
+        </svg>
+        {icon && !locked && /[^ -]/.test(icon) && (
+          <div className="absolute inset-0 flex items-end justify-end pointer-events-none select-none"
+            style={{ paddingRight: 7, paddingBottom: 8, fontSize: Math.round(size * 0.28) }}>
+            {icon}
+          </div>
+        )}
+        {locked && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ paddingTop: Math.round(size * 0.2) }}>
+            <span style={{ fontSize: Math.round(size * 0.28) }}>🔒</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── File card / row renderers ──────────────────────────────────────────────
 
   function FileRow({ file }: { file: WFile }) {
@@ -3886,67 +3924,61 @@ export default function WorkspaceHub() {
                   </div>
                 )}
 
-                {/* ── Sub-folders (Google Drive–style rows) ────────────── */}
+                {/* ── Sub-folders — Windows Explorer icon grid ──────────── */}
                 {!searchQuery.trim() && currentSubFolders.length > 0 && (
                   <div className="px-6 pt-4 pb-2">
-                    <div className="flex items-center justify-between px-2 mb-1">
+                    <div className="flex items-center justify-between px-2 mb-3">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
-                      <button
-                        onClick={() => setNewFolderOpen(true)}
-                        className="flex items-center gap-0.5 text-[10px] font-semibold text-[#2865eb] hover:text-[#1e52c9] transition-colors"
-                      >
-                        <FolderPlus className="h-3 w-3" /> New
-                      </button>
-                    </div>
-                    {currentSubFolders.map(sub => {
-                      const subFileCount = fileCounts[sub.id] ?? 0;
-                      const subChildCount = (childMap[sub.id] ?? []).length;
-                      const secCfg = SEC_CFG[sub.security_level];
-                      const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
-                      const folderColor = sub.color || '#1D3461';
-                      return (
+                      {isAdmin && (
                         <button
-                          key={sub.id}
-                          onClick={() => setSelectedFolderId(sub.id)}
-                          onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
-                          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
-                          onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
-                          className={cn(
-                            'group w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-muted/50 transition-colors text-left',
-                            dragOverFolderId === sub.id && 'bg-gray-100 dark:bg-muted/50'
-                          )}
-                          data-testid={`subfolder-btn-${sub.id}`}
+                          onClick={() => setNewFolderOpen(true)}
+                          className="flex items-center gap-0.5 text-[10px] font-semibold text-[#2865eb] hover:text-[#1e52c9] transition-colors"
                         >
-                          {subChildCount > 0
-                            ? <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                            : <span className="w-3 flex-shrink-0" />}
-                          {isLocked
-                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                            : sub.icon && /[^\u0000-\u007F]/.test(sub.icon)
-                              ? <span className="text-sm leading-none flex-shrink-0">{sub.icon}</span>
-                              : <Folder className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />}
-                          <span className="flex-1 text-sm text-gray-700 dark:text-foreground truncate" title={sub.name.replace(/^folder\s+/i, '').trim()}>
-                            {sub.name.replace(/^folder\s+/i, '').trim()}
-                          </span>
-                          {!isSuperAdmin && myFolderAccessMap.has(sub.id) && (
-                            <MyAccessBadge level={myFolderAccessMap.get(sub.id)!} />
-                          )}
-                          <span className="text-xs text-gray-400 flex-shrink-0">
-                            {subFileCount > 0 && subFileCount}
-                          </span>
-                          {dragOverFolderId === sub.id && (
-                            <span className="text-[10px] text-[#1D3461] font-semibold flex-shrink-0">Drop</span>
-                          )}
+                          <FolderPlus className="h-3 w-3" /> New
                         </button>
-                      );
-                    })}
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10 gap-0.5">
+                      {currentSubFolders.map(sub => {
+                        const subFileCount = fileCounts[sub.id] ?? 0;
+                        const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
+                        const isDrop = dragOverFolderId === sub.id;
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => setSelectedFolderId(sub.id)}
+                            onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+                            onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
+                            className={cn(
+                              'group flex flex-col items-center gap-1 p-2 rounded-lg transition-all text-center select-none relative',
+                              isDrop ? 'bg-[#CCE4F7] dark:bg-blue-900/40 ring-2 ring-[#0078D4]/40' : 'hover:bg-[#E3F3FD] dark:hover:bg-blue-950/30'
+                            )}
+                            data-testid={`subfolder-btn-${sub.id}`}
+                          >
+                            <WinFolderSvg icon={sub.icon || ''} locked={isLocked} size={56} />
+                            <span className="text-[11px] font-medium text-gray-800 dark:text-foreground leading-tight line-clamp-2 w-full" title={sub.name}>
+                              {sub.name}
+                            </span>
+                            {subFileCount > 0 && (
+                              <span className="text-[9px] text-muted-foreground tabular-nums">{subFileCount}</span>
+                            )}
+                            {isDrop && (
+                              <div className="absolute inset-0 rounded-lg flex items-end justify-center pb-1 pointer-events-none">
+                                <span className="text-[9px] bg-[#0078D4] text-white px-1.5 py-0.5 rounded-full font-semibold">Move here</span>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {/* ── Files ────────────────────────────────────────────────── */}
                 {displayedFiles.length > 0 && (<>
                   {currentSubFolders.length > 0 && (
-                    <div className="px-8 pt-2 pb-1">
+                    <div className="px-8 pt-3 pb-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Files</p>
                     </div>
                   )}
