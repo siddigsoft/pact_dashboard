@@ -26,7 +26,12 @@ CREATE INDEX IF NOT EXISTS idx_mmp_site_entries_campaign_id
   ON public.mmp_site_entries
   USING btree ((additional_data->>'campaign_id'));
 
--- 3. Backfill: for any existing village_team assignment that has no site_entry_id,
+-- 3. mmp_site_entries.mmp_file_id must be nullable for campaign rows.
+--    Village campaigns are not tied to an MMP file, so NULL is legitimate here.
+ALTER TABLE public.mmp_site_entries
+  ALTER COLUMN mmp_file_id DROP NOT NULL;
+
+-- 4. Backfill: for any existing village_team assignment that has no site_entry_id,
 --    create an mmp_site_entries row now.
 --    This uses a PL/pgSQL block so it's safe to re-run (no duplication).
 DO $$

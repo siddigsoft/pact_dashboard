@@ -104,11 +104,34 @@ re-check that both migration files were applied without errors in SQL Editor.
 
 ---
 
+## Step 5 — Fix mmp_site_entries nullable mmp_file_id (required)
+
+Village campaign site entries do not belong to an MMP file, so `mmp_file_id`
+must be allowed to be NULL. Run this migration **after** Step 3:
+
+```
+supabase/migrations/20260814_mmp_site_entries_nullable_mmp_file_id.sql
+```
+
+This migration:
+1. Drops the `NOT NULL` constraint on `mmp_site_entries.mmp_file_id`.
+2. Re-runs the backfill — any village-team assignments that failed earlier
+   (with error 23502) will now get their `site_entry_id` correctly.
+
+**Without this step** the dispatch flow (creating site entries for campaign
+villages) will fail with:
+```
+ERROR: 23502: null value in column "mmp_file_id" ... violates not-null constraint
+```
+
+---
+
 ## Notes
 
 - The `site-visit-photos` storage bucket (used by regular site visits) is
   reused for Village Campaigns photo uploads under the
   `village-campaign-logs/{log_id}/` prefix — no new bucket needed.
 - The `adhoc_village_teams.site_entry_id` column references `mmp_site_entries`
-  as a bridge for future mobile visibility; it is nullable and not required for
-  the feature to work.
+  as a bridge for the fee / dispatch / payment-tracking flow. It is set when a
+  village-team assignment is saved and requires `mmp_file_id` to be nullable
+  (applied by Step 5 above).
