@@ -490,8 +490,16 @@ const AuthGuard = ({ children }) => {
   const location = useLocation();
   const { currentUser, authReady } = useAppContext();
 
-  // Wait for initial auth hydration to complete before deciding
-  if (!authReady) {
+  const isPublicViewer =
+    location.pathname.startsWith('/view/') ||
+    location.pathname.startsWith('/workspace/share/') ||
+    location.pathname.startsWith('/s/') ||
+    location.pathname.startsWith('/ext/') ||
+    location.pathname === '/pdm-report';
+
+  // Wait for initial auth hydration to complete before deciding.
+  // Public share/view pages must not wait — guests have no session.
+  if (!authReady && !isPublicViewer) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-sm text-muted-foreground">Loading…</div>
@@ -829,6 +837,34 @@ function App() {
     }
   }, []);
 
+
+  // ── Public file / folder share — skip auth, FCM, live dashboard, session ──
+  // Opening /view/:code previously booted the whole Command Center (notifications,
+  // realtime, session recovery) before FileViewer could even fetch the file.
+  const guestSharePath = window.location.pathname.startsWith('/view/')
+    || window.location.pathname.startsWith('/workspace/share/');
+  if (guestSharePath) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <Suspense fallback={
+                <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0F2041,#1D3461)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ color: '#fff', fontSize: '14px', opacity: 0.8 }}>Opening file…</div>
+                </div>
+              }>
+                <Routes>
+                  <Route path="/view/:fileId" element={<FileViewer />} />
+                  <Route path="/workspace/share/folder/:folderId" element={<WorkspaceFolderShare />} />
+                </Routes>
+              </Suspense>
+            </Router>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </ThemeProvider>
+    );
+  }
 
   // ── Public PDM Report — bypass ALL session/auth/mobile guards ──────────────
   // This route has its own login gate (DCTPDMPublicPage) and must NEVER be

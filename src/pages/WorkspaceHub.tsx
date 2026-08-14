@@ -335,7 +335,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
       const { data } = await supabase.from('profiles').select('id, full_name, role').limit(200);
       return (data ?? []) as ProfileOption[];
     },
-    enabled: open,
+    enabled: open && canEdit && granteeType === 'user',
   });
 
   async function addPermission() {
@@ -550,9 +550,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`/view/${file.short_code || file.id.slice(0, 8)}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/view/${file.short_code || file.id}`}
                     className="h-7 text-[10px] bg-background font-mono"
-                    title={`${window.location.origin}/view/${file.short_code || file.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
@@ -562,6 +561,12 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                     }}
                   >
                     <Copy className="h-3 w-3" />Copy
+                  </Button>
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
+                    onClick={() => window.open(`/view/${file.short_code || file.id}`, '_blank')}
+                  >
+                    <ExternalLink className="h-3 w-3" />Open
                   </Button>
                 </div>
               </>
