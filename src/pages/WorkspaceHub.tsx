@@ -1725,6 +1725,13 @@ export default function WorkspaceHub() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewUrlLoading, setPreviewUrlLoading] = useState(false);
   const previewDragRef = useRef<{ active: boolean; startX: number; startW: number }>({ active: false, startX: 0, startW: 0 });
+  // Read the stored id NOW, at render time, before any effects run.
+  // This captures the value before the mount-time persist effect could wipe it.
+  const pendingPreviewIdRef = useRef<string | null>(
+    localStorage.getItem('ws_preview_pane') === 'true'
+      ? localStorage.getItem('ws_preview_file_id')
+      : null
+  );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
@@ -2017,33 +2024,41 @@ export default function WorkspaceHub() {
   }, []);
 
   // ── Preview pane: persist selected file id to localStorage ────────────────
+  // Only SETS the key — never clears reactively (that would wipe the stored id
+  // on mount when previewFile starts as null).  Clearing is done explicitly via
+  // closePreviewFile() at every user-initiated close site.
   useEffect(() => {
     if (previewFile) {
       localStorage.setItem('ws_preview_file_id', previewFile.id);
-    } else {
-      localStorage.removeItem('ws_preview_file_id');
     }
   }, [previewFile?.id]);
 
-  // ── Preview pane: restore selected file after files load ──────────────────
-  // Runs once when allFiles becomes non-empty. If a stored id exists and the
-  // file is still present (not deleted/archived), reopen it in the pane.
+  // ── Preview pane: restore selected file once files load ───────────────────
+  // pendingPreviewIdRef was populated at render time (before any effect ran),
+  // so the stored id is guaranteed to be intact here.
   const previewRestoredRef = useRef(false);
   useEffect(() => {
-    if (previewRestoredRef.current) return;          // already ran
-    if (!previewPaneOpen) return;                    // pane is closed — nothing to restore
-    if (allFiles.length === 0) return;               // files not loaded yet
+    if (previewRestoredRef.current) return;   // already ran
+    if (!pendingPreviewIdRef.current) return; // nothing stored
+    if (allFiles.length === 0) return;        // files not loaded yet
     previewRestoredRef.current = true;
-    const storedId = localStorage.getItem('ws_preview_file_id');
-    if (!storedId) return;
+    const storedId = pendingPreviewIdRef.current;
+    pendingPreviewIdRef.current = null;       // consumed
     const match = allFiles.find(f => f.id === storedId);
     if (match) {
       setPreviewFile(match);
     } else {
-      // File was deleted or is no longer accessible — clear stale key
+      // File deleted or no longer accessible — remove stale key
       localStorage.removeItem('ws_preview_file_id');
     }
-  }, [allFiles, previewPaneOpen]);
+  }, [allFiles]);
+
+  // ── Preview pane: explicit close (clears state + localStorage) ──────────────
+  function closePreviewFile() {
+    setPreviewFile(null);
+    localStorage.removeItem('ws_preview_file_id');
+    pendingPreviewIdRef.current = null; // discard any unconsumed pending id
+  }
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
@@ -2519,7 +2534,11 @@ export default function WorkspaceHub() {
       setShowPromptPwd(false);
     } else if (previewPaneOpen) {
       // Preview pane is open — load file into it (toggle off if same file)
-      setPreviewFile(prev => prev?.id === file.id ? null : file);
+      if (previewFile?.id === file.id) {
+        closePreviewFile();
+      } else {
+        setPreviewFile(file);
+      }
     } else {
       setSelectedFile(prev => prev?.id === file.id ? null : file);
     }
@@ -3686,7 +3705,7 @@ export default function WorkspaceHub() {
                       const next = !previewPaneOpen;
                       setPreviewPaneOpen(next);
                       localStorage.setItem('ws_preview_pane', String(next));
-                      if (!next) setPreviewFile(null);
+                      if (!next) closePreviewFile();
                     }}
                     className={cn('p-1.5 rounded transition-colors active:scale-[0.98]',
                       previewPaneOpen ? 'bg-[#2865eb] text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200')}
@@ -4234,7 +4253,7 @@ export default function WorkspaceHub() {
                     <ExternalLink className="h-3 w-3" />Open
                   </Button>
                 )}
-                <button onClick={() => setPreviewFile(null)}
+                <button onClick={() => closePreviewFile()}
                   className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 ml-1">
                   <X className="h-4 w-4" />
                 </button>
@@ -4351,7 +4370,7 @@ export default function WorkspaceHub() {
                   Click any file to preview its content here
                 </p>
                 <button
-                  onClick={() => { setPreviewPaneOpen(false); localStorage.setItem('ws_preview_pane', 'false'); }}
+                  onClick={() => { setPreviewPaneOpen(false); localStorage.setItem('ws_preview_pane', 'false'); closePreviewFile(); }}
                   className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                 >
                   Close pane
