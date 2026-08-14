@@ -1765,6 +1765,12 @@ export default function WorkspaceHub() {
   // ── Folder grid right-click context menu state ───────────────────────────
   const [ctxMenuFolder, setCtxMenuFolder] = useState<WFolder | null>(null);
   const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // ── File right-click context menu state ───────────────────────────────────
+  const [ctxMenuFile, setCtxMenuFile] = useState<WFile | null>(null);
+  const [ctxMenuFilePos, setCtxMenuFilePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // ── Background (empty area) right-click context menu ──────────────────────
+  const [bgCtxOpen, setBgCtxOpen] = useState(false);
+  const [bgCtxPos, setBgCtxPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // ── Folder customization state ────────────────────────────────────────────
   const [folderCustomizeTarget, setFolderCustomizeTarget] = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
@@ -3110,6 +3116,7 @@ export default function WorkspaceHub() {
     return (
       <tr onClick={() => openFile(file)}
         draggable
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFile(file); setCtxMenuFilePos({ x: e.clientX, y: e.clientY }); }}
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
         className={cn('group cursor-pointer hover:bg-gray-50 dark:hover:bg-muted/30 transition-colors select-none',
@@ -3245,6 +3252,7 @@ export default function WorkspaceHub() {
     return (
       <div onClick={() => openFile(file)}
         draggable
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFile(file); setCtxMenuFilePos({ x: e.clientX, y: e.clientY }); }}
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
         className={cn('flex flex-col rounded-xl border border-blue-100 dark:border-blue-900 bg-white dark:bg-[#0f1422] cursor-default hover:shadow-md hover:border-[#2865eb]/40 hover:-translate-y-0.5 transition-all ease-[cubic-bezier(0.16,1,0.3,1)] group relative overflow-hidden select-none',
@@ -3600,7 +3608,16 @@ export default function WorkspaceHub() {
               controls stay reachable once the masthead and KPI tiles scroll away —
               that's what gives the file list back its room instead of being squeezed
               under a tall block of fixed chrome. */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto"
+            onContextMenu={e => {
+              // Only fire on the background itself — children stop propagation
+              if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.wsBackground === 'true') {
+                e.preventDefault();
+                setBgCtxOpen(true);
+                setBgCtxPos({ x: e.clientX, y: e.clientY });
+              }
+            }}
+          >
           {/* Breadcrumb bar */}
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
@@ -4127,7 +4144,7 @@ export default function WorkspaceHub() {
                           <button
                             key={sub.id}
                             onClick={() => setSelectedFolderId(sub.id)}
-                            onContextMenu={e => { e.preventDefault(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
+                            onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
                             onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
                             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
                             onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
@@ -4654,6 +4671,85 @@ export default function WorkspaceHub() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ══ File right-click context menu ═══════════════════════════════════ */}
+        {ctxMenuFile && (
+          <DropdownMenu open={!!ctxMenuFile} onOpenChange={open => { if (!open) setCtxMenuFile(null); }}>
+            <DropdownMenuTrigger asChild>
+              <div style={{ position: 'fixed', left: ctxMenuFilePos.x, top: ctxMenuFilePos.y, width: 1, height: 1, pointerEvents: 'none' }} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFile(null)}>
+              <DropdownMenuItem onSelect={() => { openFileDetails(ctxMenuFile); setCtxMenuFile(null); }}>
+                <Eye className="h-3.5 w-3.5 mr-2" />View Details
+              </DropdownMenuItem>
+              {(!ctxMenuFile.password_hash || unlockedIds.has(ctxMenuFile.id) || canManageFile(ctxMenuFile)) && (
+                <OpenAsSubMenu file={ctxMenuFile} />
+              )}
+              {canManageFile(ctxMenuFile) && <>
+                <DropdownMenuSeparator />
+                {canRenameFile(ctxMenuFile) && (
+                  <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: ctxMenuFile.id, currentName: ctxMenuFile.name }); setRenameValue(ctxMenuFile.name); }}>
+                    <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => { setMoveTarget(ctxMenuFile); setMoveFolderId(ctxMenuFile.folder_id ?? '__root__'); }}>
+                  <ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {(isSuperAdmin || ctxMenuFile.created_by === userId) && (
+                  <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: ctxMenuFile.id, name: ctxMenuFile.name, password_hash: ctxMenuFile.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                    <Key className="h-3.5 w-3.5 mr-2" />
+                    {ctxMenuFile.password_hash ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password') : 'Set Password'}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShareFileTarget(ctxMenuFile)}>
+                  <Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access
+                </DropdownMenuItem>
+              </>}
+              {(ctxMenuFile.public_url || ctxMenuFile.storage_provider === 'r2') && !['top_secret','restricted'].includes(ctxMenuFile.security_level) && ctxMenuFile.allow_download && (!ctxMenuFile.password_hash || unlockedIds.has(ctxMenuFile.id)) && (
+                <DropdownMenuItem onClick={() => setQrFile(ctxMenuFile)}>
+                  <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
+                </DropdownMenuItem>
+              )}
+              {canManageFile(ctxMenuFile) && <>
+                <DropdownMenuSeparator />
+                <SecuritySubMenu current={ctxMenuFile.security_level} onSelect={l => changeFileSecurity(ctxMenuFile, l)} />
+                <DropdownMenuItem onClick={() => toggleDownload(ctxMenuFile)}>
+                  {ctxMenuFile.allow_download
+                    ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
+                    : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
+                </DropdownMenuItem>
+                {isSuperAdmin
+                  ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
+                  : (ctxMenuFile.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
+              </>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* ══ Background right-click context menu ══════════════════════════════ */}
+        {bgCtxOpen && (
+          <DropdownMenu open={bgCtxOpen} onOpenChange={open => { if (!open) setBgCtxOpen(false); }}>
+            <DropdownMenuTrigger asChild>
+              <div style={{ position: 'fixed', left: bgCtxPos.x, top: bgCtxPos.y, width: 1, height: 1, pointerEvents: 'none' }} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setBgCtxOpen(false)}>
+              <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                <Upload className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Upload Files
+              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => setNewFolderOpen(true)}>
+                  <FolderPlus className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />New Folder
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={refetch}>
+                <RefreshCw className="h-3.5 w-3.5 mr-2" />Refresh
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         {/* ══ Folder grid right-click context menu ══════════════════════════ */}
