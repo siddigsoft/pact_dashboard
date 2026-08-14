@@ -614,16 +614,17 @@ class SyncManager {
           final reportDate = (visit.completedAt ?? DateTime.now())
               .toIso8601String()
               .substring(0, 10);
+          final hhCovered = (vcData['hh_covered'] as num?)?.toInt() ?? 0;
           await _client.from('adhoc_daily_logs').upsert({
             'campaign_id':   campaignId,
             'assignment_id': assignmentId,
             'village_id':    villageId,
             'team_id':       teamId,
             'report_date':   reportDate,
-            'hh_covered':    0,
+            'hh_covered':    hhCovered,
             'male_count':    0,
             'female_count':  0,
-            'beneficiaries': 0,
+            'beneficiaries': hhCovered,
             'notes':         (visit.notes?.trim().isEmpty ?? true)
                                 ? 'Site visit completed (synced from offline)'
                                 : visit.notes!.trim(),

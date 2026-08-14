@@ -209,6 +209,7 @@ class CompleteVisitFlow {
               'village_id':    villageId,
               'team_id':       teamId,
               'assignment_id': assignmentId,
+              'hh_covered':    reportData.householdsVisited,
             };
           }
         }
@@ -302,6 +303,7 @@ class CompleteVisitFlow {
                 'village_id':    vId,
                 'team_id':       tId,
                 'assignment_id': aId,
+                'hh_covered':    reportData.householdsVisited,
               };
             }
           }
@@ -717,10 +719,10 @@ class CompleteVisitFlow {
           if (campaignId != null && villageId != null && teamId != null && assignmentId != null) {
             // VisitReportData does not capture HH counts for village campaigns.
             // Use 0 here; coordinators can update via the Village Campaigns screen.
-            // This row serves as a visit-completion marker until proper counts are entered.
             final logNotes = reportData.notes.trim().isEmpty
                 ? 'Site visit completed via mobile claim'
                 : reportData.notes.trim();
+            final hhCovered = reportData.householdsVisited;
 
             // Insert-only: if a coordinator already entered a daily log for
             // this assignment today, do nothing — never overwrite their data.
@@ -732,10 +734,10 @@ class CompleteVisitFlow {
               'village_id':    villageId,
               'team_id':       teamId,
               'report_date':   now.substring(0, 10), // YYYY-MM-DD
-              'hh_covered':    0,
+              'hh_covered':    hhCovered,
               'male_count':    0,
               'female_count':  0,
-              'beneficiaries': 0,
+              'beneficiaries': hhCovered, // sensible default; coordinator can refine
               'notes':         logNotes,
               'gps_lat':       position?.latitude,
               'gps_lng':       position?.longitude,

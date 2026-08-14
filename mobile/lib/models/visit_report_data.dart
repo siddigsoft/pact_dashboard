@@ -22,6 +22,10 @@ class VisitReportData {
   /// Warehouse name covered for WHM activity, when provided.
   final String? warehouseName;
 
+  /// Households visited/covered — only captured for village_campaign sites.
+  /// Flows directly into adhoc_daily_logs.hh_covered on submission.
+  final int householdsVisited;
+
   VisitReportData({
     required this.activities,
     required this.notes,
@@ -34,6 +38,7 @@ class VisitReportData {
     this.hasMarketDiversion = false,
     this.marketName,
     this.warehouseName,
+    this.householdsVisited = 0,
   });
 
   /// How many site-visit fees this report represents

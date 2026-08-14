@@ -54,6 +54,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   bool _hasMarketDiversion = false;
   bool _hasWarehouseMonitoring = false;
 
+  // Village-campaign only: households covered (HH count)
+  final TextEditingController _hhCountController = TextEditingController();
+  bool get _isVillageCampaign =>
+      (_additionalData['source']?.toString()) == 'village_campaign';
+
   // Prevent multiple PostFrameCallback triggers
   bool _autoSelectionProcessed = false;
   // Track if warning was shown on first load
@@ -215,6 +220,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     _notesController.dispose();
     _pdmQController.dispose();
     _marketNameController.dispose();
+    _hhCountController.dispose();
     _positionStream?.cancel();
     super.dispose();
   }
@@ -1505,6 +1511,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     setState(() => _isSubmitting = true);
 
     try {
+      final hhCount = int.tryParse(_hhCountController.text.trim()) ?? 0;
       final reportData = VisitReportData(
         activities: _activitiesController.text.trim(),
         notes: _notesController.text.trim(),
@@ -1521,6 +1528,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         warehouseName: _warehouseName.trim().isEmpty
             ? null
             : _warehouseName.trim(),
+        householdsVisited: hhCount,
       );
 
       if (mounted) {
@@ -1736,6 +1744,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         const SizedBox(height: 20),
 
                         _buildNotesField(),
+
+                        if (_isVillageCampaign) ...[
+                          const SizedBox(height: 20),
+                          _buildHhCountField(),
+                        ],
 
                         const SizedBox(height: 20),
 
@@ -3454,6 +3467,68 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             filled: true,
             fillColor: AppColors.backgroundGray,
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHhCountField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              _isArabic ? 'الأسر المستفيدة (HH)' : 'HOUSEHOLDS COVERED (HH)',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textLight,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Tooltip(
+              message: _isArabic
+                  ? 'عدد الأسر التي تمت تغطيتها خلال هذه الزيارة'
+                  : 'Number of households covered during this visit',
+              child: Icon(
+                Icons.info_outline,
+                size: 14,
+                color: AppColors.textLight,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _hhCountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            hintText: _isArabic ? 'مثال: 45' : 'e.g. 45',
+            hintStyle: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF8C8C8C),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            filled: true,
+            fillColor: AppColors.backgroundGray,
+            prefixIcon: const Icon(Icons.people_outline, size: 18),
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) return null; // optional
+            final parsed = int.tryParse(value.trim());
+            if (parsed == null || parsed < 0) {
+              return _isArabic
+                  ? 'يرجى إدخال رقم صحيح (0 أو أكثر)'
+                  : 'Enter a whole number (0 or more)';
+            }
+            return null;
+          },
         ),
       ],
     );
