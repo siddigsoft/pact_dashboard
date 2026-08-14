@@ -135,3 +135,23 @@ ERROR: 23502: null value in column "mmp_file_id" ... violates not-null constrain
   as a bridge for the fee / dispatch / payment-tracking flow. It is set when a
   village-team assignment is saved and requires `mmp_file_id` to be nullable
   (applied by Step 5 above).
+
+---
+
+## Step 6 — Cluster level & multi-activity support
+
+Run **`supabase/migrations/20260816_adhoc_clusters_activities.sql`** in the SQL Editor.
+
+This migration adds:
+- `adhoc_clusters` table — groups villages by cluster (State → Locality → Cluster → Village)
+- `cluster_id` nullable FK on `adhoc_villages`
+- `activity_name` + `activity_type` columns on `adhoc_village_teams` so one village
+  can have multiple assignments for different activities (e.g. Nutrition + WASH)
+- Drops the old `UNIQUE(campaign_id, village_id, team_id)` constraint and replaces it
+  with partial unique indexes that allow the same team to cover the same village
+  across different activities
+
+**Without this step** the Clusters tab, Activity fields, and multi-activity Costs & Dispatch
+rows will fail with "column does not exist" errors.
+
+**This migration is fully idempotent** — it can be re-run safely.

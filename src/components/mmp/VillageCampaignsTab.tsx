@@ -54,6 +54,16 @@ interface Campaign {
   project_name?: string;
 }
 
+interface Cluster {
+  id: string;
+  campaign_id: string;
+  cluster_name: string;
+  cluster_code: string;
+  state?: string;
+  locality?: string;
+  created_at: string;
+}
+
 interface Village {
   id: string;
   campaign_id: string;
@@ -62,10 +72,12 @@ interface Village {
   hh_target: number;
   state?: string;
   locality?: string;
+  cluster_id?: string | null;
   status: 'pending' | 'in_progress' | 'completed';
   // Derived
   hh_covered?: number;
   team_count?: number;
+  cluster_name?: string;
 }
 
 interface Team {
@@ -88,6 +100,8 @@ interface VillageTeam {
   hh_target_for_team?: number;
   status: 'active' | 'completed' | 'withdrawn';
   assigned_at: string;
+  activity_name?: string | null;
+  activity_type?: string | null;
   // Joined
   team_name?: string;
   team_code?: string;
@@ -227,6 +241,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
   // ── Villages & assignments for selected campaign ──────────────────────────
   const [villages, setVillages]         = useState<Village[]>([]);
+  const [clusters, setClusters]         = useState<Cluster[]>([]);
   const [assignments, setAssignments]   = useState<VillageTeam[]>([]);
   const [dailyLogs, setDailyLogs]       = useState<DailyLog[]>([]);
 
@@ -237,6 +252,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [showAssignTeam,     setShowAssignTeam]     = useState(false);
   const [showDailyLog,       setShowDailyLog]       = useState(false);
   const [showCreateTeam,     setShowCreateTeam]     = useState(false);
+  const [showAddCluster,     setShowAddCluster]     = useState(false);
+  const [clusterForm, setClusterForm] = useState({ cluster_name: '', cluster_code: '', state: '', locality: '' });
+  const [clusterSaving, setClusterSaving] = useState(false);
 
   // ── Form state — campaign wizard ──────────────────────────────────────────
   const [wizardStep, setWizardStep] = useState(1);
@@ -250,16 +268,16 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [coverageAreas, setCoverageAreas] = useState<{ state: string; locality: string }[]>([
     { state: '', locality: '' },
   ]);
-  const [wizardVillages, setWizardVillages] = useState<{ village_name: string; village_code: string; hh_target: string; state: string; locality: string }[]>([
-    { village_name: '', village_code: 'VLG-01', hh_target: '', state: '', locality: '' },
+  const [wizardVillages, setWizardVillages] = useState<{ village_name: string; village_code: string; hh_target: string; state: string; locality: string; cluster_id: string; activity_name: string; activity_type: string }[]>([
+    { village_name: '', village_code: 'VLG-01', hh_target: '', state: '', locality: '', cluster_id: '', activity_name: '', activity_type: '' },
   ]);
   const [wizardTeams, setWizardTeams] = useState<{ team_id: string; village_ids: string[]; hh_target_for_team: string }[]>([]);
 
   // ── Form state — add village ──────────────────────────────────────────────
-  const [villageForm, setVillageForm] = useState({ village_name: '', village_code: '', hh_target: '', state: '', locality: '' });
+  const [villageForm, setVillageForm] = useState({ village_name: '', village_code: '', hh_target: '', state: '', locality: '', cluster_id: '' });
 
   // ── Form state — assign team ──────────────────────────────────────────────
-  const [assignForm, setAssignForm] = useState({ team_id: '', village_id: '', hh_target_for_team: '' });
+  const [assignForm, setAssignForm] = useState({ team_id: '', village_id: '', hh_target_for_team: '', activity_name: '', activity_type: '' });
 
   // ── Form state — daily log ────────────────────────────────────────────────
   const [logForm, setLogForm] = useState({
@@ -381,8 +399,13 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   // ── Load campaign detail ──────────────────────────────────────────────────
 
   const loadCampaignDetail = useCallback(async (campaignId: string) => {
-    // Parallel load: villages + assignments + daily logs
-    const [vilRes, assignRes, logRes] = await Promise.all([
+    // Parallel load: clusters + villages + assignments + daily logs
+    const [clusterRes, vilRes, assignRes, logRes] = await Promise.all([
+      supabase
+        .from('adhoc_clusters')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .order('cluster_code', { ascending: true }),
       supabase
         .from('adhoc_villages')
         .select('*')
@@ -399,6 +422,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         .eq('campaign_id', campaignId)
         .order('report_date', { ascending: false }),
     ]);
+
+    const loadedClusters: Cluster[] = (clusterRes.data || []) as Cluster[];
+    setClusters(loadedClusters);
 
     // Load photos for all logs in parallel
     const logIds = (logRes.data || []).map((l: any) => l.id);
@@ -435,6 +461,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         team_lead_name: a.team?.profiles?.full_name         || '—',
         member_count:   a.team?.member_count                || 0,
         village_name:   a.village?.village_name             || '—',
+        activity_name:  a.activity_name                     || null,
+        activity_type:  a.activity_type                     || null,
         hh_covered,
       };
     });
@@ -442,7 +470,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     const vils: Village[] = (vilRes.data || []).map((v: any) => {
       const vilAssigns = assigns.filter(a => a.village_id === v.id);
       const hh_covered = vilAssigns.reduce((s, a) => s + (a.hh_covered || 0), 0);
-      return { ...v, hh_covered, team_count: vilAssigns.length };
+      const cluster = loadedClusters.find(c => c.id === v.cluster_id);
+      return { ...v, hh_covered, team_count: vilAssigns.length, cluster_name: cluster?.cluster_name };
     });
 
     setVillages(vils);
@@ -495,6 +524,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     // from the previous campaign never bleed through on a fast switch.
     setSiteEntries([]);
     setAdvances([]);
+    setClusters([]);
     setFeeEdits({});
     setFeesSaving({});
     setDispatching({});
@@ -610,6 +640,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
       // 2. Insert villages
       const validVillages = wizardVillages.filter(v => v.village_name.trim());
       if (validVillages.length > 0) {
+        // Derive primary state/locality from coverage areas for fallback
+        const primaryFallbackState    = coverageAreas.find(a => a.state)?.state    || null;
+        const primaryFallbackLocality = coverageAreas.find(a => a.state)?.locality || null;
         const { data: vils, error: vilErr } = await supabase
           .from('adhoc_villages')
           .insert(validVillages.map(v => ({
@@ -617,8 +650,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
             village_name: v.village_name.trim(),
             village_code: v.village_code.trim() || autoVillageCode(0),
             hh_target:    v.hh_target ? parseInt(v.hh_target) : 0,
-            state:        v.state || campaignForm.state || null,
-            locality:     v.locality || campaignForm.locality || null,
+            state:        v.state || primaryFallbackState,
+            locality:     v.locality || primaryFallbackLocality,
+            cluster_id:   v.cluster_id || null,
           })))
           .select('id, village_code');
         if (vilErr) throw vilErr;
@@ -631,11 +665,16 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
             ? ta.village_ids
             : (vils || []).map((v: any) => v.id);
           for (const vid of villageIds) {
+            // Find the village form entry to grab activity fields (if specified per-village)
+            const vilObj = (vils || []).find((v: any) => v.id === vid);
+            const vilForm = vilObj ? validVillages.find(v => v.village_code === (vilObj as any)?.village_code) : null;
             teamInserts.push({
               campaign_id:         camp.id,
               village_id:          vid,
               team_id:             ta.team_id,
               hh_target_for_team:  ta.hh_target_for_team ? parseInt(ta.hh_target_for_team) : null,
+              activity_name:       vilForm?.activity_name || null,
+              activity_type:       vilForm?.activity_type || null,
             });
           }
         }
@@ -658,10 +697,12 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
               villageId:        asn.village_id,
               villageName:      vilForm?.village_name || (vil as any)?.village_code || asn.village_id,
               villageCode:      vilForm?.village_code,
-              villageState:     vilForm?.state,
-              villageLocality:  vilForm?.locality,
+              villageState:     vilForm?.state || primaryFallbackState || undefined,
+              villageLocality:  vilForm?.locality || primaryFallbackLocality || undefined,
               teamId:           asn.team_id,
               teamName:         team?.team_name,
+              activityName:     vilForm?.activity_name || null,
+              activityType:     vilForm?.activity_type || null,
             });
           }
         }
@@ -682,7 +723,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     setWizardStep(1);
     setCampaignForm({ campaign_name:'', start_date:'', end_date:'', status:'active', project_id:'', mmp_file_id:'', coordinator_id:'', supervisor_id:'' });
     setCoverageAreas([{ state:'', locality:'' }]);
-    setWizardVillages([{ village_name:'', village_code:'VLG-01', hh_target:'', state:'', locality:'' }]);
+    setWizardVillages([{ village_name:'', village_code:'VLG-01', hh_target:'', state:'', locality:'', cluster_id:'', activity_name:'', activity_type:'' }]);
     setWizardTeams([]);
   };
 
@@ -703,12 +744,21 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     villageLocality?: string;
     teamId: string;
     teamName?: string;
+    activityName?: string | null;
+    activityType?: string | null;
+    clusterId?: string | null;
+    clusterName?: string | null;
   }) => {
+    // Build a descriptive site_name that includes activity when present
+    const siteName = params.activityName
+      ? `${params.villageName} — ${params.activityName}`
+      : params.villageName;
+
     const { data: entry, error } = await supabase
       .from('mmp_site_entries')
       .insert({
         mmp_file_id:    params.mmpFileId    || null,
-        site_name:      params.villageName,
+        site_name:      siteName,
         site_code:      params.villageCode  || null,
         state:          params.villageState  || null,
         locality:       params.villageLocality || null,
@@ -720,9 +770,14 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           campaign_id:    params.campaignId,
           campaign_name:  params.campaignName,
           village_id:     params.villageId,
+          village_name:   params.villageName,
           team_id:        params.teamId,
           team_name:      params.teamName || null,
           assignment_id:  params.assignmentId,
+          activity_name:  params.activityName || null,
+          activity_type:  params.activityType || null,
+          cluster_id:     params.clusterId    || null,
+          cluster_name:   params.clusterName  || null,
         },
       })
       .select('id')
@@ -1291,11 +1346,12 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         hh_target:    villageForm.hh_target ? parseInt(villageForm.hh_target) : 0,
         state:        villageForm.state || selectedCampaign.state || null,
         locality:     villageForm.locality || selectedCampaign.locality || null,
+        cluster_id:   villageForm.cluster_id || null,
       });
       if (error) throw error;
       toast({ title: 'Village added', description: villageForm.village_name });
       setShowAddVillage(false);
-      setVillageForm({ village_name:'', village_code:'', hh_target:'', state:'', locality:'' });
+      setVillageForm({ village_name:'', village_code:'', hh_target:'', state:'', locality:'', cluster_id:'' });
       await loadCampaignDetail(selectedCampaign.id);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -1308,6 +1364,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     if (!selectedCampaign || !assignForm.team_id || !assignForm.village_id) {
       toast({ title: 'Team and village required', variant: 'destructive' }); return;
     }
+    // Activity type without a name would create an ambiguous identity for the uniqueness key.
+    // Require a name whenever the user picks a non-general type.
+    if (assignForm.activity_type && !assignForm.activity_name.trim()) {
+      toast({ title: 'Activity name required', description: 'Please enter an activity name (e.g. "Nutrition") when an activity type is selected.', variant: 'destructive' }); return;
+    }
     setSaving(true);
     try {
       const { data: assignment, error } = await supabase
@@ -1317,6 +1378,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           village_id:         assignForm.village_id,
           team_id:            assignForm.team_id,
           hh_target_for_team: assignForm.hh_target_for_team ? parseInt(assignForm.hh_target_for_team) : null,
+          activity_name:      assignForm.activity_name || null,
+          activity_type:      assignForm.activity_type || null,
         })
         .select('id')
         .single();
@@ -1324,6 +1387,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
       // Auto-create mmp_site_entry so assignment participates in fee/dispatch flow
       const vil = villages.find(v => v.id === assignForm.village_id);
       const team = allTeams.find(t => t.id === assignForm.team_id);
+      const cluster = clusters.find(c => c.id === vil?.cluster_id);
       if (assignment?.id && vil) {
         await createSiteEntryForAssignment({
           assignmentId:    assignment.id,
@@ -1338,15 +1402,73 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           villageLocality: vil.locality,
           teamId:          assignForm.team_id,
           teamName:        team?.team_name,
+          activityName:    assignForm.activity_name || null,
+          activityType:    assignForm.activity_type || null,
+          clusterId:       vil.cluster_id || null,
+          clusterName:     cluster?.cluster_name || null,
         });
       }
       toast({ title: 'Team assigned' });
       setShowAssignTeam(false);
-      setAssignForm({ team_id:'', village_id:'', hh_target_for_team:'' });
+      setAssignForm({ team_id:'', village_id:'', hh_target_for_team:'', activity_name:'', activity_type:'' });
+      await loadCampaignDetail(selectedCampaign.id);
+    } catch (e: any) {
+      // Unique-constraint violation means this team/village/activity combo already exists
+      const isDuplicate = e?.code === '23505' || e?.message?.includes('unique');
+      toast({
+        title: isDuplicate ? 'Duplicate assignment' : 'Error',
+        description: isDuplicate
+          ? 'This team is already assigned to that village for the same activity. Use a different activity name to add a second assignment.'
+          : e.message,
+        variant: 'destructive',
+      });
+    } finally { setSaving(false); }
+  };
+
+  // ── Cluster CRUD ──────────────────────────────────────────────────────────
+
+  function autoClusterCode(existing: Cluster[]) {
+    const nums = existing
+      .map(c => { const m = c.cluster_code.match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
+      .filter(n => n > 0);
+    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    return `CLU-${String(next).padStart(2, '0')}`;
+  }
+
+  const submitAddCluster = async () => {
+    if (!selectedCampaign || !clusterForm.cluster_name.trim()) {
+      toast({ title: 'Cluster name required', variant: 'destructive' }); return;
+    }
+    setClusterSaving(true);
+    try {
+      const code = clusterForm.cluster_code.trim() || autoClusterCode(clusters);
+      const { error } = await supabase.from('adhoc_clusters').insert({
+        campaign_id:  selectedCampaign.id,
+        cluster_name: clusterForm.cluster_name.trim(),
+        cluster_code: code,
+        state:        clusterForm.state || null,
+        locality:     clusterForm.locality || null,
+      });
+      if (error) throw error;
+      toast({ title: 'Cluster added', description: clusterForm.cluster_name });
+      setShowAddCluster(false);
+      setClusterForm({ cluster_name:'', cluster_code:'', state:'', locality:'' });
       await loadCampaignDetail(selectedCampaign.id);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    } finally { setSaving(false); }
+    } finally { setClusterSaving(false); }
+  };
+
+  const deleteCluster = async (id: string) => {
+    if (!selectedCampaign) return;
+    try {
+      const { error } = await supabase.from('adhoc_clusters').delete().eq('id', id);
+      if (error) throw error;
+      toast({ title: 'Cluster removed' });
+      await loadCampaignDetail(selectedCampaign.id);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
   };
 
   // ── Submit daily log ──────────────────────────────────────────────────────
@@ -1815,10 +1937,42 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                           </Select>
                         </div>
                       </div>
+                      {/* Row 3: Activity */}
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Activity <span className="opacity-60">(optional)</span></Label>
+                          <Input
+                            value={v.activity_name}
+                            onChange={e => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, activity_name: e.target.value } : r))}
+                            placeholder="e.g. Nutrition, WASH"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Activity Type</Label>
+                          <Select
+                            value={v.activity_type || '__none__'}
+                            onValueChange={val => setWizardVillages(vs => vs.map((r, i) => i === idx ? { ...r, activity_type: val === '__none__' ? '' : val } : r))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select type…" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">General / None</SelectItem>
+                              <SelectItem value="nutrition">Nutrition</SelectItem>
+                              <SelectItem value="wash">WASH</SelectItem>
+                              <SelectItem value="protection">Protection</SelectItem>
+                              <SelectItem value="health">Health</SelectItem>
+                              <SelectItem value="education">Education</SelectItem>
+                              <SelectItem value="livelihoods">Livelihoods</SelectItem>
+                              <SelectItem value="shelter">Shelter</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
-                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state: coverageStates[0] || '', locality:'' }])}>
+                <Button type="button" variant="outline" size="sm" onClick={() => setWizardVillages(vs => [...vs, { village_name:'', village_code: autoVillageCode(vs.length), hh_target:'', state: coverageStates[0] || '', locality:'', cluster_id:'', activity_name:'', activity_type:'' }])}>
                   <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Village
                 </Button>
               </div>
@@ -1994,8 +2148,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
       {/* ── Detail Tabs ──────────────────────────────────────────────────────── */}
       <Tabs value={campaignTab} onValueChange={setCampaignTab}>
-        <TabsList className="h-9">
+        <TabsList className="h-9 flex-wrap">
           <TabsTrigger value="overview" className="text-xs gap-1.5"><BarChart3 className="h-3.5 w-3.5" />Overview</TabsTrigger>
+          <TabsTrigger value="clusters" className="text-xs gap-1.5"><Building2 className="h-3.5 w-3.5" />Clusters{clusters.length > 0 && <span className="ml-1 tabular-nums opacity-70">({clusters.length})</span>}</TabsTrigger>
           <TabsTrigger value="villages" className="text-xs gap-1.5"><MapPin className="h-3.5 w-3.5" />Villages</TabsTrigger>
           <TabsTrigger value="teams" className="text-xs gap-1.5"><Users className="h-3.5 w-3.5" />Teams</TabsTrigger>
           <TabsTrigger value="logs" className="text-xs gap-1.5"><Activity className="h-3.5 w-3.5" />Daily Logs</TabsTrigger>
@@ -2004,10 +2159,113 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         </TabsList>
 
         {/* OVERVIEW */}
-        <TabsContent value="overview" className="mt-4">
+        <TabsContent value="overview" className="mt-4 space-y-6">
           {villages.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">No villages added yet. <Button variant="link" className="p-0 h-auto" onClick={() => setShowAddVillage(true)}>Add one →</Button></div>
+          ) : clusters.length > 0 ? (
+            // ── Grouped by cluster ──
+            <>
+              {/* Unassigned villages first */}
+              {(() => {
+                const unassigned = villages.filter(v => !v.cluster_id);
+                const clusterGroups = clusters.map(cl => ({
+                  cluster: cl,
+                  vils: villages.filter(v => v.cluster_id === cl.id),
+                })).filter(g => g.vils.length > 0);
+
+                return (
+                  <>
+                    {clusterGroups.map(({ cluster, vils }) => {
+                      const clusterTarget  = vils.reduce((s, v) => s + (v.hh_target || 0), 0);
+                      const clusterCovered = vils.reduce((s, v) => s + (v.hh_covered || 0), 0);
+                      return (
+                        <div key={cluster.id}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Building2 className="h-4 w-4 text-primary/70" />
+                            <h3 className="font-semibold text-sm">{cluster.cluster_name}</h3>
+                            <span className="text-xs text-muted-foreground font-mono">{cluster.cluster_code}</span>
+                            {cluster.state && <span className="text-xs text-muted-foreground">· {cluster.state}{cluster.locality ? ` › ${cluster.locality}` : ''}</span>}
+                            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>{clusterCovered.toLocaleString()} / {clusterTarget.toLocaleString()} HH</span>
+                              <span className="font-semibold text-foreground">{pct(clusterCovered, clusterTarget)}%</span>
+                            </div>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {vils.map(v => {
+                              const vilPct = pct(v.hh_covered || 0, v.hh_target);
+                              const vilAssigns = assignments.filter(a => a.village_id === v.id);
+                              return (
+                                <Card key={v.id} className="border shadow-sm">
+                                  <CardContent className="p-4 space-y-3">
+                                    <div className="flex items-start justify-between">
+                                      <div>
+                                        <p className="font-semibold text-sm">{v.village_name}</p>
+                                        <p className="text-xs text-muted-foreground">{v.village_code}</p>
+                                      </div>
+                                      <Badge className={`text-[10px] ${statusColor(v.status)} border-0`}>{v.status.replace('_',' ')}</Badge>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">{(v.hh_covered||0).toLocaleString()} / {v.hh_target.toLocaleString()} HH</span>
+                                        <span className="font-semibold">{vilPct}%</span>
+                                      </div>
+                                      <Progress value={vilPct} className="h-2" />
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1 border-t">
+                                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{vilAssigns.length} team{vilAssigns.length !== 1 ? 's' : ''}</span>
+                                      {v.state && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{v.state}</span>}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {unassigned.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-sm text-muted-foreground mb-3 flex items-center gap-2">
+                          <MapPin className="h-4 w-4" /> Unassigned to cluster
+                        </h3>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {unassigned.map(v => {
+                            const vilPct = pct(v.hh_covered || 0, v.hh_target);
+                            const vilAssigns = assignments.filter(a => a.village_id === v.id);
+                            return (
+                              <Card key={v.id} className="border shadow-sm">
+                                <CardContent className="p-4 space-y-3">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <p className="font-semibold text-sm">{v.village_name}</p>
+                                      <p className="text-xs text-muted-foreground">{v.village_code}</p>
+                                    </div>
+                                    <Badge className={`text-[10px] ${statusColor(v.status)} border-0`}>{v.status.replace('_',' ')}</Badge>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                      <span className="text-muted-foreground">{(v.hh_covered||0).toLocaleString()} / {v.hh_target.toLocaleString()} HH</span>
+                                      <span className="font-semibold">{vilPct}%</span>
+                                    </div>
+                                    <Progress value={vilPct} className="h-2" />
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1 border-t">
+                                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{vilAssigns.length} team{vilAssigns.length !== 1 ? 's' : ''}</span>
+                                    {v.state && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{v.state}</span>}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </>
           ) : (
+            // ── Flat (no clusters) ──
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {villages.map(v => {
                 const vilPct = pct(v.hh_covered || 0, v.hh_target);
@@ -2041,6 +2299,85 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           )}
         </TabsContent>
 
+        {/* CLUSTERS TAB */}
+        <TabsContent value="clusters" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />Clusters</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Geographic clusters group villages within this campaign (State → Locality → Cluster → Village)</p>
+            </div>
+            {canManage && (
+              <Button size="sm" className="h-8 gap-1.5" onClick={() => {
+                setClusterForm({ cluster_name:'', cluster_code: autoClusterCode(clusters), state:'', locality:'' });
+                setShowAddCluster(true);
+              }}>
+                <Plus className="h-3.5 w-3.5" /> Add Cluster
+              </Button>
+            )}
+          </div>
+
+          {clusters.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+              <Building2 className="h-10 w-10 opacity-25" />
+              <p className="font-medium text-sm">No clusters yet</p>
+              <p className="text-xs text-center max-w-xs">Clusters organise villages geographically. Create one, then assign villages to it when adding or editing villages.</p>
+              {canManage && (
+                <Button size="sm" onClick={() => { setClusterForm({ cluster_name:'', cluster_code: autoClusterCode(clusters), state:'', locality:'' }); setShowAddCluster(true); }}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add First Cluster
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Code</TableHead>
+                    <TableHead>Cluster Name</TableHead>
+                    <TableHead>State / Locality</TableHead>
+                    <TableHead className="text-right">Villages</TableHead>
+                    <TableHead className="text-right">HH Target</TableHead>
+                    <TableHead className="text-right">HH Covered</TableHead>
+                    <TableHead className="text-right">Progress</TableHead>
+                    {canDelete && <TableHead />}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clusters.map(cl => {
+                    const clVils = villages.filter(v => v.cluster_id === cl.id);
+                    const clTarget  = clVils.reduce((s, v) => s + (v.hh_target || 0), 0);
+                    const clCovered = clVils.reduce((s, v) => s + (v.hh_covered || 0), 0);
+                    return (
+                      <TableRow key={cl.id}>
+                        <TableCell className="font-mono text-xs font-semibold">{cl.cluster_code}</TableCell>
+                        <TableCell className="font-medium">{cl.cluster_name}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{[cl.state, cl.locality].filter(Boolean).join(' › ') || '—'}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{clVils.length}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{clTarget.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs text-emerald-600 font-semibold">{clCovered.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <Progress value={pct(clCovered, clTarget)} className="h-1.5 w-16" />
+                            <span className="text-xs tabular-nums w-8">{pct(clCovered, clTarget)}%</span>
+                          </div>
+                        </TableCell>
+                        {canDelete && (
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
+                              onClick={() => deleteCluster(cl.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
         {/* VILLAGES */}
         <TabsContent value="villages" className="mt-4">
           <div className="rounded-md border overflow-x-auto">
@@ -2049,6 +2386,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                 <TableRow className="bg-muted/40">
                   <TableHead>Code</TableHead>
                   <TableHead>Village Name</TableHead>
+                  {clusters.length > 0 && <TableHead>Cluster</TableHead>}
                   <TableHead>State / Locality</TableHead>
                   <TableHead className="text-right">HH Target</TableHead>
                   <TableHead className="text-right">HH Covered</TableHead>
@@ -2059,11 +2397,14 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
               </TableHeader>
               <TableBody>
                 {villages.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No villages yet</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={clusters.length > 0 ? 9 : 8} className="text-center py-8 text-muted-foreground">No villages yet</TableCell></TableRow>
                 ) : villages.map(v => (
                   <TableRow key={v.id}>
                     <TableCell className="font-mono text-xs">{v.village_code}</TableCell>
                     <TableCell className="font-medium">{v.village_name}</TableCell>
+                    {clusters.length > 0 && (
+                      <TableCell className="text-xs text-muted-foreground">{v.cluster_name || <span className="italic opacity-50">—</span>}</TableCell>
+                    )}
                     <TableCell className="text-xs text-muted-foreground">{[v.state, v.locality].filter(Boolean).join(' › ') || '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{v.hh_target.toLocaleString()}</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-600 font-semibold">{(v.hh_covered||0).toLocaleString()}</TableCell>
@@ -2092,6 +2433,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                   {v.village_name} <span className="text-muted-foreground font-normal">({v.village_code})</span>
+                  {v.cluster_name && <Badge variant="outline" className="text-[10px] font-normal">{v.cluster_name}</Badge>}
                   <span className="ml-auto text-xs text-muted-foreground font-normal">{(v.hh_covered||0).toLocaleString()} / {v.hh_target.toLocaleString()} HH covered</span>
                 </h3>
                 <div className="rounded-md border overflow-x-auto mb-4">
@@ -2100,6 +2442,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                       <TableRow className="bg-muted/40">
                         <TableHead>Team Code</TableHead>
                         <TableHead>Team Name</TableHead>
+                        <TableHead>Activity</TableHead>
                         <TableHead>Team Lead</TableHead>
                         <TableHead className="text-right">Members</TableHead>
                         <TableHead className="text-right">Team HH Target</TableHead>
@@ -2109,11 +2452,16 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                     </TableHeader>
                     <TableBody>
                       {vilAssigns.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-4 text-muted-foreground text-xs">No teams assigned to this village yet</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="text-center py-4 text-muted-foreground text-xs">No teams assigned to this village yet</TableCell></TableRow>
                       ) : vilAssigns.map(a => (
                         <TableRow key={a.id}>
                           <TableCell className="font-mono text-xs font-semibold">{a.team_code}</TableCell>
                           <TableCell>{a.team_name}</TableCell>
+                          <TableCell className="text-xs">
+                            {a.activity_name
+                              ? <Badge variant="outline" className="text-[10px]">{a.activity_name}</Badge>
+                              : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{a.team_lead_name}</TableCell>
                           <TableCell className="text-right tabular-nums">{a.member_count}</TableCell>
                           <TableCell className="text-right tabular-nums">{a.hh_target_for_team?.toLocaleString() || '—'}</TableCell>
@@ -2277,6 +2625,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead>Village / Site</TableHead>
+                        {clusters.length > 0 && <TableHead>Cluster</TableHead>}
+                        <TableHead>Activity</TableHead>
                         <TableHead>Team</TableHead>
                         <TableHead className="text-right">Transport (SDG)</TableHead>
                         <TableHead className="text-right">Enum Fee (SDG)</TableHead>
@@ -2299,9 +2649,20 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                         const isDispatching = dispatching[e.id];
                         const isApproving   = approving[e.id];
                         const payStatus     = e.fee_paid_status;
+                        const villageName   = e.additional_data?.village_name || e.site_name;
                         return (
                           <TableRow key={e.id}>
-                            <TableCell className="text-xs font-medium">{e.site_name}</TableCell>
+                            <TableCell className="text-xs font-medium">{villageName}</TableCell>
+                            {clusters.length > 0 && (
+                              <TableCell className="text-xs text-muted-foreground">
+                                {e.additional_data?.cluster_name || <span className="italic opacity-40">—</span>}
+                              </TableCell>
+                            )}
+                            <TableCell className="text-xs">
+                              {e.additional_data?.activity_name
+                                ? <Badge variant="outline" className="text-[10px]">{e.additional_data.activity_name}</Badge>
+                                : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{e.additional_data?.team_name || '—'}</TableCell>
 
                             {/* Transport fee — editable only on Pending sub-tab */}
@@ -2797,6 +3158,18 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                 <Input type="number" min="0" value={villageForm.hh_target} onChange={e => setVillageForm(f => ({ ...f, hh_target: e.target.value }))} placeholder="0" />
               </div>
             </div>
+            {clusters.length > 0 && (
+              <div>
+                <Label>Cluster <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+                <Select value={villageForm.cluster_id || '__none__'} onValueChange={v => setVillageForm(f => ({ ...f, cluster_id: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Assign to cluster…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No cluster</SelectItem>
+                    {clusters.map(c => <SelectItem key={c.id} value={c.id}>{c.cluster_code} — {c.cluster_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>State</Label>
@@ -2854,11 +3227,38 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
               <Label>Village *</Label>
               <Select value={assignForm.village_id} onValueChange={v => setAssignForm(f => ({ ...f, village_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select village" /></SelectTrigger>
-                <SelectContent>{villages.map(v => <SelectItem key={v.id} value={v.id}>{v.village_code} — {v.village_name}</SelectItem>)}</SelectContent>
+                <SelectContent>{villages.map(v => <SelectItem key={v.id} value={v.id}>{v.village_code} — {v.village_name}{v.cluster_name ? ` (${v.cluster_name})` : ''}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Activity Name <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  value={assignForm.activity_name}
+                  onChange={e => setAssignForm(f => ({ ...f, activity_name: e.target.value }))}
+                  placeholder="e.g. Nutrition, WASH"
+                />
+              </div>
+              <div>
+                <Label>Activity Type</Label>
+                <Select value={assignForm.activity_type || '__none__'} onValueChange={v => setAssignForm(f => ({ ...f, activity_type: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="General" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">General / None</SelectItem>
+                    <SelectItem value="nutrition">Nutrition</SelectItem>
+                    <SelectItem value="wash">WASH</SelectItem>
+                    <SelectItem value="protection">Protection</SelectItem>
+                    <SelectItem value="health">Health</SelectItem>
+                    <SelectItem value="education">Education</SelectItem>
+                    <SelectItem value="livelihoods">Livelihoods</SelectItem>
+                    <SelectItem value="shelter">Shelter</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div>
-              <Label>Team HH Target (optional)</Label>
+              <Label>Team HH Target <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
               <Input type="number" min="0" value={assignForm.hh_target_for_team} onChange={e => setAssignForm(f => ({ ...f, hh_target_for_team: e.target.value }))} placeholder="Sub-target for this team in this village" />
             </div>
           </div>
@@ -3023,6 +3423,56 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
               onClick={markPaid} disabled={paying || !payForm.amount}>
               {paying && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Cluster Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={showAddCluster} onOpenChange={setShowAddCluster}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Building2 className="h-4 w-4" />Add Cluster</DialogTitle>
+            <DialogDescription>Clusters group villages geographically within this campaign</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Cluster Name *</Label>
+                <Input value={clusterForm.cluster_name} onChange={e => setClusterForm(f => ({ ...f, cluster_name: e.target.value }))} placeholder="e.g. North Cluster" />
+              </div>
+              <div>
+                <Label>Cluster Code</Label>
+                <Input value={clusterForm.cluster_code} onChange={e => setClusterForm(f => ({ ...f, cluster_code: e.target.value }))} placeholder="CLU-01" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>State <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+                <Select value={clusterForm.state || '__none__'} onValueChange={v => setClusterForm(f => ({ ...f, state: v === '__none__' ? '' : v, locality: '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Any / None</SelectItem>
+                    {sudanStates.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Locality <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+                <Select value={clusterForm.locality || '__none__'} onValueChange={v => setClusterForm(f => ({ ...f, locality: v === '__none__' ? '' : v }))} disabled={!clusterForm.state}>
+                  <SelectTrigger><SelectValue placeholder={clusterForm.state ? 'Select locality' : 'Select state first'} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select locality…</SelectItem>
+                    {localitiesForState(clusterForm.state).map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddCluster(false)}>Cancel</Button>
+            <Button onClick={submitAddCluster} disabled={clusterSaving || !clusterForm.cluster_name.trim()}>
+              {clusterSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Add Cluster
             </Button>
           </DialogFooter>
         </DialogContent>
