@@ -582,9 +582,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`/ws/${folder.short_code || folder.id.slice(0, 8)}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/workspace/share/folder/${folder.short_code || folder.id}`}
                     className="h-7 text-[10px] bg-background font-mono"
-                    title={`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
