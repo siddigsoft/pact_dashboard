@@ -1725,6 +1725,9 @@ export default function WorkspaceHub() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewUrlLoading, setPreviewUrlLoading] = useState(false);
   const previewDragRef = useRef<{ active: boolean; startX: number; startW: number }>({ active: false, startX: 0, startW: 0 });
+  const [previewCommentsOpen, setPreviewCommentsOpen] = useState(true);
+  const [previewComment, setPreviewComment] = useState('');
+  const [previewCommentSubmitting, setPreviewCommentSubmitting] = useState(false);
   // Read the stored id NOW, at render time, before any effects run.
   // This captures the value before the mount-time persist effect could wipe it.
   const pendingPreviewIdRef = useRef<string | null>(
@@ -2023,6 +2026,39 @@ export default function WorkspaceHub() {
     };
   }, []);
 
+  // ── Preview pane: comments query ─────────────────────────────────────────
+  const { data: previewComments = [], refetch: refetchPreviewComments } = useQuery<WComment[]>({
+    queryKey: ['ws_preview_comments', previewFile?.id],
+    queryFn: async () => {
+      if (!previewFile) return [];
+      const { data: comms } = await supabase
+        .from('workspace_comments')
+        .select('*')
+        .eq('file_id', previewFile.id)
+        .order('created_at', { ascending: true });
+      if (!comms || comms.length === 0) return [];
+      const authorIds = [...new Set(comms.map((c: any) => c.author_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (authorIds.length > 0) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', authorIds as string[]);
+        (profs ?? []).forEach((p: any) => { nameMap[p.id] = p.full_name ?? 'Unknown'; });
+      }
+      return comms.map((c: any) => ({
+        ...c,
+        _authorName: c.author_id ? (nameMap[c.author_id] ?? 'Unknown') : 'Guest',
+      })) as WComment[];
+    },
+    enabled: !!previewFile && (!previewFile.password_hash || unlockedIds.has(previewFile.id)),
+  });
+
+  // ── Preview pane: reset comments state when the previewed file changes ──────
+  useEffect(() => {
+    if (previewFile) {
+      setPreviewComment('');         // clear draft
+      setPreviewCommentsOpen(true);  // always start expanded for a new file
+    }
+  }, [previewFile?.id]);
+
   // ── Preview pane: persist selected file id to localStorage ────────────────
   // Only SETS the key — never clears reactively (that would wipe the stored id
   // on mount when previewFile starts as null).  Clearing is done explicitly via
@@ -2058,6 +2094,29 @@ export default function WorkspaceHub() {
     setPreviewFile(null);
     localStorage.removeItem('ws_preview_file_id');
     pendingPreviewIdRef.current = null; // discard any unconsumed pending id
+  }
+
+  // ── Preview pane: submit comment ─────────────────────────────────────────
+  async function submitPreviewComment() {
+    if (!previewFile || !previewComment.trim()) return;
+    setPreviewCommentSubmitting(true);
+    try {
+      const content = previewComment.trim();
+      const { error } = await supabase.from('workspace_comments').insert({
+        file_id: previewFile.id, author_id: userId, content,
+      });
+      if (error) throw error;
+      await supabase.from('workspace_activity').insert({
+        file_id: previewFile.id, user_id: userId, action: 'commented', metadata: {},
+      });
+      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', previewFile.id);
+      setPreviewComment('');
+      refetchPreviewComments();
+    } catch (e: any) {
+      toast({ title: 'Error posting comment', description: e.message, variant: 'destructive' });
+    } finally {
+      setPreviewCommentSubmitting(false);
+    }
   }
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
@@ -4267,10 +4326,22 @@ export default function WorkspaceHub() {
                   <span className="opacity-40">·</span>
                   <span>{previewFile._uploaderName}</span>
                 </>)}
-                <span className="ml-auto"><SecBadge level={previewFile.security_level} size="xs" /></span>
+                <div className="flex items-center gap-2 ml-auto">
+                  {previewComments.length > 0 && (
+                    <button
+                      onClick={() => setPreviewCommentsOpen(o => !o)}
+                      className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                      {previewComments.length}
+                    </button>
+                  )}
+                  <SecBadge level={previewFile.security_level} size="xs" />
+                </div>
               </div>
 
-              {/* Content area */}
+              {/* Content area + Comments wrapper */}
+              <div className="flex-1 flex flex-col min-h-0">
               {previewFile.password_hash && !unlockedIds.has(previewFile.id) ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6">
                   <Lock className="h-12 w-12 opacity-20" />
@@ -4359,6 +4430,78 @@ export default function WorkspaceHub() {
                   </div>
                 );
               })()}
+
+                {/* ── Comments section ─────────────────────────────────── */}
+                {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                  <div className="flex-shrink-0 border-t bg-background dark:bg-background">
+                    {/* Collapsible header */}
+                    <button
+                      type="button"
+                      onClick={() => setPreviewCommentsOpen(o => !o)}
+                      className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted/30 transition-colors"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="flex-1 text-xs font-semibold text-left text-foreground">
+                        Comments
+                        {previewComments.length > 0 && (
+                          <span className="ml-1.5 text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-bold">
+                            {previewComments.length}
+                          </span>
+                        )}
+                      </span>
+                      {previewCommentsOpen
+                        ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+                    </button>
+                    {previewCommentsOpen && (
+                      <div className="flex flex-col" style={{ maxHeight: 230 }}>
+                        {/* Comment list */}
+                        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 min-h-0">
+                          {previewComments.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground text-center py-2 leading-relaxed">
+                              No comments yet
+                            </p>
+                          ) : previewComments.map(c => (
+                            <div key={c.id} className="flex gap-2">
+                              <div className="h-6 w-6 rounded-full bg-[#1D3461]/10 dark:bg-[#1D3461]/30 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461] dark:text-blue-300">
+                                {(c._authorName ?? '?')[0].toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                  <span className="text-[11px] font-semibold text-foreground">{c._authorName}</span>
+                                  <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                </div>
+                                <p className="text-[11px] text-foreground/80 leading-relaxed mt-0.5 break-words">{c.content}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Compose area */}
+                        <div className="flex-shrink-0 px-3 pb-3 pt-1 border-t border-border/50 flex gap-2 items-end">
+                          <Textarea
+                            value={previewComment}
+                            onChange={e => setPreviewComment(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitPreviewComment(); }}
+                            placeholder="Add a comment… (Ctrl+Enter to send)"
+                            className="flex-1 text-xs min-h-[40px] max-h-[72px] resize-none rounded-lg"
+                            rows={2}
+                          />
+                          <button
+                            type="button"
+                            onClick={submitPreviewComment}
+                            disabled={!previewComment.trim() || previewCommentSubmitting}
+                            className="self-end mb-0.5 p-2 rounded-lg bg-[#1D3461] text-white disabled:opacity-40 hover:bg-[#0F2041] transition-colors flex-shrink-0"
+                          >
+                            {previewCommentSubmitting
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Send className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>{/* end content+comments wrapper */}
             </>) : (
               /* Empty state — pane open but no file selected */
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6 text-center">
