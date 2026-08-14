@@ -103,6 +103,7 @@ interface VillageTeam {
   assigned_at: string;
   activity_name?: string | null;
   activity_type?: string | null;
+  site_entry_id?: string | null;
   // Joined
   team_name?: string;
   team_code?: string;
@@ -389,6 +390,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [completeAutoVillages, setCompleteAutoVillages] = useState(true);
   const [completing, setCompleting] = useState(false);
+
+  // ── Re-sync orphaned fee records ──────────────────────────────────────────
+  const [resyncingOrphans, setResyncingOrphans] = useState(false);
 
   // ── Load reference data ───────────────────────────────────────────────────
 
@@ -696,6 +700,13 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const pendingEntries   = useMemo(() => siteEntries.filter(e => e.status === 'pending'), [siteEntries]);
   const approvedEntries  = useMemo(() => siteEntries.filter(e => e.status === 'Approved and Costed' && !e.dispatched_at), [siteEntries]);
   const dispatchedEntries = useMemo(() => siteEntries.filter(e => !!e.dispatched_at), [siteEntries]);
+
+  // Assignments whose fee record creation failed (site_entry_id is null).
+  // These are invisible in Costs & Dispatch, approval, and export flows.
+  const orphanedAssignments = useMemo(
+    () => assignments.filter(a => !a.site_entry_id),
+    [assignments]
+  );
   const filteredCostEntries = useMemo(() => {
     if (costsSubTab === 'pending') return pendingEntries;
     if (costsSubTab === 'approved') return approvedEntries;
@@ -788,26 +799,48 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
             .from('adhoc_village_teams')
             .insert(teamInserts)
             .select('id, village_id, team_id');
-          // Auto-create mmp_site_entries so each assignment participates in fee/dispatch flow
+          // Auto-create mmp_site_entries so each assignment participates in
+          // fee/dispatch flow.  Each call is idempotent (no duplicate inserts
+          // if retried) but may fail independently — collect failures instead
+          // of letting one abort the rest.  Orphaned assignments are surfaced
+          // by the Costs & Dispatch banner; the Re-sync button repairs them.
+          const siteEntryFailures: string[] = [];
           for (const asn of (insertedAssignments || [])) {
             const vil = (vils || []).find((v: any) => v.id === asn.village_id);
             const vilForm = validVillages.find(v => v.village_code === (vil as any)?.village_code);
             const team = allTeams.find(t => t.id === asn.team_id);
-            await createSiteEntryForAssignment({
-              assignmentId:     asn.id,
-              campaignId:       camp.id,
-              campaignName:     campaignForm.campaign_name.trim(),
-              mmpFileId:        campaignForm.mmp_file_id || null,
-              projectId:        (campaignForm.project_id && campaignForm.project_id !== '__none__') ? campaignForm.project_id : null,
-              villageId:        asn.village_id,
-              villageName:      vilForm?.village_name || (vil as any)?.village_code || asn.village_id,
-              villageCode:      vilForm?.village_code,
-              villageState:     vilForm?.state || primaryFallbackState || undefined,
-              villageLocality:  vilForm?.locality || primaryFallbackLocality || undefined,
-              teamId:           asn.team_id,
-              teamName:         team?.team_name,
-              activityName:     vilForm?.activity_name || null,
-              activityType:     vilForm?.activity_type || null,
+            try {
+              await createSiteEntryForAssignment({
+                assignmentId:     asn.id,
+                campaignId:       camp.id,
+                campaignName:     campaignForm.campaign_name.trim(),
+                mmpFileId:        campaignForm.mmp_file_id || null,
+                projectId:        (campaignForm.project_id && campaignForm.project_id !== '__none__') ? campaignForm.project_id : null,
+                villageId:        asn.village_id,
+                villageName:      vilForm?.village_name || (vil as any)?.village_code || asn.village_id,
+                villageCode:      vilForm?.village_code,
+                villageState:     vilForm?.state || primaryFallbackState || undefined,
+                villageLocality:  vilForm?.locality || primaryFallbackLocality || undefined,
+                teamId:           asn.team_id,
+                teamName:         team?.team_name,
+                activityName:     vilForm?.activity_name || null,
+                activityType:     vilForm?.activity_type || null,
+              });
+            } catch (siteErr: any) {
+              const label = team?.team_name || asn.team_id;
+              console.error('[wizard] site_entry failed for', label, siteErr.message);
+              siteEntryFailures.push(label);
+            }
+          }
+          if (siteEntryFailures.length > 0) {
+            const hint = siteEntryFailures.length === teamInserts.length
+              ? 'This usually means the mmp_file_id migration has not been applied. Go to Costs & Dispatch and click "Re-sync fee records" once the migration is run.'
+              : 'Go to Costs & Dispatch and click "Re-sync fee records" to repair the missing entries.';
+            toast({
+              title: `Campaign created — ${siteEntryFailures.length} fee record${siteEntryFailures.length !== 1 ? 's' : ''} missing`,
+              description: `Could not create fee records for: ${siteEntryFailures.join(', ')}. ${hint}`,
+              variant: 'destructive',
+              duration: 20000,
             });
           }
         }
@@ -833,9 +866,12 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   };
 
   // ── Create mmp_site_entry for a village-team assignment ───────────────────
-  /** Inserts an mmp_site_entries row so the assignment participates in the
-   *  existing fee / dispatch / payment-tracking flow, then links it back via
-   *  adhoc_village_teams.site_entry_id. */
+  /** Idempotent: first checks whether a site entry already exists for this
+   *  assignment (by additional_data->>'assignment_id'), reuses it if so, and
+   *  only inserts a new row when none is found.  Treats back-link update
+   *  failure as a hard error and compensates by deleting the just-created
+   *  site entry so the DB is never left in a split state.  Throws on any
+   *  unrecoverable failure so callers can roll back the assignment row. */
   const createSiteEntryForAssignment = async (params: {
     assignmentId: string;
     campaignId: string;
@@ -854,58 +890,85 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     clusterId?: string | null;
     clusterName?: string | null;
   }) => {
-    // Build a descriptive site_name that includes activity when present
-    const siteName = params.activityName
-      ? `${params.villageName} — ${params.activityName}`
-      : params.villageName;
-
-    const { data: entry, error } = await supabase
+    // ── Step 1: idempotency check ─────────────────────────────────────────
+    // If a site entry already exists for this assignment, reuse it instead of
+    // creating a duplicate.  This makes the function safe to call on re-sync.
+    const { data: existing } = await supabase
       .from('mmp_site_entries')
-      .insert({
-        mmp_file_id:    params.mmpFileId    || null,
-        site_name:      siteName,
-        site_code:      params.villageCode  || null,
-        state:          params.villageState  || null,
-        locality:       params.villageLocality || null,
-        transport_fee:  0,
-        enumerator_fee: 0,
-        status:         'pending',
-        additional_data: {
-          source:         'village_campaign',
-          campaign_id:    params.campaignId,
-          campaign_name:  params.campaignName,
-          village_id:     params.villageId,
-          village_name:   params.villageName,
-          team_id:        params.teamId,
-          team_name:      params.teamName || null,
-          assignment_id:  params.assignmentId,
-          activity_name:  params.activityName || null,
-          activity_type:  params.activityType || null,
-          cluster_id:     params.clusterId    || null,
-          cluster_name:   params.clusterName  || null,
-        },
-      })
       .select('id')
-      .single();
-    if (error) {
-      // 23502 = NOT NULL violation — the DB still has the old schema.
-      // Show a clear, copy-paste-ready fix so the admin knows exactly what to run.
-      if ((error as any).code === '23502' && error.message?.includes('mmp_file_id')) {
-        toast({
-          title: 'Database setup required',
-          description: 'Village Campaigns need a one-time schema fix. Run this in Supabase SQL Editor:\n\nALTER TABLE public.mmp_site_entries ALTER COLUMN mmp_file_id DROP NOT NULL;',
-          variant: 'destructive',
-          duration: 20000,
-        });
+      .eq('additional_data->>assignment_id' as any, params.assignmentId)
+      .maybeSingle();
+
+    let entryId: string;
+
+    if (existing?.id) {
+      // Re-use the existing entry — just ensure the back-link is set.
+      entryId = existing.id;
+    } else {
+      // ── Step 2: insert new site entry ──────────────────────────────────
+      const siteName = params.activityName
+        ? `${params.villageName} — ${params.activityName}`
+        : params.villageName;
+
+      const { data: entry, error: insertErr } = await supabase
+        .from('mmp_site_entries')
+        .insert({
+          mmp_file_id:    params.mmpFileId    || null,
+          site_name:      siteName,
+          site_code:      params.villageCode  || null,
+          state:          params.villageState  || null,
+          locality:       params.villageLocality || null,
+          transport_fee:  0,
+          enumerator_fee: 0,
+          status:         'pending',
+          additional_data: {
+            source:         'village_campaign',
+            campaign_id:    params.campaignId,
+            campaign_name:  params.campaignName,
+            village_id:     params.villageId,
+            village_name:   params.villageName,
+            team_id:        params.teamId,
+            team_name:      params.teamName || null,
+            assignment_id:  params.assignmentId,
+            activity_name:  params.activityName || null,
+            activity_type:  params.activityType || null,
+            cluster_id:     params.clusterId    || null,
+            cluster_name:   params.clusterName  || null,
+          },
+        })
+        .select('id')
+        .single();
+
+      if (insertErr) {
+        console.error('[site_entry] insert error:', insertErr.message);
+        if ((insertErr as any).code === '23502' && insertErr.message?.includes('mmp_file_id')) {
+          throw Object.assign(
+            new Error('Fee record could not be created — the database schema needs a one-time migration.'),
+            { hint: 'Run the following in Supabase SQL Editor, then re-assign the team:\n\nALTER TABLE public.mmp_site_entries ALTER COLUMN mmp_file_id DROP NOT NULL;', code: '23502' }
+          );
+        }
+        throw new Error(`Fee record creation failed: ${insertErr.message}`);
       }
-      console.error('[site_entry] create error:', error.message);
-      return;
+      entryId = entry!.id;
     }
-    if (entry?.id) {
-      await supabase
-        .from('adhoc_village_teams')
-        .update({ site_entry_id: entry.id })
-        .eq('id', params.assignmentId);
+
+    // ── Step 3: write back-link ───────────────────────────────────────────
+    // If this update fails, the site entry exists but the assignment has no
+    // pointer to it.  Compensate by deleting the site entry (only when we
+    // just created it — not when we reused an existing one) so neither side
+    // is left dangling, then throw so the caller can roll back.
+    const { error: linkErr } = await supabase
+      .from('adhoc_village_teams')
+      .update({ site_entry_id: entryId })
+      .eq('id', params.assignmentId);
+
+    if (linkErr) {
+      console.error('[site_entry] back-link update error:', linkErr.message);
+      if (!existing?.id) {
+        // We created this entry — clean it up to avoid a dangling row.
+        await supabase.from('mmp_site_entries').delete().eq('id', entryId);
+      }
+      throw new Error(`Fee record created but could not be linked to the assignment: ${linkErr.message}`);
     }
   };
 
@@ -1533,29 +1596,62 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         .select('id')
         .single();
       if (error) throw error;
-      // Auto-create mmp_site_entry so assignment participates in fee/dispatch flow
+      // Auto-create mmp_site_entry so assignment participates in fee/dispatch flow.
+      // If site-entry creation fails, roll back the assignment row so the two are
+      // never in an inconsistent state (assignment exists but no fee record).
       const vil = villages.find(v => v.id === assignForm.village_id);
       const team = allTeams.find(t => t.id === assignForm.team_id);
       const cluster = clusters.find(c => c.id === vil?.cluster_id);
       if (assignment?.id && vil) {
-        await createSiteEntryForAssignment({
-          assignmentId:    assignment.id,
-          campaignId:      selectedCampaign.id,
-          campaignName:    selectedCampaign.campaign_name,
-          mmpFileId:       selectedCampaign.mmp_file_id,
-          projectId:       selectedCampaign.project_id,
-          villageId:       vil.id,
-          villageName:     vil.village_name,
-          villageCode:     vil.village_code,
-          villageState:    vil.state,
-          villageLocality: vil.locality,
-          teamId:          assignForm.team_id,
-          teamName:        team?.team_name,
-          activityName:    assignForm.activity_name || null,
-          activityType:    assignForm.activity_type || null,
-          clusterId:       vil.cluster_id || null,
-          clusterName:     cluster?.cluster_name || null,
-        });
+        try {
+          await createSiteEntryForAssignment({
+            assignmentId:    assignment.id,
+            campaignId:      selectedCampaign.id,
+            campaignName:    selectedCampaign.campaign_name,
+            mmpFileId:       selectedCampaign.mmp_file_id,
+            projectId:       selectedCampaign.project_id,
+            villageId:       vil.id,
+            villageName:     vil.village_name,
+            villageCode:     vil.village_code,
+            villageState:    vil.state,
+            villageLocality: vil.locality,
+            teamId:          assignForm.team_id,
+            teamName:        team?.team_name,
+            activityName:    assignForm.activity_name || null,
+            activityType:    assignForm.activity_type || null,
+            clusterId:       vil.cluster_id || null,
+            clusterName:     cluster?.cluster_name || null,
+          });
+        } catch (siteErr: any) {
+          // Fee record failed — delete the assignment so DB stays consistent.
+          const { error: rollbackErr } = await supabase
+            .from('adhoc_village_teams')
+            .delete()
+            .eq('id', assignment.id);
+
+          if (rollbackErr) {
+            // Rollback also failed — assignment exists with no fee record.
+            // Tell the admin exactly what orphan ID to clean up.
+            toast({
+              title: 'Assignment saved — fee record missing',
+              description: `The assignment was created (ID: ${assignment.id}) but the fee record could not be created and the rollback also failed. Delete this assignment manually and re-assign the team once the underlying issue is fixed.\n\nOriginal error: ${siteErr.message}`,
+              variant: 'destructive',
+              duration: 30000,
+            });
+          } else {
+            // Clean rollback — surface a clear, actionable message.
+            const hint = (siteErr as any).hint;
+            toast({
+              title: 'Team assignment rolled back — fee record failed',
+              description: hint
+                ? `${siteErr.message}\n\n${hint}`
+                : siteErr.message,
+              variant: 'destructive',
+              duration: 20000,
+            });
+          }
+          return; // don't show success toast or close dialog
+        }
       }
       toast({ title: 'Team assigned' });
       setShowAssignTeam(false);
@@ -1993,6 +2089,58 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     await loadCampaigns();
     if (selectedCampaign?.id === id) setSelectedCampaign(null);
     toast({ title: 'Campaign deleted' });
+  };
+
+  // ── Re-sync orphaned fee records ──────────────────────────────────────────
+  /** Creates missing mmp_site_entries for any assignment whose site_entry_id is
+   *  null.  Safe to call multiple times — createSiteEntryForAssignment is
+   *  idempotent (insert + update back-link). */
+  const resyncOrphanedAssignments = async () => {
+    if (!selectedCampaign || orphanedAssignments.length === 0) return;
+    setResyncingOrphans(true);
+    let fixed = 0, failed = 0;
+    for (const a of orphanedAssignments) {
+      const vil = villages.find(v => v.id === a.village_id);
+      const team = allTeams.find(t => t.id === a.team_id);
+      const cluster = clusters.find(c => c.id === vil?.cluster_id);
+      if (!vil) { failed++; continue; }
+      try {
+        await createSiteEntryForAssignment({
+          assignmentId:    a.id,
+          campaignId:      selectedCampaign.id,
+          campaignName:    selectedCampaign.campaign_name,
+          mmpFileId:       selectedCampaign.mmp_file_id,
+          projectId:       selectedCampaign.project_id,
+          villageId:       vil.id,
+          villageName:     vil.village_name,
+          villageCode:     vil.village_code,
+          villageState:    vil.state,
+          villageLocality: vil.locality,
+          teamId:          a.team_id,
+          teamName:        team?.team_name,
+          activityName:    a.activity_name || null,
+          activityType:    a.activity_type || null,
+          clusterId:       vil.cluster_id || null,
+          clusterName:     cluster?.cluster_name || null,
+        });
+        fixed++;
+      } catch {
+        failed++;
+      }
+    }
+    await loadCampaignDetail(selectedCampaign.id);
+    setResyncingOrphans(false);
+    if (failed === 0) {
+      toast({ title: `${fixed} fee record${fixed !== 1 ? 's' : ''} repaired`, description: 'All orphaned assignments now have fee records.' });
+    } else {
+      toast({
+        title: `${fixed} repaired, ${failed} failed`,
+        description: failed > 0
+          ? 'Some records could not be repaired. Check that the mmp_file_id migration has been applied, then try again.'
+          : undefined,
+        variant: failed > 0 ? 'destructive' : 'default',
+      });
+    }
   };
 
   // ── Mark Campaign Complete ────────────────────────────────────────────────
@@ -2951,6 +3099,33 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
         {/* COSTS & DISPATCH */}
         <TabsContent value="costs" className="mt-4 space-y-4">
+
+          {/* ── Orphaned-assignment warning ──────────────────────────────────── */}
+          {orphanedAssignments.length > 0 && canManage && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-amber-800">
+                  {orphanedAssignments.length} assignment{orphanedAssignments.length !== 1 ? 's' : ''} missing a fee record
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {orphanedAssignments.map(a => a.team_name || a.team_id).join(', ')} —{' '}
+                  these assignments won't appear in approval, dispatch, or export flows until repaired.
+                  This usually means the <code className="bg-amber-100 px-0.5 rounded">mmp_site_entries_nullable_mmp_file_id</code> migration hasn't been applied yet.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 gap-1.5"
+                onClick={resyncOrphanedAssignments}
+                disabled={resyncingOrphans}
+              >
+                {resyncingOrphans ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Re-sync fee records
+              </Button>
+            </div>
+          )}
 
           {/* ── Summary cards (whole campaign) ─────────────────────────────── */}
           {siteEntries.length > 0 && (
