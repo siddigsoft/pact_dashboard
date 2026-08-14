@@ -3647,7 +3647,7 @@ export default function WorkspaceHub() {
               controls stay reachable once the masthead and KPI tiles scroll away —
               that's what gives the file list back its room instead of being squeezed
               under a tall block of fixed chrome. */}
-          <div className="flex-1 overflow-y-auto"
+          <div className="flex-1 overflow-y-auto relative"
             onContextMenu={e => {
               // Only fire on the background itself — children stop propagation
               if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.wsBackground === 'true') {
@@ -3656,7 +3656,47 @@ export default function WorkspaceHub() {
                 setBgCtxPos({ x: e.clientX, y: e.clientY });
               }
             }}
+            onDragEnter={e => {
+              // Only react to external file drags, not internal file-card reordering
+              if (!e.dataTransfer.types.includes('Files')) return;
+              e.preventDefault();
+              externalDragCounter.current += 1;
+              if (externalDragCounter.current === 1) setIsExternalDragOver(true);
+            }}
+            onDragLeave={e => {
+              if (!e.dataTransfer.types.includes('Files')) return;
+              externalDragCounter.current -= 1;
+              if (externalDragCounter.current <= 0) {
+                externalDragCounter.current = 0;
+                setIsExternalDragOver(false);
+              }
+            }}
+            onDragOver={e => {
+              if (!e.dataTransfer.types.includes('Files')) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={async e => {
+              e.preventDefault();
+              externalDragCounter.current = 0;
+              setIsExternalDragOver(false);
+              const entries = await readDroppedItems(e.dataTransfer);
+              if (entries.length === 0) return;
+              setPendingDropEntries(entries);
+              setUploadOpen(true);
+            }}
           >
+            {/* ── Drop overlay ─────────────────────────────────────────── */}
+            {isExternalDragOver && (
+              <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
+                style={{ background: 'rgba(29,52,97,0.10)', backdropFilter: 'blur(2px)' }}>
+                <div className="flex flex-col items-center gap-3 bg-white dark:bg-[#1a1a2e] border-2 border-dashed border-[#1D3461] rounded-3xl px-16 py-12 shadow-2xl">
+                  <Upload className="h-14 w-14 text-[#1D3461] opacity-80" />
+                  <p className="text-lg font-bold text-[#1D3461]">Drop files or folders to upload</p>
+                  <p className="text-sm text-muted-foreground">They'll be added to the current folder</p>
+                </div>
+              </div>
+            )}
           {/* Breadcrumb bar */}
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
