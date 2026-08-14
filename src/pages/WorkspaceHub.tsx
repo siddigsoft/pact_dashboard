@@ -2028,16 +2028,20 @@ export default function WorkspaceHub() {
     return result;
   }, [deniedFolderIds, folders, isSuperAdmin]);
 
-  // ── Positive folder grants ────────────────────────────────────────────────
-  // Folder IDs where the current user has an active (non-expired) positive
-  // permission grant (viewer / commenter / editor / owner).  These folders are
-  // visible even when the user's clearance level is below the folder's
-  // security_level.  A denial always wins — allDeniedFolderIds is checked
-  // first inside visibleFolders.
+  // ── Positive folder grants (with cascade) ────────────────────────────────
+  // Step 1: collect folder IDs where the current user has an active
+  // (non-expired) positive permission grant (viewer / commenter / editor / owner).
+  // Step 2: BFS-expand every directly-granted ID to include all descendants,
+  // mirroring the allDeniedFolderIds cascade pattern above.
+  // These folders are visible even when the user's clearance level is below the
+  // folder's security_level.  A denial always wins — allDeniedFolderIds is
+  // checked first inside visibleFolders.
   const grantedFolderIds = useMemo(() => {
     if (isSuperAdmin) return new Set<string>(); // super admin never needs a grant
+
+    // Step 1 — direct grants
     const now = new Date();
-    return new Set(
+    const directGrants = new Set(
       myPermissions
         .filter(p =>
           p.folder_id &&
@@ -2047,7 +2051,30 @@ export default function WorkspaceHub() {
         )
         .map(p => p.folder_id as string)
     );
-  }, [myPermissions, isSuperAdmin]);
+
+    if (directGrants.size === 0) return directGrants;
+
+    // Step 2 — BFS cascade to all descendants
+    // Build parent → [childId, …] map from the full unfiltered folder list
+    const childrenOf: Record<string, string[]> = {};
+    for (const f of folders) {
+      if (f.parent_folder_id) {
+        (childrenOf[f.parent_folder_id] ??= []).push(f.id);
+      }
+    }
+    const result = new Set<string>(directGrants);
+    const queue = [...directGrants];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const childId of (childrenOf[id] ?? [])) {
+        if (!result.has(childId)) {
+          result.add(childId);
+          queue.push(childId);
+        }
+      }
+    }
+    return result;
+  }, [myPermissions, isSuperAdmin, folders]);
 
   // ── Rename permission helpers ─────────────────────────────────────────────
   // Only the item's creator or a super admin may rename files/folders.
