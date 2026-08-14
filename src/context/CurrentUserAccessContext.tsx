@@ -55,7 +55,9 @@ export const CurrentUserAccessProvider: FC<{ children: ReactNode }> = ({ childre
 
   const isTabBlocked = useCallback((slug: string): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'superAdmin') return false;
+    // Bypass for super admins — handle both DB snake_case and normalised camelCase
+    const r = (currentUser.role ?? '').toLowerCase().replace(/[^a-z]/g, '');
+    if (r === 'superadmin') return false;
     // Only explicit is_blocked=true hides a tab — missing entry means visible
     return overrides.get(slug) === true;
   }, [overrides, currentUser]);

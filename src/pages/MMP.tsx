@@ -6737,7 +6737,14 @@ const MMP = () => {
             {/* Village Campaigns Tab */}
             {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
               <TabsContent value="village-campaigns">
-                <VillageCampaignsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
+                <ErrorBoundary fallback={(err: Error) => (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 space-y-2">
+                    <p className="font-semibold text-destructive">Village Campaigns failed to render</p>
+                    <p className="text-sm text-muted-foreground">{err.message}</p>
+                  </div>
+                )}>
+                  <VillageCampaignsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
+                </ErrorBoundary>
               </TabsContent>
             )}
           </Tabs>
