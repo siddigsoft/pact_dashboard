@@ -47,6 +47,9 @@ $$;
 
 DROP POLICY IF EXISTS "adhoc_daily_logs_write"            ON adhoc_daily_logs;
 DROP POLICY IF EXISTS "adhoc_daily_logs_write_team_lead"  ON adhoc_daily_logs;
+DROP POLICY IF EXISTS "adhoc_daily_logs_insert"           ON adhoc_daily_logs;
+DROP POLICY IF EXISTS "adhoc_daily_logs_update"           ON adhoc_daily_logs;
+DROP POLICY IF EXISTS "adhoc_daily_logs_delete"           ON adhoc_daily_logs;
 
 -- SELECT: any authenticated user can read logs (unchanged)
 -- (the existing "adhoc_daily_logs_read" policy already covers this;
@@ -118,7 +121,8 @@ CREATE POLICY "adhoc_daily_logs_delete"
 
 -- ── adhoc_village_teams — restrict writes to ops/admin only ──────────────────
 
-DROP POLICY IF EXISTS "adhoc_village_teams_write" ON adhoc_village_teams;
+DROP POLICY IF EXISTS "adhoc_village_teams_write"            ON adhoc_village_teams;
+DROP POLICY IF EXISTS "adhoc_village_teams_write_admin_only" ON adhoc_village_teams;
 
 -- READ: all authenticated users (unchanged — team leads need to see their assignments)
 -- WRITE: ops/admin only (assignment management is a coordinator/admin action)
@@ -131,7 +135,8 @@ CREATE POLICY "adhoc_village_teams_write_admin_only"
 
 -- ── adhoc_campaigns — restrict writes to ops/admin only ──────────────────────
 
-DROP POLICY IF EXISTS "village_campaigns_write" ON adhoc_campaigns;
+DROP POLICY IF EXISTS "village_campaigns_write"            ON adhoc_campaigns;
+DROP POLICY IF EXISTS "village_campaigns_write_admin_only" ON adhoc_campaigns;
 
 CREATE POLICY "village_campaigns_write_admin_only"
   ON adhoc_campaigns
@@ -142,7 +147,8 @@ CREATE POLICY "village_campaigns_write_admin_only"
 
 -- ── adhoc_villages — restrict writes to ops/admin only ───────────────────────
 
-DROP POLICY IF EXISTS "adhoc_villages_write" ON adhoc_villages;
+DROP POLICY IF EXISTS "adhoc_villages_write"            ON adhoc_villages;
+DROP POLICY IF EXISTS "adhoc_villages_write_admin_only" ON adhoc_villages;
 
 CREATE POLICY "adhoc_villages_write_admin_only"
   ON adhoc_villages
@@ -154,7 +160,8 @@ CREATE POLICY "adhoc_villages_write_admin_only"
 -- ── adhoc_teams — restrict writes to ops/admin only ──────────────────────────
 -- (team registry is managed by coordinators/admins, not team leads themselves)
 
-DROP POLICY IF EXISTS "adhoc_teams_write" ON adhoc_teams;
+DROP POLICY IF EXISTS "adhoc_teams_write"            ON adhoc_teams;
+DROP POLICY IF EXISTS "adhoc_teams_write_admin_only" ON adhoc_teams;
 
 CREATE POLICY "adhoc_teams_write_admin_only"
   ON adhoc_teams
