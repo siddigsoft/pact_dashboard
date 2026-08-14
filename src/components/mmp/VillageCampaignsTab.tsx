@@ -2730,6 +2730,61 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── New Advance Request Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showNewAdvance} onOpenChange={setShowNewAdvance}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Advance Request</DialogTitle>
+            <DialogDescription>Request a cash advance for campaign field operations</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Amount (SDG) *</Label>
+              <Input type="number" min="0" placeholder="0" value={advanceForm.requested_amount}
+                onChange={e => setAdvanceForm(f => ({ ...f, requested_amount: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Expense Category</Label>
+              <Select value={advanceForm.expense_category} onValueChange={v => setAdvanceForm(f => ({ ...f, expense_category: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transport">Transport / Fuel</SelectItem>
+                  <SelectItem value="enumerator_fees">Enumerator Fees</SelectItem>
+                  <SelectItem value="accommodation">Accommodation</SelectItem>
+                  <SelectItem value="meals">Meal Per Diem</SelectItem>
+                  <SelectItem value="supplies">Field Supplies</SelectItem>
+                  <SelectItem value="communication">Communication</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Site / Village <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
+              <Select value={advanceForm.site_name || '__none__'}
+                onValueChange={v => setAdvanceForm(f => ({ ...f, site_name: v === '__none__' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder="All villages / general" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">General (all villages)</SelectItem>
+                  {villages.map(v => <SelectItem key={v.id} value={v.village_name}>{v.village_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Description / Justification</Label>
+              <Textarea value={advanceForm.description}
+                onChange={e => setAdvanceForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Briefly describe what this advance will be used for…" rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewAdvance(false)}>Cancel</Button>
+            <Button onClick={submitAdvance} disabled={advanceSaving || !advanceForm.requested_amount}>
+              {advanceSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2850,60 +2905,6 @@ function TeamRegistryDialog({
         </DialogContent>
       </Dialog>
 
-      {/* ── New Advance Request Dialog ─────────────────────────────────────────── */}
-      <Dialog open={showNewAdvance} onOpenChange={setShowNewAdvance}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Advance Request</DialogTitle>
-            <DialogDescription>Request a cash advance for campaign field operations</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Amount (SDG) *</Label>
-              <Input type="number" min="0" placeholder="0" value={advanceForm.requested_amount}
-                onChange={e => setAdvanceForm(f => ({ ...f, requested_amount: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Expense Category</Label>
-              <Select value={advanceForm.expense_category} onValueChange={v => setAdvanceForm(f => ({ ...f, expense_category: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="transport">Transport / Fuel</SelectItem>
-                  <SelectItem value="enumerator_fees">Enumerator Fees</SelectItem>
-                  <SelectItem value="accommodation">Accommodation</SelectItem>
-                  <SelectItem value="meals">Meal Per Diem</SelectItem>
-                  <SelectItem value="supplies">Field Supplies</SelectItem>
-                  <SelectItem value="communication">Communication</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Site / Village <span className="text-[11px] text-muted-foreground font-normal">(optional)</span></Label>
-              <Select value={advanceForm.site_name || '__none__'}
-                onValueChange={v => setAdvanceForm(f => ({ ...f, site_name: v === '__none__' ? '' : v }))}>
-                <SelectTrigger><SelectValue placeholder="All villages / general" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">General (all villages)</SelectItem>
-                  {villages.map(v => <SelectItem key={v.id} value={v.village_name}>{v.village_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Description / Justification</Label>
-              <Textarea value={advanceForm.description}
-                onChange={e => setAdvanceForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Briefly describe what this advance will be used for…" rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewAdvance(false)}>Cancel</Button>
-            <Button onClick={submitAdvance} disabled={advanceSaving || !advanceForm.requested_amount}>
-              {advanceSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Submit Request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
