@@ -763,16 +763,11 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-<<<<<<< HEAD
 function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
   folderId: string | null; folderName: string;
   /** Pre-selects the security level to match the destination folder. Defaults to 'internal'. */
   folderSecurityLevel?: SecurityLevel;
   open: boolean; onClose: () => void;
-=======
-function UploadDialog({ folderId, folderName, folderPath, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
-  folderId: string | null; folderName: string; folderPath: string; open: boolean; onClose: () => void;
->>>>>>> 220e0ac2d8e303d219a80e888fa702af35a925b5
   currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
   existingFiles?: WFile[];
 }) {
@@ -5105,11 +5100,7 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
-<<<<<<< HEAD
           folderSecurityLevel={selectedFolder?.security_level ?? 'internal'}
-=======
-          folderPath={breadcrumbs.map(f => f.name).join('/') || 'Hub'}
->>>>>>> 220e0ac2d8e303d219a80e888fa702af35a925b5
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
           initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}
