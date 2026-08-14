@@ -763,8 +763,10 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
+function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
   folderId: string | null; folderName: string;
+  /** Hub breadcrumb used as the R2 snapshot key prefix. */
+  folderPath: string;
   /** Pre-selects the security level to match the destination folder. Defaults to 'internal'. */
   folderSecurityLevel?: SecurityLevel;
   open: boolean; onClose: () => void;
@@ -872,8 +874,8 @@ function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', 
           }
         }
         const sorted = Array.from(folderPaths).sort((a, b) => a.split('/').length - b.split('/').length);
-        for (const folderPath of sorted) {
-          const parts      = folderPath.split('/');
+        for (const relFolderPath of sorted) {
+          const parts      = relFolderPath.split('/');
           const name       = parts[parts.length - 1];
           const parentPath = parts.slice(0, -1).join('/');
           const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
@@ -888,7 +890,7 @@ function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', 
           );
           if (folderErr) throw folderErr;
           if (!created?.id) throw new Error('Failed to create folder');
-          folderIdMap[folderPath] = created.id;
+          folderIdMap[relFolderPath] = created.id;
         }
       }
 
@@ -5137,6 +5139,7 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
+          folderPath={breadcrumbs.map(f => f.name).join('/') || 'Hub'}
           folderSecurityLevel={selectedFolder?.security_level ?? 'internal'}
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
