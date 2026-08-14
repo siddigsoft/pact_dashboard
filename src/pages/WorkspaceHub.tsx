@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList,
+  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -60,7 +60,12 @@ interface WFolder {
   created_by: string | null; color: string; icon: string;
   is_system_folder: boolean; archived: boolean; created_at: string;
   password_hash: string | null;
+  short_code: string | null;
   _childCount?: number; _fileCount?: number;
+}
+
+function generateShortCode(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 }
 interface PasswordTarget {
   id: string; name: string; password_hash: string | null; isFolder: boolean;
@@ -738,8 +743,8 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
-  folderId: string | null; folderName: string; open: boolean; onClose: () => void;
+function UploadDialog({ folderId, folderName, folderPath, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
+  folderId: string | null; folderName: string; folderPath: string; open: boolean; onClose: () => void;
   currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
   existingFiles?: WFile[];
 }) {
@@ -874,13 +879,14 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           const parentPath = parts.slice(0, -1).join('/');
           targetFolderId = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
         }
-        // New uploads go to Cloudflare R2; the edge function generates the key
-        // under the caller's user-id prefix (see supabase/functions/r2-sign).
+        // Snapshot Hub folder path into the R2 key (see supabase/functions/r2-sign).
         const shouldExtract = extractZips && isZipFile(f);
         if (shouldExtract && f.size > MAX_ZIP_BYTES) {
           throw new Error(`"${f.name}" exceeds the 100MB ZIP extract limit. Upload without extract, or split the archive.`);
         }
-        const { key: path } = await withTimeout(r2Upload(f), 600000);
+        const relDirs = isFolderUpload ? relativePath.split('/').slice(0, -1).join('/') : '';
+        const snapshotPath = [folderPath, relDirs].filter(Boolean).join('/') || 'Hub';
+        const { key: path } = await withTimeout(r2Upload(f, { folderPath: snapshotPath }), 600000);
         pendingOrphanPaths.push(path);
         // Apply duplicate rename resolution if needed
         const dupEntry = duplicates.find(d => d.file === f || (d.file.name === f.name && d.file.size === f.size));
@@ -4041,6 +4047,7 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
+          folderPath={breadcrumbs.map(f => f.name).join('/') || 'Hub'}
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
           initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}

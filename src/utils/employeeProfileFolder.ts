@@ -229,7 +229,9 @@ export async function syncHrDocsToWorkspace(
       }
 
       const file = new File([blob], doc.doc_name, { type: doc.file_mime || blob.type || 'application/octet-stream' });
-      const { key } = await r2Upload(file);
+      const { key } = await r2Upload(file, {
+        folderPath: `HR/Profiles/${getCountryFolderName(user.employeeId)}/${computeFolderName(user)}`,
+      });
 
       const docLabel = (doc.doc_type || 'other').replace(/_/g, ' ')
         .replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -259,8 +261,8 @@ export async function syncHrDocsToWorkspace(
  * Called from syncProfileFolder and syncDocsToWorkspaceOnly.
  */
 async function syncAvatarToWorkspace(
-  user: { id: string; avatar?: string | null; name?: string | null },
-  _folderName: string,
+  user: { id: string; avatar?: string | null; name?: string | null; employeeId?: string | null },
+  folderName: string,
   folderId: string,
 ): Promise<void> {
   if (!user.avatar || !folderId) return;
@@ -282,7 +284,9 @@ async function syncAvatarToWorkspace(
     }
 
     const file = new File([blob], photoName, { type: `image/${ext}` });
-    const { key } = await r2Upload(file);
+    const { key } = await r2Upload(file, {
+      folderPath: `HR/Profiles/${getCountryFolderName(user.employeeId)}/${folderName}`,
+    });
 
     await upsertWorkspaceFile(
       folderId,
@@ -333,7 +337,9 @@ export async function syncProfileFolder(
 
     // 3. Upload to R2 so Workspace Hub can serve it
     const summaryFile = new File([pdfBytes as any], 'PROFILE_SUMMARY.pdf', { type: 'application/pdf' });
-    const { key: r2SummaryKey } = await r2Upload(summaryFile);
+    const { key: r2SummaryKey } = await r2Upload(summaryFile, {
+      folderPath: `HR/Profiles/${getCountryFolderName(user.employeeId)}/${folderName}`,
+    });
 
     // 4. Ensure Workspace Hub folder hierarchy: HR > Profiles > {Country} > {folderName}
     const countryFolderName = getCountryFolderName(user.employeeId);
