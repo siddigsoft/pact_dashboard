@@ -148,6 +148,10 @@ interface AdvanceRequest {
   created_at: string;
   description?: string | null;
   expense_category?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  paid_by?: string | null;
+  paid_at?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -200,11 +204,13 @@ interface VillageCampaignsTabProps {
   canManage: boolean;
   /** Only Super Admins may permanently delete campaigns or teams */
   canDelete?: boolean;
+  /** Admin / FOM / Super Admin — can approve entries & advance requests */
+  canApproveAdvance?: boolean;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function VillageCampaignsTab({ canManage, canDelete = false }: VillageCampaignsTabProps) {
+export default function VillageCampaignsTab({ canManage, canDelete = false, canApproveAdvance = false }: VillageCampaignsTabProps) {
   const { toast } = useToast();
 
   // ── Reference data ────────────────────────────────────────────────────────
@@ -300,6 +306,14 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
   const [payForm, setPayForm]   = useState({ amount: '', notes: '', method: 'cash' });
   const [paying, setPaying]     = useState(false);
   const [payingAll, setPayingAll] = useState(false);
+
+  // ── Approval state ────────────────────────────────────────────────────────
+  const [approving, setApproving] = useState<Record<string, boolean>>({});
+  const [approvingAll, setApprovingAll] = useState(false);
+  const [advanceApproving, setAdvanceApproving] = useState<Record<string, boolean>>({});
+
+  // ── Costs sub-tab (Pending / Approved & Costed / Dispatched) ─────────────
+  const [costsSubTab, setCostsSubTab] = useState<'pending' | 'approved' | 'dispatched'>('pending');
 
   // ── Load reference data ───────────────────────────────────────────────────
 
@@ -463,7 +477,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
 
     const { data } = await supabase
       .from('advance_requests')
-      .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category')
+      .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category, approved_by, approved_at, paid_by, paid_at')
       .or(orParts.join(','))
       .order('created_at', { ascending: false });
     setAdvances((data || []) as AdvanceRequest[]);
@@ -524,6 +538,19 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
     campaigns.filter(c => campaignStatusFilter === 'all' || c.status === campaignStatusFilter),
     [campaigns, campaignStatusFilter]
   );
+
+  // ── Costs & Dispatch sub-tab derived lists ────────────────────────────────
+  // pendingEntries strictly matches status='pending' (the DB-inserted initial value)
+  // to mirror the approve_campaign_site_entry RPC which also requires status='pending'.
+  // Non-pending/non-approved statuses (e.g. 'rejected') will not appear in any pill.
+  const pendingEntries   = useMemo(() => siteEntries.filter(e => e.status === 'pending'), [siteEntries]);
+  const approvedEntries  = useMemo(() => siteEntries.filter(e => e.status === 'Approved and Costed' && !e.dispatched_at), [siteEntries]);
+  const dispatchedEntries = useMemo(() => siteEntries.filter(e => !!e.dispatched_at), [siteEntries]);
+  const filteredCostEntries = useMemo(() => {
+    if (costsSubTab === 'pending') return pendingEntries;
+    if (costsSubTab === 'approved') return approvedEntries;
+    return dispatchedEntries;
+  }, [costsSubTab, pendingEntries, approvedEntries, dispatchedEntries]);
 
   const campaignTotals = useMemo(() => {
     const totalTarget  = villages.reduce((s, v) => s + (v.hh_target || 0), 0);
@@ -799,10 +826,9 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
   };
 
   const dispatchAll = async () => {
-    // Only target entries that have never been dispatched (dispatched_at IS NULL)
-    // — entries that are Accepted/in-progress/completed retain their dispatched_at
-    // and must not be overwritten even if their status has moved on.
-    const pending = siteEntries.filter(e => !e.dispatched_at);
+    // Only target entries that are Approved & Costed and not yet dispatched.
+    // Entries still in 'pending' status must be approved first before dispatch.
+    const pending = siteEntries.filter(e => !e.dispatched_at && e.status === 'Approved and Costed');
     if (!pending.length) { toast({ title: 'All entries already dispatched' }); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -888,6 +914,123 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
     }
   };
 
+  // ── Approve entry (Pending → Approved and Costed) ─────────────────────────
+  // Uses a SECURITY DEFINER RPC that enforces admin/FOM/superAdmin role
+  // server-side and rejects concurrent lifecycle overwrites (dispatched rows
+  // cannot be re-approved, already-approved rows return success:false).
+  const approveEntry = async (entry: SiteEntry) => {
+    // Only approve entries in the 'pending' state — matches the server-side RPC precondition
+    if (entry.status !== 'pending') {
+      toast({ title: entry.status === 'Approved and Costed' ? 'Already approved' : 'Cannot approve — entry is not in pending state' }); return;
+    }
+    setApproving(a => ({ ...a, [entry.id]: true }));
+    try {
+      const { data, error } = await supabase.rpc('approve_campaign_site_entry', {
+        p_site_id: entry.id,
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.message || 'Server rejected approval');
+      }
+      setSiteEntries(es => es.map(e => e.id === entry.id ? { ...e, status: 'Approved and Costed' } : e));
+      toast({ title: 'Approved & Costed', description: entry.site_name });
+    } catch (e: any) {
+      toast({ title: 'Approval failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setApproving(a => ({ ...a, [entry.id]: false }));
+    }
+  };
+
+  // ── Bulk approve all pending entries ──────────────────────────────────────
+  // Each call goes through the server-side RPC so authorization is enforced
+  // per-row. Rows that return success:false (already approved, dispatched, or
+  // unauthorized) are counted as skipped rather than failures.
+  const approveAll = async () => {
+    const toApprove = pendingEntries; // already filtered: not approved, not dispatched
+    if (!toApprove.length) { toast({ title: 'All entries already approved' }); return; }
+    setApprovingAll(true);
+    try {
+      type ApproveResult = { id: string; skipped: boolean };
+      const results = await Promise.allSettled(
+        toApprove.map(async (e): Promise<ApproveResult> => {
+          const { data, error } = await supabase.rpc('approve_campaign_site_entry', {
+            p_site_id: e.id,
+          });
+          if (error) throw error;
+          // success:false with 'Already approved' → skipped, not a failure
+          if (!data?.success) {
+            if (data?.message === 'Already approved') return { id: e.id, skipped: true };
+            throw new Error(data?.message || 'Server rejected approval');
+          }
+          return { id: e.id, skipped: false };
+        })
+      );
+      const successes = results
+        .filter((r): r is PromiseFulfilledResult<ApproveResult> => r.status === 'fulfilled' && !r.value.skipped)
+        .map(r => r.value.id);
+      const skipped   = results.filter((r): r is PromiseFulfilledResult<ApproveResult> => r.status === 'fulfilled' && r.value.skipped).length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
+      if (successes.length > 0) {
+        setSiteEntries(es => es.map(e => successes.includes(e.id) ? { ...e, status: 'Approved and Costed' } : e));
+      }
+
+      if (failCount > 0 && successes.length === 0 && skipped === 0) {
+        toast({ title: 'Approve All failed', description: `All ${failCount} entries were rejected.`, variant: 'destructive' });
+      } else if (failCount > 0) {
+        toast({ title: `${successes.length} approved, ${failCount} failed`, variant: 'destructive' });
+      } else {
+        toast({ title: `${successes.length} entr${successes.length !== 1 ? 'ies' : 'y'} approved${skipped ? ` (${skipped} already approved)` : ''}` });
+      }
+    } catch (e: any) {
+      toast({ title: 'Approve All failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
+  // ── Approve an advance request (pending → approved) ───────────────────────
+  const approveAdvance = async (advance: AdvanceRequest) => {
+    setAdvanceApproving(a => ({ ...a, [advance.id]: true }));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('advance_requests')
+        .update({ status: 'approved', approved_by: user.id, approved_at: now })
+        .eq('id', advance.id);
+      if (error) throw error;
+      setAdvances(avs => avs.map(a => a.id === advance.id ? { ...a, status: 'approved', approved_by: user.id, approved_at: now } : a));
+      toast({ title: 'Advance approved', description: `SDG ${Number(advance.requested_amount).toLocaleString()}` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAdvanceApproving(a => ({ ...a, [advance.id]: false }));
+    }
+  };
+
+  // ── Mark advance request as paid (approved → paid) ────────────────────────
+  const markAdvancePaid = async (advance: AdvanceRequest) => {
+    setAdvanceApproving(a => ({ ...a, [advance.id]: true }));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('advance_requests')
+        .update({ status: 'paid', paid_by: user.id, paid_at: now, total_paid_amount: advance.requested_amount })
+        .eq('id', advance.id);
+      if (error) throw error;
+      setAdvances(avs => avs.map(a => a.id === advance.id ? { ...a, status: 'paid', total_paid_amount: advance.requested_amount } : a));
+      toast({ title: 'Advance marked paid', description: `SDG ${Number(advance.requested_amount).toLocaleString()}` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAdvanceApproving(a => ({ ...a, [advance.id]: false }));
+    }
+  };
+
   // ── Mark fee as paid ─────────────────────────────────────────────────────
   // The UPDATE includes .eq('fee_paid_status', 'unpaid') as an optimistic lock.
   // If another Finance user paid first the WHERE clause matches 0 rows; we fetch
@@ -957,8 +1100,12 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
   // Each UPDATE is guarded by .eq('fee_paid_status', 'unpaid') so concurrent
   // clicks from two Finance users can't double-record. Rows that return 0
   // updated are counted as "skipped" (already paid) rather than failures.
-  const markAllPaid = async () => {
-    const unpaid = siteEntries.filter(e => e.fee_paid_status !== 'paid');
+  // `subset` limits the operation to a specific list of entries (e.g. only
+  // dispatched ones from the Dispatched sub-tab), preventing payment of
+  // entries that have not been dispatched yet.
+  const markAllPaid = async (subset?: SiteEntry[]) => {
+    const pool   = subset ?? siteEntries;
+    const unpaid = pool.filter(e => e.fee_paid_status !== 'paid');
     if (!unpaid.length) { toast({ title: 'All entries already paid' }); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -1833,8 +1980,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
           <TabsTrigger value="villages" className="text-xs gap-1.5"><MapPin className="h-3.5 w-3.5" />Villages</TabsTrigger>
           <TabsTrigger value="teams" className="text-xs gap-1.5"><Users className="h-3.5 w-3.5" />Teams</TabsTrigger>
           <TabsTrigger value="logs" className="text-xs gap-1.5"><Activity className="h-3.5 w-3.5" />Daily Logs</TabsTrigger>
-          <TabsTrigger value="costs" className="text-xs gap-1.5"><Truck className="h-3.5 w-3.5" />Costs &amp; Fees</TabsTrigger>
-          <TabsTrigger value="advances" className="text-xs gap-1.5"><Wallet className="h-3.5 w-3.5" />Advances</TabsTrigger>
+          <TabsTrigger value="costs" className="text-xs gap-1.5"><Truck className="h-3.5 w-3.5" />Costs &amp; Dispatch</TabsTrigger>
           <TabsTrigger value="report" className="text-xs gap-1.5"><FileText className="h-3.5 w-3.5" />Completion</TabsTrigger>
         </TabsList>
 
@@ -1964,9 +2110,10 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
           })}
         </TabsContent>
 
-        {/* COSTS & FEES */}
+        {/* COSTS & DISPATCH */}
         <TabsContent value="costs" className="mt-4 space-y-4">
-          {/* Summary cards */}
+
+          {/* ── Summary cards (whole campaign) ─────────────────────────────── */}
           {siteEntries.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card>
@@ -1998,243 +2145,371 @@ export default function VillageCampaignsTab({ canManage, canDelete = false }: Vi
               </Card>
             </div>
           )}
-          {/* Export button — visible to all, not gated on canManage */}
-          {siteEntries.length > 0 && (
-            <div className="flex justify-end">
-              <Button type="button" size="sm" variant="outline"
-                className="h-7 gap-1.5 text-xs"
-                onClick={exportFeesExcel}>
-                <Download className="h-3.5 w-3.5" />Export to Excel
-              </Button>
-            </div>
-          )}
-          {/* Action header bar — Dispatch All + Mark All Paid */}
-          {canManage && siteEntries.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 rounded-lg px-3 py-2 border">
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span>
-                  <span className="font-semibold text-foreground">{siteEntries.filter(e => !!e.dispatched_at).length}</span>
-                  {' / '}{siteEntries.length} dispatched
-                </span>
-                <span>
-                  <span className="font-semibold text-foreground">{siteEntries.filter(e => e.fee_paid_status === 'paid').length}</span>
-                  {' / '}{siteEntries.length} paid
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button" size="sm"
-                  className="h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                  disabled={payingAll || siteEntries.every(e => e.fee_paid_status === 'paid')}
-                  onClick={markAllPaid}
-                >
-                  {payingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3 w-3" />}
-                  Mark All Paid
-                </Button>
-                <Button
-                  type="button" size="sm"
-                  className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                  disabled={dispatchingAll || siteEntries.every(e => !!e.dispatched_at)}
-                  onClick={dispatchAll}
-                >
-                  {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                  Dispatch All
-                </Button>
-              </div>
-            </div>
-          )}
 
           {siteEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
               <DollarSign className="h-10 w-10 opacity-25" />
               <p className="font-medium text-sm">No fee records yet</p>
-              <p className="text-xs text-center max-w-xs">Assign a team to a village — a transport & enumerator fee record is created automatically for each assignment.</p>
+              <p className="text-xs text-center max-w-xs">Assign a team to a village — a fee record is created automatically for each assignment.</p>
             </div>
           ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>Village / Site</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead className="text-right">Transport Fee (SDG)</TableHead>
-                    <TableHead className="text-right">Enumerator Fee (SDG)</TableHead>
-                    <TableHead>Payment Status</TableHead>
-                    <TableHead className="text-right">Paid</TableHead>
-                    <TableHead>Dispatch</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {siteEntries.map(e => {
-                    const edit = feeEdits[e.id] || { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
-                    const isSavingFee = feesSaving[e.id];
-                    const isDispatching = dispatching[e.id];
-                    // dispatched_at is the lifecycle marker — once set it stays set even
-                    // if status later advances to Accepted/completed/in-progress
-                    const isDispatched = !!e.dispatched_at;
-                    const payStatus = e.fee_paid_status;
-                    return (
-                      <TableRow key={e.id}>
-                        <TableCell className="text-xs font-medium">{e.site_name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{e.additional_data?.team_name || '—'}</TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number" min="0"
-                            value={edit.transport_fee}
-                            onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, transport_fee: ev.target.value } }))}
-                            className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number" min="0"
-                            value={edit.enumerator_fee}
-                            onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, enumerator_fee: ev.target.value } }))}
-                            className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            <Badge className={`text-[10px] border-0 self-start ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                              {payStatus || 'unpaid'}
-                            </Badge>
-                            {payStatus === 'paid' && (
-                              <div className="flex flex-col gap-0 leading-tight">
-                                <span className="text-[9px] text-muted-foreground">
-                                  {profileName(e.fee_paid_by ?? undefined)}
-                                </span>
-                                <span className="text-[9px] text-muted-foreground tabular-nums">
-                                  {fmtDate(e.fee_paid_at ?? undefined)}
-                                  {fmtPayMethod(e.fee_payment_method) && (
-                                    <> · {fmtPayMethod(e.fee_payment_method)}</>
-                                  )}
-                                </span>
-                                {e.fee_payment_notes && (
-                                  <span className="text-[9px] text-muted-foreground italic truncate max-w-[160px]" title={e.fee_payment_notes}>
-                                    {e.fee_payment_notes}
-                                  </span>
+            <>
+              {/* ── Sub-filter pills + Export ─────────────────────────────── */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(
+                  [
+                    { key: 'pending'   as const, label: 'Pending',           count: pendingEntries.length,    activeClass: 'bg-amber-100 text-amber-800 border-amber-300' },
+                    { key: 'approved'  as const, label: 'Approved & Costed', count: approvedEntries.length,   activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+                    { key: 'dispatched'as const, label: 'Dispatched',         count: dispatchedEntries.length, activeClass: 'bg-blue-100 text-blue-800 border-blue-300' },
+                  ] satisfies { key: 'pending'|'approved'|'dispatched'; label: string; count: number; activeClass: string }[]
+                ).map(pill => (
+                  <button
+                    key={pill.key}
+                    type="button"
+                    onClick={() => setCostsSubTab(pill.key)}
+                    className={`h-7 px-3 rounded-full text-xs font-medium border transition-colors ${
+                      costsSubTab === pill.key
+                        ? pill.activeClass
+                        : 'bg-background text-muted-foreground border-border hover:border-foreground/40'
+                    }`}
+                  >
+                    {pill.label}
+                    <span className="ml-1.5 tabular-nums opacity-75">({pill.count})</span>
+                  </button>
+                ))}
+                <div className="ml-auto">
+                  <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={exportFeesExcel}>
+                    <Download className="h-3.5 w-3.5" />Export Excel
+                  </Button>
+                </div>
+              </div>
+
+              {/* ── Context-aware toolbar ─────────────────────────────────── */}
+              {canManage && (
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 rounded-lg px-3 py-2 border min-h-[40px]">
+                  {costsSubTab === 'pending' && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{pendingEntries.length}</span> entr{pendingEntries.length !== 1 ? 'ies' : 'y'} pending approval
+                      </span>
+                      {canApproveAdvance && (
+                        <Button
+                          type="button" size="sm"
+                          className="h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                          disabled={approvingAll || pendingEntries.length === 0}
+                          onClick={approveAll}
+                        >
+                          {approvingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                          Approve All
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {costsSubTab === 'approved' && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{approvedEntries.length}</span> entr{approvedEntries.length !== 1 ? 'ies' : 'y'} ready to dispatch
+                      </span>
+                      <Button
+                        type="button" size="sm"
+                        className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                        disabled={dispatchingAll || approvedEntries.length === 0}
+                        onClick={dispatchAll}
+                      >
+                        {dispatchingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                        Dispatch All
+                      </Button>
+                    </>
+                  )}
+                  {costsSubTab === 'dispatched' && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{dispatchedEntries.filter(e => e.fee_paid_status !== 'paid').length}</span> unpaid
+                        {' · '}
+                        <span className="font-semibold text-foreground">{dispatchedEntries.filter(e => e.fee_paid_status === 'paid').length}</span> paid
+                      </span>
+                      <Button
+                        type="button" size="sm"
+                        className="h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                        disabled={payingAll || dispatchedEntries.every(e => e.fee_paid_status === 'paid')}
+                        onClick={() => markAllPaid(dispatchedEntries)}
+                      >
+                        {payingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CreditCard className="h-3 w-3" />}
+                        Mark All Paid
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Filtered table ────────────────────────────────────────── */}
+              {filteredCostEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                  <CheckCircle2 className="h-8 w-8 opacity-20" />
+                  <p className="text-sm">
+                    {costsSubTab === 'pending'    && 'No entries pending approval'}
+                    {costsSubTab === 'approved'   && 'No entries awaiting dispatch'}
+                    {costsSubTab === 'dispatched' && 'No dispatched entries yet'}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead>Village / Site</TableHead>
+                        <TableHead>Team</TableHead>
+                        <TableHead className="text-right">Transport (SDG)</TableHead>
+                        <TableHead className="text-right">Enum Fee (SDG)</TableHead>
+                        {costsSubTab === 'dispatched' && (
+                          <>
+                            <TableHead>Payment Status</TableHead>
+                            <TableHead className="text-right">Paid (SDG)</TableHead>
+                          </>
+                        )}
+                        {costsSubTab !== 'dispatched' && (
+                          <TableHead>Approval</TableHead>
+                        )}
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredCostEntries.map(e => {
+                        const edit = feeEdits[e.id] || { transport_fee: String(e.transport_fee ?? 0), enumerator_fee: String(e.enumerator_fee ?? 0) };
+                        const isSavingFee   = feesSaving[e.id];
+                        const isDispatching = dispatching[e.id];
+                        const isApproving   = approving[e.id];
+                        const payStatus     = e.fee_paid_status;
+                        return (
+                          <TableRow key={e.id}>
+                            <TableCell className="text-xs font-medium">{e.site_name}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{e.additional_data?.team_name || '—'}</TableCell>
+
+                            {/* Transport fee — editable only on Pending sub-tab */}
+                            <TableCell className="text-right">
+                              {costsSubTab === 'pending' ? (
+                                <Input
+                                  type="number" min="0"
+                                  value={edit.transport_fee}
+                                  onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, transport_fee: ev.target.value } }))}
+                                  className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
+                                />
+                              ) : (
+                                <span className="tabular-nums text-xs">{(e.transport_fee || 0).toLocaleString()}</span>
+                              )}
+                            </TableCell>
+
+                            {/* Enumerator fee — editable only on Pending sub-tab */}
+                            <TableCell className="text-right">
+                              {costsSubTab === 'pending' ? (
+                                <Input
+                                  type="number" min="0"
+                                  value={edit.enumerator_fee}
+                                  onChange={ev => setFeeEdits(f => ({ ...f, [e.id]: { ...edit, enumerator_fee: ev.target.value } }))}
+                                  className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
+                                />
+                              ) : (
+                                <span className="tabular-nums text-xs">{(e.enumerator_fee || 0).toLocaleString()}</span>
+                              )}
+                            </TableCell>
+
+                            {/* Payment status — Dispatched sub-tab only */}
+                            {costsSubTab === 'dispatched' && (
+                              <>
+                                <TableCell>
+                                  <div className="flex flex-col gap-0.5">
+                                    <Badge className={`text-[10px] border-0 self-start ${payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' : payStatus === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                      {payStatus || 'unpaid'}
+                                    </Badge>
+                                    {payStatus === 'paid' && (
+                                      <div className="flex flex-col gap-0 leading-tight">
+                                        <span className="text-[9px] text-muted-foreground">{profileName(e.fee_paid_by ?? undefined)}</span>
+                                        <span className="text-[9px] text-muted-foreground tabular-nums">
+                                          {fmtDate(e.fee_paid_at ?? undefined)}
+                                          {fmtPayMethod(e.fee_payment_method) && <> · {fmtPayMethod(e.fee_payment_method)}</>}
+                                        </span>
+                                        {e.fee_payment_notes && (
+                                          <span className="text-[9px] text-muted-foreground italic truncate max-w-[160px]" title={e.fee_payment_notes}>
+                                            {e.fee_payment_notes}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums text-xs">
+                                  {e.fee_paid_amount ? `SDG ${Number(e.fee_paid_amount).toLocaleString()}` : '—'}
+                                </TableCell>
+                              </>
+                            )}
+
+                            {/* Approval badge — Pending & Approved sub-tabs */}
+                            {costsSubTab !== 'dispatched' && (
+                              <TableCell>
+                                {e.status === 'Approved and Costed' ? (
+                                  <Badge className="text-[10px] border-0 bg-emerald-100 text-emerald-700">Approved</Badge>
+                                ) : (
+                                  <Badge className="text-[10px] border-0 bg-amber-100 text-amber-700">Pending</Badge>
+                                )}
+                              </TableCell>
+                            )}
+
+                            {/* Actions column */}
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {/* Pending: Save + Approve */}
+                                {costsSubTab === 'pending' && (
+                                  <>
+                                    <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                                      disabled={isSavingFee} onClick={() => saveFee(e.id)}>
+                                      {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                                    </Button>
+                                    {canApproveAdvance && (
+                                      <Button type="button" size="sm"
+                                        className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        disabled={isApproving}
+                                        onClick={() => approveEntry(e)}>
+                                        {isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+
+                                {/* Approved & Costed: Dispatch */}
+                                {costsSubTab === 'approved' && canManage && (
+                                  <Button type="button" size="sm"
+                                    className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                                    disabled={isDispatching}
+                                    onClick={() => dispatchEntry(e)}>
+                                    {isDispatching ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Send className="h-3 w-3" /><span className="ml-1">Dispatch</span></>}
+                                  </Button>
+                                )}
+
+                                {/* Dispatched: Mark Paid / Revert */}
+                                {costsSubTab === 'dispatched' && canManage && payStatus !== 'paid' && (
+                                  <Button type="button" size="sm"
+                                    className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    onClick={() => {
+                                      const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
+                                      setPayForm({ amount: String(total), notes: '', method: 'cash' });
+                                      setPayDialog({ open: true, entry: e });
+                                    }}>
+                                    <CreditCard className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {costsSubTab === 'dispatched' && canManage && payStatus === 'paid' && (
+                                  <Button type="button" size="sm" variant="ghost"
+                                    className="h-6 text-[10px] px-2 text-muted-foreground hover:text-destructive"
+                                    title="Revert to unpaid"
+                                    onClick={() => revertPaid(e.id)}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs">
-                          {e.fee_paid_amount ? `SDG ${Number(e.fee_paid_amount).toLocaleString()}` : '—'}
-                        </TableCell>
-                        {/* Dispatch status + action */}
-                        <TableCell>
-                          {isDispatched ? (
-                            <Badge className="text-[10px] border-0 bg-blue-100 text-blue-700 gap-1">
-                              <Send className="h-2.5 w-2.5" />Dispatched
-                            </Badge>
-                          ) : (
-                            <Badge className="text-[10px] border-0 bg-amber-100 text-amber-700">
-                              Pending
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant="outline" className="h-6 text-[10px] px-2"
-                              disabled={isSavingFee} onClick={() => saveFee(e.id)}>
-                              {isSavingFee ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                            </Button>
-                            {canManage && payStatus !== 'paid' && (
-                              <Button type="button" size="sm"
-                                className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                onClick={() => {
-                                  const total = (e.transport_fee || 0) + (e.enumerator_fee || 0);
-                                  setPayForm({ amount: String(total), notes: '', method: 'cash' });
-                                  setPayDialog({ open: true, entry: e });
-                                }}>
-                                <CreditCard className="h-3 w-3" />
-                              </Button>
-                            )}
-                            {canManage && payStatus === 'paid' && (
-                              <Button type="button" size="sm" variant="ghost"
-                                className="h-6 text-[10px] px-2 text-muted-foreground hover:text-destructive"
-                                title="Revert to unpaid"
-                                onClick={() => revertPaid(e.id)}>
-                                <X className="h-3 w-3" />
-                              </Button>
-                            )}
-                            {canManage && !isDispatched && (
-                              <Button type="button" size="sm" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700"
-                                disabled={isDispatching} onClick={() => dispatchEntry(e)}>
-                                {isDispatching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
           )}
-        </TabsContent>
 
-        {/* ADVANCES */}
-        <TabsContent value="advances" className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Advance Requests</p>
-              {!selectedCampaign?.project_id && (
-                <p className="text-xs text-amber-600 mt-0.5">Link a project to this campaign to create advance requests</p>
+          {/* ── Advances section ─────────────────────────────────────────────── */}
+          <div className="border-t pt-4 space-y-3 mt-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4 text-muted-foreground" />Advance Requests</p>
+                {!selectedCampaign?.project_id && (
+                  <p className="text-xs text-amber-600 mt-0.5">Link a project to this campaign to create advance requests</p>
+                )}
+              </div>
+              {selectedCampaign?.project_id && canManage && (
+                <Button type="button" size="sm" className="h-8 gap-1.5"
+                  onClick={() => { setAdvanceForm({ requested_amount:'', description:'', expense_category:'transport', site_name:'' }); setShowNewAdvance(true); }}>
+                  <Plus className="h-3.5 w-3.5" /> New Advance Request
+                </Button>
               )}
             </div>
-            {selectedCampaign?.project_id && canManage && (
-              <Button size="sm" className="h-8 gap-1.5" onClick={() => { setAdvanceForm({ requested_amount:'', description:'', expense_category:'transport', site_name:'' }); setShowNewAdvance(true); }}>
-                <Plus className="h-3.5 w-3.5" /> New Advance Request
-              </Button>
+
+            {advances.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                <Wallet className="h-8 w-8 opacity-20" />
+                <p className="text-sm">{selectedCampaign?.project_id ? 'No advance requests yet' : 'No linked project'}</p>
+                <p className="text-xs text-center max-w-xs">
+                  {selectedCampaign?.project_id
+                    ? 'Create the first advance request using the button above.'
+                    : 'Edit this campaign and link it to a project to enable advance requests.'}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead>Description</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Site / Village</TableHead>
+                      <TableHead className="text-right">Requested (SDG)</TableHead>
+                      <TableHead className="text-right">Paid (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      {canApproveAdvance && <TableHead />}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {advances.map(adv => (
+                      <TableRow key={adv.id}>
+                        <TableCell className="text-xs">{adv.description || '—'}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{adv.expense_category || '—'}</Badge></TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{adv.site_name || '—'}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold">{Number(adv.requested_amount).toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-600">{adv.total_paid_amount ? Number(adv.total_paid_amount).toLocaleString() : '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <Badge className={`text-[10px] border-0 self-start ${['approved','paid'].includes(adv.status) ? 'bg-emerald-100 text-emerald-700' : adv.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {adv.status}
+                            </Badge>
+                            {adv.status === 'approved' && adv.approved_by && (
+                              <span className="text-[9px] text-muted-foreground">{profileName(adv.approved_by)} · {fmtDate(adv.approved_at ?? undefined)}</span>
+                            )}
+                            {adv.status === 'paid' && adv.paid_by && (
+                              <span className="text-[9px] text-muted-foreground">{profileName(adv.paid_by)} · {fmtDate(adv.paid_at ?? undefined)}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{fmtDate(adv.created_at)}</TableCell>
+                        {canApproveAdvance && (
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {adv.status === 'pending' && (
+                                <Button type="button" size="sm"
+                                  className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  disabled={!!advanceApproving[adv.id]}
+                                  onClick={() => approveAdvance(adv)}>
+                                  {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
+                                </Button>
+                              )}
+                              {adv.status === 'approved' && (
+                                <Button type="button" size="sm"
+                                  className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                                  disabled={!!advanceApproving[adv.id]}
+                                  onClick={() => markAdvancePaid(adv)}>
+                                  {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Mark Paid'}
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
-          {advances.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
-              <Wallet className="h-10 w-10 opacity-25" />
-              <p className="font-medium text-sm">{selectedCampaign?.project_id ? 'No advance requests yet' : 'No linked project'}</p>
-              <p className="text-xs text-center max-w-xs">
-                {selectedCampaign?.project_id
-                  ? 'Create the first advance request using the button above.'
-                  : 'Edit this campaign and link it to a project to enable advance requests.'}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>Description</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Site / Village</TableHead>
-                    <TableHead className="text-right">Requested (SDG)</TableHead>
-                    <TableHead className="text-right">Paid (SDG)</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {advances.map(a => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-xs">{a.description || '—'}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px]">{a.expense_category || '—'}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{a.site_name || '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">{Number(a.requested_amount).toLocaleString()}</TableCell>
-                      <TableCell className="text-right tabular-nums text-emerald-600">{a.total_paid_amount ? Number(a.total_paid_amount).toLocaleString() : '—'}</TableCell>
-                      <TableCell>
-                        <Badge className={`text-[10px] border-0 ${['approved','paid'].includes(a.status) ? 'bg-emerald-100 text-emerald-700' : a.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {a.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{fmtDate(a.created_at)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
         </TabsContent>
 
         {/* DAILY LOGS */}

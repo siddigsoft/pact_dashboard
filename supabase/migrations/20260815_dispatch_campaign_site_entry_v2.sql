@@ -1,13 +1,14 @@
--- Security-definer RPC for dispatching a campaign village site entry.
--- Only coordinator, admin, and superAdmin roles may dispatch.
--- The UPDATE is scoped to rows where dispatched_at IS NULL — entries that
--- have already been dispatched (and possibly claimed/completed) are
--- intentionally skipped so the lifecycle cannot be overwritten from the UI.
--- RETURNING id proves the row was actually updated; a NULL result means the
--- entry was not found, already dispatched, or in a non-dispatchable state.
+-- v2 of dispatch_campaign_site_entry: adds the Approved-and-Costed lifecycle guard.
+-- Environments where the v1 migration (20260813) already ran will receive this
+-- CREATE OR REPLACE and the guard will take effect immediately.
+--
+-- Lifecycle: pending → (approve_campaign_site_entry) → Approved and Costed
+--            → (dispatch_campaign_site_entry v2)      → Dispatched
+-- Pending entries cannot be dispatched directly; the RPC now rejects them with
+-- a clear error message so the UI surfaces the correct action to the user.
 
 CREATE OR REPLACE FUNCTION dispatch_campaign_site_entry(
-  p_site_id        uuid,
+  p_site_id         uuid,
   p_additional_data jsonb DEFAULT NULL
 )
 RETURNS jsonb
@@ -17,15 +18,24 @@ SET search_path = public
 AS $$
 DECLARE
   v_role        text;
+  v_normalized  text;
   v_now         timestamptz := now();
   v_updated_id  uuid;
 BEGIN
   -- ── Authorization ─────────────────────────────────────────────────────────
   SELECT role INTO v_role FROM profiles WHERE id = auth.uid();
 
-  -- Normalise: strip spaces, lowercase. Accepts superAdmin/super_admin/admin/coordinator.
-  IF LOWER(REPLACE(COALESCE(v_role, ''), ' ', '')) NOT IN (
-    'superadmin', 'super_admin', 'admin', 'coordinator'
+  -- Strip all non-alphanumeric characters and lowercase so variants like
+  -- 'superAdmin', 'super_admin', 'Admin', 'coordinator' all match.
+  v_normalized := LOWER(REGEXP_REPLACE(COALESCE(v_role, ''), '[^a-zA-Z0-9]', '', 'g'));
+
+  IF v_normalized NOT IN (
+    'superadmin',
+    'admin',
+    'coordinator',
+    'fom',
+    'fieldoperationmanager',
+    'fieldoperationmanagerfom'   -- 'Field Operation Manager (FOM)'
   ) THEN
     RETURN jsonb_build_object(
       'success', false,
@@ -33,10 +43,10 @@ BEGIN
     );
   END IF;
 
-  -- ── Dispatch (only if Approved and Costed, not yet dispatched) ───────────
-  -- Status precondition: entry must be 'Approved and Costed' before dispatch.
-  -- This closes the lifecycle bypass where a pending entry could be dispatched
-  -- directly via RPC, skipping the approval step.
+  -- ── Dispatch (only if Approved and Costed and not yet dispatched) ─────────
+  -- Lifecycle guard: entries must transition through approval before dispatch.
+  -- This prevents an authorized RPC caller from dispatching a pending entry
+  -- directly, bypassing the cost approval step.
   UPDATE mmp_site_entries
   SET
     status          = 'Dispatched',
@@ -52,17 +62,23 @@ BEGIN
 
   -- ── Result ────────────────────────────────────────────────────────────────
   IF v_updated_id IS NULL THEN
-    -- Distinguish "already dispatched" from "not approved yet" from "not found"
     IF EXISTS (
       SELECT 1 FROM mmp_site_entries WHERE id = p_site_id AND dispatched_at IS NOT NULL
     ) THEN
       RETURN jsonb_build_object('success', false, 'message', 'Already dispatched');
     ELSIF EXISTS (
-      SELECT 1 FROM mmp_site_entries WHERE id = p_site_id AND status != 'Approved and Costed'
+      SELECT 1 FROM mmp_site_entries
+      WHERE id = p_site_id AND status != 'Approved and Costed' AND dispatched_at IS NULL
     ) THEN
-      RETURN jsonb_build_object('success', false, 'message', 'Entry must be Approved and Costed before dispatch');
+      RETURN jsonb_build_object(
+        'success', false,
+        'message', 'Entry must be Approved and Costed before dispatch'
+      );
     ELSE
-      RETURN jsonb_build_object('success', false, 'message', 'Site entry not found or not in a dispatchable state');
+      RETURN jsonb_build_object(
+        'success', false,
+        'message', 'Site entry not found or not in a dispatchable state'
+      );
     END IF;
   END IF;
 
