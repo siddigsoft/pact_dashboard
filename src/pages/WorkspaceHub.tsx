@@ -1907,16 +1907,24 @@ export default function WorkspaceHub() {
     staleTime: 120_000,
   });
 
-  // ── Pending delete requests (for this user's folders, or all if super admin) ──
+  // ── Pending delete requests ───────────────────────────────────────────────
+  // Super admins and admins see every pending request.
+  // Regular users only see requests for folders they own (folder_owner_id = userId).
+  // Viewers and other non-admin, non-owner users receive an empty list.
   const { data: pendingDeleteRequests = [], refetch: refetchDeleteRequests } = useQuery<WDeleteRequest[]>({
-    queryKey: ['workspace_delete_requests', userId, isSuperAdmin],
+    queryKey: ['workspace_delete_requests', userId, isSuperAdmin, isAdmin],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let q = supabase
         .from('workspace_delete_requests')
         .select('*')
         .eq('status', 'pending')
         .order('requested_at', { ascending: false });
+      // Non-admins only see requests targeting folders they created
+      if (!isSuperAdmin && !isAdmin) {
+        q = q.eq('folder_owner_id', userId);
+      }
+      const { data, error } = await q;
       if (error || !data) return [];
       // Enrich with requester names
       const requesterIds = [...new Set(data.map((r: any) => r.requested_by).filter(Boolean))];
@@ -1930,7 +1938,8 @@ export default function WorkspaceHub() {
       }
       return data.map((r: any) => ({ ...r, _requesterName: nameMap[r.requested_by] ?? 'Unknown' })) as WDeleteRequest[];
     },
-    enabled: !!userId,
+    // Only run for admins or users who own at least one folder
+    enabled: !!userId && (isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)),
     staleTime: 30_000,
   });
 
@@ -3607,8 +3616,8 @@ export default function WorkspaceHub() {
                   <Key className="h-3.5 w-3.5" />
                 </button>
               )}
-              {/* Delete-request badge — visible to folder owners and super admins */}
-              {pendingDeleteRequests.length > 0 && (
+              {/* Delete-request badge — only admins and folder creators see this */}
+              {(isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)) && pendingDeleteRequests.length > 0 && (
                 <button
                   onClick={() => setDeleteReqPanelOpen(true)}
                   className="relative flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 transition-colors"
