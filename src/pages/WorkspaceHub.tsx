@@ -269,8 +269,10 @@ function UserPickerCombobox({ profiles, value, onChange }: {
   );
 }
 
-function ShareDialog({ file, folder, open, onClose, currentUserId }: {
+function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = true }: {
   file?: WFile; folder?: WFolder; open: boolean; onClose: () => void; currentUserId: string;
+  /** When false the dialog shows a read-only access list (folder owner view). */
+  canEdit?: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -371,8 +373,10 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 className="h-4 w-4 text-[#1D3461]" />
-            Share &amp; Permissions
+            {canEdit
+              ? <Share2 className="h-4 w-4 text-[#1D3461]" />
+              : <Users className="h-4 w-4 text-[#1D3461]" />}
+            {canEdit ? 'Share & Permissions' : 'Who Has Access'}
           </DialogTitle>
           <p className="text-sm text-muted-foreground truncate">{targetName}</p>
         </DialogHeader>
@@ -390,8 +394,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
             </div>
           )}
 
-          {/* Add new permission */}
-          <div className="border rounded-xl p-3 space-y-3">
+          {/* Add new permission — admin / editor only */}
+          {canEdit && <div className="border rounded-xl p-3 space-y-3">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Grant Access</p>
 
             <div className="grid grid-cols-2 gap-2">
@@ -454,7 +458,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
               Grant Permission
             </Button>
-          </div>
+          </div>}
 
           {/* Existing permissions */}
           {permissions.length > 0 && (
@@ -471,17 +475,33 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{granteeLabel(p)}</p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn('text-[10px] font-medium', aCfg.color)}>{aCfg.label}</span>
                         {p.expires_at && <span className={cn('text-[10px]', expired ? 'text-red-600' : 'text-muted-foreground')}>Exp: {fmtDate(p.expires_at)}</span>}
+                        {p.granted_by && (() => {
+                          const granter = profiles.find(x => x.id === p.granted_by);
+                          return <span className="text-[10px] text-muted-foreground/70">via {granter?.full_name ?? 'Admin'}</span>;
+                        })()}
                       </div>
                     </div>
-                    <button onClick={() => revokePermission(p.id)} className="p-1 rounded text-muted-foreground hover:text-red-600 transition-colors">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => revokePermission(p.id)} className="p-1 rounded text-muted-foreground hover:text-red-600 transition-colors">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Info note for read-only folder owners */}
+          {!canEdit && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-blue-50/60 border border-blue-100">
+              <Info className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                You can see who has been granted access to your folder. Contact a workspace admin to add or remove permissions.
+              </p>
             </div>
           )}
 
@@ -2625,7 +2645,7 @@ export default function WorkspaceHub() {
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
           {/* Hide management actions when user has an explicit viewer grant on this folder */}
-          {isAdmin && !viewerRestrictedFolderIds.has(folder.id) && (
+          {(isAdmin || folder.created_by === userId) && !viewerRestrictedFolderIds.has(folder.id) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                 <button className={cn('opacity-50 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0', isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-muted text-muted-foreground')}>
@@ -2633,20 +2653,30 @@ export default function WorkspaceHub() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs" onClick={e => e.stopPropagation()}>
-                {canRenameFolder(folder) && (
+                {/* Admin-only actions */}
+                {isAdmin && canRenameFolder(folder) && (
                   <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
                     <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
-                  <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
-                  <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
-                  <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
+                    <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
+                    <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                  </DropdownMenuItem>
+                )}
+                {/* Share — full edit for admins, read-only for non-admin owners */}
+                {isAdmin
+                  ? <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
+                      <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
+                    </DropdownMenuItem>
+                  : <DropdownMenuItem onClick={() => setShareFolderTarget(folder)}>
+                      <Users className="h-3.5 w-3.5 mr-2 text-blue-500" />Who Has Access
+                    </DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 {(isSuperAdmin || folder.created_by === userId) && (
                   <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -2656,8 +2686,8 @@ export default function WorkspaceHub() {
                       : 'Set Password'}
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
-                <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
+                {isAdmin && <DropdownMenuSeparator />}
+                {isAdmin && <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />}
                 <DropdownMenuSeparator />
                 {isSuperAdmin ? (
                   <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(folder)}>
@@ -3377,9 +3407,10 @@ export default function WorkspaceHub() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-4 flex-wrap justify-end">
-                {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
+                {(isAdmin || selectedFolder?.created_by === userId) && selectedFolderId && !['__pinned__', '__recent__', '__mine__', '__trash__', '__task_docs__', '__all__'].includes(selectedFolderId ?? '') && (
                   <button className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#0f1422] border border-blue-100 dark:border-blue-900 rounded-lg px-3 py-1.5 hover:bg-blue-50/60 dark:hover:bg-blue-950/40 active:scale-[0.98] transition-all" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
-                    <Share2 className="h-3 w-3" /> Share
+                    {isAdmin ? <Share2 className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+                    {isAdmin ? ' Share' : ' Who has access'}
                   </button>
                 )}
                 <Select value={typeFilter} onValueChange={v => setTypeFilter(v as any)}>
@@ -4125,7 +4156,7 @@ export default function WorkspaceHub() {
           <ShareDialog file={shareFileTarget} open={!!shareFileTarget} onClose={() => setShareFileTarget(null)} currentUserId={userId} />
         )}
         {shareFolderTarget && (
-          <ShareDialog folder={shareFolderTarget} open={!!shareFolderTarget} onClose={() => setShareFolderTarget(null)} currentUserId={userId} />
+          <ShareDialog folder={shareFolderTarget} open={!!shareFolderTarget} onClose={() => setShareFolderTarget(null)} currentUserId={userId} canEdit={isSuperAdmin || isAdmin} />
         )}
 
         {/* ── Password Unlock Prompt ────────────────────────────────────── */}
