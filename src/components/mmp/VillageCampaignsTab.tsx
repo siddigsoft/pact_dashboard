@@ -683,7 +683,20 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
       })
       .select('id')
       .single();
-    if (error) { console.error('[site_entry] create error:', error.message); return; }
+    if (error) {
+      // 23502 = NOT NULL violation — the DB still has the old schema.
+      // Show a clear, copy-paste-ready fix so the admin knows exactly what to run.
+      if ((error as any).code === '23502' && error.message?.includes('mmp_file_id')) {
+        toast({
+          title: 'Database setup required',
+          description: 'Village Campaigns need a one-time schema fix. Run this in Supabase SQL Editor:\n\nALTER TABLE public.mmp_site_entries ALTER COLUMN mmp_file_id DROP NOT NULL;',
+          variant: 'destructive',
+          duration: 20000,
+        });
+      }
+      console.error('[site_entry] create error:', error.message);
+      return;
+    }
     if (entry?.id) {
       await supabase
         .from('adhoc_village_teams')
