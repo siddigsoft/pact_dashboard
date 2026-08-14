@@ -70,7 +70,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     const isHmrRace = /must be used within/i.test(msg) ||
                       /cannot access .+ before initialization/i.test(msg) ||
                       /cannot read propert(?:y|ies) of null/i.test(msg);
-    if (isHmrRace) {
+    // Only auto-reload when NO custom fallback is provided.
+    // A caller-supplied fallback means the error is handled gracefully —
+    // reloading would discard that handling and silently reset the UI.
+    if (isHmrRace && !this.props.fallback) {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
       const now = Date.now();
