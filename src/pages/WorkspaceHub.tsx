@@ -3356,19 +3356,29 @@ export default function WorkspaceHub() {
       : (mime.includes('zip') || mime.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(fext)) ? '#f59e0b'
       : '#64748b';
     const vl = (file.version_label ?? '').toLowerCase();
+    // Use the effective security level: raise the file's own level to the ancestor
+    // folder floor when it's lower — because folder-level access gates mean the file
+    // is effectively at least as sensitive as its containing folder.
+    const effectiveSec: SecurityLevel =
+      CLEARANCE_ORDER[file.security_level] >= CLEARANCE_ORDER[ancestorSecFloor]
+        ? file.security_level
+        : ancestorSecFloor;
     const statusLabel = vl.includes('final') ? 'Final'
       : vl.includes('draft') ? 'Draft'
       : vl.includes('review') ? 'Review'
-      : file.security_level === 'public' ? 'Active'
-      : file.security_level === 'internal' ? 'Internal'
-      : file.security_level === 'confidential' ? 'Confidential'
-      : 'Restricted';
+      : effectiveSec === 'public' ? 'Active'
+      : effectiveSec === 'internal' ? 'Internal'
+      : effectiveSec === 'confidential' ? 'Confidential'
+      : effectiveSec === 'restricted' ? 'Restricted'
+      : 'Top Secret';
     const statusCls = statusLabel === 'Final' || statusLabel === 'Active'
       ? 'bg-green-100 text-green-700'
       : statusLabel === 'Draft'
       ? 'bg-yellow-100 text-yellow-700'
       : statusLabel === 'Review' || statusLabel === 'Internal'
       ? 'bg-blue-100 text-blue-700'
+      : statusLabel === 'Top Secret'
+      ? 'bg-red-100 text-red-700'
       : 'bg-orange-100 text-orange-700';
     return (
       <tr onClick={() => openFile(file)}
