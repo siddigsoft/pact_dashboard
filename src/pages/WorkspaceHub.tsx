@@ -2186,6 +2186,29 @@ export default function WorkspaceHub() {
         file_id: previewFile.id, user_id: userId, action: 'commented', metadata: {},
       });
       await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', previewFile.id);
+
+      // ── @mention notifications ──────────────────────────────────────────
+      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
+      if (mentionMatches.length > 0) {
+        const names = [...new Set(mentionMatches.map(m => m[1].trim().toLowerCase()))];
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', userId);
+        const mentioned = (profs ?? []).filter(p => names.some(n => p.full_name?.toLowerCase().includes(n)));
+        if (mentioned.length > 0) {
+          await insertNotificationsToDb(
+            mentioned.map(p => ({
+              recipient_id: p.id,
+              user_id: p.id,
+              title_en: 'You were mentioned in a file comment',
+              message_en: `Someone mentioned you in a comment on "${previewFile.name}": ${content.substring(0, 100)}`,
+              event_type: 'mention',
+              type: 'mention',
+              action_url: '/workspace',
+              is_read: false,
+            }))
+          );
+        }
+      }
+
       setPreviewComment('');
       refetchPreviewComments();
     } catch (e: any) {
