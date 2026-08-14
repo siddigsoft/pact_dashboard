@@ -210,6 +210,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
   const [projects, setProjects]   = useState<ProjectOption[]>([]);
   const [allTeams, setAllTeams]   = useState<Team[]>([]);
   const [loading, setLoading]     = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // ── Campaigns ─────────────────────────────────────────────────────────────
   const [campaigns, setCampaigns]       = useState<Campaign[]>([]);
@@ -332,6 +333,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from('adhoc_campaigns')
@@ -347,6 +349,14 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           project_name:     c.project?.name          || '—',
         }))
       );
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      // Surface migration-not-applied errors clearly
+      if (msg.includes('does not exist') || msg.includes('relation') || msg.includes('undefined_table')) {
+        setLoadError('Database tables for Village Campaigns are not yet created. An admin must apply the migration in the Supabase SQL Editor — see supabase/RUNBOOK_village_campaigns.md for instructions.');
+      } else {
+        setLoadError(`Failed to load campaigns: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -1372,7 +1382,28 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
         </div>
 
         {/* Campaign Cards */}
-        {loading ? (
+        {loadError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-semibold text-sm text-destructive">Village Campaigns tables not found</p>
+                <p className="text-sm text-muted-foreground">{loadError}</p>
+              </div>
+            </div>
+            <div className="pl-8 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium">To fix:</p>
+              <ol className="list-decimal list-inside space-y-0.5">
+                <li>Open <strong>Supabase Dashboard → SQL Editor</strong></li>
+                <li>Paste and run <code className="bg-muted px-1 rounded">supabase/migrations/20260812_village_campaigns_safe_rerun.sql</code></li>
+                <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_village_campaigns_rls_patch.sql</code></li>
+                <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_village_campaign_site_entries.sql</code></li>
+                <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_advance_requests_campaign_id.sql</code></li>
+              </ol>
+              <p className="pt-1">Full instructions: <code className="bg-muted px-1 rounded">supabase/RUNBOOK_village_campaigns.md</code></p>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
             <Loader2 className="h-5 w-5 animate-spin" /> Loading campaigns…
           </div>
