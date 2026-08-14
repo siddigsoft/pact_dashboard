@@ -4734,7 +4734,14 @@ export default function WorkspaceHub() {
                       {previewComments.filter(c => !c.resolved).length}
                     </button>
                   )}
-                  <SecBadge level={previewFile.security_level} size="xs" />
+                  <SecBadge
+                    level={
+                      CLEARANCE_ORDER[previewFile.security_level] >= CLEARANCE_ORDER[ancestorSecFloor]
+                        ? previewFile.security_level
+                        : ancestorSecFloor
+                    }
+                    size="xs"
+                  />
                 </div>
               </div>
 
