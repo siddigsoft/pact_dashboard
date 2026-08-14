@@ -1274,11 +1274,25 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
       await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
 
       // ── @mention notifications ─────────────────────────────────────────
-      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
+      // Regex captures one or more capitalised words after @, e.g. @John or @John Smith.
+      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z]*(?:\s+[A-Za-z][A-Za-z]*)*)/g)];
       if (mentionMatches.length > 0) {
-        const names = [...new Set(mentionMatches.map(m => m[1].trim().toLowerCase()))];
+        const mentionTokenSets = mentionMatches.map(m =>
+          m[1].trim().toLowerCase().split(/\s+/)
+        );
         const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', currentUserId);
-        const mentioned = (profs ?? []).filter(p => names.some(n => p.full_name?.toLowerCase().includes(n)));
+        // A profile matches only when EVERY token in the mention phrase matches
+        // at least one whitespace-delimited word in the profile's full_name.
+        // e.g. "@Ann" → token ["ann"] — matches "Ann Ali" but NOT "Annabelle" or "Shannon".
+        // e.g. "@John Smith" → tokens ["john","smith"] — must both appear as name words.
+        const nameMatches = (fullName: string | null, tokens: string[]) => {
+          if (!fullName) return false;
+          const nameWords = fullName.toLowerCase().split(/\s+/);
+          return tokens.every(tok => nameWords.some(w => w === tok));
+        };
+        const mentioned = (profs ?? []).filter(p =>
+          mentionTokenSets.some(tokens => nameMatches(p.full_name, tokens))
+        );
         if (mentioned.length > 0) {
           await insertNotificationsToDb(
             mentioned.map(p => ({
@@ -2204,11 +2218,23 @@ export default function WorkspaceHub() {
       await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
 
       // ── @mention notifications ──────────────────────────────────────────
-      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
+      // Regex captures one or more capitalised words after @, e.g. @John or @John Smith.
+      const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z]*(?:\s+[A-Za-z][A-Za-z]*)*)/g)];
       if (mentionMatches.length > 0) {
-        const names = [...new Set(mentionMatches.map(m => m[1].trim().toLowerCase()))];
+        const mentionTokenSets = mentionMatches.map(m =>
+          m[1].trim().toLowerCase().split(/\s+/)
+        );
         const { data: profs } = await supabase.from('profiles').select('id, full_name').neq('id', userId);
-        const mentioned = (profs ?? []).filter(p => names.some(n => p.full_name?.toLowerCase().includes(n)));
+        // A profile matches only when EVERY token in the mention phrase matches
+        // at least one whitespace-delimited word in the profile's full_name.
+        const nameMatches = (fullName: string | null, tokens: string[]) => {
+          if (!fullName) return false;
+          const nameWords = fullName.toLowerCase().split(/\s+/);
+          return tokens.every(tok => nameWords.some(w => w === tok));
+        };
+        const mentioned = (profs ?? []).filter(p =>
+          mentionTokenSets.some(tokens => nameMatches(p.full_name, tokens))
+        );
         if (mentioned.length > 0) {
           await insertNotificationsToDb(
             mentioned.map(p => ({
