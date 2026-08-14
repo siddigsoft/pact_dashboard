@@ -1412,6 +1412,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
                 <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_village_campaigns_rls_patch.sql</code></li>
                 <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_village_campaign_site_entries.sql</code></li>
                 <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260813_advance_requests_campaign_id.sql</code></li>
+                <li>Then run <code className="bg-muted px-1 rounded">supabase/migrations/20260814_mmp_site_entries_nullable_mmp_file_id.sql</code></li>
               </ol>
               <p className="pt-1">Full instructions: <code className="bg-muted px-1 rounded">supabase/RUNBOOK_village_campaigns.md</code></p>
             </div>
