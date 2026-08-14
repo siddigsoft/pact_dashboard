@@ -1214,6 +1214,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [showResolvedDP, setShowResolvedDP] = useState(false);
 
   // Auto-open share dialog when external signal matches this file
   useEffect(() => {
@@ -1293,6 +1294,12 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
       setComment(''); refetchComments();
     } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
     finally { setSubmitting(false); }
+  }
+
+  async function resolveComment(id: string, resolved: boolean) {
+    const { error } = await supabase.from('workspace_comments').update({ resolved }).eq('id', id);
+    if (error) { toast({ title: 'Failed to update comment', description: error.message, variant: 'destructive' }); return; }
+    refetchComments();
   }
 
   async function downloadFile() {
@@ -1378,7 +1385,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         <TabsList className="w-full rounded-none border-b bg-transparent h-9 px-4 justify-start gap-0">
           {[
             { id: 'info', label: 'Info', icon: Info },
-            { id: 'comments', label: `Comments${comments.length > 0 ? ` (${comments.length})` : ''}`, icon: MessageSquare },
+            { id: 'comments', label: `Comments${comments.filter(c => !c.resolved).length > 0 ? ` (${comments.filter(c => !c.resolved).length})` : ''}`, icon: MessageSquare },
             { id: 'versions', label: 'Versions', icon: History },
             { id: 'activity', label: 'Activity', icon: Activity },
           ].map(t => (
@@ -1417,27 +1424,84 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         {/* Comments tab */}
         <TabsContent value="comments" className="flex-1 flex flex-col min-h-0 mt-0">
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {comments.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
-                <MessageSquare className="h-8 w-8 opacity-30" />
-                <p className="text-xs">No comments yet</p>
-              </div>
-            ) : (
-              comments.map(c => (
-                <div key={c.id} className="flex gap-2">
-                  <div className="h-6 w-6 rounded-full bg-[#1D3461]/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461]">
-                    {(c._authorName ?? '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[11px] font-semibold">{c._authorName}</span>
-                      <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
-                    </div>
-                    <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2">{c.content}</p>
-                  </div>
+            {(() => {
+              const activeComments = comments.filter(c => !c.resolved);
+              const resolvedComments = comments.filter(c => c.resolved);
+              if (comments.length === 0) return (
+                <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
+                  <MessageSquare className="h-8 w-8 opacity-30" />
+                  <p className="text-xs">No comments yet</p>
                 </div>
-              ))
-            )}
+              );
+              return (
+                <>
+                  {activeComments.length === 0 && resolvedComments.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground text-center py-1">All comments resolved</p>
+                  )}
+                  {activeComments.map(c => (
+                    <div key={c.id} className="flex gap-2 group">
+                      <div className="h-6 w-6 rounded-full bg-[#1D3461]/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461]">
+                        {(c._authorName ?? '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[11px] font-semibold">{c._authorName}</span>
+                          <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                          <button
+                            type="button"
+                            title="Mark resolved"
+                            onClick={() => resolveComment(c.id, true)}
+                            className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-emerald-600 transition-all"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2 break-words">{c.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {resolvedComments.length > 0 && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowResolvedDP(s => !s)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                      >
+                        {showResolvedDP
+                          ? <><ChevronDown className="h-3 w-3" />Hide {resolvedComments.length} resolved</>
+                          : <><ChevronRight className="h-3 w-3" />Show {resolvedComments.length} resolved</>}
+                      </button>
+                      {showResolvedDP && (
+                        <div className="mt-2 space-y-2 opacity-60">
+                          {resolvedComments.map(c => (
+                            <div key={c.id} className="flex gap-2 group">
+                              <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-emerald-700">
+                                {(c._authorName ?? '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-[11px] font-semibold line-through">{c._authorName}</span>
+                                  <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                  <button
+                                    type="button"
+                                    title="Re-open"
+                                    onClick={() => resolveComment(c.id, false)}
+                                    className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-blue-600 transition-all"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <p className="text-xs mt-0.5 bg-muted/30 rounded-lg px-2.5 py-2 line-through text-muted-foreground break-words">{c.content}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div className="p-3 border-t flex gap-2">
             <Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a comment… (use @Name to notify someone)" className="text-xs min-h-[60px] resize-none" onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitComment(); }} />
@@ -1728,6 +1792,7 @@ export default function WorkspaceHub() {
   const [previewCommentsOpen, setPreviewCommentsOpen] = useState(true);
   const [previewComment, setPreviewComment] = useState('');
   const [previewCommentSubmitting, setPreviewCommentSubmitting] = useState(false);
+  const [showResolvedPV, setShowResolvedPV] = useState(false);
   // Read the stored id NOW, at render time, before any effects run.
   // This captures the value before the mount-time persist effect could wipe it.
   const pendingPreviewIdRef = useRef<string | null>(
@@ -2056,6 +2121,7 @@ export default function WorkspaceHub() {
     if (previewFile) {
       setPreviewComment('');         // clear draft
       setPreviewCommentsOpen(true);  // always start expanded for a new file
+      setShowResolvedPV(false);      // hide resolved on file switch
     }
   }, [previewFile?.id]);
 
@@ -2117,6 +2183,13 @@ export default function WorkspaceHub() {
     } finally {
       setPreviewCommentSubmitting(false);
     }
+  }
+
+  // ── Preview pane: resolve / reopen comment ───────────────────────────────
+  async function resolvePreviewComment(id: string, resolved: boolean) {
+    const { error } = await supabase.from('workspace_comments').update({ resolved }).eq('id', id);
+    if (error) { toast({ title: 'Failed to update comment', description: error.message, variant: 'destructive' }); return; }
+    refetchPreviewComments();
   }
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
@@ -4327,13 +4400,13 @@ export default function WorkspaceHub() {
                   <span>{previewFile._uploaderName}</span>
                 </>)}
                 <div className="flex items-center gap-2 ml-auto">
-                  {previewComments.length > 0 && (
+                  {previewComments.filter(c => !c.resolved).length > 0 && (
                     <button
                       onClick={() => setPreviewCommentsOpen(o => !o)}
                       className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                     >
                       <MessageSquare className="h-3 w-3" />
-                      {previewComments.length}
+                      {previewComments.filter(c => !c.resolved).length}
                     </button>
                   )}
                   <SecBadge level={previewFile.security_level} size="xs" />
@@ -4443,9 +4516,9 @@ export default function WorkspaceHub() {
                       <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="flex-1 text-xs font-semibold text-left text-foreground">
                         Comments
-                        {previewComments.length > 0 && (
+                        {previewComments.filter(c => !c.resolved).length > 0 && (
                           <span className="ml-1.5 text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full font-bold">
-                            {previewComments.length}
+                            {previewComments.filter(c => !c.resolved).length}
                           </span>
                         )}
                       </span>
@@ -4457,24 +4530,83 @@ export default function WorkspaceHub() {
                       <div className="flex flex-col" style={{ maxHeight: 230 }}>
                         {/* Comment list */}
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 min-h-0">
-                          {previewComments.length === 0 ? (
-                            <p className="text-[11px] text-muted-foreground text-center py-2 leading-relaxed">
-                              No comments yet
-                            </p>
-                          ) : previewComments.map(c => (
-                            <div key={c.id} className="flex gap-2">
-                              <div className="h-6 w-6 rounded-full bg-[#1D3461]/10 dark:bg-[#1D3461]/30 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461] dark:text-blue-300">
-                                {(c._authorName ?? '?')[0].toUpperCase()}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-baseline gap-1.5 flex-wrap">
-                                  <span className="text-[11px] font-semibold text-foreground">{c._authorName}</span>
-                                  <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
-                                </div>
-                                <p className="text-[11px] text-foreground/80 leading-relaxed mt-0.5 break-words">{c.content}</p>
-                              </div>
-                            </div>
-                          ))}
+                          {(() => {
+                            const activePV = previewComments.filter(c => !c.resolved);
+                            const resolvedPV = previewComments.filter(c => c.resolved);
+                            if (previewComments.length === 0) return (
+                              <p className="text-[11px] text-muted-foreground text-center py-2 leading-relaxed">
+                                No comments yet
+                              </p>
+                            );
+                            return (
+                              <>
+                                {activePV.length === 0 && (
+                                  <p className="text-[11px] text-muted-foreground text-center py-1">All comments resolved</p>
+                                )}
+                                {activePV.map(c => (
+                                  <div key={c.id} className="flex gap-2 group">
+                                    <div className="h-6 w-6 rounded-full bg-[#1D3461]/10 dark:bg-[#1D3461]/30 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#1D3461] dark:text-blue-300">
+                                      {(c._authorName ?? '?')[0].toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                                        <span className="text-[11px] font-semibold text-foreground">{c._authorName}</span>
+                                        <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                        <button
+                                          type="button"
+                                          title="Mark resolved"
+                                          onClick={() => resolvePreviewComment(c.id, true)}
+                                          className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-emerald-600 transition-all"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                      <p className="text-[11px] text-foreground/80 leading-relaxed mt-0.5 break-words">{c.content}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                                {resolvedPV.length > 0 && (
+                                  <div className="pt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowResolvedPV(s => !s)}
+                                      className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                                    >
+                                      {showResolvedPV
+                                        ? <><ChevronDown className="h-3 w-3" />Hide {resolvedPV.length} resolved</>
+                                        : <><ChevronRight className="h-3 w-3" />Show {resolvedPV.length} resolved</>}
+                                    </button>
+                                    {showResolvedPV && (
+                                      <div className="mt-1.5 space-y-2 opacity-60">
+                                        {resolvedPV.map(c => (
+                                          <div key={c.id} className="flex gap-2 group">
+                                            <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-emerald-700">
+                                              {(c._authorName ?? '?')[0].toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                                <span className="text-[11px] font-semibold text-foreground line-through">{c._authorName}</span>
+                                                <span className="text-[10px] text-muted-foreground">{fmtRelative(c.created_at)}</span>
+                                                <button
+                                                  type="button"
+                                                  title="Re-open"
+                                                  onClick={() => resolvePreviewComment(c.id, false)}
+                                                  className="opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 p-0.5 rounded text-muted-foreground hover:text-blue-600 transition-all"
+                                                >
+                                                  <RotateCcw className="h-3 w-3" />
+                                                </button>
+                                              </div>
+                                              <p className="text-[11px] leading-relaxed mt-0.5 break-words line-through text-muted-foreground">{c.content}</p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {/* Compose area */}
                         <div className="flex-shrink-0 px-3 pb-3 pt-1 border-t border-border/50 flex gap-2 items-end">
