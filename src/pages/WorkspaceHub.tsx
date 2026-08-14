@@ -2763,10 +2763,18 @@ export default function WorkspaceHub() {
       return;
     }
 
-    // 2. Update every file that lives inside any of those folders
-    const fileIds = allFiles
-      .filter(f => f.folder_id && allFolderIds.includes(f.folder_id))
-      .map(f => f.id);
+    // 2. Update every file that lives inside any of those folders.
+    // Query the DB directly rather than filtering React state (which can be
+    // stale due to the 300s staleTime on the workspace_files query).
+    const { data: filesInFolders, error: filesFetchErr } = await supabase
+      .from('workspace_files')
+      .select('id')
+      .in('folder_id', allFolderIds)
+      .eq('archived', false);
+    if (filesFetchErr) {
+      toast({ title: 'Folders updated but could not fetch files', description: filesFetchErr.message, variant: 'destructive' });
+    }
+    const fileIds = (filesInFolders ?? []).map((f: { id: string }) => f.id);
     if (fileIds.length > 0) {
       const { error: fileErr } = await supabase
         .from('workspace_files')
@@ -2777,8 +2785,7 @@ export default function WorkspaceHub() {
       }
     }
 
-    refetchFolders();
-    refetchFiles();
+    await Promise.all([refetchFolders(), refetchFiles()]);
     const subCount = allFolderIds.length - 1;
     toast({
       title: 'Security level updated',
