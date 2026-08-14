@@ -1,5 +1,6 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import {
   Loader2, BookOpen, ShoppingCart, Shield, TrendingUp, LayoutDashboard,
   BarChart3, Receipt, FileText, Landmark, BarChart, Package, Zap, Lock,
@@ -488,13 +489,26 @@ function PanelLoader() {
 
 export default function AccountingHub() {
   const [params, setParams] = useSearchParams();
+  const { isTabBlocked } = useCurrentUserAccess();
 
-  const allTabs = SECTIONS.flatMap(s => s.tabs);
+  // Filter tabs by per-user override (Accounting is role-gated at the page level)
+  const visibleSections = useMemo(() =>
+    SECTIONS
+      .map(s => ({
+        ...s,
+        tabs: s.tabs.filter(t => !isTabBlocked(`accounting:${t.id}`)),
+      }))
+      .filter(s => s.tabs.length > 0),
+    [isTabBlocked],
+  );
+
+  const allVisibleTabs = useMemo(() => visibleSections.flatMap(s => s.tabs), [visibleSections]);
   const rawTab = params.get('tab') ?? '';
-  const tabDef = allTabs.find(t => t.id === rawTab);
   const _savedAcct = localStorage.getItem('hub_last_tab_accounting') as AcctTab | null;
-  const _defaultAcct: AcctTab = (_savedAcct && allTabs.some(t => t.id === _savedAcct)) ? _savedAcct : 'finance-dashboard';
-  const tab: AcctTab = tabDef ? (rawTab as AcctTab) : _defaultAcct;
+  const _defaultAcct: AcctTab =
+    (_savedAcct && allVisibleTabs.some(t => t.id === _savedAcct)) ? _savedAcct
+    : (allVisibleTabs[0]?.id as AcctTab ?? 'finance-dashboard');
+  const tab: AcctTab = allVisibleTabs.find(t => t.id === rawTab) ? (rawTab as AcctTab) : _defaultAcct;
 
   const setTab = (t: AcctTab) => { localStorage.setItem('hub_last_tab_accounting', t); setParams({ tab: t }, { replace: true }); };
 
@@ -503,8 +517,9 @@ export default function AccountingHub() {
   }, [rawTab, tab]);
 
   const section = sectionOfTab(tab);
-  const currentSection = SECTIONS.find(s => s.id === section)!;
-  const activeTabDef = allTabs.find(t => t.id === tab)!;
+  const currentSection = visibleSections.find(s => s.id === section) ?? visibleSections[0] ?? SECTIONS[0];
+  const allTabs = SECTIONS.flatMap(s => s.tabs);
+  const activeTabDef = allTabs.find(t => t.id === tab) ?? allTabs[0];
   const accent = currentSection.color;
 
   return (
@@ -512,7 +527,7 @@ export default function AccountingHub() {
       title="Accounting"
       subtitle="Core Ledger · Financial Operations · P2P · Controls · Advanced"
       hubIcon={BookOpen}
-      sections={SECTIONS}
+      sections={visibleSections}
       activeSectionId={section}
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}

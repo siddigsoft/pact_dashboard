@@ -63,6 +63,10 @@ interface WFolder {
   short_code?: string | null;
   _childCount?: number; _fileCount?: number;
 }
+
+function generateShortCode(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+}
 interface PasswordTarget {
   id: string; name: string; password_hash: string | null; isFolder: boolean;
 }
@@ -759,11 +763,16 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
   folderId: string | null; folderName: string;
   /** Pre-selects the security level to match the destination folder. Defaults to 'internal'. */
   folderSecurityLevel?: SecurityLevel;
   open: boolean; onClose: () => void;
+=======
+function UploadDialog({ folderId, folderName, folderPath, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
+  folderId: string | null; folderName: string; folderPath: string; open: boolean; onClose: () => void;
+>>>>>>> 220e0ac2d8e303d219a80e888fa702af35a925b5
   currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
   existingFiles?: WFile[];
 }) {
@@ -901,13 +910,14 @@ function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', 
           const parentPath = parts.slice(0, -1).join('/');
           targetFolderId = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId;
         }
-        // New uploads go to Cloudflare R2; the edge function generates the key
-        // under the caller's user-id prefix (see supabase/functions/r2-sign).
+        // Snapshot Hub folder path into the R2 key (see supabase/functions/r2-sign).
         const shouldExtract = extractZips && isZipFile(f);
         if (shouldExtract && f.size > MAX_ZIP_BYTES) {
           throw new Error(`"${f.name}" exceeds the 100MB ZIP extract limit. Upload without extract, or split the archive.`);
         }
-        const { key: path } = await withTimeout(r2Upload(f), 600000);
+        const relDirs = isFolderUpload ? relativePath.split('/').slice(0, -1).join('/') : '';
+        const snapshotPath = [folderPath, relDirs].filter(Boolean).join('/') || 'Hub';
+        const { key: path } = await withTimeout(r2Upload(f, { folderPath: snapshotPath }), 600000);
         pendingOrphanPaths.push(path);
         // Apply duplicate rename resolution if needed
         const dupEntry = duplicates.find(d => d.file === f || (d.file.name === f.name && d.file.size === f.size));
@@ -5095,7 +5105,11 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
+<<<<<<< HEAD
           folderSecurityLevel={selectedFolder?.security_level ?? 'internal'}
+=======
+          folderPath={breadcrumbs.map(f => f.name).join('/') || 'Hub'}
+>>>>>>> 220e0ac2d8e303d219a80e888fa702af35a925b5
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
           initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Loader2, LayoutDashboard, FolderOpen, GitBranch, RotateCcw, Settings2, Banknote, FileBarChart2, Users, SendHorizonal } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 const OverviewPanel        = lazy(() => import('./PreFundingOverview'));
 const RegistryPanel        = lazy(() => import('./PreFundingRegistry'));
@@ -103,6 +104,7 @@ const STAFF_TABS: PFTab[]    = ['overview', 'allocations', 'distribute', 'report
 export default function PreFundingHub() {
   const { hasAnyRole } = useAuthorization();
   const [params, setParams] = useSearchParams();
+  const { isTabBlocked } = useCurrentUserAccess();
 
   const isFinanceAdmin   = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
   const isCD             = hasAnyRole(['countryDirector']);
@@ -116,11 +118,13 @@ export default function PreFundingHub() {
         ? APPROVER_TABS
         : STAFF_TABS;
 
-  // Build a filtered version of SECTIONS for the HubLayout sidebar
+  // Build a filtered version of SECTIONS for the HubLayout sidebar (role + per-user override)
   const visibleSections = useMemo(() => SECTIONS.map(sec => ({
     ...sec,
-    tabs: sec.tabs.filter(t => allowedTabs.includes(t.id as PFTab)),
-  })).filter(sec => sec.tabs.length > 0), [isFinanceAdmin, isApproverRole]);
+    tabs: sec.tabs.filter(t =>
+      allowedTabs.includes(t.id as PFTab) && !isTabBlocked(`pre-funding:${t.id}`)
+    ),
+  })).filter(sec => sec.tabs.length > 0), [isFinanceAdmin, isApproverRole, isTabBlocked]);
 
   const rawTab = params.get('tab') ?? '';
   const savedTab = localStorage.getItem(LS_KEY) as PFTab | null;

@@ -403,7 +403,7 @@ export default function TaskDetail() {
       const uploaded: OutputFile[] = [];
       const failures: string[] = [];
       for (const f of files) {
-        const { key } = await r2Upload(f);
+        const { key } = await r2Upload(f, { folderPath: `Tasks/${String(task?.title ?? 'Untitled').trim() || 'Untitled'}` });
         uploaded.push({
           name: f.name,
           url: toR2Ref(key),

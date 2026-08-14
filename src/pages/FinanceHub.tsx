@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Loader2, TrendingUp, FileText, Info,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { cn } from '@/lib/utils';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
 // ── Lazy panels ───────────────────────────────────────────────────────────────
 const BudgetPanel              = lazy(() => import('./Budget'));
@@ -125,13 +126,26 @@ function PanelLoader() {
 
 export default function FinanceHub() {
   const [params, setParams] = useSearchParams();
+  const { isTabBlocked } = useCurrentUserAccess();
 
-  const allTabs = SECTIONS.flatMap(s => s.tabs);
+  // Filter tabs by per-user override (role-based: Finance Hub is already role-gated at the page level)
+  const visibleSections = useMemo(() =>
+    SECTIONS
+      .map(s => ({
+        ...s,
+        tabs: s.tabs.filter(t => !isTabBlocked(`finance-hub:${t.id}`)),
+      }))
+      .filter(s => s.tabs.length > 0),
+    [isTabBlocked],
+  );
+
+  const allVisibleTabs = useMemo(() => visibleSections.flatMap(s => s.tabs), [visibleSections]);
   const rawTab = params.get('tab') ?? '';
-  const tabDef = allTabs.find(t => t.id === rawTab);
   const _savedFin = localStorage.getItem('hub_last_tab_finance') as FinTab | null;
-  const _defaultFin: FinTab = (_savedFin && allTabs.some(t => t.id === _savedFin)) ? _savedFin : 'budget';
-  const tab: FinTab = tabDef ? (rawTab as FinTab) : _defaultFin;
+  const _defaultFin: FinTab =
+    (_savedFin && allVisibleTabs.some(t => t.id === _savedFin)) ? _savedFin
+    : (allVisibleTabs[0]?.id as FinTab ?? 'budget');
+  const tab: FinTab = allVisibleTabs.find(t => t.id === rawTab) ? (rawTab as FinTab) : _defaultFin;
 
   const setTab = (t: FinTab) => { localStorage.setItem('hub_last_tab_finance', t); setParams({ tab: t }, { replace: true }); };
 
@@ -140,8 +154,8 @@ export default function FinanceHub() {
   }, [rawTab, tab]);
 
   const section = sectionOfTab(tab);
-  const currentSection = SECTIONS.find(s => s.id === section)!;
-  const activeTabDef = allTabs.find(t => t.id === tab)!;
+  const allTabs = SECTIONS.flatMap(s => s.tabs);
+  const activeTabDef = allVisibleTabs.find(t => t.id === tab) ?? allTabs.find(t => t.id === tab) ?? allTabs[0];
 
   const activeSectionFirstTab = (s: SectionDef) => s.tabs[0].id;
 
@@ -150,7 +164,7 @@ export default function FinanceHub() {
       title="Finance Hub"
       subtitle="Operations · Reports"
       hubIcon={DollarSign}
-      sections={SECTIONS}
+      sections={visibleSections}
       activeSectionId={section}
       activeTabId={tab}
       activeTabDescription={activeTabDef.description}

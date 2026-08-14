@@ -15,9 +15,10 @@ async function sign(action: string, payload: Record<string, unknown>): Promise<a
   return data;
 }
 
-/** Uploads a file to R2. Returns the object key to store as storage_path. */
-export async function r2Upload(file: File): Promise<{ key: string }> {
-  const { key, url } = await sign('sign-upload', { fileName: file.name });
+/** Uploads a file to R2. Returns the object key to store as storage_path.
+ *  Pass folderPath (Hub breadcrumb) so the R2 key is a labeled snapshot. */
+export async function r2Upload(file: File, opts?: { folderPath?: string }): Promise<{ key: string }> {
+  const { key, url } = await sign('sign-upload', { fileName: file.name, folderPath: opts?.folderPath });
   // Presigned URL signs only `host` (see r2-sign). Do NOT send Content-Type —
   // an unsigned Content-Type header makes R2 return 401 SignatureDoesNotMatch,
   // which browsers then surface as a misleading CORS failure.

@@ -2,7 +2,7 @@
  * r2-extract — unpack a .zip already stored in R2 into workspace folders/files.
  *
  * Body (POST JSON):
- *   zipKey         string   R2 object key of the uploaded zip (must be under caller's prefix)
+ *   zipKey         string   R2 object key of the uploaded zip
  *   zipFileId      string   workspace_files.id of the zip row
  *   folderId       string|null  target parent folder
  *   securityLevel  string   security_level for created folders/files
@@ -15,6 +15,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.20'
 import { unzipSync } from 'https://esm.sh/fflate@0.8.2'
+import { snapshotKey, validR2Key, r2ObjectUrl } from '../_shared/r2SnapshotKey.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +30,6 @@ const json = (body: unknown, status = 200) =>
 
 const MAX_ZIP_BYTES = 100 * 1024 * 1024
 const MAX_ENTRIES = 500
-const KEY_RE = /^[A-Za-z0-9_\-./]+$/
 const SEC_LEVELS = new Set(['public', 'internal', 'confidential', 'restricted', 'top_secret'])
 
 const MIME: Record<string, string> = {
@@ -89,7 +89,7 @@ serve(async (req) => {
   const folderId = body.folderId ?? null
   const securityLevel = SEC_LEVELS.has(body.securityLevel ?? '') ? body.securityLevel! : 'internal'
 
-  if (typeof zipKey !== 'string' || !KEY_RE.test(zipKey) || zipKey.includes('..')) {
+  if (!validR2Key(zipKey)) {
     return json({ error: 'Invalid zipKey' }, 400)
   }
   if (typeof zipFileId !== 'string' || !zipFileId) {
@@ -106,9 +106,6 @@ serve(async (req) => {
   })
   const { data: { user } } = await userClient.auth.getUser()
   if (!user) return json({ error: 'Unauthorized' }, 401)
-  if (!zipKey.startsWith(`${user.id}/`)) {
-    return json({ error: 'Forbidden: zip key not under your prefix' }, 403)
-  }
 
   const { data: zipRow, error: zipErr } = await userClient
     .from('workspace_files')
@@ -132,7 +129,7 @@ serve(async (req) => {
   const endpoint = `https://${ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET}`
 
   async function r2Get(key: string): Promise<Uint8Array> {
-    const signed = await r2.sign(new Request(`${endpoint}/${key}`, { method: 'GET' }))
+    const signed = await r2.sign(new Request(r2ObjectUrl(endpoint, key), { method: 'GET' }))
     const res = await fetch(signed)
     if (!res.ok) throw new Error(`R2 GET failed (${res.status})`)
     const buf = new Uint8Array(await res.arrayBuffer())
@@ -142,7 +139,7 @@ serve(async (req) => {
 
   async function r2Put(key: string, data: Uint8Array, contentType: string) {
     const signed = await r2.sign(
-      new Request(`${endpoint}/${key}`, {
+      new Request(r2ObjectUrl(endpoint, key), {
         method: 'PUT',
         headers: { 'Content-Type': contentType },
         body: data,
@@ -209,14 +206,32 @@ serve(async (req) => {
       folderIdMap[folderPath] = created.id
     }
 
+    async function folderBreadcrumb(id: string | null): Promise<string> {
+      if (!id) return 'Hub'
+      const names: string[] = []
+      let current: string | null = id
+      for (let i = 0; i < 8 && current; i++) {
+        const { data } = await userClient
+          .from('workspace_folders')
+          .select('name, parent_folder_id')
+          .eq('id', current)
+          .maybeSingle()
+        if (!data?.name) break
+        names.unshift(data.name)
+        current = data.parent_folder_id ?? null
+      }
+      return names.join('/') || 'Hub'
+    }
+    const basePath = await folderBreadcrumb(folderId)
+
     let uploaded = 0
     for (const e of entries) {
       const parts = e.path.split('/')
       const fileName = parts[parts.length - 1]
       const parentPath = parts.slice(0, -1).join('/')
       const targetFolder = parentPath ? (folderIdMap[parentPath] ?? folderId) : folderId
-      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)
-      const key = `${user.id}/extract_${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`
+      const folderPath = [basePath, parentPath].filter(Boolean).join('/')
+      const key = snapshotKey(folderPath, fileName, user.id)
       const mime = guessMime(fileName)
       const ext = fileName.split('.').pop()?.toLowerCase() ?? null
 

@@ -5,9 +5,9 @@
  * and returns short-lived presigned URLs; file bytes go browser ↔ R2 directly.
  *
  * Actions (POST JSON body):
- *  - sign-upload   { fileName }        → { key, url }   (presigned PUT, 15 min)
- *                    key is generated server-side under the caller's user-id
- *                    prefix so users cannot write into other prefixes.
+ *  - sign-upload   { fileName, folderPath? } → { key, url }  (presigned PUT, 15 min)
+ *                    Key is a snapshot of the Hub folder path + YYYY-MM +
+ *                    unique filename. Client cannot pick the key.
  *                    Requires an authenticated user.
  *  - sign-download { key, filename? }  → { url }        (presigned GET, 1 h)
  *                    Authenticated users: always allowed (RLS on the metadata
@@ -16,15 +16,16 @@
  *                    workspace_files row is public enough — mirrors the
  *                    security_level check FileViewer itself performs.
  *  - delete        { key }             → { ok: true }
- *                    Requires auth. Allowed for keys under the caller's own
- *                    prefix (orphan cleanup of cancelled uploads) or keys whose
- *                    workspace_files row is visible to the caller under RLS.
+ *                    Requires auth. Allowed for legacy user-id prefixes,
+ *                    unregistered snapshot keys (orphan cleanup), or keys
+ *                    whose workspace_files row is visible under RLS.
  *
  * Secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.20'
+import { snapshotKey, validR2Key, r2ObjectUrl, keyOwnedByUser } from '../_shared/r2SnapshotKey.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,8 +38,6 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-const KEY_RE = /^[A-Za-z0-9_\-./]+$/
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -50,7 +49,7 @@ serve(async (req) => {
     return json({ error: 'R2 storage is not configured on the server' }, 500)
   }
 
-  let body: { action?: string; key?: string; fileName?: string; filename?: string }
+  let body: { action?: string; key?: string; fileName?: string; filename?: string; folderPath?: string }
   try {
     body = await req.json()
   } catch {
@@ -79,16 +78,11 @@ serve(async (req) => {
   const endpoint = `https://${ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET}`
 
   async function presign(key: string, method: 'PUT' | 'GET' | 'DELETE', expires: number, extraParams?: Record<string, string>) {
-    const url = new URL(`${endpoint}/${key}`)
+    const url = new URL(r2ObjectUrl(endpoint, key))
     url.searchParams.set('X-Amz-Expires', String(expires))
     for (const [k, v] of Object.entries(extraParams ?? {})) url.searchParams.set(k, v)
     const signed = await r2.sign(new Request(url, { method }), { aws: { signQuery: true } })
     return signed.url
-  }
-
-  function validKey(key: unknown): key is string {
-    return typeof key === 'string' && key.length > 0 && key.length < 1024 &&
-      KEY_RE.test(key) && !key.includes('..')
   }
 
   // ── sign-upload ─────────────────────────────────────────────────────────────
@@ -96,8 +90,8 @@ serve(async (req) => {
     if (!user) return json({ error: 'Unauthorized' }, 401)
     const fileName = body.fileName
     if (typeof fileName !== 'string' || !fileName) return json({ error: 'fileName is required' }, 400)
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)
-    const key = `${user.id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`
+    const folderPath = typeof body.folderPath === 'string' ? body.folderPath : undefined
+    const key = snapshotKey(folderPath, fileName, user.id)
     const url = await presign(key, 'PUT', 900)
     return json({ key, url })
   }
@@ -105,7 +99,7 @@ serve(async (req) => {
   // ── sign-download ───────────────────────────────────────────────────────────
   if (action === 'sign-download') {
     const key = body.key
-    if (!validKey(key)) return json({ error: 'Invalid key' }, 400)
+    if (!validR2Key(key)) return json({ error: 'Invalid key' }, 400)
 
     if (!user) {
       // Anonymous QR-scan viewer: mirror FileViewer's own gate — only files
@@ -135,12 +129,10 @@ serve(async (req) => {
   if (action === 'delete') {
     if (!user) return json({ error: 'Unauthorized' }, 401)
     const key = body.key
-    if (!validKey(key)) return json({ error: 'Invalid key' }, 400)
+    if (!validR2Key(key)) return json({ error: 'Invalid key' }, 400)
 
-    let allowed = key.startsWith(`${user.id}/`)
+    let allowed = keyOwnedByUser(key, user.id)
     if (!allowed) {
-      // ponytail: RLS-visibility as delete permission — admins who can see the
-      // row can purge it; tighten to an explicit role check if that's too broad.
       const { data: row } = await userClient
         .from('workspace_files')
         .select('id')

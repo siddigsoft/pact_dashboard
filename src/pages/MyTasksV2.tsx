@@ -563,7 +563,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
       setUploadingAttachments(true);
       try {
         for (const f of attachments) {
-          const { key } = await r2Upload(f);
+          const { key } = await r2Upload(f, { folderPath: `Tasks/${title.trim()}` });
           uploadedPaths.push(key);
           uploadedAttachments.push({ name: f.name, url: toR2Ref(key), uploadedAt: new Date().toISOString() });
         }
@@ -1675,7 +1675,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, isDeleting, c
       const uploadedPaths: string[] = [];
       try {
         for (const f of newFiles) {
-          const { key } = await r2Upload(f);
+          const { key } = await r2Upload(f, { folderPath: `Tasks/${title.trim()}` });
           uploadedPaths.push(key);
           mergedAttachments.push({ name: f.name, url: toR2Ref(key), uploadedAt: new Date().toISOString() });
         }

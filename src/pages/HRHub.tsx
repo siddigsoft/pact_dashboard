@@ -13,6 +13,7 @@ import EOSBPanel from '@/components/hr/EOSBPanel';
 import SalaryAdvancesPanel from '@/components/hr/SalaryAdvancesPanel';
 import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -158,23 +159,46 @@ export default function HRHub() {
   const [params, setParams] = useSearchParams();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const isAdmin = isSuperAdmin() || hasAnyRole(ADMIN_ROLES);
+  const { isTabBlocked } = useCurrentUserAccess();
+
+  // Section accent colours (defined early — used in hrSections useMemo)
+  const SECTION_ACCENT: Record<HRSection, string> = {
+    pay:          '#D97706',
+    'time-leave': '#3b82f6',
+    people:       '#8b5cf6',
+    analytics:    '#6366f1',
+  };
+
+  // Sections and tabs visible to this user (role + per-user override)
+  const hrSections = useMemo(() =>
+    SECTIONS
+      .filter(s => !s.adminOnly || isAdmin)
+      .map(s => ({
+        ...s,
+        color: SECTION_ACCENT[s.id as HRSection],
+        tabs: s.tabs.filter(t => (!t.adminOnly || isAdmin) && !isTabBlocked(`hr-hub:${t.id}`)),
+      }))
+      .filter(s => s.tabs.length > 0),
+    [isAdmin, isTabBlocked],
+  );
+
+  const allVisibleTabs = useMemo(() => hrSections.flatMap(s => s.tabs), [hrSections]);
 
   // Resolve requested tab — handle legacy aliases
   const rawTab = params.get('tab') ?? '';
   const resolvedTab = (LEGACY_TAB_MAP[rawTab] ?? rawTab) as HRTab;
-  const defaultTab: HRTab = isAdmin ? 'overview' : 'payroll';
+  const defaultTab: HRTab = allVisibleTabs[0]?.id as HRTab ?? (isAdmin ? 'overview' : 'payroll');
 
-  // Find canonical tab definition across all sections
-  const allTabs = SECTIONS.flatMap(s => s.tabs);
-  const tabDef = allTabs.find(t => t.id === resolvedTab);
   const _savedHR = localStorage.getItem('hub_last_tab_hr') as HRTab | null;
-  const _savedHRDef = allTabs.find(t => t.id === _savedHR);
-  const _resolvedDefault: HRTab = (_savedHRDef && (!_savedHRDef.adminOnly || isAdmin)) ? (_savedHR as HRTab) : defaultTab;
-  const tab: HRTab = tabDef && (!tabDef.adminOnly || isAdmin) ? resolvedTab : _resolvedDefault;
+  const _resolvedDefault: HRTab =
+    (_savedHR && allVisibleTabs.find(t => t.id === _savedHR))
+      ? _savedHR
+      : defaultTab;
+  const tab: HRTab = allVisibleTabs.find(t => t.id === resolvedTab) ? resolvedTab : _resolvedDefault;
 
   const setTab = (t: HRTab) => { localStorage.setItem('hub_last_tab_hr', t); setParams({ tab: t }, { replace: true }); };
 
-  // If URL had a legacy/invalid tab, fix it silently
+  // If URL had a legacy/invisible tab, redirect silently
   useEffect(() => {
     if (rawTab && tab !== rawTab) setParams({ tab }, { replace: true });
   }, [rawTab, tab]);
@@ -182,27 +206,12 @@ export default function HRHub() {
   // Current section derived from active tab
   const section = sectionOfTab(tab);
 
-  // Visible sections and tabs based on role
-  const visibleSections = SECTIONS.filter(s => !s.adminOnly || isAdmin);
-  const currentSection = visibleSections.find(s => s.id === section) ?? visibleSections[0];
-  const visibleTabsInSection = currentSection.tabs.filter(t => !t.adminOnly || isAdmin);
+  const currentSection = hrSections.find(s => s.id === section) ?? hrSections[0];
+  const visibleTabsInSection = currentSection?.tabs ?? [];
 
+  const allTabs = SECTIONS.flatMap(s => s.tabs);
   const activeTabDef = allTabs.find(t => t.id === tab) ?? allTabs[0];
-
-  // Section accent colours
-  const SECTION_ACCENT: Record<HRSection, string> = {
-    pay:       '#D97706',
-    'time-leave': '#3b82f6',
-    people:    '#8b5cf6',
-    analytics: '#6366f1',
-  };
   const accent = SECTION_ACCENT[section];
-
-  const hrSections = visibleSections.map(s => ({
-    ...s,
-    color: SECTION_ACCENT[s.id as HRSection],
-    tabs: s.tabs.filter(t => !t.adminOnly || isAdmin),
-  }));
 
   return (
     <HubLayout

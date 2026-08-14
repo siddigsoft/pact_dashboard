@@ -15,6 +15,7 @@ import { useAppContext } from '@/context/AppContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -406,6 +407,7 @@ const MMP = () => {
   const { t } = useTranslation();
   const { mmpFiles, loading, updateMMP, refreshMMPFiles, siteEntryCounts: contextCounts, refreshSiteEntryCounts, loadSiteEntriesForMMPs } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
+  const { isTabBlocked } = useCurrentUserAccess();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
@@ -4610,48 +4612,48 @@ const MMP = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-3">
               <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1 min-h-[38px] rounded-lg shadow-lg">
-                {canClaimSites && (
+                {canClaimSites && !isTabBlocked('mmp:enumerator') && (
                   <TabsTrigger value="enumerator" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
                     <UserCheck className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.myAssignments')}
                     <Badge className="bg-blue-400/30 text-white border-0 text-[10px] px-1.5 py-0">{enumeratorMySites.length}</Badge>
                   </TabsTrigger>
                 )}
-                {!canClaimSites && (
+                {!canClaimSites && !isTabBlocked('mmp:new') && (
                   <TabsTrigger value="new" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
                     <ClipboardList className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.newMMPs')}
                     <Badge className="bg-emerald-400/30 text-white border-0 text-[10px] px-1.5 py-0">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
-                {!canClaimSites && (
+                {!canClaimSites && !isTabBlocked('mmp:forwarded') && (
                   <TabsTrigger value="forwarded" className={`flex items-center gap-1.5 min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all ${isFOM ? 'data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-md' : 'data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md'}`}>
                     <Send className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.forwardedMMPs')}
                     <Badge className={`border-0 text-[10px] px-1.5 py-0 ${isFOM ? 'bg-red-500/40 text-white' : 'bg-amber-400/30 text-white'}`}>{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
-                {!canClaimSites && (
+                {!canClaimSites && !isTabBlocked('mmp:verified') && (
                   <TabsTrigger value="verified" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.verifiedSites')}
                     <Badge className="bg-violet-400/30 text-white border-0 text-[10px] px-1.5 py-0">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
-                {!canClaimSites && (
+                {!canClaimSites && !isTabBlocked('mmp:tracker') && (
                   <TabsTrigger value="tracker" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
                     <LayoutDashboard className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && !isTabBlocked('mmp:adhoc') && (
                   <TabsTrigger value="adhoc" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-adhoc-visits">
                     <FilePlus className="h-3.5 w-3.5" />
                     Ad-hoc Visits
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && !isTabBlocked('mmp:village-campaigns') && (
                   <TabsTrigger value="village-campaigns" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-village-campaigns">
                     <Home className="h-3.5 w-3.5" />

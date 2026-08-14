@@ -176,8 +176,10 @@ export async function mirrorProjectDocumentToWorkspace(input: {
     ? sanitizeFileName(input.label.trim())
     : `${sanitizeFileName(input.label.trim())}.${ext}`;
 
-  // Same R2 path as Workspace Hub uploads (key under caller's user-id prefix).
-  const { key: storagePath } = await r2Upload(input.file);
+  // Same R2 snapshot path as Workspace Hub (Projects / name / uploader).
+  const { key: storagePath } = await r2Upload(input.file, {
+    folderPath: `Projects/${projectName}/${uploaderName}`,
+  });
 
   try {
     await upsertWorkspaceFile({
