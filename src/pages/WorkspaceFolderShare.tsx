@@ -40,7 +40,7 @@ interface ShareFolder {
   color: string;
   icon: string;
   password_hash: string | null;
-  short_code: string | null;
+  short_code?: string | null;
 }
 
 interface ShareFile {
@@ -192,7 +192,7 @@ export default function WorkspaceFolderShare() {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetFolderId);
       const baseQ = supabase
         .from('workspace_folders')
-        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash, short_code')
+        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash')
         .eq('archived', false);
       const { data: folder, error: folderErr } = await (
         isUUID ? baseQ.eq('id', targetFolderId) : baseQ.eq('short_code', targetFolderId)
@@ -250,7 +250,7 @@ export default function WorkspaceFolderShare() {
       // Load subfolders — always use the resolved UUID (f.id)
       const { data: subs } = await supabase
         .from('workspace_folders')
-        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash, short_code')
+        .select('id, name, description, parent_folder_id, security_level, color, icon, password_hash')
         .eq('parent_folder_id', f.id)
         .eq('archived', false)
         .order('name');

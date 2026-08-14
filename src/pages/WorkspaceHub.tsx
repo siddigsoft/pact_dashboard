@@ -60,6 +60,7 @@ interface WFolder {
   created_by: string | null; color: string; icon: string;
   is_system_folder: boolean; archived: boolean; created_at: string;
   password_hash: string | null;
+  short_code?: string | null;
   _childCount?: number; _fileCount?: number;
 }
 interface PasswordTarget {
