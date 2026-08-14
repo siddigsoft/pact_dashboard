@@ -1261,13 +1261,17 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
 
   async function submitComment() {
     if (!comment.trim()) return;
+    // Snapshot `file` before the first await so that navigating to a different
+    // file while the insert is in flight cannot corrupt the activity log,
+    // updated_at stamp, mention display name, or refetch key.
+    const targetFile = file;
     setSubmitting(true);
     try {
       const content = comment.trim();
-      const { error } = await supabase.from('workspace_comments').insert({ file_id: file.id, author_id: currentUserId, content });
+      const { error } = await supabase.from('workspace_comments').insert({ file_id: targetFile.id, author_id: currentUserId, content });
       if (error) throw error;
-      await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: currentUserId, action: 'commented', metadata: {} });
-      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', file.id);
+      await supabase.from('workspace_activity').insert({ file_id: targetFile.id, user_id: currentUserId, action: 'commented', metadata: {} });
+      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
 
       // ── @mention notifications ─────────────────────────────────────────
       const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
@@ -1281,7 +1285,7 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
               recipient_id: p.id,
               user_id: p.id,
               title_en: 'You were mentioned in a file comment',
-              message_en: `Someone mentioned you in a comment on "${file.name}": ${content.substring(0, 100)}`,
+              message_en: `Someone mentioned you in a comment on "${targetFile.name}": ${content.substring(0, 100)}`,
               event_type: 'mention',
               type: 'mention',
               action_url: '/workspace',
@@ -2175,17 +2179,29 @@ export default function WorkspaceHub() {
   // ── Preview pane: submit comment ─────────────────────────────────────────
   async function submitPreviewComment() {
     if (!previewFile || !previewComment.trim()) return;
+    // Snapshot previewFile before the first await so that switching files or
+    // closing the pane mid-flight cannot corrupt the activity log, updated_at
+    // stamp, mention display name, or refetch key for the wrong file.
+    const targetFile = previewFile;
     setPreviewCommentSubmitting(true);
     try {
       const content = previewComment.trim();
       const { error } = await supabase.from('workspace_comments').insert({
-        file_id: previewFile.id, author_id: userId, content,
+        file_id: targetFile.id, author_id: userId, content,
       });
       if (error) throw error;
+
+      // If the user navigated away while the insert was in flight, skip the
+      // metadata side-effects to avoid stamping the wrong file.
+      if (previewFile?.id !== targetFile.id) {
+        setPreviewComment('');
+        return;
+      }
+
       await supabase.from('workspace_activity').insert({
-        file_id: previewFile.id, user_id: userId, action: 'commented', metadata: {},
+        file_id: targetFile.id, user_id: userId, action: 'commented', metadata: {},
       });
-      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', previewFile.id);
+      await supabase.from('workspace_files').update({ updated_at: new Date().toISOString() }).eq('id', targetFile.id);
 
       // ── @mention notifications ──────────────────────────────────────────
       const mentionMatches = [...content.matchAll(/@([A-Za-z][A-Za-z\s]*?)(?=\s|$|[^A-Za-z\s])/g)];
@@ -2199,7 +2215,7 @@ export default function WorkspaceHub() {
               recipient_id: p.id,
               user_id: p.id,
               title_en: 'You were mentioned in a file comment',
-              message_en: `Someone mentioned you in a comment on "${previewFile.name}": ${content.substring(0, 100)}`,
+              message_en: `Someone mentioned you in a comment on "${targetFile.name}": ${content.substring(0, 100)}`,
               event_type: 'mention',
               type: 'mention',
               action_url: '/workspace',
