@@ -48,6 +48,7 @@ interface Campaign {
   supervisor_id?: string;
   created_by?: string;
   created_at: string;
+  completed_at?: string;
   // Joined
   coordinator_name?: string;
   supervisor_name?: string;
@@ -383,6 +384,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
   // ── Costs sub-tab (Pending / Approved & Costed / Dispatched) ─────────────
   const [costsSubTab, setCostsSubTab] = useState<'pending' | 'approved' | 'dispatched'>('pending');
+
+  // ── Mark Campaign Complete ────────────────────────────────────────────────
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [completeAutoVillages, setCompleteAutoVillages] = useState(true);
+  const [completing, setCompleting] = useState(false);
 
   // ── Load reference data ───────────────────────────────────────────────────
 
@@ -1989,6 +1995,51 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     toast({ title: 'Campaign deleted' });
   };
 
+  // ── Mark Campaign Complete ────────────────────────────────────────────────
+
+  const markCampaignComplete = async () => {
+    if (!selectedCampaign) return;
+    setCompleting(true);
+    try {
+      const now = new Date().toISOString();
+
+      // 1. Update campaign status + completed_at
+      const { error: campErr } = await supabase
+        .from('adhoc_campaigns')
+        .update({ status: 'completed', completed_at: now, updated_at: now })
+        .eq('id', selectedCampaign.id);
+      if (campErr) throw campErr;
+
+      // 2. Optionally mark pending/in_progress villages and active assignments as completed
+      if (completeAutoVillages) {
+        await supabase
+          .from('adhoc_villages')
+          .update({ status: 'completed', updated_at: now })
+          .eq('campaign_id', selectedCampaign.id)
+          .in('status', ['pending', 'in_progress']);
+
+        await supabase
+          .from('adhoc_village_teams')
+          .update({ status: 'completed' })
+          .eq('campaign_id', selectedCampaign.id)
+          .eq('status', 'active');
+      }
+
+      // 3. Refresh UI
+      const updated: Campaign = { ...selectedCampaign, status: 'completed', completed_at: now };
+      setSelectedCampaign(updated);
+      setCampaigns(prev => prev.map(c => c.id === updated.id ? updated : c));
+      await loadCampaignDetail(selectedCampaign.id);
+
+      setShowCompleteConfirm(false);
+      toast({ title: 'Campaign marked as complete', description: `${selectedCampaign.campaign_name} has been closed.` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || String(e), variant: 'destructive' });
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   // ── Completion report export ──────────────────────────────────────────────
 
   const exportCompletion = () => {
@@ -3528,11 +3579,28 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
         {/* COMPLETION REPORT */}
         <TabsContent value="report" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="font-semibold text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Completion Summary</h3>
-            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={exportCompletion}>
-              <Download className="h-3.5 w-3.5" /> Export Excel
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={exportCompletion}>
+                <Download className="h-3.5 w-3.5" /> Export Excel
+              </Button>
+              {canManage && selectedCampaign.status !== 'completed' && (
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setShowCompleteConfirm(true)}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Mark as Complete
+                </Button>
+              )}
+              {selectedCampaign.status === 'completed' && (
+                <Badge className="text-[10px] bg-blue-100 text-blue-700 border-0 gap-1 px-2 py-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Completed {selectedCampaign.completed_at ? fmtDate(selectedCampaign.completed_at) : ''}
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* By Village */}
@@ -3635,12 +3703,13 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
           {/* Campaign info */}
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
-            {[
+            {([
               ['Campaign', selectedCampaign.campaign_name],
               ['Coordinator', selectedCampaign.coordinator_name || '—'],
               ['Supervisor', selectedCampaign.supervisor_name || '—'],
               ['Period', [fmtDate(selectedCampaign.start_date), fmtDate(selectedCampaign.end_date)].filter(d => d !== '—').join(' → ') || '—'],
-            ].map(([label, value]) => (
+              ...(selectedCampaign.completed_at ? [['Completed', fmtDate(selectedCampaign.completed_at)]] : []),
+            ] as [string, string][]).map(([label, value]) => (
               <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{label}:</span> {value}
               </div>
@@ -3648,6 +3717,55 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ── Mark Campaign Complete Confirmation ─────────────────────────────── */}
+      <Dialog open={showCompleteConfirm} onOpenChange={setShowCompleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Mark Campaign as Complete?
+            </DialogTitle>
+            <DialogDescription>
+              This will set <strong>{selectedCampaign?.campaign_name}</strong> to{' '}
+              <strong>completed</strong> status and record today as the completion date.
+              This action can be undone by editing the campaign status.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={completeAutoVillages}
+                onChange={e => setCompleteAutoVillages(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <p className="text-sm font-medium leading-snug">Auto-complete remaining villages &amp; assignments</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Any villages still marked <em>pending</em> or <em>in progress</em>, and any
+                  active team assignments, will be moved to <em>completed</em>.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCompleteConfirm(false)} disabled={completing}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              onClick={markCampaignComplete}
+              disabled={completing}
+            >
+              {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {completing ? 'Completing…' : 'Mark as Complete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Excel Import Dialog ──────────────────────────────────────────────── */}
       <Dialog open={showImportDialog} onOpenChange={o => { setShowImportDialog(o); if (!o) { setImportRows([]); setImportFileName(''); } }}>
