@@ -20,7 +20,7 @@ import {
   BarChart3, Calendar, ClipboardList, CheckCircle2, AlertCircle,
   Download, Eye, RefreshCw, Home, Building2, UserCheck, FileText,
   ArrowRight, TrendingUp, Activity, Camera, ImageIcon, X, ChevronDown, ChevronUp,
-  DollarSign, Wallet, CreditCard, Truck, BadgeDollarSign, Send
+  DollarSign, Wallet, CreditCard, Truck, BadgeDollarSign, Send, Upload, FileSpreadsheet
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -166,6 +166,29 @@ interface AdvanceRequest {
   approved_at?: string | null;
   paid_by?: string | null;
   paid_at?: string | null;
+}
+
+// ── Excel import row ──────────────────────────────────────────────────────────
+
+interface ImportRow {
+  state: string;
+  locality: string;
+  cluster_name: string;
+  cluster_code: string;
+  village_name: string;
+  village_code: string;
+  hh_target: string;
+  activity_name: string;
+  activity_type: string;
+  team_code: string;
+  transport_fee: string;
+  enumerator_fee: string;
+  /** Validation messages. Empty = valid row. */
+  _errors: string[];
+  /** Resolved team id (set during validation) */
+  _teamId?: string;
+  /** 1-based row number from the file */
+  _rowNum: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -324,6 +347,13 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [payForm, setPayForm]   = useState({ amount: '', notes: '', method: 'cash' });
   const [paying, setPaying]     = useState(false);
   const [payingAll, setPayingAll] = useState(false);
+
+  // ── Excel import state ────────────────────────────────────────────────────
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importRows, setImportRows]             = useState<ImportRow[]>([]);
+  const [importing, setImporting]               = useState(false);
+  const [importFileName, setImportFileName]     = useState('');
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // ── Approval state ────────────────────────────────────────────────────────
   const [approving, setApproving] = useState<Record<string, boolean>>({});
@@ -1471,6 +1501,274 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     }
   };
 
+  // ── Excel bulk import ─────────────────────────────────────────────────────
+
+  /** Download a pre-formatted XLSX template with a Team Registry sheet. */
+  const downloadVillageTemplate = () => {
+    if (!selectedCampaign) return;
+    const headers = [
+      'State', 'Locality', 'Cluster Name', 'Cluster Code',
+      'Village Name', 'Village Code', 'HH Target',
+      'Activity Name', 'Activity Type',
+      'Team Code', 'Transport Fee (SDG)', 'Enumerator Fee (SDG)',
+    ];
+    const ex1 = ['Central Darfur', 'Zalingei', 'North Cluster', 'CLU-01', 'Al Geneina Village', 'VLG-01', '150', 'Nutrition', 'nutrition', allTeams[0]?.team_code || 'TM-001', '500', '1500'];
+    const ex2 = ['Central Darfur', 'Zalingei', 'North Cluster', 'CLU-01', 'Al Geneina Village', 'VLG-01', '', 'WASH', 'wash', allTeams[1]?.team_code || 'TM-002', '500', '1500'];
+    const ex3 = ['North Darfur', 'Kabkabiya', 'East Cluster', 'CLU-02', 'Kabkabiya Centre', 'VLG-02', '200', '', '', allTeams[0]?.team_code || 'TM-001', '600', '1200'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ex1, ex2, ex3]);
+    ws['!cols'] = [20, 16, 22, 14, 24, 14, 10, 18, 14, 12, 18, 18].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Village Import');
+
+    // Sheet 2: current teams so admins can copy valid codes
+    const teamHeaders = ['Team Code', 'Team Name', 'Team Lead', 'Members'];
+    const teamRows = allTeams.map(t => [t.team_code, t.team_name, t.team_lead_name || '—', t.member_count]);
+    const ws2 = XLSX.utils.aoa_to_sheet([teamHeaders, ...teamRows]);
+    ws2['!cols'] = [14, 24, 24, 10].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws2, 'Team Registry');
+
+    const safeName = selectedCampaign.campaign_name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    XLSX.writeFile(wb, `village-import-${safeName}.xlsx`);
+  };
+
+  /** Column aliases for auto-detection — normalise both sides to lowercase+letters+digits */
+  const normaliseHeader = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const COL_ALIASES: Record<keyof Omit<ImportRow, '_errors' | '_teamId' | '_rowNum'>, string[]> = {
+    state:          ['state', 'stateprovince'],
+    locality:       ['locality', 'district', 'county', 'localitydistrict'],
+    cluster_name:   ['clustername', 'cluster'],
+    cluster_code:   ['clustercode', 'clucode', 'clusterid'],
+    village_name:   ['villagename', 'village'],
+    village_code:   ['villagecode', 'villcode'],
+    hh_target:      ['hhtarget', 'targethh', 'target', 'households', 'hh'],
+    activity_name:  ['activityname', 'activity'],
+    activity_type:  ['activitytype', 'type'],
+    team_code:      ['teamcode', 'team'],
+    transport_fee:  ['transportfeesdg', 'transportfee', 'transport', 'travelfee'],
+    enumerator_fee: ['enumeratorfeesdg', 'enumeratorfee', 'enumfee', 'fee'],
+  };
+
+  const VALID_ACTIVITY_TYPES = new Set(['nutrition','wash','protection','health','education','livelihoods','shelter','other','']);
+
+  /** Parse an XLSX file and populate importRows with validated ImportRow objects. */
+  const parseVillageImportFile = (file: File) => {
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target?.result, { type: 'binary', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as (string | number)[][];
+        if (raw.length < 2) {
+          toast({ title: 'Empty file', description: 'No data rows found.', variant: 'destructive' });
+          return;
+        }
+        const headers = raw[0].map(h => normaliseHeader(String(h)));
+        const dataRows = raw.slice(1);
+
+        // Build column-index map
+        const fieldMap: Partial<Record<keyof Omit<ImportRow, '_errors' | '_teamId' | '_rowNum'>, number>> = {};
+        for (const [field, aliases] of Object.entries(COL_ALIASES) as [keyof typeof COL_ALIASES, string[]][]) {
+          for (const alias of aliases) {
+            const idx = headers.indexOf(alias);
+            if (idx >= 0) { fieldMap[field] = idx; break; }
+          }
+        }
+
+        const get = (row: (string | number)[], field: keyof typeof COL_ALIASES) => {
+          const idx = fieldMap[field];
+          if (idx === undefined) return '';
+          const v = row[idx];
+          return v === undefined || v === null ? '' : String(v).trim();
+        };
+
+        // Strict numeric validators used during row parsing.
+        // Number() is stricter than parseInt/parseFloat:  Number("100kg") → NaN.
+        const strictNonNegInt = (raw: string, label: string): string | null => {
+          if (!raw.trim()) return null;               // blank → allowed as 0
+          const n = Number(raw);
+          if (!isFinite(n))         return `${label} "${raw}" is not a valid number`;
+          if (n < 0)                return `${label} must be ≥ 0 (got ${raw})`;
+          if (!Number.isInteger(n)) return `${label} must be a whole number (got ${raw})`;
+          return null;
+        };
+        const strictNonNegFee = (raw: string, label: string): string | null => {
+          if (!raw.trim()) return null;               // blank → treated as 0
+          const n = Number(raw);
+          if (!isFinite(n)) return `${label} "${raw}" is not a valid number`;
+          if (n < 0)        return `${label} must be ≥ 0 (got ${raw})`;
+          return null;
+        };
+
+        const rows: ImportRow[] = dataRows
+          .map((row, i) => {
+            const village_name   = get(row, 'village_name');
+            const activity_type  = get(row, 'activity_type').toLowerCase();
+            const team_code      = get(row, 'team_code');
+            const hh_raw         = get(row, 'hh_target');
+            const tf_raw         = get(row, 'transport_fee');
+            const ef_raw         = get(row, 'enumerator_fee');
+
+            const errors: string[] = [];
+            if (!village_name) errors.push('Village Name is required');
+
+            // Strict numeric validation — catches "100kg", -5, 150.7, etc.
+            const hhErr = strictNonNegInt(hh_raw,  'HH Target');
+            if (hhErr) errors.push(hhErr);
+            const tfErr = strictNonNegFee(tf_raw,  'Transport Fee');
+            if (tfErr) errors.push(tfErr);
+            const efErr = strictNonNegFee(ef_raw,  'Enumerator Fee');
+            if (efErr) errors.push(efErr);
+
+            if (activity_type && !VALID_ACTIVITY_TYPES.has(activity_type)) {
+              errors.push(`Unknown activity type "${activity_type}". Valid: nutrition, wash, protection, health, education, livelihoods, shelter, other`);
+            }
+            let _teamId: string | undefined;
+            if (team_code) {
+              const match = allTeams.find(t => t.team_code.toLowerCase() === team_code.toLowerCase());
+              if (!match) errors.push(`Team code "${team_code}" not found in Team Registry`);
+              else _teamId = match.id;
+            }
+
+            return {
+              state:          get(row, 'state'),
+              locality:       get(row, 'locality'),
+              cluster_name:   get(row, 'cluster_name'),
+              cluster_code:   get(row, 'cluster_code'),
+              village_name,
+              village_code:   get(row, 'village_code'),
+              hh_target:      hh_raw,
+              activity_name:  get(row, 'activity_name'),
+              activity_type,
+              team_code,
+              transport_fee:  tf_raw,
+              enumerator_fee: ef_raw,
+              _errors: errors,
+              _teamId,
+              _rowNum: i + 2,   // 1-based; row 1 is the header
+            } as ImportRow;
+          })
+          .filter(r => r.village_name || r.cluster_name || r.team_code);  // skip fully empty rows
+
+        if (rows.length === 0) {
+          toast({ title: 'No data', description: 'All rows were empty.', variant: 'destructive' });
+          return;
+        }
+        setImportRows(rows);
+      } catch {
+        toast({ title: 'Parse error', description: 'Could not read the file. Make sure it is a valid .xlsx file.', variant: 'destructive' });
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  /** Run the idempotent import for all valid rows. */
+  /** Idempotent import: each valid row is handled by a single Supabase RPC that
+   *  atomically upserts the cluster → village → assignment → site-entry → back-link
+   *  in one server-side transaction.  No partial state can be created.  A retry after
+   *  any failure is always safe (ON CONFLICT upserts for clusters/villages; ON CONFLICT
+   *  DO NOTHING for assignments, with site-entry repair for null site_entry_id rows). */
+  const runVillageImport = async () => {
+    if (!selectedCampaign) return;
+    const validRows = importRows.filter(r => r._errors.length === 0);
+    if (validRows.length === 0) {
+      toast({ title: 'No valid rows', description: 'Fix all errors before importing.', variant: 'destructive' });
+      return;
+    }
+    setImporting(true);
+
+    // Counters populated from RPC response actions
+    let created = 0, repaired = 0, skipped = 0;
+
+    try {
+      const campaignId = selectedCampaign.id;
+
+      // ── Pre-generate collision-free cluster codes for rows that lack one ───────
+      // Load existing cluster codes so we never reuse one already in the campaign.
+      const { data: existingClustersForImport } = await supabase
+        .from('adhoc_clusters').select('cluster_name, cluster_code').eq('campaign_id', campaignId);
+      const existingClusterCodeSet = new Set((existingClustersForImport || []).map(c => c.cluster_code));
+      const existingClusterNameToCode = Object.fromEntries(
+        (existingClustersForImport || []).map(c => [c.cluster_name.toLowerCase(), c.cluster_code])
+      );
+
+      // Map: cluster_name (lower) → code to use in the RPC call
+      const clusterCodeForRow: Record<string, string> = { ...existingClusterNameToCode };
+      let cluSeq = existingClustersForImport?.length ?? 0;
+
+      for (const row of validRows) {
+        if (!row.cluster_name) continue;
+        const key = row.cluster_name.toLowerCase();
+        if (clusterCodeForRow[key]) continue;    // already have a code for this name
+
+        if (row.cluster_code && !existingClusterCodeSet.has(row.cluster_code)) {
+          // Spreadsheet provided a code and it's not taken
+          clusterCodeForRow[key] = row.cluster_code;
+          existingClusterCodeSet.add(row.cluster_code);
+        } else {
+          // Generate a unique code that doesn't collide with existing ones
+          let code: string;
+          do {
+            cluSeq++;
+            code = `CLU-${String(cluSeq).padStart(2, '0')}`;
+          } while (existingClusterCodeSet.has(code));
+          clusterCodeForRow[key] = code;
+          existingClusterCodeSet.add(code);
+        }
+      }
+
+      for (const row of validRows) {
+        const resolvedClusterCode = row.cluster_name
+          ? (clusterCodeForRow[row.cluster_name.toLowerCase()] ?? null)
+          : null;
+
+        const { data, error } = await supabase.rpc('import_village_campaign_row', {
+          p_campaign_id:      campaignId,
+          p_campaign_name:    selectedCampaign.campaign_name,
+          p_mmp_file_id:      selectedCampaign.mmp_file_id  || null,
+          p_cluster_name:     row.cluster_name               || null,
+          p_cluster_code:     resolvedClusterCode,
+          p_cluster_state:    row.state                      || null,
+          p_cluster_locality: row.locality                   || null,
+          p_village_name:     row.village_name,
+          p_village_code:     row.village_code               || null,
+          p_hh_target:        row.hh_target ? Number(row.hh_target) : 0,
+          p_village_state:    row.state                      || null,
+          p_village_locality: row.locality                   || null,
+          p_team_id:          row._teamId                    || null,
+          p_activity_name:    row.activity_name              || null,
+          p_activity_type:    row.activity_type              || null,
+          p_transport_fee:    row.transport_fee  ? Number(row.transport_fee)  : 0,
+          p_enumerator_fee:   row.enumerator_fee ? Number(row.enumerator_fee) : 0,
+        });
+
+        if (error) throw new Error(`Row ${row._rowNum} (${row.village_name}): ${error.message}`);
+
+        const action = (data as any)?.action as string | undefined;
+        if (action === 'created')      created++;
+        else if (action === 'repaired') repaired++;
+        else if (action === 'skipped' || action === 'village_only') skipped++;
+      }
+
+      toast({
+        title: 'Import complete',
+        description: [
+          created  && `${created} row${created   !== 1 ? 's' : ''} imported`,
+          repaired && `${repaired} missing fee record${repaired !== 1 ? 's' : ''} repaired`,
+          skipped  && `${skipped} duplicate${skipped  !== 1 ? 's' : ''} skipped`,
+        ].filter(Boolean).join(' · ') || 'Nothing new to import — all rows were already present',
+      });
+      setShowImportDialog(false);
+      setImportRows([]);
+      setImportFileName('');
+      await loadCampaignDetail(campaignId);
+    } catch (e: any) {
+      toast({ title: 'Import failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // ── Submit daily log ──────────────────────────────────────────────────────
 
   const submitDailyLog = async () => {
@@ -2380,6 +2678,16 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
         {/* VILLAGES */}
         <TabsContent value="villages" className="mt-4">
+          {canManage && (
+            <div className="flex justify-end mb-3">
+              <Button
+                variant="outline" size="sm" className="h-8 gap-1.5"
+                onClick={() => { setImportRows([]); setImportFileName(''); setShowImportDialog(true); }}
+              >
+                <Upload className="h-3.5 w-3.5" /> Import from Excel
+              </Button>
+            </div>
+          )}
           <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
@@ -3135,6 +3443,138 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ── Excel Import Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={showImportDialog} onOpenChange={o => { setShowImportDialog(o); if (!o) { setImportRows([]); setImportFileName(''); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4" /> Import Villages from Excel
+            </DialogTitle>
+            <DialogDescription>
+              Import villages, clusters, activities, teams, and fees from a spreadsheet. The import is additive only — existing records are never deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Step 1: no file yet — show template download + picker */}
+          {importRows.length === 0 && (
+            <div className="flex flex-col items-center gap-5 py-8">
+              <div className="text-center space-y-1">
+                <p className="text-sm text-muted-foreground">Start with the template so your column names are recognised automatically.</p>
+                <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={downloadVillageTemplate}>
+                  <Download className="h-3.5 w-3.5" /> Download Template (.xlsx)
+                </Button>
+              </div>
+              <div
+                className="w-full border-2 border-dashed rounded-lg p-10 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={() => importFileRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files?.[0]; if (f) parseVillageImportFile(f); }}
+              >
+                <Upload className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-medium">Click to select an Excel file (.xlsx)</p>
+                <p className="text-xs text-muted-foreground">or drag-and-drop here</p>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) parseVillageImportFile(f); e.target.value = ''; }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: file parsed — show preview table */}
+          {importRows.length > 0 && (
+            <div className="flex flex-col gap-3 min-h-0">
+              <div className="flex items-center justify-between flex-shrink-0">
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{importFileName}</span>
+                  {' '}— {importRows.length} row{importRows.length !== 1 ? 's' : ''} parsed,{' '}
+                  <span className="text-emerald-600 font-medium">{importRows.filter(r => r._errors.length === 0).length} valid</span>
+                  {importRows.some(r => r._errors.length > 0) && (
+                    <span className="text-destructive font-medium ml-1">· {importRows.filter(r => r._errors.length > 0).length} with errors</span>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => { setImportRows([]); setImportFileName(''); }}>
+                  <X className="h-3 w-3" /> Change file
+                </Button>
+              </div>
+
+              <div className="overflow-auto flex-1 rounded-md border text-xs">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="w-8 text-center">#</TableHead>
+                      <TableHead>Cluster</TableHead>
+                      <TableHead>Village</TableHead>
+                      <TableHead>State / Locality</TableHead>
+                      <TableHead className="text-right">HH Target</TableHead>
+                      <TableHead>Activity</TableHead>
+                      <TableHead>Team Code</TableHead>
+                      <TableHead className="text-right">T. Fee</TableHead>
+                      <TableHead className="text-right">E. Fee</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importRows.map((row, i) => (
+                      <TableRow key={i} className={row._errors.length > 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                        <TableCell className="text-center text-muted-foreground">{row._rowNum}</TableCell>
+                        <TableCell>{row.cluster_name || <span className="italic opacity-40">—</span>}</TableCell>
+                        <TableCell className="font-medium">{row.village_name || <span className="text-red-500">missing</span>}</TableCell>
+                        <TableCell className="text-muted-foreground">{[row.state, row.locality].filter(Boolean).join(' › ') || '—'}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.hh_target || '—'}</TableCell>
+                        <TableCell>
+                          {row.activity_name ? (
+                            <span>{row.activity_name}{row.activity_type && <span className="ml-1 text-muted-foreground">({row.activity_type})</span>}</span>
+                          ) : <span className="italic opacity-40">—</span>}
+                        </TableCell>
+                        <TableCell className="font-mono">{row.team_code || <span className="italic opacity-40">—</span>}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.transport_fee || '—'}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.enumerator_fee || '—'}</TableCell>
+                        <TableCell>
+                          {row._errors.length > 0 ? (
+                            <div className="flex items-start gap-1">
+                              <AlertCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                              <span className="text-destructive leading-tight">{row._errors.join('; ')}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-emerald-600">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Valid</span>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {importRows.some(r => r._errors.length > 0) && (
+                <p className="text-xs text-muted-foreground flex-shrink-0">
+                  Rows with errors will be skipped. Only <strong>{importRows.filter(r => r._errors.length === 0).length} valid row(s)</strong> will be imported.
+                </p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex-shrink-0">
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>Cancel</Button>
+            {importRows.length > 0 && (
+              <Button
+                onClick={runVillageImport}
+                disabled={importing || importRows.filter(r => r._errors.length === 0).length === 0}
+              >
+                {importing && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                Import {importRows.filter(r => r._errors.length === 0).length} valid row{importRows.filter(r => r._errors.length === 0).length !== 1 ? 's' : ''}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add Village Dialog ────────────────────────────────────────────────── */}
       <Dialog open={showAddVillage} onOpenChange={setShowAddVillage}>
