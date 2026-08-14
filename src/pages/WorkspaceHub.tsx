@@ -1999,6 +1999,26 @@ export default function WorkspaceHub() {
     );
   }, [myPermissions, isSuperAdmin]);
 
+  // ── Positive file grants ──────────────────────────────────────────────────
+  // File IDs where the current user has an active (non-expired) positive
+  // permission grant (viewer / commenter / editor / owner).  These files are
+  // visible even when the user's clearance is below the file's security_level.
+  // A denial (deniedFileIds) always wins and is checked first in displayedFiles.
+  const grantedFileIds = useMemo(() => {
+    if (isSuperAdmin) return new Set<string>(); // super admin never needs a grant
+    const now = new Date();
+    return new Set(
+      myPermissions
+        .filter(p =>
+          p.file_id &&
+          p.access_level !== 'no_access' &&
+          // Active = no expiry date, OR expiry date is still in the future
+          (!p.expires_at || isBefore(now, parseISO(p.expires_at)))
+        )
+        .map(p => p.file_id as string)
+    );
+  }, [myPermissions, isSuperAdmin]);
+
   // ── Cascade No Access through the folder tree ─────────────────────────────
   // A denial on a parent folder must propagate to every descendant automatically.
   // We BFS from every directly-denied folder ID using the raw (unfiltered) folders
@@ -2423,8 +2443,16 @@ export default function WorkspaceHub() {
     if (!isSuperAdmin) {
       files = files.filter(f => !f.folder_id || !allDeniedFolderIds.has(f.folder_id));
     }
-    // Enforce security clearance — hide files above user's clearance level (uploader/admin bypass)
-    files = files.filter(f => isOwnerOrAdmin(f) || CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
+    // Enforce security clearance — hide files above user's clearance level.
+    // Uploader/admin bypass clearance entirely.
+    // An explicit positive file-level grant also overrides clearance so a user
+    // can see a specific shared file even if they lack the security level.
+    // Denials (deniedFileIds) are already filtered above and always win.
+    files = files.filter(f =>
+      isOwnerOrAdmin(f) ||
+      CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
+      grantedFileIds.has(f.id)
+    );
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
@@ -2460,7 +2488,7 @@ export default function WorkspaceHub() {
       if (sortBy === 'size') return b.file_size - a.file_size;
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
