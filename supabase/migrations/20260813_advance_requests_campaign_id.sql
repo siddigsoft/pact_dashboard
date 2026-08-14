@@ -1,7 +1,41 @@
--- Migration: campaign_id FK + audit columns + backfill + RLS for advance_requests
--- Idempotent — safe to run multiple times.
+-- Migration: advance_requests table + campaign_id FK + audit columns + backfill + RLS
+-- Idempotent — safe to run multiple times on any environment.
 
--- ── 1. New columns ────────────────────────────────────────────────────────────
+-- ── 0. Create the table if it doesn't exist yet ───────────────────────────────
+-- Environments that already have the table skip this; the ALTER TABLE blocks
+-- below add missing columns with IF NOT EXISTS so they are safe either way.
+
+CREATE TABLE IF NOT EXISTS public.advance_requests (
+  id                uuid          PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+  -- attribution
+  project_id        uuid          REFERENCES public.projects(id)  ON DELETE SET NULL,
+  campaign_id       uuid          REFERENCES public.adhoc_campaigns(id) ON DELETE SET NULL,
+
+  -- request details
+  site_name         text,
+  requested_amount  numeric       NOT NULL DEFAULT 0,
+  total_paid_amount numeric,
+  description       text,
+  expense_category  text,
+
+  -- lifecycle
+  status            text          NOT NULL DEFAULT 'pending',
+  -- CHECK (status IN ('pending','approved','rejected','paid'))
+
+  -- approval / payment audit
+  approved_by       uuid          REFERENCES public.profiles(id)  ON DELETE SET NULL,
+  approved_at       timestamptz,
+  approval_notes    text,
+  paid_by           uuid          REFERENCES public.profiles(id)  ON DELETE SET NULL,
+  paid_at           timestamptz,
+
+  -- timestamps
+  created_at        timestamptz   NOT NULL DEFAULT now(),
+  updated_at        timestamptz
+);
+
+-- ── 1. New columns (no-ops when table was just created) ───────────────────────
 
 -- campaign_id: authoritative FK to one specific adhoc_campaigns row.
 -- Backfilled below for unambiguous legacy rows; left NULL for ambiguous ones.
