@@ -759,8 +759,11 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
-  folderId: string | null; folderName: string; open: boolean; onClose: () => void;
+function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
+  folderId: string | null; folderName: string;
+  /** Pre-selects the security level to match the destination folder. Defaults to 'internal'. */
+  folderSecurityLevel?: SecurityLevel;
+  open: boolean; onClose: () => void;
   currentUserId: string; onUploaded: () => void; initialEntries?: {file: File; relativePath: string}[];
   existingFiles?: WFile[];
 }) {
@@ -768,7 +771,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   const fileRef   = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<Array<{ file: File; relativePath: string }>>([]);
-  const [secLevel, setSecLevel] = useState<SecurityLevel>('internal');
+  const [secLevel, setSecLevel] = useState<SecurityLevel>(folderSecurityLevel);
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -787,7 +790,7 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
       setFiles(initialEntries);
       checkDuplicates(initialEntries.map(e => e.file));
     }
-    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); setDuplicates([]); setSecLevel('internal'); }
+    if (!open) { setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName(''); setExtractZips(true); setDuplicates([]); setSecLevel(folderSecurityLevel); }
   }, [open, initialEntries]);
 
   function checkDuplicates(newFiles: File[]) {
@@ -5092,6 +5095,7 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
+          folderSecurityLevel={selectedFolder?.security_level ?? 'internal'}
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
           initialEntries={pendingDropEntries.length > 0 ? pendingDropEntries : undefined}
