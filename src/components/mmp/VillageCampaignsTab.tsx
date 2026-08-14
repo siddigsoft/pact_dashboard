@@ -198,11 +198,13 @@ function fmtPayMethod(m?: string | null) {
 
 interface VillageCampaignsTabProps {
   canManage: boolean;
+  /** Only Super Admins may permanently delete campaigns or teams */
+  canDelete?: boolean;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabProps) {
+export default function VillageCampaignsTab({ canManage, canDelete = false }: VillageCampaignsTabProps) {
   const { toast } = useToast();
 
   // ── Reference data ────────────────────────────────────────────────────────
@@ -1730,6 +1732,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           profiles={profiles}
           onRefresh={loadTeams}
           canManage={canManage}
+          canDelete={canDelete}
           showCreateTeam={showCreateTeam}
           setShowCreateTeam={setShowCreateTeam}
           teamForm={teamForm}
@@ -1784,7 +1787,7 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => loadCampaignDetail(selectedCampaign.id)}>
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
-          {canManage && (
+          {canDelete && (
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600" onClick={() => deleteCampaign(selectedCampaign.id)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -2792,13 +2795,13 @@ export default function VillageCampaignsTab({ canManage }: VillageCampaignsTabPr
 // ── Team Registry Dialog ──────────────────────────────────────────────────────
 
 function TeamRegistryDialog({
-  open, onOpenChange, teams, profiles, onRefresh, canManage,
+  open, onOpenChange, teams, profiles, onRefresh, canManage, canDelete,
   showCreateTeam, setShowCreateTeam, teamForm, setTeamForm,
   onSubmitTeam, saving, autoCode, onDeleteTeam,
 }: {
   open: boolean; onOpenChange: (v: boolean) => void;
   teams: Team[]; profiles: ProfileOption[];
-  onRefresh: () => void; canManage: boolean;
+  onRefresh: () => void; canManage: boolean; canDelete?: boolean;
   showCreateTeam: boolean; setShowCreateTeam: (v: boolean) => void;
   teamForm: { team_name: string; team_code: string; team_lead_id: string; member_count: string; notes: string };
   setTeamForm: (f: any) => void;
@@ -2830,12 +2833,12 @@ function TeamRegistryDialog({
                   <TableHead>Team Lead</TableHead>
                   <TableHead className="text-right">Members</TableHead>
                   <TableHead>Notes</TableHead>
-                  {canManage && <TableHead />}
+                  {canDelete && <TableHead />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {teams.length === 0 ? (
-                  <TableRow><TableCell colSpan={canManage ? 6 : 5} className="text-center py-8 text-muted-foreground">No teams yet. Create the first one →</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={canDelete ? 6 : 5} className="text-center py-8 text-muted-foreground">No teams yet. Create the first one →</TableCell></TableRow>
                 ) : teams.map(t => (
                   <TableRow key={t.id}>
                     <TableCell className="font-mono text-xs font-semibold">{t.team_code}</TableCell>
@@ -2843,7 +2846,7 @@ function TeamRegistryDialog({
                     <TableCell className="text-xs text-muted-foreground">{t.team_lead_name || '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{t.member_count}</TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">{t.notes || '—'}</TableCell>
-                    {canManage && (
+                    {canDelete && (
                       <TableCell>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={() => onDeleteTeam(t.id)}>
                           <Trash2 className="h-3.5 w-3.5" />

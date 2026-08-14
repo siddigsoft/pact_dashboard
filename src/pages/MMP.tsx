@@ -6743,7 +6743,7 @@ const MMP = () => {
                     <p className="text-sm text-muted-foreground">{err.message}</p>
                   </div>
                 )}>
-                  <VillageCampaignsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
+                  <VillageCampaignsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} canDelete={isSuperAdmin} />
                 </ErrorBoundary>
               </TabsContent>
             )}
