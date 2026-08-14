@@ -2576,14 +2576,15 @@ const MMP = () => {
     suppressToast: true
   });
 
-  // Set initial active tab based on role
-  // Coordinators should see the enumerator tab (they can claim sites like data collectors)
+  // Set initial active tab based on role.
+  // Uses the functional updater so it only changes the tab when the user is
+  // still on a role-default tab ('new' / 'enumerator') — if they have already
+  // navigated to Village Campaigns, Tracker, Ad-hoc, etc. this is a no-op.
   useEffect(() => {
-    if (canClaimSites) {
-      setActiveTab('enumerator');
-    } else {
-      setActiveTab('new');
-    }
+    setActiveTab(prev => {
+      if (prev !== 'new' && prev !== 'enumerator') return prev;
+      return canClaimSites ? 'enumerator' : 'new';
+    });
   }, [canClaimSites]);
 
   // Get users from context for coordinator/supervisor selection
