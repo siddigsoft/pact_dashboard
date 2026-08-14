@@ -4166,10 +4166,13 @@ export default function WorkspaceHub() {
                   );
                 })()}
                 <span className="flex-1 text-sm font-semibold truncate text-foreground select-text">{previewFile.name}</span>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 flex-shrink-0"
-                  onClick={() => openFileAs(previewFile, 'browser')}>
-                  <ExternalLink className="h-3 w-3" />Open
-                </Button>
+                {/* Only show Open when the file is unlocked — mirrors the workspace hub menu guard */}
+                {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 flex-shrink-0"
+                    onClick={() => openFileAs(previewFile, 'browser')}>
+                    <ExternalLink className="h-3 w-3" />Open
+                  </Button>
+                )}
                 <button onClick={() => setPreviewFile(null)}
                   className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 ml-1">
                   <X className="h-4 w-4" />
@@ -4255,18 +4258,21 @@ export default function WorkspaceHub() {
                         ))}
                       </div>
                     )}
-                    <div className="flex gap-2 flex-wrap justify-center">
-                      <Button size="sm" className="gap-1.5 bg-[#1D3461] hover:bg-[#0F2041]"
-                        onClick={() => openFileAs(previewFile, 'browser')}>
-                        <ExternalLink className="h-3.5 w-3.5" />Open File
-                      </Button>
-                      {previewFile.allow_download && (
-                        <Button size="sm" variant="outline" className="gap-1.5"
-                          onClick={() => openFileAs(previewFile, 'download')}>
-                          <Download className="h-3.5 w-3.5" />Download
+                    {/* Actions only available for unlocked files */}
+                    {(!previewFile.password_hash || unlockedIds.has(previewFile.id)) && (
+                      <div className="flex gap-2 flex-wrap justify-center">
+                        <Button size="sm" className="gap-1.5 bg-[#1D3461] hover:bg-[#0F2041]"
+                          onClick={() => openFileAs(previewFile, 'browser')}>
+                          <ExternalLink className="h-3.5 w-3.5" />Open File
                         </Button>
-                      )}
-                    </div>
+                        {previewFile.allow_download && (
+                          <Button size="sm" variant="outline" className="gap-1.5"
+                            onClick={() => openFileAs(previewFile, 'download')}>
+                            <Download className="h-3.5 w-3.5" />Download
+                          </Button>
+                        )}
+                      </div>
+                    )}
                     <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
                       Preview not available for this file type
                     </p>
