@@ -162,10 +162,21 @@ interface AdvanceRequest {
   created_at: string;
   description?: string | null;
   expense_category?: string | null;
+  // Legacy single-tier fields (still written by Mark Paid)
   approved_by?: string | null;
   approved_at?: string | null;
   paid_by?: string | null;
   paid_at?: string | null;
+  // Two-tier fields
+  tier1_status?: string | null;
+  tier1_approved_by?: string | null;
+  tier1_approved_at?: string | null;
+  tier1_notes?: string | null;
+  tier2_status?: string | null;
+  tier2_approved_by?: string | null;
+  tier2_approved_at?: string | null;
+  tier2_notes?: string | null;
+  rejection_reason?: string | null;
 }
 
 // ── Excel import row ──────────────────────────────────────────────────────────
@@ -241,13 +252,15 @@ interface VillageCampaignsTabProps {
   canManage: boolean;
   /** Only Super Admins may permanently delete campaigns or teams */
   canDelete?: boolean;
-  /** Admin / FOM / Super Admin — can approve entries & advance requests */
+  /** FOM / Admin / Super Admin — can perform Tier 1 advance approval */
   canApproveAdvance?: boolean;
+  /** Admin / Super Admin only — can perform Tier 2 advance approval (and Mark Paid) */
+  canTier2Approve?: boolean;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function VillageCampaignsTab({ canManage, canDelete = false, canApproveAdvance = false }: VillageCampaignsTabProps) {
+export default function VillageCampaignsTab({ canManage, canDelete = false, canApproveAdvance = false, canTier2Approve = false }: VillageCampaignsTabProps) {
   const { toast } = useToast();
 
   // ── Reference data ────────────────────────────────────────────────────────
@@ -341,6 +354,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
   const [showNewAdvance, setShowNewAdvance] = useState(false);
   const [advanceSaving, setAdvanceSaving] = useState(false);
   const [advanceForm, setAdvanceForm] = useState({ requested_amount: '', description: '', expense_category: 'transport', site_name: '' });
+
+  // ── Advance reject dialog ─────────────────────────────────────────────────
+  const [rejectDialog, setRejectDialog] = useState<{ open: boolean; advance: AdvanceRequest | null; tier: 1 | 2 }>({ open: false, advance: null, tier: 1 });
+  const [rejectNote, setRejectNote]   = useState('');
+  const [rejecting, setRejecting]     = useState(false);
 
   // ── Mark Paid state ───────────────────────────────────────────────────────
   const [payDialog, setPayDialog] = useState<{ open: boolean; entry: SiteEntry | null }>({ open: false, entry: null });
@@ -536,7 +554,7 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
 
     const { data } = await supabase
       .from('advance_requests')
-      .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category, approved_by, approved_at, paid_by, paid_at')
+      .select('id, site_name, requested_amount, total_paid_amount, status, created_at, description, expense_category, approved_by, approved_at, paid_by, paid_at, tier1_status, tier1_approved_by, tier1_approved_at, tier1_notes, tier2_status, tier2_approved_by, tier2_approved_at, tier2_notes, rejection_reason')
       .or(orParts.join(','))
       .order('created_at', { ascending: false });
     setAdvances((data || []) as AdvanceRequest[]);
@@ -568,6 +586,8 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     setPayForm({ amount: '', notes: '', method: 'cash' });
     setShowNewAdvance(false);
     setAdvanceForm({ requested_amount: '', description: '', expense_category: 'transport', site_name: '' });
+    setRejectDialog({ open: false, advance: null, tier: 1 });
+    setRejectNote('');
 
     if (selectedCampaign) {
       loadCampaignDetail(selectedCampaign.id);
@@ -1093,20 +1113,16 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     }
   };
 
-  // ── Approve an advance request (pending → approved) ───────────────────────
-  const approveAdvance = async (advance: AdvanceRequest) => {
+  // ── Approve advance — Tier 1 (pending → under_review) ───────────────────
+  const approveAdvanceTier1 = async (advance: AdvanceRequest) => {
     setAdvanceApproving(a => ({ ...a, [advance.id]: true }));
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('advance_requests')
-        .update({ status: 'approved', approved_by: user.id, approved_at: now })
-        .eq('id', advance.id);
+      const { error } = await supabase.rpc('approve_campaign_advance_tier1', { p_advance_id: advance.id, p_notes: null });
       if (error) throw error;
-      setAdvances(avs => avs.map(a => a.id === advance.id ? { ...a, status: 'approved', approved_by: user.id, approved_at: now } : a));
-      toast({ title: 'Advance approved', description: `SDG ${Number(advance.requested_amount).toLocaleString()}` });
+      setAdvances(avs => avs.map(a => a.id === advance.id
+        ? { ...a, status: 'under_review', tier1_status: 'approved' }
+        : a));
+      toast({ title: 'Tier 1 approved', description: `SDG ${Number(advance.requested_amount).toLocaleString()} — awaiting Tier 2 approval` });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally {
@@ -1114,17 +1130,65 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
     }
   };
 
-  // ── Mark advance request as paid (approved → paid) ────────────────────────
+  // ── Approve advance — Tier 2 (under_review → approved) ───────────────────
+  const approveAdvanceTier2 = async (advance: AdvanceRequest) => {
+    setAdvanceApproving(a => ({ ...a, [advance.id]: true }));
+    try {
+      const { error } = await supabase.rpc('approve_campaign_advance_tier2', { p_advance_id: advance.id, p_notes: null });
+      if (error) throw error;
+      setAdvances(avs => avs.map(a => a.id === advance.id
+        ? { ...a, status: 'approved', tier2_status: 'approved' }
+        : a));
+      toast({ title: 'Tier 2 approved', description: `SDG ${Number(advance.requested_amount).toLocaleString()} — ready for payment` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setAdvanceApproving(a => ({ ...a, [advance.id]: false }));
+    }
+  };
+
+  // ── Reject advance (either tier) ──────────────────────────────────────────
+  const rejectAdvance = async () => {
+    const { advance, tier } = rejectDialog;
+    if (!advance) return;
+    setRejecting(true);
+    try {
+      const { error } = await supabase.rpc('reject_campaign_advance', {
+        p_advance_id: advance.id,
+        p_tier:       tier,
+        p_reason:     rejectNote.trim() || 'Rejected',
+      });
+      if (error) throw error;
+      const reason = rejectNote.trim() || 'Rejected';
+      setAdvances(avs => avs.map(a => a.id === advance.id
+        ? {
+            ...a,
+            status:           'rejected',
+            rejection_reason: reason,
+            ...(tier === 1 ? { tier1_status: 'rejected', tier1_notes: reason } : {}),
+            ...(tier === 2 ? { tier2_status: 'rejected', tier2_notes: reason } : {}),
+          }
+        : a));
+      toast({ title: `Tier ${tier} rejected`, description: reason });
+      setRejectDialog({ open: false, advance: null, tier: 1 });
+      setRejectNote('');
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  // ── Mark advance request as paid (tier2-approved → paid) — via RPC ────────
+  // All payment state writes are gated by the mark_campaign_advance_paid SECURITY
+  // DEFINER RPC. Direct REST updates to status/paid_by/paid_at are blocked by RLS.
   const markAdvancePaid = async (advance: AdvanceRequest) => {
     setAdvanceApproving(a => ({ ...a, [advance.id]: true }));
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('advance_requests')
-        .update({ status: 'paid', paid_by: user.id, paid_at: now, total_paid_amount: advance.requested_amount })
-        .eq('id', advance.id);
+      const { error } = await supabase.rpc('mark_campaign_advance_paid', {
+        p_advance_id:  advance.id,
+        p_paid_amount: advance.requested_amount,
+      });
       if (error) throw error;
       setAdvances(avs => avs.map(a => a.id === advance.id ? { ...a, status: 'paid', total_paid_amount: advance.requested_amount } : a));
       toast({ title: 'Advance marked paid', description: `SDG ${Number(advance.requested_amount).toLocaleString()}` });
@@ -3113,6 +3177,12 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                 {!selectedCampaign?.project_id && (
                   <p className="text-xs text-amber-600 mt-0.5">Link a project to this campaign to create advance requests</p>
                 )}
+                {(canApproveAdvance || canTier2Approve) && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Approval chain: <span className="font-medium">Tier 1 Review</span> (FOM/Supervisor) →{' '}
+                    <span className="font-medium">Tier 2 Approval</span> (Admin) → Paid
+                  </p>
+                )}
               </div>
               {selectedCampaign?.project_id && canManage && (
                 <Button type="button" size="sm" className="h-8 gap-1.5"
@@ -3142,57 +3212,129 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                       <TableHead>Site / Village</TableHead>
                       <TableHead className="text-right">Requested (SDG)</TableHead>
                       <TableHead className="text-right">Paid (SDG)</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Approval Status</TableHead>
                       <TableHead>Date</TableHead>
-                      {canApproveAdvance && <TableHead />}
+                      {(canApproveAdvance || canTier2Approve) && <TableHead className="w-48" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {advances.map(adv => (
-                      <TableRow key={adv.id}>
-                        <TableCell className="text-xs">{adv.description || '—'}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{adv.expense_category || '—'}</Badge></TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{adv.site_name || '—'}</TableCell>
-                        <TableCell className="text-right tabular-nums font-semibold">{Number(adv.requested_amount).toLocaleString()}</TableCell>
-                        <TableCell className="text-right tabular-nums text-emerald-600">{adv.total_paid_amount ? Number(adv.total_paid_amount).toLocaleString() : '—'}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            <Badge className={`text-[10px] border-0 self-start ${['approved','paid'].includes(adv.status) ? 'bg-emerald-100 text-emerald-700' : adv.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {adv.status}
-                            </Badge>
-                            {adv.status === 'approved' && adv.approved_by && (
-                              <span className="text-[9px] text-muted-foreground">{profileName(adv.approved_by)} · {fmtDate(adv.approved_at ?? undefined)}</span>
-                            )}
-                            {adv.status === 'paid' && adv.paid_by && (
-                              <span className="text-[9px] text-muted-foreground">{profileName(adv.paid_by)} · {fmtDate(adv.paid_at ?? undefined)}</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{fmtDate(adv.created_at)}</TableCell>
-                        {canApproveAdvance && (
+                    {advances.map(adv => {
+                      // Resolve effective tier statuses — fall back to legacy single-tier status
+                      const t1 = adv.tier1_status || (adv.status === 'pending' ? 'pending' : 'approved');
+                      const t2 = adv.tier2_status || (adv.status === 'approved' || adv.status === 'paid' ? 'approved' : 'pending');
+                      const isRejected = adv.status === 'rejected';
+                      const isPaid     = adv.status === 'paid';
+                      const isTier1Pending  = !isRejected && !isPaid && t1 === 'pending';
+                      const isTier2Pending  = !isRejected && !isPaid && t1 === 'approved' && t2 === 'pending';
+                      const isFullyApproved = !isRejected && !isPaid && t1 === 'approved' && t2 === 'approved';
+
+                      return (
+                        <TableRow key={adv.id}>
+                          <TableCell className="text-xs">{adv.description || '—'}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{adv.expense_category || '—'}</Badge></TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{adv.site_name || '—'}</TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">{Number(adv.requested_amount).toLocaleString()}</TableCell>
+                          <TableCell className="text-right tabular-nums text-emerald-600">{adv.total_paid_amount ? Number(adv.total_paid_amount).toLocaleString() : '—'}</TableCell>
+
+                          {/* ── Two-tier status badge ───────────────────────── */}
                           <TableCell>
-                            <div className="flex items-center gap-1">
-                              {adv.status === 'pending' && (
-                                <Button type="button" size="sm"
-                                  className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  disabled={!!advanceApproving[adv.id]}
-                                  onClick={() => approveAdvance(adv)}>
-                                  {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
-                                </Button>
+                            <div className="flex flex-col gap-1 min-w-[130px]">
+                              {/* Overall pill */}
+                              {isPaid ? (
+                                <Badge className="text-[10px] border-0 self-start bg-blue-100 text-blue-700">Paid</Badge>
+                              ) : isRejected ? (
+                                <Badge className="text-[10px] border-0 self-start bg-red-100 text-red-700">Rejected</Badge>
+                              ) : isFullyApproved ? (
+                                <Badge className="text-[10px] border-0 self-start bg-emerald-100 text-emerald-700">Tier 2 Approved</Badge>
+                              ) : isTier2Pending ? (
+                                <Badge className="text-[10px] border-0 self-start bg-purple-100 text-purple-700">Tier 1 Approved</Badge>
+                              ) : (
+                                <Badge className="text-[10px] border-0 self-start bg-amber-100 text-amber-700">Pending</Badge>
                               )}
-                              {adv.status === 'approved' && (
-                                <Button type="button" size="sm"
-                                  className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
-                                  disabled={!!advanceApproving[adv.id]}
-                                  onClick={() => markAdvancePaid(adv)}>
-                                  {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Mark Paid'}
-                                </Button>
+
+                              {/* Tier-by-tier audit trail */}
+                              {t1 === 'approved' && adv.tier1_approved_by && (
+                                <span className="text-[9px] text-muted-foreground leading-tight">
+                                  T1: {profileName(adv.tier1_approved_by)} · {fmtDate(adv.tier1_approved_at ?? undefined)}
+                                </span>
+                              )}
+                              {t2 === 'approved' && adv.tier2_approved_by && (
+                                <span className="text-[9px] text-muted-foreground leading-tight">
+                                  T2: {profileName(adv.tier2_approved_by)} · {fmtDate(adv.tier2_approved_at ?? undefined)}
+                                </span>
+                              )}
+                              {isPaid && adv.paid_by && (
+                                <span className="text-[9px] text-muted-foreground leading-tight">
+                                  Paid by {profileName(adv.paid_by)} · {fmtDate(adv.paid_at ?? undefined)}
+                                </span>
+                              )}
+                              {isRejected && adv.rejection_reason && (
+                                <span className="text-[9px] text-red-400 leading-tight max-w-[140px] truncate" title={adv.rejection_reason}>
+                                  {adv.rejection_reason}
+                                </span>
                               )}
                             </div>
                           </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
+
+                          <TableCell className="text-xs whitespace-nowrap">{fmtDate(adv.created_at)}</TableCell>
+
+                          {/* ── Action buttons ──────────────────────────────── */}
+                          {(canApproveAdvance || canTier2Approve) && (
+                            <TableCell>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {/* Tier 1 Approve — FOM/Supervisor (canApproveAdvance) */}
+                                {isTier1Pending && canApproveAdvance && (
+                                  <Button type="button" size="sm"
+                                    className="h-6 text-[10px] px-2 bg-purple-600 hover:bg-purple-700 text-white"
+                                    disabled={!!advanceApproving[adv.id]}
+                                    onClick={() => approveAdvanceTier1(adv)}>
+                                    {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'T1 Approve'}
+                                  </Button>
+                                )}
+                                {/* Tier 1 Reject — FOM/Supervisor/Admin */}
+                                {isTier1Pending && canApproveAdvance && (
+                                  <Button type="button" size="sm" variant="outline"
+                                    className="h-6 text-[10px] px-2 text-red-600 border-red-200 hover:bg-red-50"
+                                    disabled={!!advanceApproving[adv.id]}
+                                    onClick={() => { setRejectDialog({ open: true, advance: adv, tier: 1 }); setRejectNote(''); }}>
+                                    Reject
+                                  </Button>
+                                )}
+
+                                {/* Tier 2 Approve — Admin/SuperAdmin only */}
+                                {isTier2Pending && canTier2Approve && (
+                                  <Button type="button" size="sm"
+                                    className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    disabled={!!advanceApproving[adv.id]}
+                                    onClick={() => approveAdvanceTier2(adv)}>
+                                    {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'T2 Approve'}
+                                  </Button>
+                                )}
+                                {/* Tier 2 Reject — Admin/SuperAdmin only */}
+                                {isTier2Pending && canTier2Approve && (
+                                  <Button type="button" size="sm" variant="outline"
+                                    className="h-6 text-[10px] px-2 text-red-600 border-red-200 hover:bg-red-50"
+                                    disabled={!!advanceApproving[adv.id]}
+                                    onClick={() => { setRejectDialog({ open: true, advance: adv, tier: 2 }); setRejectNote(''); }}>
+                                    Reject
+                                  </Button>
+                                )}
+
+                                {/* Mark Paid — Admin/SuperAdmin, after both tiers approved */}
+                                {isFullyApproved && canTier2Approve && (
+                                  <Button type="button" size="sm"
+                                    className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                                    disabled={!!advanceApproving[adv.id]}
+                                    onClick={() => markAdvancePaid(adv)}>
+                                    {advanceApproving[adv.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Mark Paid'}
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -3968,6 +4110,37 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
             <Button variant="outline" onClick={() => setShowNewAdvance(false)}>Cancel</Button>
             <Button onClick={submitAdvance} disabled={advanceSaving || !advanceForm.requested_amount}>
               {advanceSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reject Advance Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={rejectDialog.open} onOpenChange={open => !open && setRejectDialog(d => ({ ...d, open: false }))}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reject Advance — Tier {rejectDialog.tier}</DialogTitle>
+            <DialogDescription>
+              {rejectDialog.advance && (
+                <>SDG {Number(rejectDialog.advance.requested_amount).toLocaleString()} · {rejectDialog.advance.description || 'No description'}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Rejection reason <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+              <Textarea
+                value={rejectNote}
+                onChange={e => setRejectNote(e.target.value)}
+                placeholder="Explain why this advance request is being rejected…"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRejectDialog(d => ({ ...d, open: false }))}>Cancel</Button>
+            <Button type="button" variant="destructive" onClick={rejectAdvance} disabled={rejecting}>
+              {rejecting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />} Reject
             </Button>
           </DialogFooter>
         </DialogContent>

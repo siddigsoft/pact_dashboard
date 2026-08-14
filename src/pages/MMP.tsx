@@ -4654,7 +4654,7 @@ const MMP = () => {
                     Ad-hoc Visits
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && !isTabBlocked('mmp:village-campaigns') && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor) && !isTabBlocked('mmp:village-campaigns') && (
                   <TabsTrigger value="village-campaigns" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-village-campaigns">
                     <Home className="h-3.5 w-3.5" />
@@ -6735,7 +6735,7 @@ const MMP = () => {
             )}
 
             {/* Village Campaigns Tab */}
-            {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isSupervisor) && (
               <TabsContent value="village-campaigns">
                 <ErrorBoundary fallback={(err: Error) => (
                   <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 space-y-2">
@@ -6746,7 +6746,8 @@ const MMP = () => {
                   <VillageCampaignsTab
                     canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator}
                     canDelete={isSuperAdmin}
-                    canApproveAdvance={isSuperAdmin || isAdmin || isFOM}
+                    canApproveAdvance={isSuperAdmin || isAdmin || isFOM || isSupervisor}
+                    canTier2Approve={isSuperAdmin || isAdmin}
                   />
                 </ErrorBoundary>
               </TabsContent>
