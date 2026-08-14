@@ -1762,6 +1762,10 @@ export default function WorkspaceHub() {
   const [pendingDropEntries, setPendingDropEntries] = useState<{file: File; relativePath: string}[]>([]);
   const externalDragCounter = useRef(0);
 
+  // ── Folder grid right-click context menu state ───────────────────────────
+  const [ctxMenuFolder, setCtxMenuFolder] = useState<WFolder | null>(null);
+  const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // ── Folder customization state ────────────────────────────────────────────
   const [folderCustomizeTarget, setFolderCustomizeTarget] = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
   const [customColor, setCustomColor] = useState('#1D3461');
@@ -4083,11 +4087,7 @@ export default function WorkspaceHub() {
                           onClick={() => { setSelectedFolderId(folder.id); setSearchQuery(''); }}
                           className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors text-left"
                         >
-                          {isLocked
-                            ? <Lock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                            : folder.icon && /[^\u0000-\u007F]/.test(folder.icon)
-                              ? <span className="text-sm leading-none flex-shrink-0">{folder.icon}</span>
-                              : <Folder className="h-3.5 w-3.5 text-[#2865eb] flex-shrink-0" />}
+                          <WinFolderSvg icon={folder.icon || ''} locked={isLocked} size={20} />
                           <span className="flex-1 text-sm text-gray-800 dark:text-foreground font-medium truncate">
                             {folder.name.replace(/^folder\s+/i, '').trim()}
                           </span>
@@ -4127,6 +4127,7 @@ export default function WorkspaceHub() {
                           <button
                             key={sub.id}
                             onClick={() => setSelectedFolderId(sub.id)}
+                            onContextMenu={e => { e.preventDefault(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
                             onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
                             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
                             onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
@@ -4653,6 +4654,65 @@ export default function WorkspaceHub() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ══ Folder grid right-click context menu ══════════════════════════ */}
+        {ctxMenuFolder && (isAdmin || ctxMenuFolder.created_by === userId) && (
+          <DropdownMenu
+            open={!!ctxMenuFolder}
+            onOpenChange={open => { if (!open) setCtxMenuFolder(null); }}
+          >
+            <DropdownMenuTrigger asChild>
+              <div
+                style={{ position: 'fixed', left: ctxMenuPos.x, top: ctxMenuPos.y, width: 1, height: 1, pointerEvents: 'none' }}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFolder(null)}>
+              {isAdmin && canRenameFolder(ctxMenuFolder) && (
+                <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: ctxMenuFolder.id, currentName: ctxMenuFolder.name }); setRenameValue(ctxMenuFolder.name); }}>
+                  <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => { setCustomColor(ctxMenuFolder.color || '#1D3461'); setCustomIcon(ctxMenuFolder.icon || ''); setFolderCustomizeTarget({ id: ctxMenuFolder.id, name: ctxMenuFolder.name, color: ctxMenuFolder.color, icon: ctxMenuFolder.icon }); }}>
+                  <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
+                </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => duplicateFolder(ctxMenuFolder)}>
+                  <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                </DropdownMenuItem>
+              )}
+              {isAdmin
+                ? <DropdownMenuItem onClick={() => setShareFolderTarget(ctxMenuFolder)}>
+                    <Share2 className="h-3.5 w-3.5 mr-2 text-blue-600" />Share / Manage Access
+                  </DropdownMenuItem>
+                : <DropdownMenuItem onClick={() => setShareFolderTarget(ctxMenuFolder)}>
+                    <Users className="h-3.5 w-3.5 mr-2 text-blue-500" />Who Has Access
+                  </DropdownMenuItem>}
+              <DropdownMenuSeparator />
+              {(isSuperAdmin || ctxMenuFolder.created_by === userId) && (
+                <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: ctxMenuFolder.id, name: ctxMenuFolder.name, password_hash: ctxMenuFolder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                  <Key className="h-3.5 w-3.5 mr-2" />
+                  {ctxMenuFolder.password_hash
+                    ? (isSuperAdmin ? 'Change / Reset Password' : 'Change Password')
+                    : 'Set Password'}
+                </DropdownMenuItem>
+              )}
+              {isAdmin && <DropdownMenuSeparator />}
+              {isAdmin && <SecuritySubMenu current={ctxMenuFolder.security_level} onSelect={l => changeFolderSecurity(ctxMenuFolder.id, ctxMenuFolder.name, l)} />}
+              <DropdownMenuSeparator />
+              {isSuperAdmin ? (
+                <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(ctxMenuFolder)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFolder(ctxMenuFolder)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         {/* ══ File Detail Panel ════════════════════════════════════════════ */}
