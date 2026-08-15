@@ -258,6 +258,30 @@ const UserDetail: FC = () => {
   // multiple times while a direct DB fetch is already in-flight.
   const fallbackFetchingRef = useRef(false);
 
+  // ── Reset on profile navigation ──────────────────────────────────────────
+  // React Router v6 does NOT remount <UserDetail> when only :id changes, so
+  // `user` and `fallbackFetchingRef` carry stale values from the previous
+  // profile.  That causes the fallback-fetch guard to silently skip the new
+  // profile.  Clear everything the moment the URL param changes.
+  const prevIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevIdRef.current === id) return;
+    prevIdRef.current = id;
+    setUser(null);
+    setIsLoadingUser(!!id);
+    fallbackFetchingRef.current = false;
+  }, [id]);
+
+  // ── Safety timeout ────────────────────────────────────────────────────────
+  // If something goes wrong and isLoadingUser stays true for 10 s, surface an
+  // error rather than spinning forever.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoadingUser) { setLoadTimedOut(false); return; }
+    const t = setTimeout(() => setLoadTimedOut(true), 10000);
+    return () => clearTimeout(t);
+  }, [isLoadingUser]);
+
   // Employment record state
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [empDepartmentId, setEmpDepartmentId] = useState<string>("");
@@ -1520,6 +1544,26 @@ const UserDetail: FC = () => {
   };
 
   if (isLoadingUser) {
+    if (loadTimedOut) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center space-y-4">
+            <h2 className="text-xl font-bold">Profile took too long to load</h2>
+            <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+              The profile could not be loaded. This may be a permissions issue or a temporary connection problem.
+            </p>
+            <div className="flex items-center gap-3 justify-center">
+              <Button onClick={() => { setLoadTimedOut(false); setIsLoadingUser(true); fallbackFetchingRef.current = false; setUser(null); }}>
+                Retry
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/users')}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Staff Directory
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
