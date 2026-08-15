@@ -5,6 +5,7 @@ import { useUser } from '@/context/user/UserContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { User } from '@/types';
 import { Project, ProjectRole, ProjectTeamMember } from '@/types/project';
+import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -103,6 +104,7 @@ const Users = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoadingApproval, setIsLoadingApproval] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -269,7 +271,14 @@ const Users = () => {
     if (roleFilter !== 'all') {
       result = result.filter(u => getPrimaryRoleLabel(u).toLowerCase() === roleFilter.toLowerCase());
     }
-    
+
+    // Classification filter
+    if (classificationFilter === 'none') {
+      result = result.filter(u => !u.classification?.level);
+    } else if (classificationFilter !== 'all') {
+      result = result.filter(u => u.classification?.level === classificationFilter);
+    }
+
     // Status filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'approved') {
@@ -1090,12 +1099,29 @@ const Users = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {(searchQuery || roleFilter !== 'all') && (
+              <Select value={classificationFilter} onValueChange={setClassificationFilter}>
+                <SelectTrigger className="h-9 w-[170px] rounded-lg" data-testid="select-classification">
+                  <SelectValue placeholder="All Classifications" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classifications</SelectItem>
+                  <SelectItem value="none">No Classification</SelectItem>
+                  {(Object.entries(CLASSIFICATION_LABELS) as [string, string][]).map(([level, label]) => (
+                    <SelectItem key={level} value={level}>
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${CLASSIFICATION_COLORS[level as 'A'|'B'|'C'].split(' ')[0]}`} />
+                        {label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(searchQuery || roleFilter !== 'all' || classificationFilter !== 'all') && (
                 <Button 
                   variant="ghost" 
                   size="sm"
                   className="h-9 px-3 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setSearchQuery(''); setRoleFilter('all'); }}
+                  onClick={() => { setSearchQuery(''); setRoleFilter('all'); setClassificationFilter('all'); }}
                   data-testid="button-clear-filters"
                 >
                   <X className="h-3.5 w-3.5 mr-1" />
