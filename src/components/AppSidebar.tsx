@@ -502,8 +502,11 @@
     if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin)) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
+    if (!isHidden('/mmp/incentive-settings') && (isSuperAdmin || isAdmin)) {
+      coordinationItems.push({ id: 'mmp-incentive-settings', title: "Incentive Settings", url: "/mmp/incentive-settings", icon: Award, priority: 6, isPinned: isPinned('/mmp/incentive-settings') });
+    }
     const coordSiteItems  = coordinationItems.filter(i => ['supervisor-site-management','site-verification','sites-for-verification','mmp-cycle-close'].includes(i.id));
-    const coordAdminItems = coordinationItems.filter(i => ['staff-directory'].includes(i.id));
+    const coordAdminItems = coordinationItems.filter(i => ['staff-directory','mmp-incentive-settings'].includes(i.id));
     if (coordSiteItems.length)  groups.push({ id: 'coord-sites', label: 'Site Management', order: 4.51, items: coordSiteItems,  parentGroup: 'coordination' } as any);
     if (coordAdminItems.length) groups.push({ id: 'coord-admin', label: 'Administration',  order: 4.52, items: coordAdminItems, parentGroup: 'coordination' } as any);
 
