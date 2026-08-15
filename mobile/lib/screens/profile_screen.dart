@@ -45,6 +45,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   List<Map<String, String>> _classificationHistory = [];
   bool _isLoadingLookups = false;
 
+  // Incentive bonus history (coordinators & supervisors)
+  List<Map<String, dynamic>> _incentivePayments = [];
+  bool _isLoadingIncentive = false;
+  bool _incentiveHistoryLoaded = false; // prevents refetch on empty result
+
   // Sync status
   int _pendingSyncCount = 0;
   int _pendingSiteVisitsCount = 0;
@@ -394,6 +399,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _stateName == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadLookupNames(profile);
+      });
+    }
+
+    // Load incentive bonus history for eligible roles
+    final _eligibleForIncentive = profile != null &&
+        (profile.role == 'coordinator' ||
+            profile.role == 'supervisor' ||
+            profile.role == 'hub_supervisor' ||
+            profile.role == 'hubSupervisor');
+    if (_eligibleForIncentive &&
+        !_isLoadingIncentive &&
+        !_incentiveHistoryLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadIncentivePayments(profile.id);
       });
     }
 
@@ -750,6 +769,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             // Bank Account Section
                             _buildBankAccountSection(profile),
                             const SizedBox(height: 16),
+
+                            // Incentive Bonus History (coordinators & supervisors)
+                            _buildIncentiveHistorySection(),
+                            if (_incentivePayments.isNotEmpty ||
+                                _isLoadingIncentive)
+                              const SizedBox(height: 16),
 
                             // Timestamps Section
                             _buildSection(
@@ -1143,6 +1168,439 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ],
       ),
     );
+  }
+
+  // ── Incentive bonus history fetch ────────────────────────────────────────────
+  Future<void> _loadIncentivePayments(String userId) async {
+    if (_isLoadingIncentive) return;
+    setState(() => _isLoadingIncentive = true);
+    try {
+      final supabase = Supabase.instance.client;
+      // Use a SECURITY DEFINER RPC so the snapshot lifecycle status is readable
+      // even though mmp_incentive_snapshots is RLS-restricted to finance/admin.
+      // The function filters to auth.uid() == user_id server-side.
+      final response = await supabase
+          .rpc('get_my_incentive_payments');
+
+      final all = (response as List).cast<Map<String, dynamic>>();
+      // Hide rows whose snapshot is still being calculated (amounts not final)
+      final visible = all.where((p) {
+        final snapStatus = (p['snapshot_status'] as String?) ?? '';
+        return snapStatus != 'calculating';
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _incentivePayments = visible;
+          _isLoadingIncentive = false;
+          _incentiveHistoryLoaded = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading incentive payments: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingIncentive = false;
+          _incentiveHistoryLoaded = true; // stop retrying on error too
+        });
+      }
+    }
+  }
+
+  // ── Incentive history section widget ─────────────────────────────────────────
+  Widget _buildIncentiveHistorySection() {
+    if (_isLoadingIncentive) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.1),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.monetization_on_outlined,
+                    color: Colors.amber,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Incentive Bonus History',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber[800],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_incentivePayments.isEmpty) return const SizedBox.shrink();
+
+    // Compute totals
+    final paidRows = _incentivePayments
+        .where((p) => p['payment_status'] == 'paid' && p['excluded'] != true)
+        .toList();
+    final totalPaidCents = paidRows.fold<int>(
+      0,
+      (sum, p) => sum + ((p['bonus_amount_cents'] as int?) ?? 0),
+    );
+    final currency = (_incentivePayments.first['currency'] as String?) ?? 'SDG';
+    final totalPaid = totalPaidCents / 100;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ─────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.monetization_on_outlined,
+                  color: Colors.amber,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Incentive Bonus History',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber[800],
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                if (paidRows.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber[700],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${paidRows.length} paid',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Total paid summary bar ──────────────────────────────────────────
+          if (paidRows.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.amber.shade700, Colors.amber.shade500],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Total Paid Out',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${totalPaid.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} $currency',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── Payment rows ───────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                for (int i = 0; i < _incentivePayments.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  _buildIncentivePaymentRow(_incentivePayments[i]),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncentivePaymentRow(Map<String, dynamic> p) {
+    // ── Derive display values ─────────────────────────────────────────────────
+    // RPC returns flat columns: snapshot_status, payment_status, mmp_name
+    final snapStatus = (p['snapshot_status'] as String?) ?? 'pre_approved';
+    final isPaid = (p['payment_status'] as String?) == 'paid';
+    final displayStatus = isPaid ? 'paid' : snapStatus;
+    final excluded = p['excluded'] == true;
+
+    final mmpName = (p['mmp_name'] as String?) ?? '—';
+
+    final bonusCents = (p['bonus_amount_cents'] as int?) ?? 0;
+    final bonusAmt = bonusCents / 100;
+    final currency = (p['currency'] as String?) ?? 'SDG';
+    final amtStr =
+        '${bonusAmt.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} $currency';
+
+    final role = (p['role'] as String? ?? '').toLowerCase();
+    final hub = (p['hub_name'] as String?) ?? '';
+
+    // Status badge config
+    Color badgeColor;
+    Color badgeText;
+    String badgeLabel;
+    switch (displayStatus) {
+      case 'paid':
+        badgeColor = const Color(0xFFEDE9FE); // purple-100
+        badgeText = const Color(0xFF6D28D9);   // purple-700
+        badgeLabel = 'Paid';
+        break;
+      case 'approved':
+        badgeColor = const Color(0xFFD1FAE5); // green-100
+        badgeText = const Color(0xFF065F46);  // green-800
+        badgeLabel = 'Approved';
+        break;
+      default: // pre_approved
+        badgeColor = const Color(0xFFFEF3C7); // amber-100
+        badgeText = const Color(0xFF92400E);  // amber-800
+        badgeLabel = 'Pre-Approved';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isPaid
+            ? const Color(0xFFF5F3FF)
+            : excluded
+                ? Colors.grey.shade50
+                : AppColors.backgroundGray,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isPaid
+              ? const Color(0xFFDDD6FE)
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: MMP name + status badge
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  mmpName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: excluded
+                        ? Colors.grey.shade500
+                        : AppColors.textDark,
+                    decoration: excluded
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: badgeText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Role + hub row
+          Row(
+            children: [
+              Icon(Icons.work_outline, size: 12, color: Colors.grey.shade500),
+              const SizedBox(width: 4),
+              Text(
+                role.isEmpty ? '—' : role[0].toUpperCase() + role.substring(1),
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              if (hub.isNotEmpty) ...[
+                Text(
+                  '  ·  ',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+                Icon(Icons.location_on_outlined,
+                    size: 12, color: Colors.grey.shade500),
+                const SizedBox(width: 2),
+                Flexible(
+                  child: Text(
+                    hub,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Bonus amount row + payment info
+          Row(
+            children: [
+              Text(
+                'Bonus',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                excluded ? '(excluded) $amtStr' : amtStr,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: excluded
+                      ? Colors.grey.shade400
+                      : isPaid
+                          ? const Color(0xFF6D28D9)
+                          : AppColors.textDark,
+                  decoration: excluded
+                      ? TextDecoration.lineThrough
+                      : TextDecoration.none,
+                ),
+              ),
+            ],
+          ),
+
+          // Paid date (only for paid rows)
+          if (isPaid && p['paid_at'] != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 12, color: const Color(0xFF6D28D9)),
+                const SizedBox(width: 4),
+                Text(
+                  '${(p['payment_method'] as String? ?? 'wallet')} · ${_formatDateStr(p['paid_at'] as String)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: const Color(0xFF6D28D9),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatDateStr(String iso) {
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return iso;
+    }
   }
 
   Widget _buildSyncStatusBanner() {
