@@ -49,6 +49,8 @@ const emptyCounts = (): NavBadgeCounts => ({
 interface UseNavBadgeCountsParams {
   currentUserId?: string;
   hubId?: string | null;
+  /** Secondary hub from profile — extends supervisor badge scope alongside primary hub */
+  secondaryHubId?: string | null;
   roleIsSupervisor: boolean;
   roleIsFinance: boolean;
   roleIsCoordinator: boolean;
@@ -69,6 +71,7 @@ interface UseNavBadgeCountsParams {
 export function useNavBadgeCounts({
   currentUserId,
   hubId,
+  secondaryHubId,
   roleIsSupervisor,
   roleIsFinance,
   roleIsCoordinator,
@@ -162,11 +165,17 @@ export function useNavBadgeCounts({
       }
 
       if (roleIsSupervisor && hubId) {
+        // Build a deduplicated list of all supervised hub IDs (primary + secondary)
+        const supervisedHubIds = Array.from(
+          new Set([hubId, secondaryHubId].filter((h): h is string => !!h))
+        );
+        const hubFilter = supervisedHubIds.map(h => `hub_id.eq.${h}`).join(',');
+
         next.pendingCostTier1Hub = await headCount(
           supabase
             .from('operational_cost_submissions')
             .select('id', { count: 'exact', head: true })
-            .eq('hub_id', hubId)
+            .or(hubFilter)
             .eq('tier1_status', 'pending')
             .neq('submitted_by', currentUserId)
         );
@@ -174,14 +183,14 @@ export function useNavBadgeCounts({
           supabase
             .from('down_payment_requests')
             .select('id', { count: 'exact', head: true })
-            .eq('hub_id', hubId)
+            .or(hubFilter)
             .eq('status', 'pending_supervisor')
         );
         // Withdrawal requests pending supervisor — hub-scoped via team member IDs
         const { data: hubMembers } = await supabase
           .from('profiles')
           .select('id')
-          .eq('hub_id', hubId)
+          .or(hubFilter)
           .neq('id', currentUserId);
         const memberIds = (hubMembers || []).map((m: { id: string }) => m.id);
         if (memberIds.length > 0) {

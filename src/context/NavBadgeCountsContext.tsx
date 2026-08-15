@@ -75,6 +75,7 @@ export function NavBadgeCountsProvider({ children }: { children: React.ReactNode
     () => ({
       currentUserId: currentUser?.id,
       hubId: currentUser?.hubId ?? null,
+      secondaryHubId: (currentUser as any)?.secondaryHubId ?? null,
       roleIsSupervisor,
       roleIsFinance,
       roleIsCoordinator,
