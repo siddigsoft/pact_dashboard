@@ -1838,6 +1838,7 @@ export default function WorkspaceHub() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   // ── Bulk selection state ──────────────────────────────────────────────────
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [bulkMoveFolderId, setBulkMoveFolderId] = useState<string>('__root__');
   const [bulkMoving, setBulkMoving] = useState(false);
@@ -2711,6 +2712,25 @@ export default function WorkspaceHub() {
   // Computed selection state for Select All checkbox
   const allDisplayedSelected = displayedFiles.length > 0 && displayedFiles.every(f => selectedFileIds.has(f.id));
   const someDisplayedSelected = displayedFiles.some(f => selectedFileIds.has(f.id)) && !allDisplayedSelected;
+
+  async function bulkDeleteFolders() {
+    const ids = [...selectedFolderIds];
+    const toDelete = currentSubFolders.filter(f => ids.includes(f.id) && (isSuperAdmin || f.created_by === userId));
+    const skipped = ids.length - toDelete.length;
+    if (toDelete.length === 0) {
+      toast({ title: 'Nothing to delete', description: 'You do not have permission to delete the selected folders.', variant: 'destructive' });
+      return;
+    }
+    const results = await Promise.all(toDelete.map(f => supabase.from('workspace_folders').delete().eq('id', f.id)));
+    const failed = results.filter(r => r.error);
+    setSelectedFolderIds(new Set());
+    refetchFolders(); refetchFiles();
+    if (failed.length > 0) {
+      toast({ title: `Some folders could not be deleted`, description: String(failed[0].error?.message), variant: 'destructive' });
+    } else {
+      toast({ title: `${toDelete.length} folder${toDelete.length !== 1 ? 's' : ''} deleted${skipped > 0 ? ` (${skipped} skipped — no permission)` : ''}` });
+    }
+  }
 
   async function bulkShareFiles() {
     const ids = [...selectedFileIds];
@@ -4569,55 +4589,83 @@ export default function WorkspaceHub() {
                         const subFileCount = fileCounts[sub.id] ?? 0;
                         const isLocked = !!sub.password_hash && !unlockedFolderIds.has(sub.id);
                         const isDrop = dragOverFolderId === sub.id;
+                        const isFolderSelected = selectedFolderIds.has(sub.id);
                         return (
-                          <button
-                            key={sub.id}
-                            onClick={() => setSelectedFolderId(sub.id)}
-                            onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
-                            onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
-                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
-                            onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
-                            className={cn(
-                              'group flex flex-col items-center gap-1 p-2 rounded-lg transition-all text-center select-none relative',
-                              isDrop ? 'bg-[#CCE4F7] dark:bg-blue-900/40 ring-2 ring-[#0078D4]/40' : 'hover:bg-[#E3F3FD] dark:hover:bg-blue-950/30'
-                            )}
-                            data-testid={`subfolder-btn-${sub.id}`}
-                          >
-                            <WinFolderSvg icon={sub.icon || ''} locked={isLocked} size={56} />
-                            <span className="text-[11px] font-medium text-gray-800 dark:text-foreground leading-tight line-clamp-2 w-full" title={sub.name}>
-                              {sub.name}
-                            </span>
-                            {subFileCount > 0 && (
-                              <span className="text-[9px] text-muted-foreground tabular-nums">{subFileCount}</span>
-                            )}
-                            {isDrop && (
-                              <div className="absolute inset-0 rounded-lg flex items-end justify-center pb-1 pointer-events-none">
-                                <span className="text-[9px] bg-[#0078D4] text-white px-1.5 py-0.5 rounded-full font-semibold">Move here</span>
-                              </div>
-                            )}
-                          </button>
+                          <div key={sub.id} className="relative group/fcard">
+                            {/* selection checkbox — always visible when any folder selected, else hover-only */}
+                            <button
+                              className={cn(
+                                'absolute top-1 left-1 z-10 flex items-center justify-center w-5 h-5 rounded transition-opacity',
+                                selectedFolderIds.size > 0 ? 'opacity-100' : 'opacity-0 group-hover/fcard:opacity-100'
+                              )}
+                              onClick={e => { e.stopPropagation(); setSelectedFolderIds(prev => { const n = new Set(prev); n.has(sub.id) ? n.delete(sub.id) : n.add(sub.id); return n; }); }}
+                              title={isFolderSelected ? 'Deselect' : 'Select'}
+                            >
+                              {isFolderSelected
+                                ? <SquareCheck className="h-4 w-4 text-blue-600 drop-shadow" />
+                                : <Square className="h-4 w-4 text-gray-400 drop-shadow" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (selectedFolderIds.size > 0) {
+                                  setSelectedFolderIds(prev => { const n = new Set(prev); n.has(sub.id) ? n.delete(sub.id) : n.add(sub.id); return n; });
+                                } else {
+                                  setSelectedFolderId(sub.id);
+                                }
+                              }}
+                              onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFolder(sub); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
+                              onDragOver={e => { e.preventDefault(); setDragOverFolderId(sub.id); }}
+                              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+                              onDrop={e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, sub.id); setDragOverFolderId(null); }}
+                              className={cn(
+                                'flex flex-col items-center gap-1 p-2 rounded-lg transition-all text-center select-none relative w-full',
+                                isFolderSelected
+                                  ? 'bg-blue-100 dark:bg-blue-900/50 ring-2 ring-blue-400'
+                                  : isDrop ? 'bg-[#CCE4F7] dark:bg-blue-900/40 ring-2 ring-[#0078D4]/40' : 'hover:bg-[#E3F3FD] dark:hover:bg-blue-950/30'
+                              )}
+                              data-testid={`subfolder-btn-${sub.id}`}
+                            >
+                              <WinFolderSvg icon={sub.icon || ''} locked={isLocked} size={56} />
+                              <span className="text-[11px] font-medium text-gray-800 dark:text-foreground leading-tight line-clamp-2 w-full" title={sub.name}>
+                                {sub.name}
+                              </span>
+                              {subFileCount > 0 && (
+                                <span className="text-[9px] text-muted-foreground tabular-nums">{subFileCount}</span>
+                              )}
+                              {isDrop && (
+                                <div className="absolute inset-0 rounded-lg flex items-end justify-center pb-1 pointer-events-none">
+                                  <span className="text-[9px] bg-[#0078D4] text-white px-1.5 py-0.5 rounded-full font-semibold">Move here</span>
+                                </div>
+                              )}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
                 )}
 
-                {/* ── Files ────────────────────────────────────────────────── */}
-                {displayedFiles.length > 0 && (<>
-                  {/* ── Bulk action toolbar — appears when files are selected ── */}
-                  {selectedFileIds.size > 0 && (
+                {/* ── Bulk action toolbar — files + folders ─────────────── */}
+                {(selectedFileIds.size > 0 || selectedFolderIds.size > 0) && (() => {
+                  const totalCount = selectedFileIds.size + selectedFolderIds.size;
+                  const label = selectedFileIds.size > 0 && selectedFolderIds.size > 0
+                    ? `${totalCount} items selected`
+                    : selectedFileIds.size > 0
+                      ? `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} selected`
+                      : `${selectedFolderIds.size} folder${selectedFolderIds.size !== 1 ? 's' : ''} selected`;
+                  return (
                     <div className="mx-6 mt-3 mb-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 animate-in slide-in-from-top-1 duration-150">
-                      <span className="text-xs font-semibold text-blue-800 dark:text-blue-300 flex-1 select-none">
-                        {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
-                      </span>
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
-                        onClick={() => setBulkMoveOpen(true)}>
-                        <ArrowUpDown className="h-3.5 w-3.5" />Move
-                      </Button>
-                      {(isAdmin || isSuperAdmin) && (
+                      <span className="text-xs font-semibold text-blue-800 dark:text-blue-300 flex-1 select-none">{label}</span>
+                      {selectedFileIds.size > 0 && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                          onClick={() => setBulkMoveOpen(true)}>
+                          <ArrowUpDown className="h-3.5 w-3.5" />Move
+                        </Button>
+                      )}
+                      {(isAdmin || isSuperAdmin) && selectedFileIds.size > 0 && (
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
                           onClick={() => setBulkShareOpen(true)}>
-                          <Share2 className="h-3.5 w-3.5" />Share
+                          <Share2 className="h-3.5 w-3.5" />Share files
                         </Button>
                       )}
                       {(isAdmin || isSuperAdmin) && (
@@ -4628,13 +4676,17 @@ export default function WorkspaceHub() {
                       )}
                       <button
                         className="ml-1 p-1 rounded text-blue-400 hover:text-blue-700 transition-colors"
-                        onClick={() => setSelectedFileIds(new Set())}
+                        onClick={() => { setSelectedFileIds(new Set()); setSelectedFolderIds(new Set()); }}
                         title="Clear selection"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  )}
+                  );
+                })()}
+
+                {/* ── Files ────────────────────────────────────────────────── */}
+                {displayedFiles.length > 0 && (<>
                   {currentSubFolders.length > 0 && (
                     <div className="px-8 pt-3 pb-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Files</p>
@@ -5265,18 +5317,29 @@ export default function WorkspaceHub() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <Trash2 className="h-4 w-4" />
-                Move {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} to trash?
+                {selectedFileIds.size > 0 && selectedFolderIds.size > 0
+                  ? `Delete ${selectedFileIds.size + selectedFolderIds.size} items?`
+                  : selectedFolderIds.size > 0
+                    ? `Delete ${selectedFolderIds.size} folder${selectedFolderIds.size !== 1 ? 's' : ''}?`
+                    : `Move ${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} to trash?`}
               </DialogTitle>
               <DialogDescription>
-                {isSuperAdmin
-                  ? `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} will be moved to the Recycle Bin. You can restore them from there.`
-                  : `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} you own will be moved to trash. Files you don't own will be skipped.`}
+                {selectedFolderIds.size > 0
+                  ? `Folders and all their contents will be permanently deleted. Files will be moved to the Recycle Bin.`
+                  : isSuperAdmin
+                    ? `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} will be moved to the Recycle Bin.`
+                    : `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} you own will be moved to trash. Files you don't own will be skipped.`}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2">
               <Button variant="outline" size="sm" onClick={() => setBulkDeleteConfirmOpen(false)}>Cancel</Button>
-              <Button size="sm" variant="destructive" onClick={() => { setBulkDeleteConfirmOpen(false); bulkDeleteFiles(); }}>
-                <Trash2 className="h-3.5 w-3.5 mr-1.5" />Move to trash
+              <Button size="sm" variant="destructive" onClick={() => {
+                setBulkDeleteConfirmOpen(false);
+                if (selectedFileIds.size > 0) bulkDeleteFiles();
+                if (selectedFolderIds.size > 0) bulkDeleteFolders();
+              }}>
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                {selectedFolderIds.size > 0 ? 'Delete' : 'Move to trash'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -5394,6 +5457,15 @@ export default function WorkspaceHub() {
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFolder(null)}>
+              <DropdownMenuItem onSelect={() => {
+                setSelectedFolderIds(prev => { const n = new Set(prev); n.has(ctxMenuFolder.id) ? n.delete(ctxMenuFolder.id) : n.add(ctxMenuFolder.id); return n; });
+                setCtxMenuFolder(null);
+              }}>
+                {selectedFolderIds.has(ctxMenuFolder.id)
+                  ? <><X className="h-3.5 w-3.5 mr-2" />Deselect</>
+                  : <><SquareCheck className="h-3.5 w-3.5 mr-2" />Select</>}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {isAdmin && canRenameFolder(ctxMenuFolder) && (
                 <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: ctxMenuFolder.id, currentName: ctxMenuFolder.name }); setRenameValue(ctxMenuFolder.name); }}>
                   <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
