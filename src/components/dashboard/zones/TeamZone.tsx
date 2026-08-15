@@ -49,11 +49,11 @@ export const TeamZone: React.FC = () => {
     return normalizedRoles.includes('supervisor') && !isAdmin;
   }, [roles]);
 
-  // Get supervisor's hub IDs for filtering (primary hub only).
-  // secondary_hub_id on a supervisor's profile is their *work location*, not a hub they supervise.
-  // To give a supervisor visibility over additional hubs, use additional_roles assignments.
+  // Get supervisor's hub IDs for filtering (primary and secondary).
+  // A supervisor assigned to two hubs via secondary_hub_id sees both hubs' teams.
   const supervisorHubId = currentUser?.hubId;
-  const supervisorHubIds = [supervisorHubId]
+  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId]
     .filter(Boolean)
     .map(h => normalizeHubId(h!) || h!)
     .filter((v, i, a) => a.indexOf(v) === i);

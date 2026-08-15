@@ -1115,7 +1115,13 @@ const CostSubmission = () => {
           return false;
         });
       } else if (isSupervisor) {
-        const myHubId = (currentUser as any)?.hubId;
+        // Build the full set of hub IDs this supervisor is responsible for
+        // (primary hub + secondary hub from profile + any additional_roles hub assignments).
+        const supervisorHubAccess = getHubAccessInfo(currentUser as any);
+        const myHubIds = supervisorHubAccess.hubIds; // normalized list
+        const matchesAnyHub = (hubId: string | null | undefined) =>
+          !!hubId && myHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(hubId) || hubId));
+
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
           // Already actioned by this Supervisor (T1 approved or rejected)
@@ -1124,14 +1130,14 @@ const CostSubmission = () => {
           // Never show other Supervisors' submissions — each Supervisor only sees their own hub's Coordinators
           const isOtherSupervisorSub = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
           if (isOtherSupervisorSub) return false;
-          // Coordinator/DataCollector submissions: strict hub match required
+          // Coordinator/DataCollector submissions: match against ALL supervised hubs
           const isCoordEnumSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
             || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
             || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
           if (isCoordEnumSub) {
-            if (!myHubId) return false; // Supervisor with no hub assigned cannot see coordinator submissions
+            if (myHubIds.length === 0) return false; // Supervisor with no hub assigned cannot see coordinator submissions
             if (!o.hub_id) return teamMemberIds.includes(o.submitted_by); // Fallback: accept if confirmed team member
-            return o.hub_id === myHubId; // Strict hub match
+            return matchesAnyHub(o.hub_id); // Match any of the supervisor's hubs
           }
           return false;
         });
@@ -1272,12 +1278,14 @@ const CostSubmission = () => {
       // If this hub has NO supervisor at all, FOM steps in as T1 approver.
       if (isFOM && !hubHasSupervisor(effectiveHubId)) return true;
 
-      // Primary-role Supervisor: approve submissions from their own hub only.
+      // Primary-role Supervisor: approve submissions from any of their supervised hubs
+      // (primary hub + secondary hub from profile + additional_roles hub assignments).
       if (isPrimaryRoleSupervisor) {
-        const myHubId = (currentUser as any)?.hubId;
-        if (!myHubId) return false;
+        const supervisorHubAccess = getHubAccessInfo(currentUser as any);
+        const myHubIds = supervisorHubAccess.hubIds;
+        if (myHubIds.length === 0) return false;
         if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
-        return oc.hub_id === myHubId;
+        return myHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(oc.hub_id!) || oc.hub_id));
       }
       // FOM who also holds a Supervisor role via additional_roles — hub-scoped T1 approval.
       if (isFOM && isSupervisor) {
