@@ -294,7 +294,7 @@ const Users = () => {
     }
     
     return result;
-  }, [users, activeTab, debouncedSearchQuery, roleFilter, statusFilter, currentUser]);
+  }, [users, activeTab, debouncedSearchQuery, roleFilter, classificationFilter, statusFilter, currentUser]);
 
   // Track initial load state - set to false after a short delay to handle empty datasets
   useEffect(() => {
