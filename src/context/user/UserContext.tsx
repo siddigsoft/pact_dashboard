@@ -1566,7 +1566,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         employee_id: updatedUser.employeeId,
         phone: updatedUser.phone,
         bank_account: (updatedUser as any).bankAccount || null,
-        updated_at: new Date().toISOString(),
       };
       // Only include role in the payload for non-protected-owner accounts.
       if (!isProtectedOwner(updatedUser.id)) {
