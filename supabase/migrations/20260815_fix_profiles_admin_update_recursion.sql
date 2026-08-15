@@ -1,15 +1,10 @@
 -- Fix: "infinite recursion detected in policy for relation profiles"
+-- Also adds update_own_bank_account() so field staff can save bank details
+-- without hitting RLS at all.
 --
--- Root cause: the profiles_admin_update RLS UPDATE policy contained an
+-- Root cause: profiles_admin_update RLS UPDATE policy contained an inline
 --   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() ...)
--- sub-query.  PostgreSQL evaluates that sub-query under the SAME RLS
--- context, which immediately triggers the UPDATE policy again → infinite
--- loop.
---
--- Solution: extract the role check into a SECURITY DEFINER function.
--- SECURITY DEFINER runs with the function-owner's privileges (superuser),
--- so it bypasses RLS entirely and can safely read public.profiles without
--- re-triggering any policy.
+-- sub-query.  PostgreSQL evaluates it under the SAME RLS context → loop.
 
 -- ── 1. SECURITY DEFINER helper ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.current_user_is_admin()
@@ -28,16 +23,10 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.current_user_is_admin() TO authenticated;
 
-COMMENT ON FUNCTION public.current_user_is_admin IS
-'SECURITY DEFINER helper: returns true when the calling session belongs to
- an admin or super-admin.  Uses the function-owner privileges so it can
- read public.profiles without triggering RLS recursion.';
-
 -- ── 2. Drop the recursive policy ─────────────────────────────────────────────
 DROP POLICY IF EXISTS profiles_admin_update ON public.profiles;
 
 -- ── 3. Re-create using the SECURITY DEFINER helper ───────────────────────────
---    No direct reference to public.profiles inside the policy expression.
 CREATE POLICY profiles_admin_update
   ON public.profiles
   FOR UPDATE
@@ -50,3 +39,20 @@ CREATE POLICY profiles_admin_update
     public.is_super_admin((SELECT auth.uid()))
     OR public.current_user_is_admin()
   );
+
+-- ── 4. RPC: any user can update their OWN bank account ───────────────────────
+-- SECURITY DEFINER bypasses RLS so it never triggers the policy above.
+-- The WHERE id = auth.uid() ensures users can only update their own row.
+CREATE OR REPLACE FUNCTION public.update_own_bank_account(bank_account_data JSONB)
+RETURNS VOID
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE public.profiles
+  SET    bank_account = bank_account_data,
+         updated_at   = now()
+  WHERE  id = auth.uid();
+$$;
+
+GRANT EXECUTE ON FUNCTION public.update_own_bank_account(JSONB) TO authenticated;
