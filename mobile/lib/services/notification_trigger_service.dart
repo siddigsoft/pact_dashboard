@@ -956,40 +956,85 @@ class NotificationTriggerService {
     String? projectId,
   }) async {
     try {
-      // Resolve coordinator_id from the campaign record
+      // Resolve coordinator_id and supervisor_id from the campaign record in
+      // one query so we avoid a second round-trip.
       final campaignRow = await _supabase
           .from('adhoc_campaigns')
-          .select('coordinator_id')
+          .select('coordinator_id, supervisor_id')
           .eq('id', campaignId)
           .maybeSingle();
 
       final coordinatorId = campaignRow?['coordinator_id'] as String?;
-      if (coordinatorId == null || coordinatorId.isEmpty) {
+      final supervisorId  = campaignRow?['supervisor_id']  as String?;
+
+      final hasCoordinator =
+          coordinatorId != null && coordinatorId.isNotEmpty;
+      final hasSupervisor  =
+          supervisorId  != null && supervisorId.isNotEmpty;
+
+      // Skip only when neither recipient is set — a campaign with a supervisor
+      // but no coordinator is still valid and must receive a notification.
+      if (!hasCoordinator && !hasSupervisor) {
         debugPrint(
-          '[Notification] villageSiteClaimed: no coordinator on campaign $campaignId — skipping',
+          '[Notification] villageSiteClaimed: no coordinator or supervisor on '
+          'campaign $campaignId — skipping',
         );
         return;
       }
 
-      await send(
-        NotificationTriggerOptions(
-          userId: coordinatorId,
-          title: 'Village Claimed',
-          message:
-              '$teamLeadName has claimed $villageName — work can begin',
-          type: NotificationType.info,
-          category: NotificationCategory.assignments,
-          priority: NotificationPriority.high,
-          link: '/mmp',
-          relatedEntityId: siteId,
-          relatedEntityType: RelatedEntityType.siteVisit,
-          projectId: projectId,
-        ),
-      );
+      // Build the list of sends to dispatch in parallel.
+      // Coordinator → high priority (primary owner).
+      // Supervisor  → medium priority, only when distinct from coordinator.
+      final sends = <Future<bool>>[];
+
+      if (hasCoordinator) {
+        sends.add(
+          send(
+            NotificationTriggerOptions(
+              userId: coordinatorId!,
+              title: 'Village Claimed',
+              message:
+                  '$teamLeadName has claimed $villageName — work can begin',
+              type: NotificationType.info,
+              category: NotificationCategory.assignments,
+              priority: NotificationPriority.high,
+              link: '/mmp',
+              relatedEntityId: siteId,
+              relatedEntityType: RelatedEntityType.siteVisit,
+              projectId: projectId,
+            ),
+          ),
+        );
+      }
+
+      if (hasSupervisor && supervisorId != coordinatorId) {
+        sends.add(
+          send(
+            NotificationTriggerOptions(
+              userId: supervisorId!,
+              title: 'Village Claimed',
+              message:
+                  '$teamLeadName has claimed $villageName — work can begin',
+              type: NotificationType.info,
+              category: NotificationCategory.assignments,
+              priority: NotificationPriority.medium,
+              link: '/mmp',
+              relatedEntityId: siteId,
+              relatedEntityType: RelatedEntityType.siteVisit,
+              projectId: projectId,
+            ),
+          ),
+        );
+      }
+
+      await Future.wait(sends);
 
       debugPrint(
-        '[Notification] villageSiteClaimed: notified coordinator=$coordinatorId '
-        'for village=$villageName campaign=$campaignId',
+        '[Notification] villageSiteClaimed: notified '
+        '${hasCoordinator ? "coordinator=$coordinatorId" : ""}'
+        '${hasCoordinator && hasSupervisor && supervisorId != coordinatorId ? " " : ""}'
+        '${hasSupervisor && supervisorId != coordinatorId ? "supervisor=$supervisorId" : ""}'
+        ' for village=$villageName campaign=$campaignId',
       );
     } catch (e) {
       // Non-fatal — claim already succeeded; log and continue.
