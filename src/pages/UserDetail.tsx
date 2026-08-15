@@ -520,6 +520,11 @@ const UserDetail: FC = () => {
         }))
     : [];
   const loadingHistory = false;
+
+  // ── Incentive payment history ─────────────────────────────────────────────
+  const [incentivePayments, setIncentivePayments] = useState<any[]>([]);
+  const [loadingIncentive, setLoadingIncentive] = useState(false);
+
   const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
   
   // Location dropdown state management
@@ -1094,6 +1099,34 @@ const UserDetail: FC = () => {
       .limit(30)
       .then(({ data }) => setBankHistory(data ?? []));
   }, [user?.id]);
+
+  // ── Incentive payment history fetch ────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.id || !showCompensation) return;
+    setLoadingIncentive(true);
+    supabase
+      .from('mmp_incentive_payments')
+      .select(`
+        id, role, hub_id, hub_name, dc_fee_pool_cents, bonus_pct,
+        bonus_amount_cents, currency, excluded, status,
+        payment_method, payroll_period, paid_at,
+        mmp_incentive_snapshots(id, status),
+        mmp_files(id, name, mmp_id)
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
+        // Hide rows whose parent snapshot is still 'calculating' — amounts are
+        // not meaningful yet and the row is shown only from pre_approved onward.
+        const visible = (data ?? []).filter(
+          (p: any) => p.mmp_incentive_snapshots?.status !== 'calculating'
+        );
+        setIncentivePayments(visible);
+        setLoadingIncentive(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, showCompensation]);
 
   const handleDeleteBankAccount = async () => {
     if (!user || !updateUser) return;
@@ -3121,6 +3154,140 @@ const UserDetail: FC = () => {
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">No classification history yet</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* ── Incentive Payment History ───────────────────────────── */}
+                <Card className="shadow-sm">
+                  <CardHeader className="p-4 border-b bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm font-semibold">Incentive Payment History</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {loadingIncentive ? (
+                      <div className="flex items-center justify-center py-8 gap-3 text-muted-foreground">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+                        <span className="text-sm">Loading history…</span>
+                      </div>
+                    ) : incentivePayments.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">No incentive history yet</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/20 text-xs text-muted-foreground">
+                              <th className="text-left px-4 py-2 font-medium">MMP</th>
+                              <th className="text-left px-4 py-2 font-medium">Role</th>
+                              <th className="text-left px-4 py-2 font-medium">Hub</th>
+                              {isAdmin && <th className="text-right px-4 py-2 font-medium">DC Fee Pool</th>}
+                              {isAdmin && <th className="text-right px-4 py-2 font-medium">Bonus %</th>}
+                              <th className="text-right px-4 py-2 font-medium">Bonus Amount</th>
+                              <th className="text-left px-4 py-2 font-medium">Status</th>
+                              <th className="text-left px-4 py-2 font-medium">Payment</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {incentivePayments.map((p: any) => {
+                              const snapStatus = p.mmp_incentive_snapshots?.status ?? 'pre_approved';
+                              const isPaid = p.status === 'paid';
+                              // Derive display status: payment.status='paid' overrides;
+                              // otherwise use the snapshot lifecycle status.
+                              const displayStatus = isPaid ? 'paid' : snapStatus;
+                              const mmpName = p.mmp_files?.name ?? p.mmp_files?.mmp_id ?? 'MMP';
+                              const mmpFileId = p.mmp_files?.id;
+                              return (
+                                <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                                  <td className="px-4 py-3">
+                                    {mmpFileId ? (
+                                      <a
+                                        href={`/mmp/${mmpFileId}`}
+                                        className="text-primary hover:underline font-medium text-xs"
+                                      >
+                                        {mmpName}
+                                      </a>
+                                    ) : (
+                                      <span className="text-xs font-medium">{mmpName}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 capitalize text-xs">{p.role}</td>
+                                  <td className="px-4 py-3 text-xs text-muted-foreground">{p.hub_name ?? '—'}</td>
+                                  {isAdmin && (
+                                    <td className="px-4 py-3 text-right text-xs font-mono">
+                                      {p.dc_fee_pool_cents != null
+                                        ? `${(p.dc_fee_pool_cents / 100).toLocaleString()} ${p.currency}`
+                                        : '—'}
+                                    </td>
+                                  )}
+                                  {isAdmin && (
+                                    <td className="px-4 py-3 text-right text-xs">
+                                      {p.bonus_pct != null ? `${p.bonus_pct}%` : '—'}
+                                    </td>
+                                  )}
+                                  <td className="px-4 py-3 text-right text-xs font-semibold">
+                                    {p.excluded ? (
+                                      <span className="text-muted-foreground line-through">
+                                        {(p.bonus_amount_cents / 100).toLocaleString()} {p.currency}
+                                      </span>
+                                    ) : (
+                                      `${(p.bonus_amount_cents / 100).toLocaleString()} ${p.currency}`
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {displayStatus === 'paid' && (
+                                      <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-xs">Paid</Badge>
+                                    )}
+                                    {displayStatus === 'approved' && (
+                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">Approved</Badge>
+                                    )}
+                                    {displayStatus === 'pre_approved' && (
+                                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">Pre-Approved</Badge>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                                    {isPaid ? (
+                                      <div>
+                                        <span className="capitalize">{p.payment_method ?? 'wallet'}</span>
+                                        {p.paid_at && (
+                                          <p className="text-[10px] mt-0.5">
+                                            {new Date(p.paid_at).toLocaleDateString('en-US', {
+                                              month: 'short', day: 'numeric', year: 'numeric',
+                                            })}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          {/* Total paid footer — only shown when at least one payment is paid */}
+                          {incentivePayments.some(p => p.status === 'paid') && (() => {
+                            const paidRows = incentivePayments.filter(p => p.status === 'paid' && !p.excluded);
+                            const totalPaid = paidRows.reduce((s: number, p: any) => s + (p.bonus_amount_cents ?? 0), 0);
+                            const currency = paidRows[0]?.currency ?? 'SDG';
+                            const colSpanLeft = isAdmin ? 5 : 3;
+                            return (
+                              <tfoot>
+                                <tr className="border-t bg-muted/30">
+                                  <td colSpan={colSpanLeft} className="px-4 py-2 text-xs font-semibold text-right text-muted-foreground">
+                                    Total Paid
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-xs font-bold">
+                                    {(totalPaid / 100).toLocaleString()} {currency}
+                                  </td>
+                                  <td colSpan={2} />
+                                </tr>
+                              </tfoot>
+                            );
+                          })()}
+                        </table>
                       </div>
                     )}
                   </CardContent>
