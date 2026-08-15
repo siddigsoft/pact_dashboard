@@ -2594,8 +2594,16 @@ const UserDetail: FC = () => {
 
             {/* ── LOCATION SECTION ────────────────────────────────────────── */}
             {activeSection === 'location' && (() => {
-              const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor'];
-              const isFieldStaff = FIELD_STAFF.includes((user.role || '').toLowerCase());
+              // Roles that carry Hub / State / Locality assignments (not Country/City/Address).
+              // FOM and HubSupervisor manage field operations and are hub-scoped like field staff.
+              const FIELD_STAFF = [
+                'datacollector', 'data_collector',
+                'coordinator',
+                'supervisor',
+                'hubsupervisor', 'hub_supervisor',
+                'fom', 'fieldopmanager', 'field operation manager (fom)',
+              ];
+              const isFieldStaff = FIELD_STAFF.includes((user.role || '').toLowerCase().replace(/\s+/g, ' ').trim());
 
               return (
                 <div className="p-5 sm:p-6 space-y-5">
