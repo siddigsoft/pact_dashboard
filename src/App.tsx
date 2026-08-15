@@ -163,6 +163,7 @@ const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const IncentiveSettingsPage = lazy(() => import('./pages/IncentiveSettingsPage'));
+const IncentivesOverviewPage = lazy(() => import('./pages/IncentivesOverviewPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
 const WorkspaceFolderShare = lazy(() => import('./pages/WorkspaceFolderShare'));
 const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
@@ -555,6 +556,7 @@ const AppRoutes = () => {
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
         <Route path="/mmp/incentive-settings" element={<IncentiveSettingsPage />} />
+        <Route path="/incentives" element={<IncentivesOverviewPage />} />
         <Route path="/mmp/:id" element={<MMPDetailView />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />

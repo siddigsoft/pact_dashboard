@@ -476,6 +476,19 @@
     }
     if (planningItems.length) groups.push({ id: 'programme-planning', label: 'Planning', order: 2.1, items: planningItems, parentGroup: 'programme' } as any);
 
+    // ── Incentive Bonuses section ────────────────────────────────────────────
+    const canSeeIncentives = isSuperAdmin || isAdmin || isICT || isFOM || isCountryDirector || isSeniorManagement ||
+      hasAnyRole(['finance', 'financial_admin', 'financialAdmin']) || isCoordinator || isSupervisor;
+    const incentiveItems: MenuGroup['items'] = [];
+    if (canSeeIncentives && !isHidden('/incentives')) {
+      const incTitle = (isCoordinator || isSupervisor) ? 'My Bonuses' : 'Incentive Overview';
+      incentiveItems.push({ id: 'incentive-overview', title: incTitle, url: '/incentives', icon: Award, priority: 1, isPinned: isPinned('/incentives') });
+    }
+    if ((isSuperAdmin || isAdmin) && !isHidden('/mmp/incentive-settings')) {
+      incentiveItems.push({ id: 'incentive-settings', title: 'Incentive Settings', url: '/mmp/incentive-settings', icon: Settings2 as any, priority: 2, isPinned: isPinned('/mmp/incentive-settings') });
+    }
+    if (incentiveItems.length) groups.push({ id: 'incentives-main', label: 'Bonuses', order: 2.15, items: incentiveItems, parentGroup: 'incentives' } as any);
+
     // â”€â”€ 4. Field Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // ── Field Ops Hub (replaces 9 flat items) ─────────────────────────────────
     const fieldOpsItems: MenuGroup['items'] = [];
@@ -502,11 +515,8 @@
     if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin)) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
-    if (!isHidden('/mmp/incentive-settings') && (isSuperAdmin || isAdmin)) {
-      coordinationItems.push({ id: 'mmp-incentive-settings', title: "Incentive Settings", url: "/mmp/incentive-settings", icon: Award, priority: 6, isPinned: isPinned('/mmp/incentive-settings') });
-    }
     const coordSiteItems  = coordinationItems.filter(i => ['supervisor-site-management','site-verification','sites-for-verification','mmp-cycle-close'].includes(i.id));
-    const coordAdminItems = coordinationItems.filter(i => ['staff-directory','mmp-incentive-settings'].includes(i.id));
+    const coordAdminItems = coordinationItems.filter(i => ['staff-directory'].includes(i.id));
     if (coordSiteItems.length)  groups.push({ id: 'coord-sites', label: 'Site Management', order: 4.51, items: coordSiteItems,  parentGroup: 'coordination' } as any);
     if (coordAdminItems.length) groups.push({ id: 'coord-admin', label: 'Administration',  order: 4.52, items: coordAdminItems, parentGroup: 'coordination' } as any);
 
@@ -1344,6 +1354,7 @@
             const SECTION_CFG: Record<string, SectionCfg> = {
               'workspace':     { label: 'My Workspace',            Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL },
               'programme':     { label: 'Programme Management',    Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL },
+              'incentives':    { label: 'Incentive Bonuses',        Icon: Award,           labelClass: SIDEBAR_SECTION_LABEL },
               'comms':         { label: 'Communication',           Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL },
               'fieldops':      { label: 'Field Operations',        Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL },
               'coordination':  { label: 'Coordination & Oversight',Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL },
