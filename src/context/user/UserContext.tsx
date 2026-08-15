@@ -164,11 +164,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       // Directory fields only — bank_account / photo counts loaded on demand elsewhere.
-      // `additional_roles` and `last_activity` are optional columns that may not yet exist
-      // in all DB instances.  Try the full select first; on any column-not-found error fall
-      // back to the guaranteed-safe minimal set so the directory always loads.
-      const FULL_COLS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, additional_roles, last_activity';
-      const SAFE_COLS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to';
+      // Some columns are optional and may not exist in all DB instances.
+      // Try progressively smaller column sets so the directory always loads.
+      const FULL_COLS    = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, additional_roles, last_activity';
+      const SAFE_COLS    = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to';
+      const MINIMAL_COLS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to';
 
       let profilesData: any[] | null = null;
       let profilesError: any = null;
@@ -176,12 +176,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ({ data: profilesData, error: profilesError } = await supabase.from('profiles').select(FULL_COLS));
 
       if (profilesError) {
-        console.warn('[fetchUsers] Full column select failed, retrying with safe columns:', profilesError.message);
+        console.warn('[fetchUsers] Full cols failed, retrying without optional cols:', profilesError.message);
         ({ data: profilesData, error: profilesError } = await supabase.from('profiles').select(SAFE_COLS));
       }
 
       if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
+        console.warn('[fetchUsers] Safe cols failed, retrying with minimal cols:', profilesError.message);
+        ({ data: profilesData, error: profilesError } = await supabase.from('profiles').select(MINIMAL_COLS));
+      }
+
+      if (profilesError) {
+        console.error('[fetchUsers] All column sets failed:', profilesError.message);
         return;
       }
 

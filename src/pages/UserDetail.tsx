@@ -259,28 +259,14 @@ const UserDetail: FC = () => {
   // Start in loading state whenever a profile ID is in the URL so we never
   // flash "User not found" before the context / fallback fetch has a chance to run.
   const [isLoadingUser, setIsLoadingUser] = useState(!!id);
-  // Guard: prevents concurrent fallback fetches when `users` fires the effect
-  // multiple times while a direct DB fetch is already in-flight.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  // Track the last id we started loading so we can detect navigation.
+  const loadingForIdRef = useRef<string | undefined>(undefined);
+  // Prevents concurrent fallback fetches when `users` re-fires the effect.
   const fallbackFetchingRef = useRef(false);
 
-  // ── Reset on profile navigation ──────────────────────────────────────────
-  // React Router v6 does NOT remount <UserDetail> when only :id changes, so
-  // `user` and `fallbackFetchingRef` carry stale values from the previous
-  // profile.  That causes the fallback-fetch guard to silently skip the new
-  // profile.  Clear everything the moment the URL param changes.
-  const prevIdRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (prevIdRef.current === id) return;
-    prevIdRef.current = id;
-    setUser(null);
-    setIsLoadingUser(!!id);
-    fallbackFetchingRef.current = false;
-  }, [id]);
-
   // ── Safety timeout ────────────────────────────────────────────────────────
-  // If something goes wrong and isLoadingUser stays true for 10 s, surface an
-  // error rather than spinning forever.
-  const [loadTimedOut, setLoadTimedOut] = useState(false);
   useEffect(() => {
     if (!isLoadingUser) { setLoadTimedOut(false); return; }
     const t = setTimeout(() => setLoadTimedOut(true), 10000);
@@ -572,50 +558,60 @@ const UserDetail: FC = () => {
   useEffect(() => {
     if (!id) return;
 
+    // ── Detect profile navigation (React Router reuses this component) ──────
+    // When :id changes, reset the fetch guard so the new profile always loads.
+    // We do this HERE (not in a separate effect) so the reset and the lookup
+    // happen in the same synchronous tick — no stale-closure race condition.
+    if (loadingForIdRef.current !== id) {
+      loadingForIdRef.current = id;
+      fallbackFetchingRef.current = false;
+      setIsLoadingUser(true);
+    }
+
     const foundUser = users.find(u => u.id === id);
     if (foundUser) {
-      // User is in the context cache — apply it.
-      // Only show the full loading spinner on the very first load (user is null).
-      // On subsequent realtime heartbeat refreshes we silently update so child tabs
-      // (EmployeeEducationTab etc.) are NOT unmounted and do NOT lose form state.
-      if (!user) setIsLoadingUser(true);
       setUser(foundUser);
-      // IMPORTANT: only reset editForm when NOT in edit mode so we don't overwrite
-      // changes the admin is actively making.
+      // IMPORTANT: only reset editForm when NOT in edit mode so we don't
+      // overwrite changes the admin is actively making.
       if (!editMode) {
-        const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
+        const normalizedRole = foundUser.role
+          ? (normalizeRole(foundUser.role as string) || foundUser.role)
+          : '';
         setEditForm({ ...foundUser, role: normalizedRole as any });
       }
       setIsLoadingUser(false);
-      fallbackFetchingRef.current = false; // clear guard if a previous fetch completed
+      fallbackFetchingRef.current = false;
       return;
     }
 
-    // User not in context cache. If a fallback is already in-flight (the effect
-    // can re-fire many times when realtime updates change `users`), skip.
-    if (user || fallbackFetchingRef.current) return;
+    // User not in context cache — start a direct DB fetch.
+    // Only `fallbackFetchingRef` guards against concurrent fetches; we no
+    // longer check `user` here because it may still be the *previous*
+    // profile's data (stale closure) which would wrongly block the fetch.
+    if (fallbackFetchingRef.current) return;
 
-    // Direct single-row fetch as last resort — handles stale localStorage,
-    // a failed directory query, or a FOM whose profile isn't in their hub-scoped
-    // users list. Uses the absolute minimum columns that exist in all DB instances.
     fallbackFetchingRef.current = true;
     setIsLoadingUser(true);
 
+    const targetId = id; // capture for async closure
+
     (async () => {
       try {
-        // secondary_hub_id may not exist in all DB instances — omit it here and
-        // derive it from the location JSONB fallback below (already handled in the
-        // loaded User object via `loc?.secondary_hub_id`).
+        // Omit optional columns (secondary_hub_id etc.) that may not exist in
+        // all DB instances — derive secondary hub from location JSONB instead.
         const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, email, role, status, hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
-          .eq('id', id)
+          .eq('id', targetId)
           .maybeSingle();
+
+        // Navigation may have changed id before this resolved — discard stale result
+        if (loadingForIdRef.current !== targetId) return;
 
         if (error) throw error;
 
         if (!data) {
-          toast({ title: 'User not found', description: `No profile with ID ${id}`, variant: 'destructive' });
+          toast({ title: 'User not found', description: `No profile with ID ${targetId}`, variant: 'destructive' });
           navigate('/users');
           return;
         }
@@ -635,7 +631,7 @@ const UserDetail: FC = () => {
           role: data.role || 'dataCollector',
           roles: [],
           hubId: data.hub_id ?? undefined,
-          secondaryHubId: data.secondary_hub_id || loc?.secondary_hub_id || undefined,
+          secondaryHubId: loc?.secondary_hub_id || undefined,
           stateId: data.state_id ?? undefined,
           localityId: data.locality_id ?? undefined,
           location: loc,
