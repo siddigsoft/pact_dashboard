@@ -574,9 +574,12 @@ const UserDetail: FC = () => {
 
     (async () => {
       try {
+        // secondary_hub_id may not exist in all DB instances — omit it here and
+        // derive it from the location JSONB fallback below (already handled in the
+        // loaded User object via `loc?.secondary_hub_id`).
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, full_name, email, role, status, hub_id, secondary_hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
+          .select('id, full_name, email, role, status, hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
           .eq('id', id)
           .maybeSingle();
 
