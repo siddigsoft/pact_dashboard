@@ -2,7 +2,6 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/cost-group/GroupedList.tsx": () => import("../components/mockups/cost-group/GroupedList.tsx"),
-  "./components/mockups/employee-profile/UnifiedProfile.tsx": () => import("../components/mockups/employee-profile/UnifiedProfile.tsx"),
   "./components/mockups/mmp-card/OptionA.tsx": () => import("../components/mockups/mmp-card/OptionA.tsx"),
   "./components/mockups/mmp-card/OptionB.tsx": () => import("../components/mockups/mmp-card/OptionB.tsx"),
   "./components/mockups/mmp-card/OptionC.tsx": () => import("../components/mockups/mmp-card/OptionC.tsx"),
@@ -20,6 +19,7 @@ export const modules: ModuleMap = {
   "./components/mockups/my-tasks/NotionStyle.tsx": () => import("../components/mockups/my-tasks/NotionStyle.tsx"),
   "./components/mockups/my-tasks/TimeBlockStyle.tsx": () => import("../components/mockups/my-tasks/TimeBlockStyle.tsx"),
   "./components/mockups/my-tasks/TodoistStyle.tsx": () => import("../components/mockups/my-tasks/TodoistStyle.tsx"),
+  "./components/mockups/employee-profile/UnifiedProfile.tsx": () => import("../components/mockups/employee-profile/UnifiedProfile.tsx"),
   "./components/mockups/my-tasks-variants/V10MinimalList.tsx": () => import("../components/mockups/my-tasks-variants/V10MinimalList.tsx"),
   "./components/mockups/my-tasks-variants/V1SideNavCards.tsx": () => import("../components/mockups/my-tasks-variants/V1SideNavCards.tsx"),
   "./components/mockups/my-tasks-variants/V2CommandHub.tsx": () => import("../components/mockups/my-tasks-variants/V2CommandHub.tsx"),

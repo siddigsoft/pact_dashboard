@@ -562,50 +562,61 @@ const UserDetail: FC = () => {
     // When :id changes, reset the fetch guard so the new profile always loads.
     // We do this HERE (not in a separate effect) so the reset and the lookup
     // happen in the same synchronous tick — no stale-closure race condition.
-    if (loadingForIdRef.current !== id) {
+    const idChanged = loadingForIdRef.current !== id;
+
+    if (idChanged) {
+      // ── New profile navigation ─────────────────────────────────────────────
       loadingForIdRef.current = id;
       fallbackFetchingRef.current = false;
-      setIsLoadingUser(true);
-    }
 
-    const foundUser = users.find(u => u.id === id);
-    if (foundUser) {
-      setUser(foundUser);
-      // IMPORTANT: only reset editForm when NOT in edit mode so we don't
-      // overwrite changes the admin is actively making.
-      if (!editMode) {
-        const normalizedRole = foundUser.role
-          ? (normalizeRole(foundUser.role as string) || foundUser.role)
-          : '';
-        setEditForm({ ...foundUser, role: normalizedRole as any });
+      // Fast-render: if context already has this user show it immediately,
+      // but ALWAYS kick off a fresh DB fetch below to ensure accuracy.
+      const cached = users.find(u => u.id === id);
+      if (cached) {
+        setUser(cached);
+        if (!editMode) {
+          const nr = cached.role ? (normalizeRole(cached.role as string) || cached.role) : '';
+          setEditForm({ ...cached, role: nr as any });
+        }
+        setIsLoadingUser(false);
+        // Still fall through to start the DB fetch for fresh data.
+      } else {
+        setIsLoadingUser(true);
       }
-      setIsLoadingUser(false);
-      fallbackFetchingRef.current = false;
-      return;
+    } else {
+      // ── Same id, users list updated (realtime / fetchUsers completed) ──────
+      // Silently sync the latest context data without touching isLoadingUser,
+      // so ongoing sub-tab fetches are not disrupted.
+      const cached = users.find(u => u.id === id);
+      if (cached) {
+        setUser(cached);
+        if (!editMode) {
+          const nr = cached.role ? (normalizeRole(cached.role as string) || cached.role) : '';
+          setEditForm({ ...cached, role: nr as any });
+        }
+        setIsLoadingUser(false);
+      }
+      // Whether or not we found in context, let any in-flight DB fetch finish.
+      if (fallbackFetchingRef.current) return;
+      // No point re-fetching from DB if we already have the user loaded.
+      if (!idChanged) return;
     }
 
-    // User not in context cache — start a direct DB fetch.
-    // Only `fallbackFetchingRef` guards against concurrent fetches; we no
-    // longer check `user` here because it may still be the *previous*
-    // profile's data (stale closure) which would wrongly block the fetch.
+    // Guard: only one DB fetch per id at a time.
     if (fallbackFetchingRef.current) return;
-
     fallbackFetchingRef.current = true;
-    setIsLoadingUser(true);
 
-    const targetId = id; // capture for async closure
+    const targetId = id;
 
     (async () => {
       try {
-        // Omit optional columns (secondary_hub_id etc.) that may not exist in
-        // all DB instances — derive secondary hub from location JSONB instead.
         const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, email, role, status, hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
           .eq('id', targetId)
           .maybeSingle();
 
-        // Navigation may have changed id before this resolved — discard stale result
+        // Discard if the user navigated away before this resolved.
         if (loadingForIdRef.current !== targetId) return;
 
         if (error) throw error;
@@ -657,9 +668,9 @@ const UserDetail: FC = () => {
         if (!editMode) setEditForm({ ...loaded, role: normRole as any });
         setIsLoadingUser(false);
       } catch (err: any) {
-        console.error('[UserDetail] fallback fetch failed:', err);
+        console.error('[UserDetail] DB fetch failed:', err);
         setIsLoadingUser(false);
-        toast({ title: 'User not found', description: err?.message || `No profile with ID ${id}`, variant: 'destructive' });
+        toast({ title: 'Could not load profile', description: err?.message || `Profile ID: ${targetId}`, variant: 'destructive' });
         navigate('/users');
       } finally {
         fallbackFetchingRef.current = false;
