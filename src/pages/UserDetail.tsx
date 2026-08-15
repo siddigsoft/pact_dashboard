@@ -515,6 +515,7 @@ const UserDetail: FC = () => {
           effectiveUntil: c.effectiveUntil,
           assignedBy: c.assignedBy,
           changeReason: c.changeReason,
+          notes: c.notes,
           createdAt: c.createdAt,
         }))
     : [];
@@ -3115,7 +3116,8 @@ const UserDetail: FC = () => {
                                 {' → '}
                                 {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Present'}
                               </p>
-                              {history.changeReason && <p className="text-xs text-muted-foreground mt-1.5 pl-2 border-l-2 border-muted-foreground/30">{history.changeReason}</p>}
+                              {history.changeReason && <p className="text-xs text-muted-foreground mt-1.5 pl-2 border-l-2 border-muted-foreground/30"><span className="font-medium">Reason:</span> {history.changeReason}</p>}
+                              {history.notes && <p className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-muted-foreground/20 italic">{history.notes}</p>}
                             </div>
                           </div>
                         ))}

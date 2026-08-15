@@ -128,6 +128,7 @@ export interface ClassificationHistory {
   assignedBy?: string;
   assignedByName?: string;
   changeReason?: string;
+  notes?: string;
   createdAt: string;
 }
 
