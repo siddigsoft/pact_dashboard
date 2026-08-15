@@ -2592,6 +2592,51 @@ const UserDetail: FC = () => {
                           </LocField>
                         </div>
                       )}
+
+                      {/* ── Temporary Hub Assignment — exception for non-field-staff covering a hub ── */}
+                      <div className="mt-2 rounded-lg border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Building2 className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Temporary Hub Assignment</span>
+                          <span className="text-[10px] font-semibold bg-amber-200 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Exception</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Assign a hub so this person can cover approvals, MMP site data, and cost submissions for that hub while the regular supervisor is away. This does not change their role or normal location settings.
+                        </p>
+                        {canEditProfile ? (
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={editForm.secondaryHubId || "__none__"}
+                              onValueChange={v => handleEditChange("secondaryHubId", v === "__none__" ? undefined : v)}
+                            >
+                              <SelectTrigger className="h-9 text-sm flex-1 bg-background">
+                                <SelectValue placeholder="No hub assigned" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">— No hub assigned —</SelectItem>
+                                {hubs.map(h => (
+                                  <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" className="h-9 shrink-0" onClick={handleEditSave} disabled={isSaving}>
+                              {isSaving ? "Saving…" : "Save"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-sm font-semibold">
+                            {user.secondaryHubId
+                              ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId)
+                              : <span className="text-muted-foreground">None assigned</span>}
+                          </p>
+                        )}
+                        {user.secondaryHubId && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Active — this person currently sees data from <strong>{hubs.find(h => h.id === user.secondaryHubId)?.name ?? 'the assigned hub'}</strong> in MMP, Cost Submissions, and Approvals.
+                          </p>
+                        )}
+                      </div>
                     </>
                   )}
 
