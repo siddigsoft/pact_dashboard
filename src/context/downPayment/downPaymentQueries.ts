@@ -126,16 +126,14 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   const DP_SELECT_PLAIN = 'id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at, country_id, fully_paid_at';
 
   // All hub IDs this supervisor is responsible for:
-  //   1. Primary hub (hub_id profile column)  — the supervisor's actual scope
-  //   2. Additional role-based hub assignments (additionalRoles[].hub_id where role=supervisor)
-  //
-  // NOTE: secondary_hub_id is a *work location* field, NOT a supervisory scope.
-  // It is intentionally excluded here. To grant multi-hub supervisory access,
-  // use the Additional Roles panel (role=Supervisor + hub_id).
+  //   1. Primary hub (hub_id profile column)
+  //   2. Secondary hub (secondary_hub_id profile column)
+  //   3. Additional role-based hub assignments (additionalRoles[].hub_id where role=supervisor)
   const additionalRoleHubIds = getAdditionalRoleHubIds(user);
-  // Deduplicated list: primary hub + additional role hubs
+  // Deduplicated list: primary + secondary + additional role hubs
   const allSupervisedHubIds = Array.from(new Set([
     user.hubId,
+    user.secondaryHubId,
     ...additionalRoleHubIds,
   ].filter((h): h is string => !!h)));
 

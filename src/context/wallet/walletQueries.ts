@@ -202,14 +202,14 @@ async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<S
   }
 
   const supervisorHubId = user.hubId;
+  const supervisorSecondaryHubId = user.secondaryHubId;
   const supervisorStateId = user.stateId;
   const additionalSupervisorHubs = getAdditionalSupervisorHubs(user);
 
-  // Collect every hub this user can supervise (primary hub + additional-role hubs).
-  // NOTE: secondary_hub_id is a *work location* field, NOT a supervisory scope.
-  // Excluded intentionally — use Additional Roles panel for multi-hub supervisors.
+  // Collect every hub this user can supervise (primary + secondary + additional-role hubs)
   const allSupervisedHubIds = [
     supervisorHubId,
+    supervisorSecondaryHubId,
     ...additionalSupervisorHubs,
   ].filter((h): h is string => !!h);
 

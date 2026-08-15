@@ -1760,6 +1760,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
        * across ALL states within their hub. Team members need matching `hub_id` to appear.
        */
       const supervisorHubId = currentUser.hubId;
+      const supervisorSecondaryHubId = currentUser.secondaryHubId;
       const supervisorStateId = currentUser.stateId;
 
       // Extract any supervisor hub_ids granted via Additional Roles
@@ -1773,11 +1774,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             .filter(Boolean)
         : [];
 
-      // All hubs this user can supervise (primary hub + additional-role hubs).
-      // NOTE: secondary_hub_id is a *work location* field, NOT a supervisory scope.
-      // Excluded intentionally — use Additional Roles panel for multi-hub supervisors.
+      // All hubs this user can supervise (primary + secondary profile hubs + additional-role hubs)
       const allSupervisedHubIds = [
         supervisorHubId,
+        supervisorSecondaryHubId,
         ...additionalSupervisorHubs,
       ].filter((h): h is string => !!h);
 

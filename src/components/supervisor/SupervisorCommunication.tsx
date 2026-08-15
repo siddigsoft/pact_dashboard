@@ -72,9 +72,10 @@ export function SupervisorCommunication({ hubId, className }: SupervisorCommunic
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
 
   const supervisorHubId = hubId || currentUser?.hubId;
-  // secondary_hub_id is a work-location field, NOT a second supervisory scope.
-  // Only the primary hub determines which team members a supervisor can message.
-  const supervisorHubIds = [supervisorHubId]
+  // Include both primary and secondary hub — a supervisor assigned to two hubs
+  // should be able to message team members in both.
+  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId]
     .filter(Boolean)
     .map(h => normalizeHubId(h!) || h!)
     .filter((v, i, a) => a.indexOf(v) === i);
