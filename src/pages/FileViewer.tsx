@@ -105,40 +105,52 @@ export default function FileViewer() {
   const [error,      setError]     = useState<string | null>(null);
   const [showOnline, setShowOnline] = useState(false);
 
+  const [urlReady, setUrlReady] = useState(false);
+
   useEffect(() => {
     if (!fileId) { setError('No file specified.'); setLoading(false); return; }
+    let cancelled = false;
 
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId);
     const query  = supabase.from('workspace_files')
       .select('id, name, mime_type, extension, public_url, storage_path, storage_provider, file_size, description, security_level');
 
     (async () => {
-      const { data, error: err } = await (isUUID ? query.eq('id', fileId) : query.eq('short_code', fileId.toUpperCase()))
+      // Case-insensitive short_code match — codes are mixed-case (e.g. R226KVHG).
+      const { data, error: err } = await (isUUID ? query.eq('id', fileId) : query.ilike('short_code', fileId))
         .eq('archived', false)
-        .single();
+        .maybeSingle();
+      if (cancelled) return;
       if (err || !data) {
         setError('File not found or is no longer available.');
-      } else if (['top_secret', 'restricted'].includes(data.security_level)) {
-        setError('This file requires authentication to view. Please log in to the PACT Command Center.');
-      } else {
-        const fd = { ...data } as FileData;
-        // R2 files have no permanent public URL — fetch a short-lived signed one.
-        if (!fd.public_url && fd.storage_provider === 'r2') {
-          fd.public_url = await r2SignedUrl(fd.storage_path).catch(() => null);
-        }
-        if (!fd.public_url) {
-          setError('This file is not publicly accessible via QR code.');
-        } else {
-          setFile(fd);
-          supabase.from('workspace_activity').insert({
-            file_id: fd.id,
-            action: 'viewed',
-            metadata: { source: 'qr_scan' },
-          }).then(() => {});
+        setLoading(false);
+        return;
+      }
+
+      const fd = { ...data } as FileData;
+      // Show the file card immediately — don't block on the R2 signed URL.
+      setFile(fd);
+      setLoading(false);
+      supabase.from('workspace_activity').insert({
+        file_id: fd.id,
+        action: 'viewed',
+        metadata: { source: 'qr_scan' },
+      }).then(() => {});
+
+      if (fd.public_url) {
+        setUrlReady(true);
+        return;
+      }
+      if (fd.storage_provider === 'r2') {
+        const signed = await r2SignedUrl(fd.storage_path).catch(() => null);
+        if (cancelled) return;
+        if (signed) {
+          setFile(prev => prev ? { ...prev, public_url: signed } : prev);
+          setUrlReady(true);
         }
       }
-      setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [fileId]);
 
   if (loading) return (
@@ -165,9 +177,21 @@ export default function FileViewer() {
   );
 
   const cat = getCategory(file);
-  const url = file.public_url!;
+  const url = file.public_url || '';
+  const linkPending = !urlReady || !url;
 
   /* ── Inline viewers ──────────────────────────────────────────── */
+  if (cat === 'image' || cat === 'video' || cat === 'audio' || cat === 'pdf' || cat === 'text') {
+    if (linkPending) return (
+      <div className="min-h-screen flex flex-col bg-[#0d1117]">
+        <TopBar file={file} />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+        </div>
+      </div>
+    );
+  }
+
   if (cat === 'image') return (
     <div className="min-h-screen flex flex-col bg-[#0d1117]">
       <TopBar file={file} />
@@ -284,41 +308,45 @@ export default function FileViewer() {
             <div className="px-5 py-5 flex flex-col gap-3">
 
               {/* Open in native app — PRIMARY */}
-              <a href={deepLink}
+              <a href={linkPending ? undefined : deepLink}
+                onClick={e => { if (linkPending) e.preventDefault(); }}
                 className="flex items-center gap-4 w-full px-4 py-4 rounded-xl text-white font-semibold text-[14px] shadow-lg active:scale-[.98] transition-all"
-                style={{ background: `linear-gradient(135deg,${app.headerFrom},${app.headerTo})` }}>
+                style={{ background: `linear-gradient(135deg,${app.headerFrom},${app.headerTo})`, opacity: linkPending ? 0.7 : 1 }}>
                 <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-                  <Smartphone className="h-5 w-5 text-white" />
+                  {linkPending ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Smartphone className="h-5 w-5 text-white" />}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-bold leading-none">Open in {app.name}</p>
-                  <p className="text-white/65 text-[11px] mt-0.5">Opens the {app.name} app if installed</p>
+                  <p className="text-white/65 text-[11px] mt-0.5">{linkPending ? 'Preparing link…' : `Opens the ${app.name} app if installed`}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-white/50 shrink-0" />
               </a>
 
               {/* View Online — SECONDARY */}
-              <button onClick={() => setShowOnline(true)}
-                className="flex items-center gap-4 w-full px-4 py-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-[14px] active:scale-[.98] transition-all">
+              <button onClick={() => { if (!linkPending) setShowOnline(true); }}
+                disabled={linkPending}
+                className="flex items-center gap-4 w-full px-4 py-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-[14px] active:scale-[.98] transition-all disabled:opacity-70">
                 <div className="w-9 h-9 rounded-xl bg-slate-200 flex items-center justify-center shrink-0">
-                  <Globe className="h-5 w-5 text-slate-600" />
+                  {linkPending ? <Loader2 className="h-5 w-5 text-slate-600 animate-spin" /> : <Globe className="h-5 w-5 text-slate-600" />}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-bold text-slate-800 leading-none">View Online</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Open in {app.name} Online — no app needed</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">{linkPending ? 'Preparing link…' : `Open in ${app.name} Online — no app needed`}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
               </button>
 
               {/* Download — TERTIARY */}
-              <a href={url} download={file.name}
-                className="flex items-center gap-4 w-full px-4 py-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-[14px] active:scale-[.98] transition-all">
+              <a href={linkPending ? undefined : url} download={file.name}
+                onClick={e => { if (linkPending) e.preventDefault(); }}
+                className="flex items-center gap-4 w-full px-4 py-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-[14px] active:scale-[.98] transition-all"
+                style={{ opacity: linkPending ? 0.7 : 1 }}>
                 <div className="w-9 h-9 rounded-xl bg-slate-200 flex items-center justify-center shrink-0">
-                  <Download className="h-5 w-5 text-slate-600" />
+                  {linkPending ? <Loader2 className="h-5 w-5 text-slate-600 animate-spin" /> : <Download className="h-5 w-5 text-slate-600" />}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-bold text-slate-800 leading-none">Download File</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Save to your device — open with any app</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">{linkPending ? 'Preparing link…' : 'Save to your device — open with any app'}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
               </a>

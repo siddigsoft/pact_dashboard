@@ -67,6 +67,32 @@ interface WFolder {
 function generateShortCode(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 }
+
+const WORKSPACE_REVIEWER_ROLES = ['admin', 'Admin', 'superAdmin', 'super_admin', 'SuperAdmin'];
+
+async function notifyAdminsOfDeleteRequest(params: {
+  requesterId: string;
+  targetName: string;
+  kind: 'file' | 'folder';
+}) {
+  try {
+    const { data } = await supabase.from('profiles').select('id').in('role', WORKSPACE_REVIEWER_ROLES);
+    const recipients = [...new Set((data ?? []).map(p => p.id).filter(id => id && id !== params.requesterId))];
+    if (recipients.length === 0) return;
+    await insertNotificationsToDb(recipients.map(id => ({
+      recipient_id: id,
+      user_id: id,
+      title_en: 'Workspace delete request',
+      message_en: `A ${params.kind} delete request for "${params.targetName}" is waiting for review.`,
+      event_type: 'approvals',
+      type: 'approvals',
+      action_url: '/workspace',
+      is_read: false,
+    })));
+  } catch (e) {
+    console.warn('[WorkspaceHub] failed to notify admins of delete request', e);
+  }
+}
 interface PasswordTarget {
   id: string; name: string; password_hash: string | null; isFolder: boolean;
 }
@@ -309,7 +335,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
       const { data } = await supabase.from('profiles').select('id, full_name, role').limit(200);
       return (data ?? []) as ProfileOption[];
     },
-    enabled: open,
+    enabled: open && canEdit && granteeType === 'user',
   });
 
   async function addPermission() {
@@ -518,15 +544,13 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
             {file ? (
               <>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Share this link with external guests or partners. Recipients need a PACT account to open the file unless the security level is set to{' '}
-                  <span className="font-semibold text-emerald-600">Public</span>. For truly public access, change the security level above first.
+                  Anyone with this link can open the file — including Confidential and Top Secret files. Treat the link like a password.
                 </p>
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`/view/${file.short_code || file.id.slice(0, 8)}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/view/${file.short_code || file.id}`}
                     className="h-7 text-[10px] bg-background font-mono"
-                    title={`${window.location.origin}/view/${file.short_code || file.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
@@ -537,23 +561,24 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                   >
                     <Copy className="h-3 w-3" />Copy
                   </Button>
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
+                    onClick={() => window.open(`/view/${file.short_code || file.id}`, '_blank')}
+                  >
+                    <ExternalLink className="h-3 w-3" />Open
+                  </Button>
                 </div>
               </>
             ) : folder ? (
               <>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Share this folder with guests or partners. Anyone with the link can see the folder contents they have clearance for.{' '}
-                  {folder.security_level === 'public'
-                    ? <span>Since this folder is <span className="font-semibold text-emerald-600">Public</span>, all files marked Public will be visible without a PACT account.</span>
-                    : <span>Recipients will need to <span className="font-semibold">sign in</span> to view files above Public level — grant them access in the panel above first.</span>
-                  }
+                  Anyone with this link can open the folder and its contents — the same as a file share link. Recipients must be signed in. Treat the link like a password.
                 </p>
                 <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={`/ws/${folder.short_code || folder.id.slice(0, 8)}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/workspace/share/folder/${folder.short_code || folder.id}`}
                     className="h-7 text-[10px] bg-background font-mono"
-                    title={`${window.location.origin}/workspace/share/folder/${folder.short_code || folder.id}`}
                   />
                   <Button
                     type="button" size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-shrink-0"
@@ -763,8 +788,10 @@ async function readDroppedItems(dataTransfer: DataTransfer): Promise<{file: File
 
 // ─── Upload dialog ─────────────────────────────────────────────────────────────
 
-function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
+function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 'internal', open, onClose, currentUserId, onUploaded, initialEntries, existingFiles = [] }: {
   folderId: string | null; folderName: string;
+  /** Hub breadcrumb used as the R2 snapshot key prefix. */
+  folderPath: string;
   /** Pre-selects the security level to match the destination folder. Defaults to 'internal'. */
   folderSecurityLevel?: SecurityLevel;
   open: boolean; onClose: () => void;
@@ -872,8 +899,8 @@ function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', 
           }
         }
         const sorted = Array.from(folderPaths).sort((a, b) => a.split('/').length - b.split('/').length);
-        for (const folderPath of sorted) {
-          const parts      = folderPath.split('/');
+        for (const relFolderPath of sorted) {
+          const parts      = relFolderPath.split('/');
           const name       = parts[parts.length - 1];
           const parentPath = parts.slice(0, -1).join('/');
           const parentId   = parentPath ? (folderIdMap[parentPath] ?? null) : folderId;
@@ -888,7 +915,7 @@ function UploadDialog({ folderId, folderName, folderSecurityLevel = 'internal', 
           );
           if (folderErr) throw folderErr;
           if (!created?.id) throw new Error('Failed to create folder');
-          folderIdMap[folderPath] = created.id;
+          folderIdMap[relFolderPath] = created.id;
         }
       }
 
@@ -1917,23 +1944,16 @@ export default function WorkspaceHub() {
   });
 
   // ── Pending delete requests ───────────────────────────────────────────────
-  // Super admins and admins see every pending request.
-  // Regular users only see requests for folders they own (folder_owner_id = userId).
-  // Viewers and other non-admin, non-owner users receive an empty list.
+  // Admin and Super Admin only — folder owners and requesters do not review.
   const { data: pendingDeleteRequests = [], refetch: refetchDeleteRequests } = useQuery<WDeleteRequest[]>({
-    queryKey: ['workspace_delete_requests', userId, isSuperAdmin, isAdmin],
+    queryKey: ['workspace_delete_requests', userId, isAdmin],
     queryFn: async () => {
-      if (!userId) return [];
-      let q = supabase
+      if (!userId || !isAdmin) return [];
+      const { data, error } = await supabase
         .from('workspace_delete_requests')
         .select('*')
         .eq('status', 'pending')
         .order('requested_at', { ascending: false });
-      // Non-admins only see requests targeting folders they created
-      if (!isSuperAdmin && !isAdmin) {
-        q = q.eq('folder_owner_id', userId);
-      }
-      const { data, error } = await q;
       if (error || !data) return [];
       // Enrich with requester names
       const requesterIds = [...new Set(data.map((r: any) => r.requested_by).filter(Boolean))];
@@ -1947,8 +1967,7 @@ export default function WorkspaceHub() {
       }
       return data.map((r: any) => ({ ...r, _requesterName: nameMap[r.requested_by] ?? 'Unknown' })) as WDeleteRequest[];
     },
-    // Only run for admins or users who own at least one folder
-    enabled: !!userId && (isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)),
+    enabled: !!userId && isAdmin,
     staleTime: 30_000,
   });
 
@@ -2690,7 +2709,7 @@ export default function WorkspaceHub() {
   }
 
   // ── Delete request system ─────────────────────────────────────────────────
-  // Non-admin users submit a request; Super Admin approves or rejects it.
+  // Non-admin users submit a request; Admin / Super Admin approves or rejects it.
 
   async function requestDeleteFile(file: WFile) {
     const folder = file.folder_id ? folders.find(f => f.id === file.folder_id) : null;
@@ -2705,11 +2724,10 @@ export default function WorkspaceHub() {
     });
     if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
     refetchDeleteRequests();
+    void notifyAdminsOfDeleteRequest({ requesterId: userId, targetName: file.name, kind: 'file' });
     toast({
       title: 'Delete request submitted',
-      description: folder
-        ? `The folder owner will be notified to approve or reject this request.`
-        : 'A workspace admin will review your request.',
+      description: 'An admin will review your request.',
     });
   }
 
@@ -2726,13 +2744,18 @@ export default function WorkspaceHub() {
     });
     if (error) { toast({ title: 'Failed to submit request', description: error.message, variant: 'destructive' }); return; }
     refetchDeleteRequests();
+    void notifyAdminsOfDeleteRequest({ requesterId: userId, targetName: folder.name, kind: 'folder' });
     toast({
       title: 'Delete request submitted',
-      description: 'The folder owner will review your request.',
+      description: 'An admin will review your request.',
     });
   }
 
   async function approveDeleteRequest(req: WDeleteRequest) {
+    if (!isAdmin) {
+      toast({ title: 'Not allowed', description: 'Only admins can approve delete requests.', variant: 'destructive' });
+      return;
+    }
     try {
       if (req.type === 'file') {
         const file = allFiles.find(f => f.id === req.target_id);
@@ -2758,6 +2781,10 @@ export default function WorkspaceHub() {
   }
 
   async function rejectDeleteRequest(req: WDeleteRequest, notes: string) {
+    if (!isAdmin) {
+      toast({ title: 'Not allowed', description: 'Only admins can reject delete requests.', variant: 'destructive' });
+      return;
+    }
     await supabase.from('workspace_delete_requests').update({
       status:       'rejected',
       reviewed_by:  userId,
@@ -3761,8 +3788,8 @@ export default function WorkspaceHub() {
                   <Key className="h-3.5 w-3.5" />
                 </button>
               )}
-              {/* Delete-request badge — only admins and folder creators see this */}
-              {(isSuperAdmin || isAdmin || folders.some(f => f.created_by === userId)) && pendingDeleteRequests.length > 0 && (
+              {/* Delete-request badge — Admin and Super Admin only */}
+              {isAdmin && pendingDeleteRequests.length > 0 && (
                 <button
                   onClick={() => setDeleteReqPanelOpen(true)}
                   className="relative flex-shrink-0 p-1 rounded hover:bg-amber-100 text-amber-600 transition-colors"
@@ -5144,6 +5171,7 @@ export default function WorkspaceHub() {
         {/* Upload dialog */}
         <UploadDialog
           folderId={selectedFolder?.id ?? null} folderName={currentFolderName}
+          folderPath={breadcrumbs.map(f => f.name).join('/') || 'Hub'}
           folderSecurityLevel={selectedFolder?.security_level ?? 'internal'}
           open={uploadOpen} onClose={() => { setUploadOpen(false); setPendingDropEntries([]); }}
           currentUserId={userId} onUploaded={refetch}
@@ -5343,7 +5371,7 @@ export default function WorkspaceHub() {
 
         {/* ── Rename Dialog ──────────────────────────────────────────────── */}
         {/* ── Delete Request Approval Panel ────────────────────────────── */}
-        <Dialog open={deleteReqPanelOpen} onOpenChange={setDeleteReqPanelOpen}>
+        <Dialog open={isAdmin && deleteReqPanelOpen} onOpenChange={setDeleteReqPanelOpen}>
           <DialogContent className="max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
             <DialogHeader className="flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
