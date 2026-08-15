@@ -178,6 +178,9 @@ const UserDetail: FC = () => {
   // Check the VIEWED user's primary role AND additional roles.
   const FIELD_STAFF_ROLES = ['supervisor', 'coordinator', 'datacollector', 'data_collector', 'hubsupervisor', 'hub_supervisor'];
   const viewedUserRole = (user?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  // True only for field-staff: hub/state/locality location editing applies to them.
+  // Non-field-staff (FOM, Admin, etc.) use LocationAddressForm which self-manages save.
+  const isViewedUserFieldStaff = FIELD_STAFF_ROLES.includes(viewedUserRole);
   const viewedUserAdditional = [
     ...(Array.isArray(user?.additionalRoles) ? user.additionalRoles : []),
     ...(Array.isArray(user?.roles) ? user.roles : []),
@@ -1954,7 +1957,7 @@ const UserDetail: FC = () => {
                     <Edit className="h-3 w-3" /> Edit
                   </Button>
                 )}
-                {editMode && (activeSection === 'overview' || activeSection === 'location') && (
+                {editMode && (activeSection === 'overview' || (activeSection === 'location' && isViewedUserFieldStaff)) && (
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
