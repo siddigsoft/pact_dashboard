@@ -72,7 +72,10 @@ export function SupervisorCommunication({ hubId, className }: SupervisorCommunic
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
 
   const supervisorHubId = hubId || currentUser?.hubId;
-  const supervisorHubIds = [supervisorHubId, (currentUser as any)?.secondaryHubId]
+  // Only scope to the primary hub. secondary_hub_id is the supervisor's work location,
+  // not a hub they supervise — including it would expose another hub's team members.
+  // Additional supervisor hub assignments flow through additional_roles, not this field.
+  const supervisorHubIds = [supervisorHubId]
     .filter(Boolean)
     .map(h => normalizeHubId(h!) || h!)
     .filter((v, i, a) => a.indexOf(v) === i);

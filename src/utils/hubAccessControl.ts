@@ -81,7 +81,18 @@ export function getHubAccessInfo(user: User | null): HubAccessInfo {
 
   // For primary-role supervisors/coordinators we require a hubId on the profile.
   // For users who are supervisor only via additionalRoles, we use the role-scoped hub_ids.
-  const profileHubIds = [primaryHubId, secondaryHubId].filter(Boolean) as string[];
+  //
+  // IMPORTANT: For supervisors, `secondary_hub_id` on the profile is the supervisor's
+  // *work location* — it does NOT extend their supervisory scope to that hub.
+  // The correct way to give a supervisor visibility over additional hubs is via
+  // `additional_roles` with role=supervisor + hub_id.
+  // Including secondaryHubId for supervisors causes them to see team submissions,
+  // site visits, and MMP data from a hub they don't actually supervise.
+  //
+  // Coordinators legitimately work across two hubs, so secondaryHubId is included for them.
+  const profileHubIds = isCoordinator
+    ? [primaryHubId, secondaryHubId].filter(Boolean) as string[]
+    : [primaryHubId].filter(Boolean) as string[];
 
   // Merge: profile hubs (for primary-role supervisors) + additional role hubs
   const rawIds = isSupervisorByPrimary || isCoordinator
