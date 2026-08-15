@@ -1276,42 +1276,44 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "The user can now log in to the system.",
       });
 
-      // Send welcome email and in-app notification to the newly approved user
-      try {
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('email, full_name, role')
-          .eq('id', userId)
-          .single();
+      // Fire-and-forget: welcome email + in-app notification + first-login flag.
+      // These are side effects only — do NOT await them so the button re-enables
+      // immediately after the core approval succeeds.
+      (async () => {
+        try {
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('email, full_name, role')
+            .eq('id', userId)
+            .single();
 
-        if (userProfile?.email) {
-          EmailNotificationService.sendWelcomeEmail(
-            userProfile.email,
-            userProfile.full_name || 'User',
-            userProfile.role || 'Data Collector'
-          );
+          if (userProfile?.email) {
+            EmailNotificationService.sendWelcomeEmail(
+              userProfile.email,
+              userProfile.full_name || 'User',
+              userProfile.role || 'Data Collector'
+            );
+          }
+
+          await insertNotificationsToDb([{
+            recipient_id: userId,
+            title: 'Your account has been activated!',
+            message: 'Welcome to PACT! Your account registration has been approved and you now have full access to the system. Log in to get started.',
+            event_type: 'account',
+            type: 'success',
+            priority: 'high',
+            link: '/dashboard',
+            is_read: false,
+            created_at: new Date().toISOString(),
+          }]);
+        } catch (emailError) {
+          console.error('Failed to send welcome email or notification:', emailError);
         }
 
-        // Insert in-app notification for the approved user
-        await insertNotificationsToDb([{
-          recipient_id: userId,
-          title: 'Your account has been activated!',
-          message: 'Welcome to PACT! Your account registration has been approved and you now have full access to the system. Log in to get started.',
-          event_type: 'account',
-          type: 'success',
-          priority: 'high',
-          link: '/dashboard',
-          is_read: false,
-          created_at: new Date().toISOString(),
-        }]);
-      } catch (emailError) {
-        console.error('Failed to send welcome email or notification:', emailError);
-      }
-
-      // Mark as first login so walkthrough shows on next sign-in
-      try {
-        await supabase.from('profiles').update({ metadata: { first_login: true } }).eq('id', userId);
-      } catch {}
+        try {
+          await supabase.from('profiles').update({ metadata: { first_login: true } }).eq('id', userId);
+        } catch {}
+      })();
 
       return true;
     } catch (error) {
