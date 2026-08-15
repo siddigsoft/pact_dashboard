@@ -534,34 +534,87 @@ const UserDetail: FC = () => {
   const [availableLocalities, setAvailableLocalities] = useState<{ id: string; name: string; }[]>([]);
 
   useEffect(() => {
-    if (id) {
-      const foundUser = users.find(u => u.id === id);
-      if (foundUser) {
-        // Only show the full loading spinner on the very first load (user is null).
-        // On subsequent refreshes triggered by realtime subscription updates we
-        // silently update the user object so child tab components (EmployeeEducationTab
-        // etc.) are NOT unmounted and do NOT lose their local form state.
-        if (!user) setIsLoadingUser(true);
-        setUser(foundUser);
-        // IMPORTANT: only reset editForm when NOT in edit mode.
-        // Realtime heartbeat updates fire frequently (every few minutes) and
-        // re-running setEditForm while the admin is mid-edit would silently
-        // overwrite any changes they've made — including the role dropdown.
-        if (!editMode) {
-          const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
-          setEditForm({ ...foundUser, role: normalizedRole as any });
-        }
-        setIsLoadingUser(false);
-      } else if (!user) {
-        // Only navigate away if we have never loaded the user (not a transient
-        // refresh gap where users momentarily doesn't contain this ID).
-        toast({
-          title: "User not found",
-          description: `No user with ID ${id} exists`,
-          variant: "destructive",
-        });
-        navigate("/users");
+    if (!id) return;
+    const foundUser = users.find(u => u.id === id);
+    if (foundUser) {
+      // Only show the full loading spinner on the very first load (user is null).
+      // On subsequent refreshes triggered by realtime subscription updates we
+      // silently update the user object so child tab components (EmployeeEducationTab
+      // etc.) are NOT unmounted and do NOT lose their local form state.
+      if (!user) setIsLoadingUser(true);
+      setUser(foundUser);
+      // IMPORTANT: only reset editForm when NOT in edit mode.
+      // Realtime heartbeat updates fire frequently (every few minutes) and
+      // re-running setEditForm while the admin is mid-edit would silently
+      // overwrite any changes they've made — including the role dropdown.
+      if (!editMode) {
+        const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
+        setEditForm({ ...foundUser, role: normalizedRole as any });
       }
+      setIsLoadingUser(false);
+    } else if (!user) {
+      // Context cache missed — fall back to a direct DB fetch before giving up.
+      // This handles stale localStorage, a failed directory query (e.g. missing
+      // column in production), or a FOM/Supervisor whose profile wasn't included
+      // in their own hub-scoped users list.
+      setIsLoadingUser(true);
+      supabase
+        .from('profiles')
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, additional_roles, last_activity')
+        .eq('id', id)
+        .single()
+        .then(({ data, error }) => {
+          if (error || !data) {
+            setIsLoadingUser(false);
+            toast({
+              title: "User not found",
+              description: `No user with ID ${id} exists`,
+              variant: "destructive",
+            });
+            navigate("/users");
+            return;
+          }
+          // Shape the raw profile row into a User object the same way UserContext does
+          let locationData: any = null;
+          if (data.location) {
+            try {
+              locationData = typeof data.location === 'string' ? JSON.parse(data.location) : data.location;
+            } catch { locationData = null; }
+          }
+          const fallbackUser: User = {
+            id: data.id,
+            name: data.full_name || 'Unknown',
+            email: data.email || '',
+            role: data.role || 'dataCollector',
+            roles: [],
+            stateId: data.state_id ?? undefined,
+            hubId: data.hub_id ?? undefined,
+            secondaryHubId: data.secondary_hub_id || (locationData as any)?.secondary_hub_id || undefined,
+            localityId: data.locality_id ?? undefined,
+            avatar: data.avatar_url ?? undefined,
+            photoUploadCount: 0,
+            username: data.username ?? undefined,
+            fullName: data.full_name ?? undefined,
+            phone: data.phone ?? undefined,
+            employeeId: data.employee_id ?? undefined,
+            lastActive: (data as any).last_activity ?? null,
+            isApproved: data.status === 'approved',
+            profileStatus: data.status || 'pending',
+            availability: data.availability || 'offline',
+            createdAt: data.created_at || new Date().toISOString(),
+            location: locationData,
+            performance: { rating: 0, totalCompletedTasks: 0, onTimeCompletion: 0 },
+            departmentId: data.department_id ?? null,
+            employmentType: data.employment_type ?? null,
+            contractStartDate: data.contract_start_date ?? null,
+            contractEndDate: data.contract_end_date ?? null,
+            reportsTo: data.reports_to ?? null,
+          } as User;
+          const normalizedRole = fallbackUser.role ? (normalizeRole(fallbackUser.role as string) || fallbackUser.role) : '';
+          setUser(fallbackUser);
+          if (!editMode) setEditForm({ ...fallbackUser, role: normalizedRole as any });
+          setIsLoadingUser(false);
+        });
     }
   }, [id, users, navigate, toast, editMode]);
 
