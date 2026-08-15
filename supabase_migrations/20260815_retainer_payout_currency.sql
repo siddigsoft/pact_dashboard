@@ -1,14 +1,20 @@
--- ============================================================
--- Run this in Supabase Studio → SQL Editor
--- Fixes: classification save failing with "retainer_payout_currency"
--- Safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE)
--- ============================================================
+-- =============================================================================
+-- Migration: Add retainer_payout_currency to user_classifications
+-- Date: 2026-08-15
+-- Run in: Supabase Studio → SQL Editor
+-- Safe to re-run: uses IF NOT EXISTS / CREATE OR REPLACE
+--
+-- Fixes: classification save fails with "column retainer_payout_currency does
+-- not exist" when assigning/updating a user classification.
+-- =============================================================================
 
 -- 1. Add the missing column
 ALTER TABLE public.user_classifications
   ADD COLUMN IF NOT EXISTS retainer_payout_currency text;
 
--- 2. Recreate the view to include the new column
+-- 2. Recreate the view to expose the new column
+--    (DROP + recreate because PostgreSQL only allows appending columns with
+--     CREATE OR REPLACE VIEW, not inserting them mid-list)
 DROP VIEW IF EXISTS public.current_user_classifications CASCADE;
 CREATE VIEW public.current_user_classifications AS
 SELECT DISTINCT ON (user_id)

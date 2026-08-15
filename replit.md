@@ -8,6 +8,12 @@ Preferred communication style: Simple, everyday language.
 
 **Never push to GitHub automatically.** Only commit locally. The user controls when to run `git push origin master`.
 
+**SQL Migration Rule (permanent default):**
+- Any time a task requires a database change (new column, new table, new view, new RLS policy, new function, index, etc.), save the SQL as a new file in `supabase_migrations/` using the naming pattern `YYYYMMDD_description.sql`.
+- The file must be ready to copy-paste and run in Supabase Studio → SQL Editor.
+- Include a header comment explaining what the migration does and that it is safe to re-run (using `IF NOT EXISTS`, `CREATE OR REPLACE`, etc.).
+- Never wait to be asked — always produce the migration file as part of completing the task.
+
 **Flutter Mobile Sync Rule (permanent default):**
 - The Flutter app at `mobile/` is for field operations staff only (Data Collector, Coordinator, Supervisor, FOM, Data Team).
 - Whenever ANY change is made to the web app that affects field staff screens, features, layouts, or views — the equivalent change MUST also be made to the Flutter app in the same session, automatically, without being asked.
