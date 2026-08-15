@@ -251,7 +251,12 @@ const UserDetail: FC = () => {
   // Add loading state for save
   // Start in loading state whenever a profile ID is in the URL so we never
   // flash "User not found" before the context / fallback fetch has a chance to run.
+  // Start in loading state whenever a profile ID is in the URL so we never
+  // flash "User not found" before the context / fallback fetch has a chance to run.
   const [isLoadingUser, setIsLoadingUser] = useState(!!id);
+  // Guard: prevents concurrent fallback fetches when `users` fires the effect
+  // multiple times while a direct DB fetch is already in-flight.
+  const fallbackFetchingRef = useRef(false);
 
   // Employment record state
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
@@ -537,90 +542,101 @@ const UserDetail: FC = () => {
 
   useEffect(() => {
     if (!id) return;
+
     const foundUser = users.find(u => u.id === id);
     if (foundUser) {
+      // User is in the context cache — apply it.
       // Only show the full loading spinner on the very first load (user is null).
-      // On subsequent refreshes triggered by realtime subscription updates we
-      // silently update the user object so child tab components (EmployeeEducationTab
-      // etc.) are NOT unmounted and do NOT lose their local form state.
+      // On subsequent realtime heartbeat refreshes we silently update so child tabs
+      // (EmployeeEducationTab etc.) are NOT unmounted and do NOT lose form state.
       if (!user) setIsLoadingUser(true);
       setUser(foundUser);
-      // IMPORTANT: only reset editForm when NOT in edit mode.
-      // Realtime heartbeat updates fire frequently (every few minutes) and
-      // re-running setEditForm while the admin is mid-edit would silently
-      // overwrite any changes they've made — including the role dropdown.
+      // IMPORTANT: only reset editForm when NOT in edit mode so we don't overwrite
+      // changes the admin is actively making.
       if (!editMode) {
         const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
         setEditForm({ ...foundUser, role: normalizedRole as any });
       }
       setIsLoadingUser(false);
-    } else if (!user) {
-      // Context cache missed — fall back to a direct DB fetch before giving up.
-      // This handles stale localStorage, a failed directory query (e.g. missing
-      // column in production), or a FOM/Supervisor whose profile wasn't included
-      // in their own hub-scoped users list.
-      setIsLoadingUser(true);
-      supabase
-        .from('profiles')
-        // Minimal safe column set — excludes optional columns (additional_roles,
-        // last_activity) that may be absent in older DB instances and would cause
-        // the whole query to fail with a column-not-found error.
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
-        .eq('id', id)
-        .single()
-        .then(({ data, error }) => {
-          if (error || !data) {
-            setIsLoadingUser(false);
-            toast({
-              title: "User not found",
-              description: `No user with ID ${id} exists`,
-              variant: "destructive",
-            });
-            navigate("/users");
-            return;
-          }
-          // Shape the raw profile row into a User object the same way UserContext does
-          let locationData: any = null;
-          if (data.location) {
-            try {
-              locationData = typeof data.location === 'string' ? JSON.parse(data.location) : data.location;
-            } catch { locationData = null; }
-          }
-          const fallbackUser: User = {
-            id: data.id,
-            name: data.full_name || 'Unknown',
-            email: data.email || '',
-            role: data.role || 'dataCollector',
-            roles: [],
-            stateId: data.state_id ?? undefined,
-            hubId: data.hub_id ?? undefined,
-            secondaryHubId: data.secondary_hub_id || (locationData as any)?.secondary_hub_id || undefined,
-            localityId: data.locality_id ?? undefined,
-            avatar: data.avatar_url ?? undefined,
-            photoUploadCount: 0,
-            username: data.username ?? undefined,
-            fullName: data.full_name ?? undefined,
-            phone: data.phone ?? undefined,
-            employeeId: data.employee_id ?? undefined,
-            lastActive: (data as any).last_activity ?? null,
-            isApproved: data.status === 'approved',
-            profileStatus: data.status || 'pending',
-            availability: data.availability || 'offline',
-            createdAt: data.created_at || new Date().toISOString(),
-            location: locationData,
-            performance: { rating: 0, totalCompletedTasks: 0, onTimeCompletion: 0 },
-            departmentId: data.department_id ?? null,
-            employmentType: data.employment_type ?? null,
-            contractStartDate: data.contract_start_date ?? null,
-            contractEndDate: data.contract_end_date ?? null,
-            reportsTo: data.reports_to ?? null,
-          } as User;
-          const normalizedRole = fallbackUser.role ? (normalizeRole(fallbackUser.role as string) || fallbackUser.role) : '';
-          setUser(fallbackUser);
-          if (!editMode) setEditForm({ ...fallbackUser, role: normalizedRole as any });
-          setIsLoadingUser(false);
-        });
+      fallbackFetchingRef.current = false; // clear guard if a previous fetch completed
+      return;
     }
+
+    // User not in context cache. If a fallback is already in-flight (the effect
+    // can re-fire many times when realtime updates change `users`), skip.
+    if (user || fallbackFetchingRef.current) return;
+
+    // Direct single-row fetch as last resort — handles stale localStorage,
+    // a failed directory query, or a FOM whose profile isn't in their hub-scoped
+    // users list. Uses the absolute minimum columns that exist in all DB instances.
+    fallbackFetchingRef.current = true;
+    setIsLoadingUser(true);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role, status, hub_id, secondary_hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (!data) {
+          toast({ title: 'User not found', description: `No profile with ID ${id}`, variant: 'destructive' });
+          navigate('/users');
+          return;
+        }
+
+        let loc: any = null;
+        try {
+          loc = data.location
+            ? (typeof data.location === 'string' ? JSON.parse(data.location) : data.location)
+            : null;
+        } catch { loc = null; }
+
+        const loaded: User = {
+          id: data.id,
+          name: data.full_name || 'Unknown',
+          fullName: data.full_name ?? undefined,
+          email: data.email || '',
+          role: data.role || 'dataCollector',
+          roles: [],
+          hubId: data.hub_id ?? undefined,
+          secondaryHubId: data.secondary_hub_id || loc?.secondary_hub_id || undefined,
+          stateId: data.state_id ?? undefined,
+          localityId: data.locality_id ?? undefined,
+          location: loc,
+          avatar: data.avatar_url ?? undefined,
+          phone: data.phone ?? undefined,
+          employeeId: data.employee_id ?? undefined,
+          photoUploadCount: 0,
+          isApproved: data.status === 'approved',
+          profileStatus: data.status || 'pending',
+          availability: 'offline',
+          createdAt: data.created_at || new Date().toISOString(),
+          lastActive: null,
+          performance: { rating: 0, totalCompletedTasks: 0, onTimeCompletion: 0 },
+          departmentId: data.department_id ?? null,
+          employmentType: data.employment_type ?? null,
+          contractStartDate: data.contract_start_date ?? null,
+          contractEndDate: data.contract_end_date ?? null,
+          reportsTo: data.reports_to ?? null,
+        } as User;
+
+        const normRole = loaded.role ? (normalizeRole(loaded.role as string) || loaded.role) : '';
+        setUser(loaded);
+        if (!editMode) setEditForm({ ...loaded, role: normRole as any });
+        setIsLoadingUser(false);
+      } catch (err: any) {
+        console.error('[UserDetail] fallback fetch failed:', err);
+        setIsLoadingUser(false);
+        toast({ title: 'User not found', description: err?.message || `No profile with ID ${id}`, variant: 'destructive' });
+        navigate('/users');
+      } finally {
+        fallbackFetchingRef.current = false;
+      }
+    })();
   }, [id, users, navigate, toast, editMode]);
 
   // Update available states when hub changes in edit mode
