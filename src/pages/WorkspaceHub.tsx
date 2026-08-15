@@ -300,6 +300,50 @@ function UserPickerCombobox({ profiles, value, onChange }: {
   );
 }
 
+/** Inline user-picker used by the bulk-share dialog inside WorkspaceHub. */
+function BulkShareUserPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const { data: profiles = [] } = useQuery<ProfileOption[]>({
+    queryKey: ['profiles_for_bulk_share'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').limit(200);
+      return (data ?? []) as ProfileOption[];
+    },
+    staleTime: 60_000,
+  });
+  const selected = profiles.find(p => p.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="w-full flex items-center justify-between h-8 px-3 rounded-md border border-input bg-background text-xs hover:bg-accent transition-colors">
+          <span className={selected ? 'text-foreground' : 'text-muted-foreground'}>
+            {selected ? (selected.full_name ?? selected.id) : 'Search people…'}
+          </span>
+          <svg className="h-3.5 w-3.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search name or role…" className="h-8 text-xs" />
+          <CommandList>
+            <CommandEmpty>No people found.</CommandEmpty>
+            <CommandGroup>
+              {profiles.map(p => (
+                <CommandItem key={p.id} value={`${p.full_name ?? ''} ${p.role ?? ''}`}
+                  onSelect={() => { onChange(p.id); setOpen(false); }}
+                  className="text-xs gap-2">
+                  <span className="font-medium">{p.full_name ?? p.id.slice(0, 8)}</span>
+                  {p.role && <span className="text-muted-foreground capitalize">{p.role.replace(/_/g, ' ')}</span>}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = true }: {
   file?: WFile; folder?: WFolder; open: boolean; onClose: () => void; currentUserId: string;
   /** When false the dialog shows a read-only access list (folder owner view). */
@@ -1797,6 +1841,12 @@ export default function WorkspaceHub() {
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [bulkMoveFolderId, setBulkMoveFolderId] = useState<string>('__root__');
   const [bulkMoving, setBulkMoving] = useState(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [bulkShareOpen, setBulkShareOpen] = useState(false);
+  const [bulkShareGranteeType, setBulkShareGranteeType] = useState<GranteeType>('user');
+  const [bulkShareGranteeId, setBulkShareGranteeId] = useState('');
+  const [bulkShareAccessLevel, setBulkShareAccessLevel] = useState<AccessLevel>('viewer');
+  const [bulkSharing, setBulkSharing] = useState(false);
   const [shareFolderTarget, setShareFolderTarget] = useState<WFolder | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
   const [deleteReqPanelOpen, setDeleteReqPanelOpen] = useState(false);
@@ -2658,6 +2708,39 @@ export default function WorkspaceHub() {
     }
   }
 
+  // Computed selection state for Select All checkbox
+  const allDisplayedSelected = displayedFiles.length > 0 && displayedFiles.every(f => selectedFileIds.has(f.id));
+  const someDisplayedSelected = displayedFiles.some(f => selectedFileIds.has(f.id)) && !allDisplayedSelected;
+
+  async function bulkShareFiles() {
+    const ids = [...selectedFileIds];
+    setBulkSharing(true);
+    try {
+      const results = await Promise.all(ids.map(id =>
+        supabase.from('workspace_permissions').insert({
+          file_id: id,
+          grantee_type: bulkShareGranteeType,
+          grantee_id: bulkShareGranteeId || null,
+          access_level: bulkShareAccessLevel,
+          granted_by: userId,
+        })
+      ));
+      const failed = results.filter(r => r.error);
+      setBulkShareOpen(false);
+      setBulkShareGranteeId('');
+      setSelectedFileIds(new Set());
+      if (failed.length > 0) {
+        toast({ title: `${ids.length - failed.length} shared, ${failed.length} failed`, description: String(failed[0].error?.message), variant: 'destructive' });
+      } else {
+        toast({ title: `Access granted to ${ids.length} file${ids.length !== 1 ? 's' : ''}` });
+      }
+    } catch (e: any) {
+      toast({ title: 'Bulk share failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setBulkSharing(false);
+    }
+  }
+
   const lastSelectedIdxRef = useRef<number>(-1);
   function toggleFileSelection(fileId: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -3417,6 +3500,17 @@ export default function WorkspaceHub() {
           isSelected && 'bg-blue-50/60 dark:bg-[#1D3461]/5',
           isBulkSelected && 'bg-blue-50 dark:bg-[#1D3461]/8',
           dragFileId === file.id && 'opacity-40')}>
+        {/* Bulk select checkbox */}
+        <td className="py-3 pr-1 w-8" onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isBulkSelected}
+            onChange={() => setSelectedFileIds(prev => { const n = new Set(prev); n.has(file.id) ? n.delete(file.id) : n.add(file.id); return n; })}
+            onClick={e => e.stopPropagation()}
+            className={cn('h-3.5 w-3.5 rounded border-gray-300 cursor-pointer accent-blue-600 transition-opacity',
+              isBulkSelected || selectedFileIds.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
+          />
+        </td>
         {/* Name + type badge */}
         <td className="py-3 pr-4">
           <div className="flex items-center gap-3">
@@ -4509,6 +4603,37 @@ export default function WorkspaceHub() {
 
                 {/* ── Files ────────────────────────────────────────────────── */}
                 {displayedFiles.length > 0 && (<>
+                  {/* ── Bulk action toolbar — appears when files are selected ── */}
+                  {selectedFileIds.size > 0 && (
+                    <div className="mx-6 mt-3 mb-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 animate-in slide-in-from-top-1 duration-150">
+                      <span className="text-xs font-semibold text-blue-800 dark:text-blue-300 flex-1 select-none">
+                        {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
+                      </span>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                        onClick={() => setBulkMoveOpen(true)}>
+                        <ArrowUpDown className="h-3.5 w-3.5" />Move
+                      </Button>
+                      {(isAdmin || isSuperAdmin) && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                          onClick={() => setBulkShareOpen(true)}>
+                          <Share2 className="h-3.5 w-3.5" />Share
+                        </Button>
+                      )}
+                      {(isAdmin || isSuperAdmin) && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          onClick={() => setBulkDeleteConfirmOpen(true)}>
+                          <Trash2 className="h-3.5 w-3.5" />Delete
+                        </Button>
+                      )}
+                      <button
+                        className="ml-1 p-1 rounded text-blue-400 hover:text-blue-700 transition-colors"
+                        onClick={() => setSelectedFileIds(new Set())}
+                        title="Clear selection"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                   {currentSubFolders.length > 0 && (
                     <div className="px-8 pt-3 pb-1">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Files</p>
@@ -4519,6 +4644,16 @@ export default function WorkspaceHub() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
+                            <th className="pb-3 pr-1 w-8">
+                              <input
+                                type="checkbox"
+                                checked={allDisplayedSelected}
+                                ref={el => { if (el) el.indeterminate = someDisplayedSelected; }}
+                                onChange={e => { if (e.target.checked) setSelectedFileIds(new Set(displayedFiles.map(f => f.id))); else setSelectedFileIds(new Set()); }}
+                                className="h-3.5 w-3.5 rounded border-gray-300 cursor-pointer accent-blue-600"
+                                aria-label="Select all files"
+                              />
+                            </th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Size</th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Modified</th>
@@ -4537,6 +4672,16 @@ export default function WorkspaceHub() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200">
+                            <th className="pb-3 pr-1 w-8">
+                              <input
+                                type="checkbox"
+                                checked={allDisplayedSelected}
+                                ref={el => { if (el) el.indeterminate = someDisplayedSelected; }}
+                                onChange={e => { if (e.target.checked) setSelectedFileIds(new Set(displayedFiles.map(f => f.id))); else setSelectedFileIds(new Set()); }}
+                                className="h-3.5 w-3.5 rounded border-gray-300 cursor-pointer accent-blue-600"
+                                aria-label="Select all files"
+                              />
+                            </th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4">Name</th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden lg:table-cell">Security</th>
                             <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide pb-3 pr-4 hidden md:table-cell">Type</th>
@@ -4574,6 +4719,17 @@ export default function WorkspaceHub() {
                                   isSelected && 'bg-blue-50/60 dark:bg-[#1D3461]/5',
                                   isBulkSelected && 'bg-blue-50 dark:bg-[#1D3461]/8',
                                   dragFileId === f.id && 'opacity-40')}>
+                                {/* Bulk select checkbox */}
+                                <td className="py-2.5 pr-1 w-8" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isBulkSelected}
+                                    onChange={() => setSelectedFileIds(prev => { const n = new Set(prev); n.has(f.id) ? n.delete(f.id) : n.add(f.id); return n; })}
+                                    onClick={e => e.stopPropagation()}
+                                    className={cn('h-3.5 w-3.5 rounded border-gray-300 cursor-pointer accent-blue-600 transition-opacity',
+                                      isBulkSelected || selectedFileIds.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
+                                  />
+                                </td>
                                 {/* Name */}
                                 <td className="py-2.5 pr-4">
                                   <div className="flex items-center gap-2.5">
@@ -5092,6 +5248,129 @@ export default function WorkspaceHub() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        {/* ══ Bulk delete confirmation dialog ══════════════════════════════ */}
+        <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-4 w-4" />
+                Move {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} to trash?
+              </DialogTitle>
+              <DialogDescription>
+                {isSuperAdmin
+                  ? `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} will be moved to the Recycle Bin. You can restore them from there.`
+                  : `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} you own will be moved to trash. Files you don't own will be skipped.`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => setBulkDeleteConfirmOpen(false)}>Cancel</Button>
+              <Button size="sm" variant="destructive" onClick={() => { setBulkDeleteConfirmOpen(false); bulkDeleteFiles(); }}>
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />Move to trash
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ══ Bulk share dialog ════════════════════════════════════════════ */}
+        <Dialog open={bulkShareOpen} onOpenChange={open => { setBulkShareOpen(open); if (!open) { setBulkShareGranteeId(''); setBulkShareGranteeType('user'); setBulkShareAccessLevel('viewer'); } }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Share2 className="h-4 w-4 text-blue-600" />
+                Share {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''}
+              </DialogTitle>
+              <DialogDescription>
+                Grant access to the selected files. Existing permissions on each file are not affected.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-1">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Grant access to</label>
+                <Select value={bulkShareGranteeType} onValueChange={v => { setBulkShareGranteeType(v as GranteeType); setBulkShareGranteeId(''); }}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Specific person</SelectItem>
+                    <SelectItem value="all_staff">All staff</SelectItem>
+                    <SelectItem value="role">By role</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {bulkShareGranteeType === 'user' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Person</label>
+                  <BulkShareUserPicker value={bulkShareGranteeId} onChange={setBulkShareGranteeId} />
+                </div>
+              )}
+              {bulkShareGranteeType === 'role' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Role</label>
+                  <Select value={bulkShareGranteeId} onValueChange={setBulkShareGranteeId}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pick a role…" /></SelectTrigger>
+                    <SelectContent>
+                      {['admin','supervisor','coordinator','data_collector','hr','finance','field_staff'].map(r => (
+                        <SelectItem key={r} value={r}>{r.replace(/_/g,' ')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Access level</label>
+                <Select value={bulkShareAccessLevel} onValueChange={v => setBulkShareAccessLevel(v as AccessLevel)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(['viewer','commenter','editor'] as AccessLevel[]).map(l => (
+                      <SelectItem key={l} value={l}>
+                        <span className="font-medium">{ACCESS_CFG[l].label}</span>
+                        <span className="ml-1.5 text-muted-foreground text-[11px]">— {ACCESS_CFG[l].desc}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => setBulkShareOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={bulkSharing || (bulkShareGranteeType !== 'all_staff' && !bulkShareGranteeId)} onClick={bulkShareFiles}>
+                {bulkSharing ? 'Sharing…' : `Share ${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''}`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ══ Bulk move dialog ══════════════════════════════════════════════ */}
+        <Dialog open={bulkMoveOpen} onOpenChange={open => { if (!open) { setBulkMoveOpen(false); setBulkMoveFolderId('__root__'); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-blue-600" />
+                Move {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''}
+              </DialogTitle>
+              <DialogDescription>Choose a destination folder.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1 py-1">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Destination</label>
+              <Select value={bulkMoveFolderId} onValueChange={setBulkMoveFolderId}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__root__">Root (no folder)</SelectItem>
+                  {folders.filter(f => !f.archived && !f.is_system_folder).map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => setBulkMoveOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={bulkMoving} onClick={bulkMoveFiles}>
+                {bulkMoving ? 'Moving…' : `Move ${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''}`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ══ Folder grid right-click context menu ══════════════════════════ */}
         {ctxMenuFolder && (isAdmin || ctxMenuFolder.created_by === userId) && (
