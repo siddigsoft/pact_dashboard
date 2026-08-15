@@ -336,16 +336,23 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       console.log('[Classification] Successfully inserted:', result?.id);
 
-      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
-
       const newClassification = transformUserClassificationFromDB(result);
 
-      toast({
-        title: 'Success',
-        description: existingClassifications.length > 0
-          ? 'Classification updated successfully (previous classification deactivated)' 
-          : 'Classification assigned successfully',
-      });
+      // Optimistically patch the cache so the UI updates instantly —
+      // mark old active ones as inactive and push the new record in.
+      queryClient.setQueryData<UserClassification[]>(
+        classificationQueryKeys.userClassifications(),
+        (prev = []) => {
+          const updated = prev.map(c =>
+            existingClassifications.some(e => e.id === c.id)
+              ? { ...c, isActive: false, effectiveUntil: effectiveFrom }
+              : c
+          );
+          return [newClassification, ...updated];
+        }
+      );
+      // Background invalidation keeps the cache eventually consistent.
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       return newClassification;
     } catch (error: any) {
@@ -356,14 +363,9 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         code: error.code || 'No code',
         stack: error.stack,
       });
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to assign classification',
-        variant: 'destructive',
-      });
-      throw error;
+      throw error; // caller (handleClassificationSave) owns the error toast
     }
-  }, [userClassifications, currentUser, toast, queryClient]);
+  }, [userClassifications, currentUser, queryClient]);
 
   // Create fee structure
   const createFeeStructure = useCallback(async (data: CreateFeeStructureRequest): Promise<ClassificationFeeStructure | null> => {

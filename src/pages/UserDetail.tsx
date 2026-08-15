@@ -1160,20 +1160,16 @@ const UserDetail: FC = () => {
 
     try {
       await assignClassification(user.id, data);
-      
-      // Refresh classification context to update UI immediately
-      await refreshUserClassifications();
-      
-      // Also refresh user data
-      if (refreshUsers) {
-        await refreshUsers();
-      }
-      
+
       toast({
         title: "Classification Updated",
         description: `Classification updated for ${user.name}`,
       });
       setClassificationDialogOpen(false);
+
+      // Fire background refreshes without blocking the UI
+      refreshUserClassifications().catch(() => {});
+      if (refreshUsers) refreshUsers().catch(() => {});
     } catch (error) {
       console.error("Error updating classification:", error);
       toast({
