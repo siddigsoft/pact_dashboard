@@ -105,6 +105,7 @@ const Users = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
+  const [classificationMap, setClassificationMap] = useState<Map<string, string>>(new Map());
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoadingApproval, setIsLoadingApproval] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -272,11 +273,12 @@ const Users = () => {
       result = result.filter(u => getPrimaryRoleLabel(u).toLowerCase() === roleFilter.toLowerCase());
     }
 
-    // Classification filter
+    // Classification filter — uses the separately-fetched classificationMap
+    // because u.classification is only populated for the logged-in user
     if (classificationFilter === 'none') {
-      result = result.filter(u => !u.classification?.level);
+      result = result.filter(u => !classificationMap.get(u.id));
     } else if (classificationFilter !== 'all') {
-      result = result.filter(u => u.classification?.level === classificationFilter);
+      result = result.filter(u => classificationMap.get(u.id) === classificationFilter);
     }
 
     // Status filter
@@ -294,7 +296,26 @@ const Users = () => {
     }
     
     return result;
-  }, [users, activeTab, debouncedSearchQuery, roleFilter, classificationFilter, statusFilter, currentUser]);
+  }, [users, activeTab, debouncedSearchQuery, roleFilter, classificationFilter, classificationMap, statusFilter, currentUser]);
+
+  // Fetch all active classifications for the full user list (classification is only
+  // loaded on the currentUser object, not on every user in the list)
+  useEffect(() => {
+    supabase
+      .from('user_classifications')
+      .select('user_id, classification_level')
+      .eq('is_active', true)
+      .order('effective_from', { ascending: false })
+      .then(({ data }) => {
+        if (!data) return;
+        const map = new Map<string, string>();
+        // Keep only the first (most-recent) classification per user
+        data.forEach(row => {
+          if (!map.has(row.user_id)) map.set(row.user_id, row.classification_level);
+        });
+        setClassificationMap(map);
+      });
+  }, []);
 
   // Track initial load state - set to false after a short delay to handle empty datasets
   useEffect(() => {
