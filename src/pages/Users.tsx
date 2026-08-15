@@ -365,9 +365,10 @@ const Users = () => {
     if (!checkUsersWrite('write')) return;
     setIsLoadingApproval(userId);
     try {
-      await approveUser(userId);
-      toast({ title: "User approved", description: "User has been approved successfully" });
-      
+      const approved = await approveUser(userId);
+      if (!approved) return; // approveUser already showed the error toast
+
+      // approveUser shows its own success toast — just open the project dialog
       const approvedUser = users.find(u => u.id === userId);
       if (approvedUser && projects.length > 0) {
         setAddToProjectDialog({ open: true, user: approvedUser });
