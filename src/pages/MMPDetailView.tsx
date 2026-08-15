@@ -44,6 +44,7 @@ import { ReclaimFromCoordinatorDialog } from "@/components/mmp/ReclaimFromCoordi
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
 import CoordinatorSummaryCard from "@/components/mmp/CoordinatorSummaryCard";
 import WorkflowTrackerTab from "@/components/mmp/WorkflowTrackerTab";
+import IncentivesTab from "@/components/mmp/IncentivesTab";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
@@ -912,7 +913,7 @@ const MMPDetailView = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="list" className="w-full">
-            <TabsList className="grid grid-cols-3 md:grid-cols-7 w-full bg-muted/50">
+            <TabsList className="grid grid-cols-3 md:grid-cols-8 w-full bg-muted/50">
               <TabsTrigger 
                 value="list" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
@@ -965,6 +966,13 @@ const MMPDetailView = () => {
               >
                 <span className="hidden sm:inline">Version History</span>
                 <span className="sm:hidden">Versions</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="incentives" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-incentives"
+              >
+                Incentives
               </TabsTrigger>
             </TabsList>
         
@@ -1221,6 +1229,16 @@ const MMPDetailView = () => {
 
             <TabsContent value="version-history" className="mt-6">
               <MMPVersionHistory mmpFile={mmpFile} mmpId={mmpFile.mmpId || `MMP-${mmpFile.id}`} />
+            </TabsContent>
+
+            <TabsContent value="incentives" className="mt-6">
+              <IncentivesTab
+                mmpId={id!}
+                mmpHubName={(mmpFile as any).hub ?? (mmpFile as any).projectHub ?? null}
+                siteEntries={siteEntries as any[]}
+                isClosed={(mmpFile as any).cycle_status === 'closed' || mmpFile.status === 'closed'}
+                isHistorical={!!mmpFile.uploadedAt && mmpFile.uploadedAt < '2026-08-01'}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>

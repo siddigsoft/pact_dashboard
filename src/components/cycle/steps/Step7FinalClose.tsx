@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -42,6 +42,25 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const [overrideTargetId, setOverrideTargetId] = useState<number | null>(null);
   const [overrideJustification, setOverrideJustification] = useState('');
   const [savingOverride, setSavingOverride] = useState(false);
+
+  // ── Incentive snapshot guard ─────────────────────────────────────────────
+  // 'loading' | 'missing' | 'pre_approved' | 'approved' | 'paid' | 'skipped'
+  const [incentiveStatus, setIncentiveStatus] = useState<string>('loading');
+  const [incentiveConfirmText, setIncentiveConfirmText] = useState('');
+
+  useEffect(() => {
+    const mmpId = wizardState.selectedMmpId;
+    if (!mmpId) return;
+    supabase
+      .from('mmp_incentive_snapshots')
+      .select('id, status, skipped')
+      .eq('mmp_id', mmpId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) { setIncentiveStatus('missing'); return; }
+        setIncentiveStatus(data.skipped ? 'skipped' : data.status);
+      });
+  }, [wizardState.selectedMmpId]);
 
   const matchResults = wizardState.matchResults;
   const hasFile = matchResults.length > 0;
@@ -177,25 +196,49 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
   const handleCloseCycle = async () => {
     if (!allPassed || !confirmChecked) return;
+    // If no pre-approved snapshot, require the admin to have typed CONFIRM
+    if (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM') return;
     setClosing(true);
     try {
-      const closedAt = new Date().toISOString();
-      const { error } = await supabase.from('mmp_files').update({
-        status: 'closed',
-        cycle_status: 'closed',       // canonical column checked by Operations/Monitoring
-        closed_at: closedAt,
-        cycle_closed_at: closedAt,
-        closed_by: currentUser?.id,
-      }).eq('id', wizardState.selectedMmpId!);
+      // close_mmp_and_lock_incentives is a SECURITY DEFINER RPC that atomically:
+      //   1. Updates mmp_files (status → closed)
+      //   2. Locks any pre_approved snapshot → approved, OR inserts a skipped
+      //      record if no snapshot exists — preventing retroactive pre-approval.
+      // SECURITY DEFINER bypasses RLS so FOM/Admin/SuperAdmin can all call it
+      // without needing direct write access to mmp_incentive_snapshots.
+      const skipReason = incentiveStatus === 'missing'
+        ? 'Cycle closed without incentive pre-approval (admin confirmed).'
+        : undefined;
 
-      if (error) {
-        console.error('Cycle close DB error:', error);
-        alert(`Failed to close cycle: ${error.message}\n\nThe cycle has NOT been marked closed. Please try again.`);
+      // closed_by is derived server-side from auth.uid() — we do NOT pass it as
+      // a parameter, preventing any client-side spoofing of the audit trail.
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'close_mmp_and_lock_incentives',
+        {
+          p_mmp_id:      wizardState.selectedMmpId!,
+          p_skip_reason: skipReason ?? null,
+        }
+      );
+
+      if (rpcError) {
+        console.error('Cycle close RPC error:', rpcError);
+        alert(`Failed to close cycle: ${rpcError.message}\n\nThe cycle has NOT been marked closed. Please try again.`);
         setClosing(false);
         return;
       }
 
-      // Reports are generated after a confirmed DB write
+      const result = rpcResult as { ok: boolean; closed_at?: string; error?: string } | null;
+      if (!result?.ok) {
+        const msg = result?.error ?? 'Unknown error from close_mmp_and_lock_incentives';
+        console.error('Cycle close RPC returned failure:', msg);
+        alert(`Failed to close cycle: ${msg}\n\nThe cycle has NOT been marked closed. Please try again.`);
+        setClosing(false);
+        return;
+      }
+
+      const closedAt = result.closed_at ?? new Date().toISOString();
+
+      // Reports generated after confirmed atomic DB write
       await generateCycleCloseReports();
       updateWizardState({ cycleClosedAt: closedAt });
     } catch (err: any) {
@@ -301,6 +344,27 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         </Alert>
       )}
 
+      {/* Incentive pre-approval warning — shown when no snapshot exists */}
+      {allPassed && incentiveStatus === 'missing' && (
+        <div className="border-2 border-amber-400 rounded-lg p-4 space-y-3 bg-amber-50/30">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <p className="font-semibold text-amber-700 text-sm">Incentive bonuses have not been pre-approved</p>
+          </div>
+          <p className="text-xs text-amber-700">
+            No incentive snapshot was pre-approved for this MMP. Closing without pre-approval means incentive bonuses cannot be paid for this cycle. If this is intentional, type <strong>CONFIRM</strong> below to proceed without incentives.
+          </p>
+          <input
+            type="text"
+            placeholder="Type CONFIRM to close without incentives"
+            value={incentiveConfirmText}
+            onChange={e => setIncentiveConfirmText(e.target.value)}
+            className="w-full border border-amber-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            data-testid="input-incentive-confirm"
+          />
+        </div>
+      )}
+
       {allPassed && (
         <div className="border-2 border-green-400 rounded-lg p-4 space-y-3 bg-green-50/30">
           <div className="flex items-center gap-2">
@@ -321,7 +385,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           <Button
             type="button"
             onClick={() => setClosingDialog(true)}
-            disabled={!confirmChecked}
+            disabled={!confirmChecked || (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM')}
             className="bg-green-600 hover:bg-green-700 text-white"
             data-testid="button-close-cycle"
           >
