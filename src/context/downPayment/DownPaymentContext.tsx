@@ -153,7 +153,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   // User shape for query (role-based filtering)
   const userForQuery: UserForDownPayment | null = currentUser
-    ? { id: currentUser.id, hubId: currentUser.hubId, secondaryHubId: currentUser.secondaryHubId, role: currentUser.role }
+    ? {
+        id: currentUser.id,
+        hubId: currentUser.hubId,
+        secondaryHubId: currentUser.secondaryHubId,
+        role: currentUser.role,
+        // Pass additional role assignments so hub IDs from role management are included
+        additionalRoles: (currentUser as any).additionalRoles ?? null,
+      }
     : null;
 
   const requestsQuery = useDownPaymentRequestsQuery(userForQuery, downPaymentScopeActive);

@@ -14,12 +14,27 @@ export interface UserForDownPayment {
   hubId?: string | null;
   secondaryHubId?: string | null;
   role?: string | null;
+  /** Raw additionalRoles array from the user profile (optional — used to include
+   *  hub assignments granted via role management, not just the profile hub columns). */
+  additionalRoles?: any[] | null;
+}
+
+/** Extract hub IDs this user supervises via additional role assignments. */
+function getAdditionalRoleHubIds(user: UserForDownPayment): string[] {
+  const roles = Array.isArray(user.additionalRoles) ? user.additionalRoles : [];
+  return roles
+    .filter((r: any) => {
+      const norm = (r?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      return norm === 'supervisor' || norm === 'hubsupervisor' || norm === 'hub_supervisor';
+    })
+    .map((r: any) => r?.hub_id)
+    .filter((h: any): h is string => !!h);
 }
 
 export const downPaymentQueryKeys = {
   all: ['down-payment'] as const,
-  requests: (userId?: string | null, hubId?: string | null, secondaryHubId?: string | null, role?: string | null) =>
-    [...downPaymentQueryKeys.all, 'requests', userId ?? '', hubId ?? '', secondaryHubId ?? '', role ?? ''] as const,
+  requests: (userId?: string | null, hubId?: string | null, secondaryHubId?: string | null, role?: string | null, additionalHubIds?: string[]) =>
+    [...downPaymentQueryKeys.all, 'requests', userId ?? '', hubId ?? '', secondaryHubId ?? '', role ?? '', (additionalHubIds ?? []).sort().join(',') ] as const,
 };
 
 /** Strip surrounding single/double quotes and trim whitespace — some rows in
@@ -110,14 +125,27 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   `;
   const DP_SELECT_PLAIN = 'id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at, country_id, fully_paid_at';
 
+  // All hub IDs this supervisor is responsible for:
+  //   1. Primary hub (hub_id profile column)
+  //   2. Secondary hub (secondary_hub_id profile column)
+  //   3. Additional role-based hub assignments (additionalRoles[].hub_id where role=supervisor)
+  const additionalRoleHubIds = getAdditionalRoleHubIds(user);
+  // Deduplicated list: primary + secondary + additional role hubs
+  const allSupervisedHubIds = Array.from(new Set([
+    user.hubId,
+    user.secondaryHubId,
+    ...additionalRoleHubIds,
+  ].filter((h): h is string => !!h)));
+
   const applyRoleFilter = (q: any) => {
     if (userRole === 'datacollector' || userRole === 'coordinator') {
       return q.eq('requested_by', user.id);
     }
     if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
-      if (user.hubId) {
-        let hubFilter = `requested_by.eq.${user.id},hub_id.eq.${user.hubId}`;
-        if (user.secondaryHubId) hubFilter += `,hub_id.eq.${user.secondaryHubId}`;
+      if (allSupervisedHubIds.length > 0) {
+        // Include supervisor's own requests + any request tagged with a hub they supervise
+        const hubClauses = allSupervisedHubIds.map(h => `hub_id.eq.${h}`);
+        const hubFilter = [`requested_by.eq.${user.id}`, ...hubClauses].join(',');
         return q.or(hubFilter);
       }
       return q.eq('requested_by', user.id);
@@ -138,9 +166,13 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   // are populated from metadata first, then filled in by the enrichment RPC below.
   // Try the SECURITY DEFINER RPC first (bypasses RLS, applies role filter in SQL).
   // Falls back to a direct query if the migration hasn't been applied yet.
+  //
+  // The RPC only accepts two hub params (primary + secondary). When a supervisor
+  // has additional hub assignments via additionalRoles, bypass the RPC so the
+  // direct applyRoleFilter can include all supervised hub IDs.
   let allData: any[] = [];
   let error: any = null;
-  let useRpc = true;
+  let useRpc = additionalRoleHubIds.length === 0; // skip RPC when additional-role hubs present
 
   for (let _dpf = 0; ; _dpf += 1000) {
     let _dpp: any[] | null = null;
@@ -369,8 +401,10 @@ export function useDownPaymentRequestsQuery(
 ) {
   const enabled = !!user?.id && scopeEnabled;
 
+  const additionalHubIds = getAdditionalRoleHubIds(user ?? {});
+
   return useQuery({
-    queryKey: downPaymentQueryKeys.requests(user?.id, user?.hubId, user?.secondaryHubId, user?.role),
+    queryKey: downPaymentQueryKeys.requests(user?.id, user?.hubId, user?.secondaryHubId, user?.role, additionalHubIds),
     queryFn: () =>
       withTimeout(
         fetchDownPaymentRequests(user!),
