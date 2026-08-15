@@ -4,6 +4,7 @@ import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/settings/SettingsContext';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
+import { useAutoLocationRefresh } from '@/hooks/use-auto-location-refresh';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { DashboardZone as DashboardZoneType } from '@/types/user-preferences';
@@ -95,6 +96,9 @@ const Dashboard = () => {
   }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
 
   const [activeZone, setActiveZone] = useState<DashboardZone>(defaultZone);
+
+  // Silently refresh GPS on every login/session start for users who already consented
+  useAutoLocationRefresh();
 
   useEffect(() => {
     setActiveZone(defaultZone);
