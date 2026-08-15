@@ -11,7 +11,7 @@ import {
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
-  SquareCheck, Square, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, PanelRight, XCircle,
+  SquareCheck, Square, SquareMinus, ArrowLeft, HelpCircle, Table2, UserCog, AlertCircle, LayoutList, PanelRight, XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -4574,7 +4574,23 @@ export default function WorkspaceHub() {
                 {!searchQuery.trim() && currentSubFolders.length > 0 && (
                   <div className="px-6 pt-4 pb-2">
                     <div className="flex items-center justify-between px-2 mb-3">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
+                      {/* Select-all checkbox + label */}
+                      <button
+                        onClick={() => {
+                          const allIds = currentSubFolders.map(f => f.id);
+                          const allSelected = allIds.every(id => selectedFolderIds.has(id));
+                          setSelectedFolderIds(allSelected ? new Set() : new Set(allIds));
+                        }}
+                        className="flex items-center gap-1.5 group/selall"
+                        title={currentSubFolders.every(f => selectedFolderIds.has(f.id)) ? 'Deselect all folders' : 'Select all folders'}
+                      >
+                        {currentSubFolders.length > 0 && currentSubFolders.every(f => selectedFolderIds.has(f.id))
+                          ? <SquareCheck className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                          : currentSubFolders.some(f => selectedFolderIds.has(f.id))
+                            ? <SquareMinus className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+                            : <Square className="h-3.5 w-3.5 text-muted-foreground/50 group-hover/selall:text-muted-foreground flex-shrink-0 transition-colors" />}
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Folders</p>
+                      </button>
                       {isAdmin && (
                         <button
                           onClick={() => setNewFolderOpen(true)}
