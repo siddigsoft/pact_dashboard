@@ -495,13 +495,30 @@ const UserDetail: FC = () => {
   // Custom DB roles not in the built-in list — these are created via Role Management UI
   const customDbRoles = allDbRoles.filter(r => r.name && !normalizeRole(r.name));
   const isSA = isSuperAdmin();
-  const { getUserClassification, getClassificationHistory, assignClassification, refreshUserClassifications } = useClassification();
+  const { getUserClassification, assignClassification, refreshUserClassifications, userClassifications: allClassifications } = useClassification();
   const [classificationDialogOpen, setClassificationDialogOpen] = useState(false);
   
   const canManageClassifications = canManageFinances();
   const userClassification = user ? getUserClassification(user.id) : undefined;
-  const [classificationHistory, setClassificationHistory] = useState<ClassificationHistory[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Derive history directly from the context's already-loaded data — no separate
+  // DB query needed, and it auto-updates whenever a new classification is saved.
+  const classificationHistory: ClassificationHistory[] = user
+    ? [...allClassifications]
+        .filter(c => c.userId === user.id)
+        .sort((a, b) => new Date(b.effectiveFrom).getTime() - new Date(a.effectiveFrom).getTime())
+        .map(c => ({
+          id: c.id,
+          classificationLevel: c.classificationLevel,
+          roleScope: c.roleScope,
+          effectiveFrom: c.effectiveFrom,
+          effectiveUntil: c.effectiveUntil,
+          assignedBy: c.assignedBy,
+          changeReason: c.changeReason,
+          createdAt: c.createdAt,
+        }))
+    : [];
+  const loadingHistory = false;
   const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
   
   // Location dropdown state management
@@ -1062,23 +1079,8 @@ const UserDetail: FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, activeSection]);
 
-  useEffect(() => {
-    const fetchClassificationHistory = async () => {
-      if (user?.id && canManageClassifications) {
-        setLoadingHistory(true);
-        try {
-          const history = await getClassificationHistory(user.id);
-          setClassificationHistory(history);
-        } catch (error) {
-          console.error('Error fetching classification history:', error);
-          setClassificationHistory([]);
-        } finally {
-          setLoadingHistory(false);
-        }
-      }
-    };
-    fetchClassificationHistory();
-  }, [user?.id, canManageClassifications, getClassificationHistory]);
+  // Classification history is now derived directly from the context's allClassifications
+  // — no separate useEffect or DB query needed.
 
   // ── Bank Account History fetch ────────────────────────────────────────
   useEffect(() => {
