@@ -5178,6 +5178,15 @@ export default function WorkspaceHub() {
               <div style={{ position: 'fixed', left: ctxMenuFilePos.x, top: ctxMenuFilePos.y, width: 1, height: 1, pointerEvents: 'none' }} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="text-xs z-[200]" onClick={() => setCtxMenuFile(null)}>
+              <DropdownMenuItem onSelect={() => {
+                setSelectedFileIds(prev => { const n = new Set(prev); n.has(ctxMenuFile.id) ? n.delete(ctxMenuFile.id) : n.add(ctxMenuFile.id); return n; });
+                setCtxMenuFile(null);
+              }}>
+                {selectedFileIds.has(ctxMenuFile.id)
+                  ? <><X className="h-3.5 w-3.5 mr-2" />Deselect</>
+                  : <><SquareCheck className="h-3.5 w-3.5 mr-2" />Select</>}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => { openFileDetails(ctxMenuFile); setCtxMenuFile(null); }}>
                 <Eye className="h-3.5 w-3.5 mr-2" />View Details
               </DropdownMenuItem>
