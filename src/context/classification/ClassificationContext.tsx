@@ -294,7 +294,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       // Create new classification
       // Handle both ClassificationFormData (has required fields) and CreateClassificationRequest (has optional fields)
-      const insertData = {
+      const insertData: Record<string, unknown> = {
         user_id: userId,
         classification_level: data.classificationLevel,
         role_scope: data.roleScope,
@@ -303,13 +303,18 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         has_retainer: data.hasRetainer ?? false,
         retainer_amount_cents: data.retainerAmountCents ?? 0,
         retainer_currency: data.retainerCurrency ?? 'SDG',
-        retainer_payout_currency: data.retainerPayoutCurrency || null,
         retainer_frequency: data.retainerFrequency ?? 'monthly',
         assigned_by: currentUser?.id,
         change_reason: data.changeReason,
         notes: data.notes,
         is_active: true,
       };
+      // Only include retainer_payout_currency when it differs from base currency —
+      // omitting it entirely avoids a DB error on instances where the column
+      // hasn't been migrated yet (ADD COLUMN IF NOT EXISTS migration pending).
+      if (data.retainerPayoutCurrency && data.retainerPayoutCurrency !== (data.retainerCurrency ?? 'SDG')) {
+        insertData.retainer_payout_currency = data.retainerPayoutCurrency;
+      }
 
       console.log('[Classification] Insert data:', JSON.stringify(insertData, null, 2));
 
