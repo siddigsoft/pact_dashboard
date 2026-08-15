@@ -249,7 +249,9 @@ const UserDetail: FC = () => {
   const [adminRoleOtpOpen, setAdminRoleOtpOpen] = useState(false);
 
   // Add loading state for save
-  const [isLoadingUser, setIsLoadingUser] = useState(false);
+  // Start in loading state whenever a profile ID is in the URL so we never
+  // flash "User not found" before the context / fallback fetch has a chance to run.
+  const [isLoadingUser, setIsLoadingUser] = useState(!!id);
 
   // Employment record state
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
@@ -560,7 +562,10 @@ const UserDetail: FC = () => {
       setIsLoadingUser(true);
       supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to, additional_roles, last_activity')
+        // Minimal safe column set — excludes optional columns (additional_roles,
+        // last_activity) that may be absent in older DB instances and would cause
+        // the whole query to fail with a column-not-found error.
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
         .eq('id', id)
         .single()
         .then(({ data, error }) => {
