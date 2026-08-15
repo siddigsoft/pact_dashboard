@@ -46,6 +46,7 @@ import EmployeeSkillsTab from "@/components/hr/EmployeeSkillsTab";
 import EmployeeTrainingTab from "@/components/hr/EmployeeTrainingTab";
 import EmployeeBenefitsTab from "@/components/hr/EmployeeBenefitsTab";
 import { generateEmployeeCV } from "@/utils/employeeCvExport";
+import { generateIncentivePDF } from "@/utils/incentivePdfExport";
 import {
   generateReverseChronologicalCV,
   generateFunctionalCV,
@@ -524,6 +525,7 @@ const UserDetail: FC = () => {
   // ── Incentive payment history ─────────────────────────────────────────────
   const [incentivePayments, setIncentivePayments] = useState<any[]>([]);
   const [loadingIncentive, setLoadingIncentive] = useState(false);
+  const [exportingIncentive, setExportingIncentive] = useState(false);
 
   const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
   
@@ -3162,9 +3164,38 @@ const UserDetail: FC = () => {
                 {/* ── Incentive Payment History ───────────────────────────── */}
                 <Card className="shadow-sm">
                   <CardHeader className="p-4 border-b bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-sm font-semibold">Incentive Payment History</CardTitle>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-semibold">Incentive Payment History</CardTitle>
+                      </div>
+                      {incentivePayments.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs gap-1.5"
+                          disabled={exportingIncentive}
+                          onClick={async () => {
+                            if (!user) return;
+                            setExportingIncentive(true);
+                            try {
+                              generateIncentivePDF({
+                                userName:  user.name  ?? user.email ?? 'Staff',
+                                userRole:  user.role  ?? '',
+                                userEmail: user.email ?? null,
+                                isAdmin,
+                                payments:  incentivePayments,
+                              });
+                            } finally {
+                              setExportingIncentive(false);
+                            }
+                          }}
+                        >
+                          {exportingIncentive
+                            ? <><Loader2 className="h-3 w-3 animate-spin" />Exporting…</>
+                            : <><Download className="h-3 w-3" />Export PDF</>}
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
