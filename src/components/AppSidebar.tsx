@@ -478,7 +478,7 @@
 
     // ── Incentive Bonuses section ────────────────────────────────────────────
     const canSeeIncentives = isSuperAdmin || isAdmin || isICT || isFOM || isCountryDirector || isSeniorManagement ||
-      hasAnyRole(['finance', 'financial_admin', 'financialAdmin']) || isCoordinator || isSupervisor;
+      isFinancialAdmin || isCoordinator || isSupervisor;
     const incentiveItems: MenuGroup['items'] = [];
     if (canSeeIncentives && !isHidden('/incentives')) {
       const incTitle = (isCoordinator || isSupervisor) ? 'My Bonuses' : 'Incentive Overview';
