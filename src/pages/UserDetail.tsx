@@ -558,75 +558,61 @@ const UserDetail: FC = () => {
   const [availableStates, setAvailableStates] = useState<typeof sudanStates>([]);
   const [availableLocalities, setAvailableLocalities] = useState<{ id: string; name: string; }[]>([]);
 
+  // ── Effect 1: load profile when :id changes ──────────────────────────────
+  // Deps: [id] only.  `users`, `navigate`, `toast`, `editMode` are intentionally
+  // excluded — they are either stable refs or accessed via current refs below,
+  // so removing them from deps prevents spurious re-runs that were making the
+  // profile flicker or permanently stay on the loading spinner.
+  const usersRef = useRef(users);
+  usersRef.current = users;
+  const editModeRef = useRef(editMode);
+  editModeRef.current = editMode;
+
   useEffect(() => {
     if (!id) return;
 
-    // ── Detect profile navigation (React Router reuses this component) ──────
-    // When :id changes, reset the fetch guard so the new profile always loads.
-    // We do this HERE (not in a separate effect) so the reset and the lookup
-    // happen in the same synchronous tick — no stale-closure race condition.
-    const idChanged = loadingForIdRef.current !== id;
+    loadingForIdRef.current = id;
+    fallbackFetchingRef.current = false;
+    setLoadTimedOut(false);
 
-    if (idChanged) {
-      // ── New profile navigation ─────────────────────────────────────────────
-      loadingForIdRef.current = id;
-      fallbackFetchingRef.current = false;
-
-      // Fast-render: if context already has this user show it immediately,
-      // but ALWAYS kick off a fresh DB fetch below to ensure accuracy.
-      const cached = users.find(u => u.id === id);
-      if (cached) {
-        setUser(cached);
-        if (!editMode) {
-          const nr = cached.role ? (normalizeRole(cached.role as string) || cached.role) : '';
-          setEditForm({ ...cached, role: nr as any });
-        }
-        setIsLoadingUser(false);
-        // Still fall through to start the DB fetch for fresh data.
-      } else {
-        setIsLoadingUser(true);
+    // ── Fast render: serve from context cache immediately if available ───────
+    const cached = usersRef.current.find(u => u.id === id);
+    if (cached) {
+      setUser(cached);
+      if (!editModeRef.current) {
+        const nr = cached.role ? (normalizeRole(cached.role as string) || cached.role) : '';
+        setEditForm({ ...cached, role: nr as any });
       }
-    } else {
-      // ── Same id, users list updated (realtime / fetchUsers completed) ──────
-      // Silently sync the latest context data without touching isLoadingUser,
-      // so ongoing sub-tab fetches are not disrupted.
-      const cached = users.find(u => u.id === id);
-      if (cached) {
-        setUser(cached);
-        if (!editMode) {
-          const nr = cached.role ? (normalizeRole(cached.role as string) || cached.role) : '';
-          setEditForm({ ...cached, role: nr as any });
-        }
-        setIsLoadingUser(false);
-      }
-      // Whether or not we found in context, let any in-flight DB fetch finish.
-      if (fallbackFetchingRef.current) return;
-      // No point re-fetching from DB if we already have the user loaded.
-      if (!idChanged) return;
+      setIsLoadingUser(false);
+      return; // Context hit — no DB fetch needed on this pass
     }
 
-    // Guard: only one DB fetch per id at a time.
-    if (fallbackFetchingRef.current) return;
+    // ── Context miss: fetch directly from Supabase ───────────────────────────
+    setIsLoadingUser(true);
     fallbackFetchingRef.current = true;
 
     const targetId = id;
 
     (async () => {
       try {
+        // Use the same column set as UserContext MINIMAL_COLS so we never hit
+        // a "column does not exist" error on older DB instances.
         const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, email, role, status, hub_id, state_id, locality_id, location, avatar_url, phone, employee_id, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to')
           .eq('id', targetId)
           .maybeSingle();
 
-        // Discard if the user navigated away before this resolved.
+        // Navigation changed before this resolved — discard stale result
         if (loadingForIdRef.current !== targetId) return;
 
         if (error) throw error;
 
         if (!data) {
-          toast({ title: 'User not found', description: `No profile with ID ${targetId}`, variant: 'destructive' });
-          navigate('/users');
+          // Profile genuinely does not exist — show error in UI, don't navigate
+          console.error('[UserDetail] profile not found for id:', targetId);
+          setIsLoadingUser(false);
+          setLoadTimedOut(true);
           return;
         }
 
@@ -668,18 +654,33 @@ const UserDetail: FC = () => {
 
         const normRole = loaded.role ? (normalizeRole(loaded.role as string) || loaded.role) : '';
         setUser(loaded);
-        if (!editMode) setEditForm({ ...loaded, role: normRole as any });
+        if (!editModeRef.current) setEditForm({ ...loaded, role: normRole as any });
         setIsLoadingUser(false);
       } catch (err: any) {
         console.error('[UserDetail] DB fetch failed:', err);
+        if (loadingForIdRef.current !== targetId) return;
         setIsLoadingUser(false);
-        toast({ title: 'Could not load profile', description: err?.message || `Profile ID: ${targetId}`, variant: 'destructive' });
-        navigate('/users');
+        setLoadTimedOut(true);
       } finally {
         fallbackFetchingRef.current = false;
       }
     })();
-  }, [id, users, navigate, toast, editMode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // ── Effect 2: silently sync from context when the users array updates ─────
+  // Runs when fetchUsers completes or realtime pushes a new version of this user.
+  // Never resets isLoadingUser — just updates the displayed data.
+  useEffect(() => {
+    if (!id || isLoadingUser) return;
+    const found = users.find(u => u.id === id);
+    if (!found) return;
+    setUser(found);
+    if (!editMode) {
+      const nr = found.role ? (normalizeRole(found.role as string) || found.role) : '';
+      setEditForm(prev => ({ ...prev, ...found, role: nr as any }));
+    }
+  }, [id, users]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update available states when hub changes in edit mode
   useEffect(() => {
