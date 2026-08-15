@@ -166,8 +166,13 @@ const UserDetail: FC = () => {
 
   const roleStr = (currentUser?.role || '').toLowerCase();
   const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict' || roleStr === 'hr_admin';
-  const canEditBankAccount = isAdminRole;
   const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict', 'hr_admin'].includes(String(r).toLowerCase())));
+
+  // Computed early (before user state loads) so gate checks work during loading.
+  const isOwnProfileEarly = currentUser?.id === id;
+
+  // Admins can edit anyone's bank account; users can edit their own.
+  const canEditBankAccount = isAdminRole || isOwnProfileEarly;
 
   // Classification & Compensation is only relevant for field-staff roles.
   // Check the VIEWED user's primary role AND additional roles.
@@ -1642,26 +1647,35 @@ const UserDetail: FC = () => {
               </button>
               <span className="text-white/20 text-xs shrink-0">›</span>
 
-              {/* Avatar — click to upload */}
-              <div className="relative shrink-0 group cursor-pointer" onClick={() => avatarInputRef.current?.click()} title="Click to change photo">
-                <div
-                  className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-extrabold text-sm shadow-md ring-2 ring-white/15 overflow-hidden"
-                  style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}
-                >
-                  {avatarUploading
-                    ? <Loader2 className="h-4 w-4 animate-spin text-white" />
-                    : user.avatar
-                      ? <img src={user.avatar} alt={user.name} className="h-9 w-9 object-cover" />
-                      : initials}
-                </div>
-                {/* Upload overlay on hover */}
-                {!avatarUploading && (
-                  <div className="absolute inset-0 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera className="h-3.5 w-3.5 text-white" />
+              {/* Avatar — click to upload (own profile or admin only) */}
+              {(() => {
+                const canUploadPhoto = canEditProfile || isOwnProfileEarly;
+                return (
+                  <div
+                    className={`relative shrink-0 group ${canUploadPhoto ? 'cursor-pointer' : 'cursor-default'}`}
+                    onClick={canUploadPhoto ? () => avatarInputRef.current?.click() : undefined}
+                    title={canUploadPhoto ? 'Click to change photo' : undefined}
+                  >
+                    <div
+                      className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-extrabold text-sm shadow-md ring-2 ring-white/15 overflow-hidden"
+                      style={{ background: `linear-gradient(135deg, ${accent}cc, ${accent}88)` }}
+                    >
+                      {avatarUploading
+                        ? <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        : user.avatar
+                          ? <img src={user.avatar} alt={user.name} className="h-9 w-9 object-cover" />
+                          : initials}
+                    </div>
+                    {/* Upload overlay on hover — only shown when upload is allowed */}
+                    {canUploadPhoto && !avatarUploading && (
+                      <div className="absolute inset-0 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Camera className="h-3.5 w-3.5 text-white" />
+                      </div>
+                    )}
+                    <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                   </div>
-                )}
-                <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0a1628] ${user.isApproved ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              </div>
+                );
+              })()}
 
               {/* Name + badges */}
               <div className="flex-1 min-w-0">
