@@ -6,6 +6,7 @@ import 'offline_db.dart';
 import 'models.dart';
 // import '../offline_data_service.dart'; // DEPRECATED: Use OfflineDb instead
 import '../chat_service.dart';
+import '../notification_trigger_service.dart';
 
 typedef SyncProgressCallback = void Function(SyncProgress progress);
 typedef SyncCompleteCallback = void Function(SyncResult result);
@@ -636,6 +637,37 @@ class SyncManager {
             '[SyncManager] _syncSiteVisitComplete: adhoc_daily_logs insert-if-absent '
             'for assignment=$assignmentId date=$reportDate',
           );
+
+          // Notify coordinator — gated on reaching this point, meaning all
+          // required metadata was present and the daily-log upsert did not
+          // throw.  Resolve the team lead's display name from profiles for a
+          // human-readable message; fall back silently.  Fire-and-forget.
+          unawaited(() async {
+            try {
+              final villageName = vcData['village_name']?.toString()
+                  ?? visit.siteName;
+              String teamLeadName = 'Team lead';
+              final profileRow = await _client
+                  .from('profiles')
+                  .select('full_name')
+                  .eq('id', userId)
+                  .maybeSingle();
+              if (profileRow?['full_name'] is String &&
+                  (profileRow!['full_name'] as String).isNotEmpty) {
+                teamLeadName = profileRow['full_name'] as String;
+              }
+              await NotificationTriggerService().villageVisitCompleted(
+                campaignId: campaignId,
+                siteId: visit.siteEntryId,
+                villageName: villageName ?? 'Unknown village',
+                teamLeadName: teamLeadName,
+              );
+            } catch (notifError) {
+              debugPrint(
+                '[SyncManager] coordinator notification failed (non-fatal): $notifError',
+              );
+            }
+          }());
         }
       } catch (dailyLogError) {
         // Non-fatal: daily-log sync failure does not fail the visit sync.

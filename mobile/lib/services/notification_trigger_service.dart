@@ -997,6 +997,56 @@ class NotificationTriggerService {
     }
   }
 
+  /// Notify the campaign coordinator that a team lead has completed their
+  /// village visit.  Mirrors villageSiteClaimed() but fires on completion so
+  /// the coordinator knows the daily log is ready for review.  Non-fatal.
+  Future<void> villageVisitCompleted({
+    required String campaignId,
+    required String siteId,
+    required String villageName,
+    required String teamLeadName,
+    String? projectId,
+  }) async {
+    try {
+      final campaignRow = await _supabase
+          .from('adhoc_campaigns')
+          .select('coordinator_id')
+          .eq('id', campaignId)
+          .maybeSingle();
+
+      final coordinatorId = campaignRow?['coordinator_id'] as String?;
+      if (coordinatorId == null || coordinatorId.isEmpty) {
+        debugPrint(
+          '[Notification] villageVisitCompleted: no coordinator on campaign $campaignId — skipping',
+        );
+        return;
+      }
+
+      await send(
+        NotificationTriggerOptions(
+          userId: coordinatorId,
+          title: 'Village Visit Completed',
+          message:
+              '$teamLeadName has completed $villageName — daily log ready for review',
+          type: NotificationType.success,
+          category: NotificationCategory.assignments,
+          priority: NotificationPriority.high,
+          link: '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: RelatedEntityType.siteVisit,
+          projectId: projectId,
+        ),
+      );
+
+      debugPrint(
+        '[Notification] villageVisitCompleted: notified coordinator=$coordinatorId '
+        'for village=$villageName campaign=$campaignId',
+      );
+    } catch (e) {
+      debugPrint('[Notification] villageVisitCompleted error (non-fatal): $e');
+    }
+  }
+
   // ==================== SITE DISPATCH NOTIFICATIONS ====================
 
   /// Send bilingual site dispatch notification to field staff

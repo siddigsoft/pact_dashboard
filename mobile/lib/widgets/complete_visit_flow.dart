@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/visit_report_data.dart';
+import '../services/notification_trigger_service.dart';
 import '../services/offline/offline_db.dart';
 import '../services/location_service.dart';
 import '../services/photo_upload_service.dart';
@@ -67,6 +69,9 @@ class CompleteVisitFlow {
     BuildContext context, {
     required Map<String, dynamic> site,
     required String? userId,
+    /// Display name of the completing user — used for the coordinator
+    /// notification.  Falls back to "Team lead" when omitted.
+    String? userName,
     Future<void> Function()? onOnlineSuccessReload,
   }) async {
     final supabase = Supabase.instance.client;
@@ -749,9 +754,28 @@ class CompleteVisitFlow {
             debugPrint(
               '[CompleteVisitFlow] adhoc_daily_logs insert attempted (ignoreDuplicates) for assignment=$assignmentId',
             );
+
+            // Notify the campaign coordinator — gated on reaching this point,
+            // meaning all required metadata was present AND the daily-log upsert
+            // did not throw.  Fire-and-forget: failure here must never block
+            // the completion flow.
+            final villageNameForNotif =
+                additionalData['village_name']?.toString() ??
+                site['site_name']?.toString() ??
+                site['siteName']?.toString() ??
+                'Unknown village';
+            unawaited(
+              NotificationTriggerService().villageVisitCompleted(
+                campaignId: campaignId,
+                siteId: site['id'].toString(),
+                villageName: villageNameForNotif,
+                teamLeadName: userName ?? 'Team lead',
+              ),
+            );
           }
         } catch (dailyLogError) {
           // Non-fatal: daily log sync failure should not block visit completion.
+          // Notification is also skipped — we only notify on a successful write.
           debugPrint(
             '[CompleteVisitFlow] adhoc_daily_logs upsert failed (non-critical): $dailyLogError',
           );
