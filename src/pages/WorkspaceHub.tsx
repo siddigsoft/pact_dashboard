@@ -3727,11 +3727,11 @@ export default function WorkspaceHub() {
               </div>
             );
           })()}
-          {/* Checkbox overlay */}
+          {/* Checkbox overlay — visible on hover; always visible when any file is selected */}
           <button onClick={e => toggleFileSelection(file.id, e)} className="absolute top-1.5 left-1.5 z-10">
             {isBulkSelected
               ? <SquareCheck className="h-4 w-4 text-[#1D3461] bg-white rounded drop-shadow" />
-              : <Square className="h-4 w-4 text-white opacity-0 group-hover:opacity-80 drop-shadow" />}
+              : <Square className={cn('h-4 w-4 text-white drop-shadow', selectedFileIds.size > 0 ? 'opacity-80' : 'opacity-0 group-hover:opacity-80')} />}
           </button>
           {/* Lock badge */}
           {isLocked && <span className="absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
