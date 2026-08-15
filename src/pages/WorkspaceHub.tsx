@@ -3223,6 +3223,7 @@ export default function WorkspaceHub() {
             isDragOver && !isSelected && 'ring-2 ring-offset-1 bg-blue-50')}
           style={{ paddingLeft: `${8 + depth * 14}px`, ['--tw-ring-color']: folderColor } as CSSProperties}
           onClick={() => openFolder(folder)}
+          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtxMenuFolder(folder); setCtxMenuPos({ x: e.clientX, y: e.clientY }); }}
           onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverFolderId(folder.id); }}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
           onDrop={e => { e.preventDefault(); e.stopPropagation(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, folder.id); }}
