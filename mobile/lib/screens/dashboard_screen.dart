@@ -15,6 +15,7 @@ import '../widgets/mmp_filter_bar.dart';
 import '../services/wallet_service.dart';
 import '../services/user_notification_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/location_auto_refresh_service.dart';
 import '../services/offline/offline_db.dart';
 import '../models/site_visit.dart';
 import '../utils/mmp_filter_utils.dart';
@@ -159,6 +160,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Cache profile for offline use
           await _cacheProfile(user.id, profileResponse);
           _applyProfileData(profileResponse);
+
+          // Silently refresh GPS on every session start for users who have
+          // already consented to location sharing.  Mirrors the web
+          // useAutoLocationRefresh hook — rate-limited to once per hour,
+          // no UI shown.  Fire-and-forget: does not block dashboard load.
+          LocationAutoRefreshService.refreshIfNeeded(user.id).ignore();
 
           // Fetch user's project memberships (for non-admin users)
           if (!_isAdminOrSuperUser) {
