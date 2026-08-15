@@ -390,10 +390,6 @@ const UserDetail: FC = () => {
   const [locPersonalId, setLocPersonalId] = useState<string | null>(null);
   const [locSaving, setLocSaving] = useState(false);
 
-  // ── FOM temporary hub deployment dates ────────────────────────────────────
-  const [fomTempStart, setFomTempStart] = useState('');
-  const [fomTempEnd, setFomTempEnd]     = useState('');
-
   // ── Contract documents ────────────────────────────────────────────────────
   interface StaffContract {
     id: string;
@@ -819,24 +815,12 @@ const UserDetail: FC = () => {
     }
   };
 
-  // Load FOM temporary deployment dates from location JSONB
-  useEffect(() => {
-    if (!user) return;
-    const roleNorm = (user.role || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const FOM_ROLES = ['fom', 'fieldopmanager', 'field operation manager (fom)', 'field operations manager'];
-    if (!FOM_ROLES.includes(roleNorm)) return;
-    const loc = (user.location as Record<string, string> | null) || {};
-    setFomTempStart(loc.temp_hub_start || '');
-    setFomTempEnd(loc.temp_hub_end || '');
-  }, [user?.id, user?.role, user?.location]);
-
   // Fetch city/address from hr_employee_personal for non-field-staff
   useEffect(() => {
-    const FOM_ROLES = ['fom', 'fieldopmanager', 'field operation manager (fom)', 'field operations manager'];
-    const FIELD_STAFF = ['datacollector', 'coordinator', 'supervisor', 'hubsupervisor', 'hub_supervisor'];
+    const FIELD_STAFF = ['datacollector', 'data_collector', 'coordinator', 'supervisor', 'hubsupervisor', 'hub_supervisor'];
     const role = (user?.role || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    // FOM and field staff use hub/state/locality — skip city/address fetch
-    if (!user || FIELD_STAFF.includes(role) || FOM_ROLES.includes(role)) return;
+    // Field staff use hub/state/locality — skip city/address fetch for them only
+    if (!user || FIELD_STAFF.includes(role)) return;
     supabase.from('hr_employee_personal').select('id,address_line1,address_line2,city,country').eq('profile_id', user.id).maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -1354,12 +1338,11 @@ const UserDetail: FC = () => {
       const HUB_REQUIRED_ROLES = [
         'datacollector', 'data_collector', 'coordinator', 'supervisor',
         'hubsupervisor', 'hub_supervisor',
-        'fom', 'fieldopmanager', 'field operation manager (fom)', 'field operations manager',
       ];
       const roleNorm = (user.role || '').toLowerCase().replace(/\s+/g, ' ').trim();
       if (HUB_REQUIRED_ROLES.includes(roleNorm) && !editForm.hubId) {
         isSavingRef.current = false;
-        toast({ title: 'Required field missing', description: 'Please select a Home Hub before saving.', variant: 'destructive' });
+        toast({ title: 'Required field missing', description: 'Please select a Hub before saving.', variant: 'destructive' });
         return;
       }
     }
@@ -2616,148 +2599,14 @@ const UserDetail: FC = () => {
             {/* ── LOCATION SECTION ────────────────────────────────────────── */}
             {activeSection === 'location' && (() => {
               const roleNorm = (user.role || '').toLowerCase().replace(/\s+/g, ' ').trim();
-              const FOM_ROLES = ['fom', 'fieldopmanager', 'field operation manager (fom)', 'field operations manager'];
+              // Field staff are hub-scoped; everyone else (incl. FOM) sees Country/City/Address
+              // plus the Temporary Hub Assignment section for coverage exceptions.
               const FIELD_STAFF_ROLES = ['datacollector', 'data_collector', 'coordinator', 'supervisor', 'hubsupervisor', 'hub_supervisor'];
-              const isFOM       = FOM_ROLES.includes(roleNorm);
-              const isFieldStaff = !isFOM && FIELD_STAFF_ROLES.includes(roleNorm);
-
-              // Save FOM temporary deployment dates to location JSONB (independent of hub save)
-              const handleFomDeploymentSave = async () => {
-                if (!user || !canEditProfile) return;
-                try {
-                  const { data: profRow } = await supabase.from('profiles').select('location').eq('id', user.id).single();
-                  const currentLoc = (profRow as any)?.location || {};
-                  await supabase.from('profiles').update({
-                    location: { ...currentLoc, temp_hub_start: fomTempStart || null, temp_hub_end: fomTempEnd || null }
-                  }).eq('id', user.id);
-                  toast({ title: 'Deployment dates saved' });
-                } catch {
-                  toast({ title: 'Save failed', description: 'Could not update deployment dates.', variant: 'destructive' });
-                }
-              };
+              const isFieldStaff = FIELD_STAFF_ROLES.includes(roleNorm);
 
               return (
                 <div className="p-5 sm:p-6 space-y-5">
-                  {isFOM ? (
-                    /* ── FOM: Home Hub / Temporary Hub / Deployment Dates / State / Locality ── */
-                    <>
-                      {/* Info banner */}
-                      <div className="flex items-start gap-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
-                        <span className="mt-0.5 shrink-0">🗺️</span>
-                        <p>
-                          <strong>Home Hub</strong> is this FOM's permanent base.{' '}
-                          <strong>Temporary Hub</strong> tracks where they are currently deployed — update it when they move between sites, and set the deployment period so field teams know when the assignment ends.
-                        </p>
-                      </div>
-
-                      {/* Hub assignments */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <LocField label="Home Hub" required>
-                          {editMode ? (
-                            <Select value={editForm.hubId || ""} onValueChange={v => handleEditChange("hubId", v)}>
-                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select home hub" /></SelectTrigger>
-                              <SelectContent>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                          ) : (
-                            <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                        <LocField label="Temporary Hub">
-                          {editMode ? (
-                            <Select value={editForm.secondaryHubId || "__none__"} onValueChange={v => handleEditChange("secondaryHubId", v === "__none__" ? undefined : v)}>
-                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="No temporary deployment" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Not currently deployed</SelectItem>
-                                {hubs.filter(h => h.id !== editForm.hubId).map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <p className="font-semibold text-base">
-                              {user.secondaryHubId
-                                ? <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />{hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId}</span>
-                                : <span className="text-muted-foreground">Not currently deployed</span>}
-                            </p>
-                          )}
-                        </LocField>
-                        <LocField label="State">
-                          {editMode ? (
-                            <Select value={editForm.stateId || ""} onValueChange={v => handleEditChange("stateId", v)} disabled={!editForm.hubId}>
-                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select state" /></SelectTrigger>
-                              <SelectContent>{availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                          ) : (
-                            <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                        <LocField label="Locality">
-                          {editMode ? (
-                            <Select value={editForm.localityId || "__none__"} onValueChange={v => handleEditChange("localityId", v === "__none__" ? undefined : v)} disabled={!editForm.stateId}>
-                              <SelectTrigger className="h-11 bg-background"><SelectValue placeholder="Select locality (optional)" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">None</SelectItem>
-                                {availableLocalities.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
-                          )}
-                        </LocField>
-                      </div>
-                      {editMode && (
-                        <div className="flex items-center gap-3 pt-1">
-                          <Button onClick={() => { const re = user && editForm.role !== user.role && ['Admin','SuperAdmin'].includes(editForm.role||''); if(re && isProtectedOwner(currentUser?.id)) setAdminRoleOtpOpen(true); else handleEditSave(); }} disabled={isSaving}>
-                            {isSaving ? "Saving…" : "Save Hub & Location"}
-                          </Button>
-                          <Button onClick={handleEditCancel} variant="outline">Cancel</Button>
-                        </div>
-                      )}
-
-                      {/* ── Deployment Period (independent of main hub save) ── */}
-                      <div className="border-t border-border/50 pt-5 space-y-3">
-                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          <span>📅</span> Temporary Deployment Period
-                          {user.secondaryHubId && (
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full ml-1">Active</span>
-                          )}
-                        </h3>
-                        <p className="text-[12px] text-muted-foreground">
-                          Set the start and expected end of this FOM's temporary hub assignment so team leads know when the deployment finishes.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <LocField label="Deployment Start">
-                            {canEditProfile ? (
-                              <input
-                                type="date"
-                                value={fomTempStart}
-                                onChange={e => setFomTempStart(e.target.value)}
-                                className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                              />
-                            ) : (
-                              <p className="font-semibold text-base">{fomTempStart || <span className="text-muted-foreground">Not set</span>}</p>
-                            )}
-                          </LocField>
-                          <LocField label="Deployment End (Expected)">
-                            {canEditProfile ? (
-                              <input
-                                type="date"
-                                value={fomTempEnd}
-                                onChange={e => setFomTempEnd(e.target.value)}
-                                min={fomTempStart || undefined}
-                                className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                              />
-                            ) : (
-                              <p className="font-semibold text-base">{fomTempEnd || <span className="text-muted-foreground">Not set</span>}</p>
-                            )}
-                          </LocField>
-                        </div>
-                        {canEditProfile && (
-                          <Button size="sm" onClick={handleFomDeploymentSave} variant="outline">
-                            Save Deployment Dates
-                          </Button>
-                        )}
-                      </div>
-                    </>
-                  ) : isFieldStaff ? (
+                  {isFieldStaff ? (
                     /* ── Field Staff: Hub / State / Locality ── */
                     <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
