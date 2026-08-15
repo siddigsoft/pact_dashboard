@@ -1178,6 +1178,7 @@ const UserDetail: FC = () => {
         description: "There was a problem updating the classification.",
         variant: "destructive"
       });
+      throw error; // re-throw so the dialog doesn't show a false success toast
     }
   };
 

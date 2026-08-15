@@ -200,17 +200,10 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
     setIsLoading(true);
     try {
       await onSave(formData);
-      toast({
-        title: 'Success',
-        description: 'Classification updated successfully',
-      });
       onOpenChange(false);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update classification',
-        variant: 'destructive',
-      });
+    } catch {
+      // Parent (handleClassificationSave) shows the error toast and re-throws;
+      // we just stop the spinner here without adding a duplicate toast.
     } finally {
       setIsLoading(false);
     }
