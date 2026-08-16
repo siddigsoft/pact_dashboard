@@ -375,6 +375,8 @@ const CostSubmission = () => {
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  // Super-admin only: filter by the current approval tier a submission is waiting at
+  const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
 
   // Reports tab: which cards are collapsed (card IDs), and which role rows are expanded in the timeline
@@ -1171,8 +1173,24 @@ const CostSubmission = () => {
          return (u?.stateId || (u as any)?.state) === stateFilter;
        });
      }
+     // Approval-tier filter (Super Admin only) — keep submissions currently awaiting that tier
+     if (tierFilter !== 'all') {
+       filtered = filtered.filter(o => {
+         const t1 = (o.tier1_status || '').toLowerCase();
+         const t2 = (o.tier2_status || '').toLowerCase();
+         const t3 = (o.tier3_status || '').toLowerCase();
+         const t4 = (o.tier4_status || '').toLowerCase();
+         const pending = (s: string) => !s || s === 'pending';
+         const approved = (s: string) => s === 'approved';
+         if (tierFilter === 't1') return pending(t1);
+         if (tierFilter === 't2') return approved(t1) && pending(t2);
+         if (tierFilter === 't3') return approved(t2) && pending(t3);
+         if (tierFilter === 't4') return approved(t3) && pending(t4);
+         return true;
+       });
+     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter, userFilter, stateFilter, users]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter, userFilter, stateFilter, tierFilter, users]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -5399,8 +5417,24 @@ const CostSubmission = () => {
               </Select>
             )}
 
+            {/* Approval-tier filter — Super Admin only */}
+            {isSuperAdmin && (
+              <Select value={tierFilter} onValueChange={v => setTierFilter(v as typeof tierFilter)} data-testid="select-tier-filter">
+                <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="trigger-tier-filter">
+                  <SelectValue placeholder="All Tiers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🔢 All Tiers</SelectItem>
+                  <SelectItem value="t1">⏳ Awaiting T1</SelectItem>
+                  <SelectItem value="t2">⏳ Awaiting T2</SelectItem>
+                  <SelectItem value="t3">⏳ Awaiting T3</SelectItem>
+                  <SelectItem value="t4">⏳ Awaiting T4 (Final)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Active filter pills + clear */}
-            {(mmpFilter !== 'all' || userFilter !== 'all' || stateFilter !== 'all') && (
+            {(mmpFilter !== 'all' || userFilter !== 'all' || stateFilter !== 'all' || tierFilter !== 'all') && (
               <div className="flex items-center gap-1 flex-wrap">
                 {mmpFilter !== 'all' && (
                   <span className="inline-flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 py-0.5 font-medium">
@@ -5420,8 +5454,14 @@ const CostSubmission = () => {
                     <button onClick={() => setStateFilter('all')} className="ml-0.5 hover:text-emerald-900" data-testid="button-clear-state-filter">✕</button>
                   </span>
                 )}
+                {tierFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 rounded-full px-2 py-0.5 font-medium">
+                    Tier: {tierFilter === 't1' ? 'Awaiting T1' : tierFilter === 't2' ? 'Awaiting T2' : tierFilter === 't3' ? 'Awaiting T3' : 'Awaiting T4'}
+                    <button onClick={() => setTierFilter('all')} className="ml-0.5 hover:text-orange-900" data-testid="button-clear-tier-filter">✕</button>
+                  </span>
+                )}
                 <button
-                  onClick={() => { setMmpFilter('all'); setUserFilter('all'); setStateFilter('all'); }}
+                  onClick={() => { setMmpFilter('all'); setUserFilter('all'); setStateFilter('all'); setTierFilter('all'); }}
                   className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
                   data-testid="button-clear-all-filters"
                 >
