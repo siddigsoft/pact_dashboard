@@ -218,9 +218,16 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   
   const projectManagerUsers = users?.filter(u => 
     u.roles?.some(r => {
-      const role = r.toLowerCase();
-      const isFieldTeam = role === 'supervisor' || role === 'coordinator' || role === 'datacollector' || role === 'data collector';
-      const isPMRole = role.includes('projectmanager') || role.includes('project manager') || role === 'pm' || role === 'fieldopmanager' || role === 'admin';
+      const role = r.toLowerCase().replace(/[\s_-]/g, '');
+      const isFieldTeam = role === 'supervisor' || role === 'coordinator' || role === 'datacollector';
+      const isPMRole =
+        role.includes('projectmanager') ||
+        role === 'pm' ||
+        role === 'fieldopmanager' ||
+        role === 'admin' ||
+        role === 'superadmin' ||
+        role === 'superadministrator' ||
+        role === 'seniormanagement';
       return isPMRole && !isFieldTeam;
     })
   ) || [];
