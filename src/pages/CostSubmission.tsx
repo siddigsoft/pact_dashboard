@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
-import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
+import { REJECTION_REASONS, APPROVAL_REASONS, groupReasonOptions } from "@/config/rejectionReasons";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -10556,12 +10556,20 @@ const CostSubmission = () => {
                       <SelectValue placeholder="Select a reason... / اختر سبباً..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(approvalDialog.action === 'reject'
-                        ? REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
-                        : APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
-                      ).map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
+                      {groupReasonOptions(
+                        approvalDialog.action === 'reject'
+                          ? REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
+                          : APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
+                      ).map(({ group, items }) =>
+                        group ? (
+                          <SelectGroup key={group}>
+                            <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 py-1">{group}</SelectLabel>
+                            {items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                          </SelectGroup>
+                        ) : (
+                          items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                   {!approvalReason && (
@@ -10846,12 +10854,20 @@ const CostSubmission = () => {
                         <SelectValue placeholder="Select a reason..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {(isApprove
-                          ? APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
-                          : REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
-                        ).map(opt => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
+                        {groupReasonOptions(
+                          isApprove
+                            ? APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
+                            : REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
+                        ).map(({ group, items }) =>
+                          group ? (
+                            <SelectGroup key={group}>
+                              <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 py-1">{group}</SelectLabel>
+                              {items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                            </SelectGroup>
+                          ) : (
+                            items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)
+                          )
+                        )}
                       </SelectContent>
                     </Select>
                     {!groupApprovalReason && (

@@ -13,7 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -21,6 +23,7 @@ import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import {
   REJECTION_REASONS,
   APPROVAL_REASONS,
+  groupReasonOptions,
   type WorkflowType,
 } from '@/config/rejectionReasons';
 
@@ -113,9 +116,16 @@ export function ReasonPickerDialog({
                 <SelectValue placeholder="Select a reason..." />
               </SelectTrigger>
               <SelectContent>
-                {options.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
+                {groupReasonOptions(options).map(({ group, items }) =>
+                  group ? (
+                    <SelectGroup key={group}>
+                      <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 py-1">{group}</SelectLabel>
+                      {items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                    </SelectGroup>
+                  ) : (
+                    items.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)
+                  )
+                )}
               </SelectContent>
             </Select>
             {requireReason && !reason && (
