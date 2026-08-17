@@ -52,38 +52,59 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
     const notCoveredIds = Object.keys(wizardState.uncoveredReasons);
     if (!notCoveredIds.length) { setLoading(false); return; }
 
-    // Get enumerator IDs for not-covered sites
+    // Get site data for not-covered sites — do NOT use profiles!accepted_by join
+    // (accepted_by has no FK constraint to profiles, the join silently fails)
     const { data: siteData } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, accepted_by, profiles!accepted_by(full_name)')
+      .select('id, site_name, state, locality, accepted_by')
       .in('id', notCoveredIds);
 
     if (!siteData?.length) { setLoading(false); return; }
 
-    const enumIds = [...new Set(siteData.map((s: any) => s.accepted_by).filter(Boolean))];
+    // Resolve enumerator names via separate profiles lookup
+    const enumUuids = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
+    const nameMap: Record<string, string> = {};
+    if (enumUuids.length) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', enumUuids);
+      for (const p of (profileRows ?? [])) {
+        if (p.full_name) nameMap[p.id] = p.full_name;
+      }
+    }
 
-    // Check for advances paid (down_payments table)
+    // Advances are stored in down_payment_requests, linked via mmp_site_entry_id
+    // (there is no mmp_file_id on down_payment_requests — join through entries)
     const { data: advances } = await supabase
-      .from('down_payments')
-      .select('id, user_id, amount, status, mmp_file_id')
-      .eq('mmp_file_id', wizardState.selectedMmpId!)
-      .in('user_id', enumIds)
-      .in('status', ['approved', 'paid', 'partially_paid']);
+      .from('down_payment_requests')
+      .select('mmp_site_entry_id, total_paid_amount, requested_amount, status')
+      .in('mmp_site_entry_id', notCoveredIds)
+      .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
+
+    // Map advance totals to the enumerator of each site entry
+    const entryToEnum: Record<string, string> = {};
+    for (const s of (siteData as any[])) {
+      if (s.accepted_by) entryToEnum[s.id] = s.accepted_by;
+    }
 
     const advanceByEnum: Record<string, number> = {};
-    (advances ?? []).forEach((a: any) => {
-      advanceByEnum[a.user_id] = (advanceByEnum[a.user_id] ?? 0) + (a.amount ?? 0);
-    });
+    for (const a of (advances ?? [])) {
+      const enumId = entryToEnum[(a as any).mmp_site_entry_id];
+      if (!enumId) continue;
+      const amount = (a as any).total_paid_amount ?? (a as any).requested_amount ?? 0;
+      advanceByEnum[enumId] = (advanceByEnum[enumId] ?? 0) + amount;
+    }
 
-    const exceptionSites: ExceptionSite[] = siteData
-      .filter((s: any) => advanceByEnum[s.accepted_by] > 0)
+    const exceptionSites: ExceptionSite[] = (siteData as any[])
+      .filter((s: any) => s.accepted_by && advanceByEnum[s.accepted_by] > 0)
       .map((s: any) => ({
         siteId: s.id,
         siteName: s.site_name,
         state: s.state,
         locality: s.locality,
         enumeratorId: s.accepted_by,
-        enumeratorName: s.profiles?.full_name ?? 'Unknown',
+        enumeratorName: nameMap[s.accepted_by] ?? 'Unknown',
         advancePaid: advanceByEnum[s.accepted_by] ?? 0,
       }));
 

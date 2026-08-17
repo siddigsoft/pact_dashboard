@@ -56,21 +56,14 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
 
     // Fetch entries with per-site fee columns and all enumerator-linkage columns.
     // transport_fee / enumerator_fee live on each entry row, not on mmp_files.
-    // Enumerator linkage may be accepted_by, claimed_by, or visit_started_by (UUID)
-    // with display names falling back to additional_data text fields.
+    // Enumerator linkage may be accepted_by, claimed_by, or visit_started_by (UUID).
+    // Do NOT join profiles!accepted_by — there is no FK constraint; do a separate lookup.
     const { data: entries } = await supabase
       .from('mmp_site_entries')
       .select(
-        'id, accepted_by, claimed_by, visit_started_by, status, transport_fee, enumerator_fee, additional_data, ' +
-        'profiles!accepted_by(full_name)'
+        'id, accepted_by, claimed_by, visit_started_by, status, transport_fee, enumerator_fee, additional_data'
       )
       .eq('mmp_file_id', wizardState.selectedMmpId!);
-
-    const { data: advances } = await supabase
-      .from('down_payments')
-      .select('user_id, amount, status')
-      .eq('mmp_file_id', wizardState.selectedMmpId!)
-      .in('status', ['approved', 'paid', 'partially_paid']);
 
     const notCoveredIds = new Set(Object.keys(wizardState.uncoveredReasons));
     const confirmedMatchIds = new Set(
@@ -84,49 +77,53 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     const resolveEnumId = (e: any): string | null =>
       e.accepted_by || e.claimed_by || e.visit_started_by || null;
 
-    // Pick the best available display name per entry
-    const resolveEnumName = (e: any): string => {
-      const profileName = (e as any).profiles?.full_name;
-      if (profileName) return profileName;
-      const ad = e.additional_data ?? {};
-      return (
-        ad.collector_name      ||
-        ad.accepted_by_name    ||
-        ad.enumerator_name     ||
-        ad.data_collector_name ||
-        ad.collectorName       ||
-        'Unknown'
-      );
-    };
-
-    // Group by enumerator
+    // Group by enumerator (name resolved below after profile lookup)
     const byEnum: Record<string, { name: string; entries: any[] }> = {};
     for (const e of (entries ?? [])) {
       const id = resolveEnumId(e);
       if (!id) continue;
-      if (!byEnum[id]) byEnum[id] = { name: resolveEnumName(e), entries: [] };
+      // Fallback name from additional_data text fields
+      const ad = (e as any).additional_data ?? {};
+      const adName = ad.collector_name || ad.accepted_by_name || ad.enumerator_name ||
+                     ad.data_collector_name || ad.collectorName || 'Unknown';
+      if (!byEnum[id]) byEnum[id] = { name: adName, entries: [] };
       byEnum[id].entries.push(e);
     }
 
-    // Batch-resolve profile names for any enumerator whose name is still 'Unknown'
-    // (happens when the link column is claimed_by/visit_started_by — profile join only covers accepted_by)
-    const unknownIds = Object.entries(byEnum)
-      .filter(([, d]) => d.name === 'Unknown')
-      .map(([id]) => id);
-    if (unknownIds.length > 0) {
+    // Resolve profile names for all enumerator UUIDs in one batch
+    const allEnumIds = Object.keys(byEnum);
+    if (allEnumIds.length > 0) {
       const { data: profileRows } = await supabase
         .from('profiles')
         .select('id, full_name')
-        .in('id', unknownIds);
+        .in('id', allEnumIds);
       for (const p of (profileRows ?? [])) {
         if (byEnum[p.id] && p.full_name) byEnum[p.id].name = p.full_name;
       }
     }
 
+    // Advances are in down_payment_requests, linked via mmp_site_entry_id.
+    // There is no mmp_file_id column on down_payment_requests — join via entry IDs.
+    const entryIds = (entries ?? []).map((e: any) => e.id);
+    const { data: advances } = await supabase
+      .from('down_payment_requests')
+      .select('mmp_site_entry_id, total_paid_amount, requested_amount, status')
+      .in('mmp_site_entry_id', entryIds)
+      .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
+
+    // Map entry_id → enumerator UUID so we can attribute advances to enumerators
+    const entryToEnum: Record<string, string> = {};
+    for (const e of (entries ?? [])) {
+      const enumId = resolveEnumId(e);
+      if (enumId) entryToEnum[(e as any).id] = enumId;
+    }
+
     const advanceByEnum: Record<string, number> = {};
     for (const a of (advances ?? [])) {
-      if (!a.user_id) continue;
-      advanceByEnum[a.user_id] = (advanceByEnum[a.user_id] ?? 0) + (a.amount ?? 0);
+      const enumId = entryToEnum[(a as any).mmp_site_entry_id];
+      if (!enumId) continue;
+      const amount = (a as any).total_paid_amount ?? (a as any).requested_amount ?? 0;
+      advanceByEnum[enumId] = (advanceByEnum[enumId] ?? 0) + amount;
     }
 
     const tableRows: EnumRow[] = Object.entries(byEnum).map(([enumId, data]) => {
