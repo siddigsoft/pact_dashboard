@@ -330,7 +330,12 @@ export default function Step2UploadMatch({
     const updated = wizardState.matchResults.map(r =>
       r.rowIndex === rowIndex ? { ...r, action, status: 'actioned' as const } : r
     );
-    updateWizardState({ matchResults: updated });
+    // Recompute unmatchedMmpSiteIds so confirmed/linked sites leave the "Not in clean data" list
+    const matchedSiteIds = new Set(updated.map(r => r.matchedSiteId).filter(Boolean) as string[]);
+    const unmatchedMmpSiteIds = candidates
+      .filter(c => !matchedSiteIds.has(c.siteId))
+      .map(c => c.siteId);
+    updateWizardState({ matchResults: updated, unmatchedMmpSiteIds });
   };
 
   const handleManualSearch = async (rowIndex: number, query: string) => {
@@ -362,7 +367,12 @@ export default function Step2UploadMatch({
         manualMatchAt: new Date().toISOString(),
       } : r
     );
-    updateWizardState({ matchResults: updated });
+    // Recompute unmatchedMmpSiteIds so the newly linked site leaves the "Not in clean data" list
+    const matchedSiteIds = new Set(updated.map(r => r.matchedSiteId).filter(Boolean) as string[]);
+    const unmatchedMmpSiteIds = candidates
+      .filter(c => !matchedSiteIds.has(c.siteId))
+      .map(c => c.siteId);
+    updateWizardState({ matchResults: updated, unmatchedMmpSiteIds });
     setManualSearch(prev => ({ ...prev, [rowIndex]: '' }));
     setManualCandidates(prev => ({ ...prev, [rowIndex]: [] }));
   };
@@ -402,6 +412,13 @@ export default function Step2UploadMatch({
   const needsReview    = matchResults.filter(r => r.status === 'review');
   const unmatchedRows  = matchResults.filter(r => r.status === 'unmatched');
   const hasValidPairs  = wizardState.matchingPairs.some(p => p.mmpColumn && p.wfpColumn);
+
+  // Derive "not in clean data" live from current matchResults so any manual
+  // confirm/link immediately removes the site from this list (fixes stale count).
+  const matchedSiteIdsLive = new Set(
+    matchResults.map(r => r.matchedSiteId).filter(Boolean) as string[]
+  );
+  const notInCleanCands = candidates.filter(c => !matchedSiteIdsLive.has(c.siteId));
 
   // Primary WFP display column (first valid pair's wfp side)
   const primaryPair = wizardState.matchingPairs.find(p => p.mmpColumn && p.wfpColumn);
@@ -912,16 +929,14 @@ export default function Step2UploadMatch({
               className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 rounded-lg p-3 text-center hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors w-full"
             >
               <AlertCircle className="h-5 w-5 text-slate-500 mx-auto mb-1" />
-              <p className="text-xl font-bold text-slate-700">{(wizardState.unmatchedMmpSiteIds ?? []).length}</p>
+              <p className="text-xl font-bold text-slate-700">{notInCleanCands.length}</p>
               <p className="text-xs text-slate-500">Not in clean data</p>
               <p className="text-[10px] text-primary mt-0.5">{showNotInClean ? 'Hide ▲' : 'Show sites ▼'}</p>
             </button>
           </div>
 
           {/* Not-in-clean-data detail panel */}
-          {showNotInClean && (wizardState.unmatchedMmpSiteIds ?? []).length > 0 && (() => {
-            const notInCleanSet = new Set(wizardState.unmatchedMmpSiteIds ?? []);
-            const notInCleanCands = candidates.filter(c => notInCleanSet.has(c.siteId));
+          {showNotInClean && notInCleanCands.length > 0 && (() => {
             return (
               <div className="border rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border-b">
