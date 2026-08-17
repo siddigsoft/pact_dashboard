@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,25 +42,18 @@ interface CfSection { label: string; labelAr: string; items: { account_id: strin
 export default function AccountingCashFlow() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
   const [accounts, setAccounts] = useState<Record<string, Account>>({});
   const [periodId, setPeriodId] = useState('');
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [countryInit, setCountryInit] = useState(false);
   const [jLines, setJLines] = useState<JLRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [bootstrap, setBootstrap] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['operating', 'investing', 'financing']));
   const [pdfBusy, setPdfBusy] = useState(false);
-
-  useEffect(() => {
-    if (!acctLoading && !countryInit) { setCountryFilter(defaultCountryId ?? 'all'); setCountryInit(true); }
-  }, [acctLoading, defaultCountryId, countryInit]);
 
   useEffect(() => {
     (async () => {
@@ -107,13 +99,12 @@ export default function AccountingCashFlow() {
 
   useEffect(() => { if (!bootstrap && periodId) void runReport(); }, [periodId, bootstrap]);
 
-  const selectedCurrency = useMemo(() => countries.find(x => x.id === countryFilter)?.currency_code ?? 'SDG', [countryFilter, countries]);
+  const selectedCurrency = 'SDG';
 
   const sections: { operating: CfSection; investing: CfSection; financing: CfSection } = useMemo(() => {
     const cats: Record<CFCategory, Record<string, { code: string; name: string; inflow: number; outflow: number }>> = { operating: {}, investing: {}, financing: {} };
     for (const line of jLines) {
       const acct = accounts[line.account_id]; if (!acct) continue;
-      if (countryFilter !== 'all') { /* country filter - no country_id on lines, skip for now */ }
       const cat = classifyCF(acct.account_type, acct.subtype);
       if (!cats[cat][acct.id]) cats[cat][acct.id] = { code: acct.code, name: acct.name_en, inflow: 0, outflow: 0 };
       const amt = Number(line.functional_amount) || 0;
@@ -129,7 +120,7 @@ export default function AccountingCashFlow() {
       investing: buildSection('investing', 'Investing Activities', 'أنشطة الاستثمار'),
       financing: buildSection('financing', 'Financing Activities', 'أنشطة التمويل'),
     };
-  }, [jLines, accounts, countryFilter]);
+  }, [jLines, accounts]);
 
   const netChange = sections.operating.total + sections.investing.total + sections.financing.total;
 
@@ -297,17 +288,6 @@ export default function AccountingCashFlow() {
       <Card className="mb-4">
         <CardContent className="pt-4 pb-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Country Scope</label>
-              <Select value={countryFilter} onValueChange={setCountryFilter}>
-                <SelectTrigger className="h-9" data-testid="select-country"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Countries</SelectItem>
-                  {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Fiscal Period</label>
               <Select value={periodId} onValueChange={setPeriodId}>
                 <SelectTrigger className="h-9" data-testid="select-period"><SelectValue placeholder="Select period" /></SelectTrigger>
