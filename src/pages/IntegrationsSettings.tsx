@@ -18,6 +18,7 @@ import { useUser } from "@/context/user/UserContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Calendar,
+  FolderOpen,
   Mail,
   CheckCircle2,
   XCircle,
@@ -45,6 +46,8 @@ interface UserIntegration {
   user_id: string;
   google_calendar_connected: boolean;
   google_calendar_email?: string | null;
+  google_drive_connected?: boolean;
+  google_drive_email?: string | null;
   notification_email?: string | null;
   email_notifications_enabled: boolean;
   email_notify_task_assigned: boolean;
@@ -74,6 +77,8 @@ type EmailPrefKey = keyof Pick<
 const DEFAULT_INTEGRATION: Omit<UserIntegration, "user_id"> = {
   google_calendar_connected: false,
   google_calendar_email: null,
+  google_drive_connected: false,
+  google_drive_email: null,
   notification_email: null,
   email_notifications_enabled: true,
   email_notify_task_assigned: true,
@@ -175,6 +180,7 @@ export default function IntegrationsSettings() {
   const [saving, setSaving] = useState(false);
   const [connectingCalendar, setConnectingCalendar] = useState(false);
   const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  const [connectingDrive, setConnectingDrive] = useState(false);
   // T26 — surface the last connect error inline so the user has a one-click retry.
   const [calendarConnectError, setCalendarConnectError] = useState<string | null>(null);
   const [notificationEmail, setNotificationEmail] = useState("");
@@ -239,27 +245,32 @@ export default function IntegrationsSettings() {
     loadIntegration();
   }, [loadIntegration]);
 
-  // Handle OAuth callback: ?calendar_callback=1&code=...&state=...
+  // Handle OAuth callbacks:
+  // - ?calendar_callback=1&code=...&state=...
+  // - ?drive_callback=1&code=...&state=...
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const isCallback = params.get("calendar_callback") === "1";
+    const isDriveCallback = params.get("drive_callback") === "1";
     const code = params.get("code");
     const state = params.get("state");
 
-    if (!isCallback || !code || !state || !currentUser?.id) return;
+    if ((!isCallback && !isDriveCallback) || !code || !state || !currentUser?.id) return;
 
     // Clean the URL so the callback doesn't re-trigger on refresh
     window.history.replaceState({}, "", "/integrations");
 
     const handleCallback = async () => {
-      setConnectingCalendar(true);
+      if (isCallback) setConnectingCalendar(true);
+      if (isDriveCallback) setConnectingDrive(true);
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData.session?.access_token;
         if (!accessToken) throw new Error("Not authenticated");
 
+        const callbackFn = isDriveCallback ? "google-drive-oauth" : "google-calendar-oauth";
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-oauth?action=callback`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${callbackFn}?action=callback`,
           {
             method: "POST",
             headers: {
@@ -274,26 +285,37 @@ export default function IntegrationsSettings() {
         const result = await response.json() as {
           success?: boolean;
           google_calendar_email?: string;
+          google_drive_email?: string;
           error?: string;
         };
 
         if (!response.ok || result.error) {
-          throw new Error(result.error || "Failed to connect Google Calendar");
+          throw new Error(result.error || `Failed to connect Google ${isDriveCallback ? "Drive" : "Calendar"}`);
         }
 
-        toast({
-          title: "Google Calendar connected",
-          description: result.google_calendar_email
-            ? `Connected as ${result.google_calendar_email}`
-            : "Your Google Calendar has been linked successfully.",
-        });
+        if (isDriveCallback) {
+          toast({
+            title: "Google Drive connected",
+            description: result.google_drive_email
+              ? `Connected as ${result.google_drive_email}`
+              : "Your Google Drive has been linked successfully.",
+          });
+        } else {
+          toast({
+            title: "Google Calendar connected",
+            description: result.google_calendar_email
+              ? `Connected as ${result.google_calendar_email}`
+              : "Your Google Calendar has been linked successfully.",
+          });
+        }
 
         await loadIntegration();
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to complete Google Calendar connection";
+        const message = err instanceof Error ? err.message : `Failed to complete Google ${isDriveCallback ? "Drive" : "Calendar"} connection`;
         toast({ title: "Connection failed", description: message, variant: "destructive" });
       } finally {
-        setConnectingCalendar(false);
+        if (isCallback) setConnectingCalendar(false);
+        if (isDriveCallback) setConnectingDrive(false);
       }
     };
 
@@ -535,6 +557,44 @@ export default function IntegrationsSettings() {
     }
   };
 
+  const handleConnectGoogleDrive = async () => {
+    if (!currentUser?.id) return;
+    setConnectingDrive(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-oauth?action=initiate`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+        }
+      );
+
+      const result = await response.json() as {
+        authorization_url?: string;
+        error?: string;
+      };
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || "Failed to initiate Google Drive OAuth");
+      }
+
+      if (result.authorization_url) {
+        window.location.href = result.authorization_url;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to connect Google Drive";
+      toast({ title: "Connection failed", description: message, variant: "destructive" });
+      setConnectingDrive(false);
+    }
+  };
+
   const handleDismissTip = () => {
     setTipBannerDismissed(true);
     setTipExpanded(false);
@@ -554,6 +614,7 @@ export default function IntegrationsSettings() {
   }
 
   const isCalendarConnected = integration?.google_calendar_connected ?? false;
+  const isDriveConnected = integration?.google_drive_connected ?? false;
 
   return (
     <div className="space-y-6 p-6 max-w-3xl mx-auto" data-testid="integrations-page">
@@ -795,6 +856,59 @@ export default function IntegrationsSettings() {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Drive Section */}
+      <Card data-testid="card-drive-integration">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                <FolderOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Google Drive (Workspace Import)</CardTitle>
+                <CardDescription>
+                  Let users import files directly from Drive into Workspace
+                </CardDescription>
+              </div>
+            </div>
+            <Badge
+              variant={isDriveConnected ? "default" : "secondary"}
+              className={cn("shrink-0", isDriveConnected ? "bg-green-500 hover:bg-green-600" : "")}
+            >
+              {isDriveConnected ? (
+                <>
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Connected
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Not connected
+                </>
+              )}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+            <p className="text-sm font-medium">What this does</p>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />Import files from user Drive straight into Workspace</li>
+              <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />Avoid local upload for large files</li>
+            </ul>
+          </div>
+          {isDriveConnected && integration?.google_drive_email && (
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">Connected as {integration.google_drive_email}</p>
+          )}
+          {!isDriveConnected && (
+            <Button onClick={handleConnectGoogleDrive} disabled={connectingDrive} className="gap-2">
+              {connectingDrive ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              {connectingDrive ? "Connecting..." : "Connect Google Drive"}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
