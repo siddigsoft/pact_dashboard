@@ -22,7 +22,7 @@ import {
   Loader2, Search, Download, RefreshCw, BookOpen, Upload,
   ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe, Building2, CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
-import { ACCT_TYPE_LABELS, downloadCsv } from '@/lib/accountingFormat';
+import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { useAccountingCountry } from '@/hooks/use-accounting-country';
@@ -123,6 +123,7 @@ export default function AccountingCOA() {
   const [companyFilter, setCompanyFilter]   = useState<string>('all');
   const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
+  const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
 
   useEffect(() => {
     if (!acctCountryLoading && !countryFilterInitialized) {
@@ -152,7 +153,7 @@ export default function AccountingCOA() {
   const load = async () => {
     setLoading(true);
     setError(null);
-    const [acctRes, ctrRes, coRes] = await Promise.all([
+    const [acctRes, ctrRes, coRes, balRes] = await Promise.all([
       supabase
         .from('acct_accounts')
         .select('id, code, name_en, name_ar, account_type, subtype, parent_id, is_active, is_postable, version, country_id, company_id, allow_reconciliation, account_currency, notes, deprecated, account_tags')
@@ -167,11 +168,24 @@ export default function AccountingCOA() {
         .select('id, name_en, currency_code')
         .eq('is_active', true)
         .order('name_en'),
+      supabase
+        .from('vw_account_balances' as any)
+        .select('account_id, total_dr, total_cr, net_balance'),
     ]);
     if (acctRes.error) setError(acctRes.error.message);
     setRows((acctRes.data ?? []) as Account[]);
     setCountries((ctrRes.data ?? []) as Country[]);
     setCompanies(((coRes.data ?? []) as Company[]));
+    // Build balance map: account_id → { dr, cr, net }
+    const bmap = new Map<string, { dr: number; cr: number; net: number }>();
+    for (const b of ((balRes.data ?? []) as any[])) {
+      bmap.set(b.account_id, {
+        dr:  Number(b.total_dr   ?? 0),
+        cr:  Number(b.total_cr   ?? 0),
+        net: Number(b.net_balance ?? 0),
+      });
+    }
+    setBalances(bmap);
     setLoading(false);
   };
 
@@ -460,15 +474,30 @@ export default function AccountingCOA() {
   };
 
   // ── row renderer ──────────────────────────────────────────
+  // Debit-normal account types: positive net = normal state
+  const DEBIT_NORMAL = new Set<Account['account_type']>(['asset', 'expense']);
+
   const renderRow = (acct: Account, depth: number): React.ReactNode => {
-    const kids  = childrenOf.get(acct.id) ?? [];
+    const kids   = childrenOf.get(acct.id) ?? [];
     const isOpen = expanded.has(acct.id);
-    const ctr   = countries.find(c => c.id === acct.country_id);
+    const ctr    = countries.find(c => c.id === acct.country_id);
+    const bal    = balances.get(acct.id);
+    const net    = bal?.net ?? 0;
+    const hasActivity = !!bal;
+    const isDebitNormal = DEBIT_NORMAL.has(acct.account_type);
+    // "Normal" means the balance is on the expected side for the account type
+    const isNormalBalance = isDebitNormal ? net >= 0 : net <= 0;
+    const balColor = !hasActivity
+      ? 'text-muted-foreground'
+      : isNormalBalance
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : 'text-rose-600 dark:text-rose-400';
+
     return (
       <div key={acct.id} data-testid={`row-acct-${acct.id}`}>
         <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b items-center hover:bg-muted/40 group">
           {/* Code */}
-          <div className="col-span-3 flex items-center gap-1" style={{ paddingLeft: `${depth * 16}px` }}>
+          <div className="col-span-2 flex items-center gap-1" style={{ paddingLeft: `${depth * 16}px` }}>
             {kids.length > 0 ? (
               <button
                 type="button"
@@ -486,8 +515,8 @@ export default function AccountingCOA() {
           </div>
 
           {/* Names */}
-          <div className="col-span-2 text-sm">{acct.name_en}</div>
-          <div className="col-span-2 text-sm text-muted-foreground" dir="rtl" lang="ar">{acct.name_ar}</div>
+          <div className="col-span-2 text-sm truncate">{acct.name_en}</div>
+          <div className="col-span-1 text-sm text-muted-foreground truncate" dir="rtl" lang="ar">{acct.name_ar}</div>
 
           {/* Type */}
           <div className="col-span-1">
@@ -506,6 +535,17 @@ export default function AccountingCOA() {
             ) : (
               <span className="opacity-40">—</span>
             )}
+          </div>
+
+          {/* Balance */}
+          <div
+            className={cn('col-span-2 text-right font-mono text-xs tabular-nums', balColor)}
+            title={hasActivity ? `DR: ${formatNumber(bal!.dr)}  |  CR: ${formatNumber(bal!.cr)}` : 'No posted entries'}
+          >
+            {hasActivity
+              ? formatNumber(Math.abs(net))
+              : <span className="opacity-30">—</span>
+            }
           </div>
 
           {/* Flags + actions */}
@@ -711,12 +751,13 @@ export default function AccountingCOA() {
           ) : (
             <div className="border rounded-md">
               <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b bg-muted/40 text-[11px] font-semibold uppercase text-muted-foreground">
-                <div className="col-span-3">Code</div>
+                <div className="col-span-2">Code</div>
                 <div className="col-span-2">Name (EN)</div>
-                <div className="col-span-2">Name (AR)</div>
+                <div className="col-span-1">Name (AR)</div>
                 <div className="col-span-1">Type</div>
                 <div className="col-span-1">Subtype</div>
                 <div className="col-span-1">Country</div>
+                <div className="col-span-2 text-right">Balance</div>
                 <div className="col-span-2 text-right">Flags</div>
               </div>
               {visibleRoots.map(r => renderRow(r, 0))}
