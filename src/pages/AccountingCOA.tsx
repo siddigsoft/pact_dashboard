@@ -239,8 +239,9 @@ export default function AccountingCOA() {
       if (postableFilter === 'postable' && !r.is_postable) return false;
       if (postableFilter === 'header' && r.is_postable) return false;
       if (companyFilter !== 'all') {
-        // Strict: only show accounts that explicitly belong to the selected company
-        if (r.company_id !== companyFilter) return false;
+        // Global accounts (company_id = null) are shared across all companies — always show.
+        // Only hide accounts explicitly assigned to a different company.
+        if (r.company_id !== null && r.company_id !== companyFilter) return false;
       }
       if (q) {
         return r.code.toLowerCase().includes(q)
