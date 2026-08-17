@@ -26,7 +26,7 @@ interface Company {
   created_at: string;
 }
 
-const CURRENCIES = ['USD','SDG','EUR','GBP','SAR','AED','EGP','ETB','KES','UGX','TZS','NGN','XAF','JPY','CNY'];
+const CURRENCIES = ['USD','SDG','EUR','GBP','SAR','AED','EGP','ETB','KES','UGX','RWF','TZS','NGN','XAF','SSP','JPY','CNY'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 const BLANK: Omit<Company,'id'|'created_at'> = {
