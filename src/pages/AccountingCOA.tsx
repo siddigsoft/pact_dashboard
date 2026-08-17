@@ -124,6 +124,7 @@ export default function AccountingCOA() {
   const [postableFilter, setPostableFilter] = useState<string>('all');
   const [companyFilter, setCompanyFilter]   = useState<string>('all');
   const [companyFilterInitialized, setCompanyFilterInitialized] = useState(false);
+  const [balanceOnly, setBalanceOnly]       = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
   const [balanceMigrationNeeded, setBalanceMigrationNeeded] = useState(false);
@@ -243,6 +244,7 @@ export default function AccountingCOA() {
         // Only hide accounts explicitly assigned to a different company.
         if (r.company_id !== null && r.company_id !== companyFilter) return false;
       }
+      if (balanceOnly && !balances.get(r.id)) return false;
       if (q) {
         return r.code.toLowerCase().includes(q)
           || r.name_en.toLowerCase().includes(q)
@@ -251,7 +253,7 @@ export default function AccountingCOA() {
       }
       return true;
     });
-  }, [rows, search, typeFilter, activeFilter, postableFilter, companyFilter]);
+  }, [rows, search, typeFilter, activeFilter, postableFilter, companyFilter, balanceOnly, balances]);
 
   const childrenOf = useMemo(() => {
     const map = new Map<string | null, Account[]>();
@@ -764,6 +766,21 @@ export default function AccountingCOA() {
                 </SelectContent>
               </Select>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setBalanceOnly(v => !v)}
+              className={cn(
+                'flex items-center gap-2 px-3 py-2 rounded border text-sm font-medium transition-colors',
+                balanceOnly
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  : 'border-input bg-background text-muted-foreground hover:bg-muted'
+              )}
+              title="Show only accounts with posted balances"
+            >
+              <CheckCircle2 className={cn('w-3.5 h-3.5', balanceOnly ? 'text-emerald-600' : 'text-muted-foreground')} />
+              Has balance
+            </button>
           </div>
 
           {error && (
