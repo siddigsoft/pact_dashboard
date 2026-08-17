@@ -128,9 +128,14 @@ export default function AccountingCOA() {
   const [countryFilter, setCountryFilter]   = useState<string>('all');
   const [companyFilter, setCompanyFilter]   = useState<string>('all');
   const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
+  const [companyFilterInitialized, setCompanyFilterInitialized] = useState(false);
+  const [showGlobalAccounts, setShowGlobalAccounts] = useState<boolean>(true);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
+  const [balanceMigrationNeeded, setBalanceMigrationNeeded] = useState(false);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
+
+  const COA_COMPANY_KEY = 'pact-coa-company-filter';
 
   useEffect(() => {
     if (!acctCountryLoading && !countryFilterInitialized) {
@@ -138,6 +143,20 @@ export default function AccountingCOA() {
       setCountryFilterInitialized(true);
     }
   }, [acctCountryLoading, defaultCountryId, countryFilterInitialized]);
+
+  // Initialise company filter from localStorage once companies are loaded
+  useEffect(() => {
+    if (companyFilterInitialized || companies.length === 0) return;
+    const saved = localStorage.getItem(COA_COMPANY_KEY);
+    const valid = saved && (saved === 'all' || companies.some(c => c.id === saved));
+    setCompanyFilter(valid ? saved! : (companies[0]?.id ?? 'all'));
+    setCompanyFilterInitialized(true);
+  }, [companies, companyFilterInitialized]);
+
+  const handleCompanyFilter = (v: string) => {
+    setCompanyFilter(v);
+    localStorage.setItem(COA_COMPANY_KEY, v);
+  };
 
   // ── dialog states ─────────────────────────────────────────
   const [formOpen, setFormOpen]       = useState(false);
@@ -204,11 +223,15 @@ export default function AccountingCOA() {
     const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('get_account_balances');
     if (!rpcErr && rpcData && rpcData.length > 0) {
       buildMap(rpcData);
+      setBalanceMigrationNeeded(false);
     } else if (!balRes.error && balRes.data && balRes.data.length > 0) {
       // RPC not yet deployed → use view data
       buildMap(balRes.data as any[]);
+      setBalanceMigrationNeeded(false);
+    } else {
+      // Neither exists yet — show migration banner
+      setBalanceMigrationNeeded(true);
     }
-    // else: neither exists yet — balances will show "—" until migration is run
 
     setBalances(bmap);
     setLoading(false);
@@ -226,7 +249,12 @@ export default function AccountingCOA() {
       if (postableFilter === 'postable' && !r.is_postable) return false;
       if (postableFilter === 'header' && r.is_postable) return false;
       if (countryFilter !== 'all' && r.country_id !== countryFilter) return false;
-      if (companyFilter !== 'all' && r.company_id !== companyFilter) return false;
+      if (companyFilter !== 'all') {
+        // Show the company's own accounts; also show unassigned (global) accounts if toggle is on
+        const isGlobal = r.company_id === null || r.company_id === '';
+        if (isGlobal && !showGlobalAccounts) return false;
+        if (!isGlobal && r.company_id !== companyFilter) return false;
+      }
       if (q) {
         return r.code.toLowerCase().includes(q)
           || r.name_en.toLowerCase().includes(q)
@@ -730,18 +758,31 @@ export default function AccountingCOA() {
               </SelectContent>
             </Select>
 
-            <Select value={companyFilter} onValueChange={setCompanyFilter}>
-              <SelectTrigger data-testid="select-company-filter">
-                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Company" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All companies</SelectItem>
-                {companies.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name_en}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <Select value={companyFilter} onValueChange={handleCompanyFilter}>
+                <SelectTrigger data-testid="select-company-filter">
+                  <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                  <SelectValue placeholder="Company" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All companies</SelectItem>
+                  {companies.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name_en}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {companyFilter !== 'all' && (
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer pl-0.5">
+                  <input
+                    type="checkbox"
+                    className="w-3 h-3 accent-primary"
+                    checked={showGlobalAccounts}
+                    onChange={e => setShowGlobalAccounts(e.target.checked)}
+                  />
+                  Include global accounts
+                </label>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <Select value={activeFilter} onValueChange={setActiveFilter}>
@@ -768,6 +809,18 @@ export default function AccountingCOA() {
               {error}
               <div className="text-xs mt-1 text-rose-700/80">
                 If this is a missing-relation error, apply the coa_countries_migration.sql in Supabase first.
+              </div>
+            </div>
+          )}
+
+          {balanceMigrationNeeded && !loading && (
+            <div className="p-3 rounded border border-amber-200 bg-amber-50 text-amber-900 text-sm flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
+              <div>
+                <span className="font-medium">Account balances are not available yet.</span>
+                {' '}Run <code className="bg-amber-100 rounded px-1 text-xs">20260817_vw_account_balances.sql</code> in{' '}
+                <span className="font-medium">Supabase Studio → SQL Editor</span> to activate live balances for all accounts.
+                This also enables DR/CR breakdowns in the account detail panel.
               </div>
             </div>
           )}
