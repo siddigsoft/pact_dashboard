@@ -596,9 +596,9 @@ export default function AccountingGLBridge() {
                       </TableCell>
                       <TableCell className={cn(
                         'text-sm text-right font-mono font-semibold',
-                        Math.abs(Number(row.variance)) > 1
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-green-600 dark:text-green-400'
+                        row.passed
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-red-600 dark:text-red-400'
                       )}>
                         {Number(row.variance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
