@@ -129,7 +129,6 @@ export default function AccountingCOA() {
   const [companyFilter, setCompanyFilter]   = useState<string>('all');
   const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [companyFilterInitialized, setCompanyFilterInitialized] = useState(false);
-  const [showGlobalAccounts, setShowGlobalAccounts] = useState<boolean>(true);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
   const [balanceMigrationNeeded, setBalanceMigrationNeeded] = useState(false);
@@ -250,10 +249,8 @@ export default function AccountingCOA() {
       if (postableFilter === 'header' && r.is_postable) return false;
       if (countryFilter !== 'all' && r.country_id !== countryFilter) return false;
       if (companyFilter !== 'all') {
-        // Show the company's own accounts; also show unassigned (global) accounts if toggle is on
-        const isGlobal = r.company_id === null || r.company_id === '';
-        if (isGlobal && !showGlobalAccounts) return false;
-        if (!isGlobal && r.company_id !== companyFilter) return false;
+        // Strict: only show accounts that explicitly belong to the selected company
+        if (r.company_id !== companyFilter) return false;
       }
       if (q) {
         return r.code.toLowerCase().includes(q)
@@ -771,17 +768,6 @@ export default function AccountingCOA() {
                   ))}
                 </SelectContent>
               </Select>
-              {companyFilter !== 'all' && (
-                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer pl-0.5">
-                  <input
-                    type="checkbox"
-                    className="w-3 h-3 accent-primary"
-                    checked={showGlobalAccounts}
-                    onChange={e => setShowGlobalAccounts(e.target.checked)}
-                  />
-                  Include global accounts
-                </label>
-              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
