@@ -218,17 +218,20 @@ export default function AccountingCOA() {
       }
     };
 
-    // Try RPC first (works even before the view exists)
+    // Try RPC first (works even before the view exists).
+    // Key: check for ERROR (function doesn't exist), not empty rows.
+    // Zero rows is valid — migration IS deployed but no journal entries posted yet.
     const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('get_account_balances');
-    if (!rpcErr && rpcData && rpcData.length > 0) {
-      buildMap(rpcData);
+    if (!rpcErr) {
+      // RPC exists → migration was run. May return 0 rows before any postings.
+      buildMap(rpcData ?? []);
       setBalanceMigrationNeeded(false);
-    } else if (!balRes.error && balRes.data && balRes.data.length > 0) {
-      // RPC not yet deployed → use view data
-      buildMap(balRes.data as any[]);
+    } else if (!balRes.error) {
+      // RPC not yet deployed but view is accessible — use view data (may also be empty).
+      buildMap((balRes.data ?? []) as any[]);
       setBalanceMigrationNeeded(false);
     } else {
-      // Neither exists yet — show migration banner
+      // Both RPC and view errored → migration not yet run in Supabase Studio.
       setBalanceMigrationNeeded(true);
     }
 

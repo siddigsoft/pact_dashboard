@@ -55,3 +55,6 @@ $$;
 
 -- Allow authenticated users to call the RPC
 GRANT EXECUTE ON FUNCTION get_account_balances() TO authenticated;
+
+-- Allow authenticated users to query the view directly (view fallback path)
+GRANT SELECT ON vw_account_balances TO authenticated;
