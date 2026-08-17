@@ -1,0 +1,457 @@
+/**
+ * AccountingGLBridgeAdvances.tsx
+ *
+ * GL Bridge panel for:
+ *   • Field Advances (down_payment_requests → status = fully_paid)
+ *   • Operational Cost Submissions (operational_cost_submissions → status = paid)
+ *
+ * Shows records that have been paid but not yet posted to the General Ledger,
+ * lets Finance review them, and triggers the bridge RPCs that create
+ * acct_journal_entries + acct_journal_lines rows.
+ *
+ * Bridge RPCs:
+ *   post_downpayments_to_gl()      (see 20260817_gl_bridge_advances_ops.sql)
+ *   post_cost_submissions_to_gl()  (see 20260817_gl_bridge_advances_ops.sql)
+ */
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, Zap, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Receipt, TrendingDown } from 'lucide-react';
+import { toast } from 'sonner';
+import { parseJournalError } from '@/lib/journalErrors';
+import { formatNumber } from '@/lib/accountingFormat';
+import { format } from 'date-fns';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface BridgeLog {
+  id: string;
+  source_table: string;
+  source_id: string;
+  event_type: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+  journal_entry_id: string | null;
+}
+
+interface DownPayment {
+  id: string;
+  site_name: string | null;
+  requested_amount: number;
+  total_paid_amount: number;
+  status: string;
+  updated_at: string;
+  hub_name: string | null;
+}
+
+interface CostSubmission {
+  id: string;
+  expense_category: string;
+  amount_cents: number;
+  currency: string;
+  description: string;
+  expense_date: string;
+  status: string;
+  paid_at: string | null;
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  success: 'bg-green-100 text-green-700 border-green-200',
+  error:   'bg-red-100 text-red-700 border-red-200',
+  skipped: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  pending: 'bg-blue-100 text-blue-700 border-blue-200',
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  permits:          'Permits',
+  incentives:       'Incentives',
+  communications:   'Communications',
+  training:         'Training',
+  general_transport:'General Transport',
+  equipment:        'Equipment',
+  printing:         'Printing',
+  meetings:         'Meetings',
+  other:            'Other',
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function AccountingGLBridgeAdvances() {
+  const { hasAnyRole, isAuthenticated } = useAuthorization();
+  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+
+  const [dpUnposted,  setDpUnposted]  = useState<DownPayment[]>([]);
+  const [opsUnposted, setOpsUnposted] = useState<CostSubmission[]>([]);
+  const [logs,        setLogs]        = useState<BridgeLog[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [bridgingDp,  setBridgingDp]  = useState(false);
+  const [bridgingOps, setBridgingOps] = useState(false);
+
+  // ── Load ──────────────────────────────────────────────────────────────────
+  async function load() {
+    setLoading(true);
+
+    const [logRes, dpRes, opsRes] = await Promise.all([
+      // Bridge log for both source tables
+      supabase
+        .from('acct_gl_bridge_log')
+        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id')
+        .in('source_table', ['down_payment_requests', 'operational_cost_submissions'])
+        .order('created_at', { ascending: false })
+        .limit(300),
+
+      // Fully-paid down-payments
+      supabase
+        .from('down_payment_requests' as any)
+        .select('id,site_name,requested_amount,total_paid_amount,status,updated_at,hub_name')
+        .eq('status', 'fully_paid')
+        .order('updated_at', { ascending: false })
+        .limit(500),
+
+      // Paid cost submissions
+      supabase
+        .from('operational_cost_submissions' as any)
+        .select('id,expense_category,amount_cents,currency,description,expense_date,status,paid_at')
+        .eq('status', 'paid')
+        .order('paid_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    const allLogs = (logRes.data ?? []) as BridgeLog[];
+    setLogs(allLogs);
+
+    const bridgedDpIds  = new Set(allLogs.filter(l => l.source_table === 'down_payment_requests'          && l.status === 'success').map(l => l.source_id));
+    const bridgedOpsIds = new Set(allLogs.filter(l => l.source_table === 'operational_cost_submissions'   && l.status === 'success').map(l => l.source_id));
+
+    setDpUnposted( ((dpRes.data  ?? []) as DownPayment[]).filter(r => !bridgedDpIds.has(r.id)));
+    setOpsUnposted(((opsRes.data ?? []) as CostSubmission[]).filter(r => !bridgedOpsIds.has(r.id)));
+    setLoading(false);
+  }
+
+  useEffect(() => { if (isAuthenticated && allowed) load(); }, [isAuthenticated]);
+
+  // ── Bridge runners ────────────────────────────────────────────────────────
+  async function runDpBridge() {
+    setBridgingDp(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('post_downpayments_to_gl', {});
+      if (error) throw error;
+      const r = data as { posted: number; skipped: number; errors: number } | null;
+      toast.success(`Advances bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${r?.errors ?? 0}`);
+      await load();
+    } catch (err: any) {
+      toast.error(`Bridge failed: ${parseJournalError(err)}`);
+    } finally {
+      setBridgingDp(false);
+    }
+  }
+
+  async function runOpsBridge() {
+    setBridgingOps(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('post_cost_submissions_to_gl', {});
+      if (error) throw error;
+      const r = data as { posted: number; skipped: number; errors: number } | null;
+      toast.success(`Costs bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${r?.errors ?? 0}`);
+      await load();
+    } catch (err: any) {
+      toast.error(`Bridge failed: ${parseJournalError(err)}`);
+    } finally {
+      setBridgingOps(false);
+    }
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const dpSuccessCount  = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'success').length;
+  const opsSuccessCount = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'success').length;
+  const dpErrorCount    = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'error').length;
+  const opsErrorCount   = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'error').length;
+
+  if (!isAuthenticated || !allowed) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <AlertTriangle className="h-5 w-5 mr-2" />
+        Access restricted to Finance roles.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Advances &amp; Costs → GL Bridge</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Post paid field advances and operational cost submissions to the General Ledger as double-entry journal entries.
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        </Button>
+      </div>
+
+      {/* ── KPI strip ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-5">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+              <TrendingDown className="h-4 w-4" /> Advances Pending
+            </div>
+            <p className="text-3xl font-bold text-blue-600">{loading ? '…' : dpUnposted.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+              <Receipt className="h-4 w-4" /> Costs Pending
+            </div>
+            <p className="text-3xl font-bold text-violet-600">{loading ? '…' : opsUnposted.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-sm text-muted-foreground mb-1">Posted (Advances)</p>
+            <p className="text-3xl font-bold text-green-600">{loading ? '…' : dpSuccessCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
+            <p className="text-sm text-muted-foreground mb-1">Posted (Costs)</p>
+            <p className="text-3xl font-bold text-green-600">{loading ? '…' : opsSuccessCount}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Error banner ──────────────────────────────────────────────────── */}
+      {(dpErrorCount + opsErrorCount) > 0 && (
+        <div className="p-3 rounded border border-red-200 bg-red-50 text-red-800 text-sm flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          {dpErrorCount + opsErrorCount} bridge error(s) require attention. Check the Log tab below.
+        </div>
+      )}
+
+      {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+      <Tabs defaultValue="advances">
+        <TabsList>
+          <TabsTrigger value="advances">
+            Field Advances
+            {dpUnposted.length > 0 && (
+              <Badge className="ml-2 bg-blue-100 text-blue-700 border-blue-200 text-[10px]">{dpUnposted.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="costs">
+            Operational Costs
+            {opsUnposted.length > 0 && (
+              <Badge className="ml-2 bg-violet-100 text-violet-700 border-violet-200 text-[10px]">{opsUnposted.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="log">Bridge Log</TabsTrigger>
+        </TabsList>
+
+        {/* ── Field Advances ─────────────────────────────────────────────── */}
+        <TabsContent value="advances" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                {dpUnposted.length === 0
+                  ? 'All fully-paid field advances are posted to the GL.'
+                  : `${dpUnposted.length} advance(s) awaiting GL posting.`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Account mapping: DR 1510 Staff/Travel Advances · CR 1200 Cash/Bank
+              </p>
+            </div>
+            <Button
+              onClick={runDpBridge}
+              disabled={bridgingDp || dpUnposted.length === 0}
+              className="gap-2"
+            >
+              {bridgingDp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              Run Bridge ({dpUnposted.length})
+            </Button>
+          </div>
+
+          {dpUnposted.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4 text-blue-500" />
+                  Pending Field Advances
+                </CardTitle>
+                <CardDescription>Fully-paid advances not yet posted to the GL.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-muted-foreground border-b text-xs">
+                          <th className="text-left pb-2 pr-3">Date</th>
+                          <th className="text-left pb-2 pr-3">Hub</th>
+                          <th className="text-left pb-2 pr-3">Site</th>
+                          <th className="text-left pb-2 pr-3">Status</th>
+                          <th className="text-right pb-2">Amount (SDG)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dpUnposted.slice(0, 100).map(r => (
+                          <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-1.5 pr-3 text-xs">{format(new Date(r.updated_at), 'dd/MM/yyyy')}</td>
+                            <td className="py-1.5 pr-3 text-xs text-muted-foreground">{r.hub_name ?? '—'}</td>
+                            <td className="py-1.5 pr-3 text-xs truncate max-w-[180px]">{r.site_name ?? '—'}</td>
+                            <td className="py-1.5 pr-3">
+                              <Badge variant="outline" className="text-[10px]">{r.status}</Badge>
+                            </td>
+                            <td className="py-1.5 text-right font-mono text-xs">
+                              {formatNumber(r.total_paid_amount || r.requested_amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {dpUnposted.length > 100 && (
+                      <p className="text-xs text-muted-foreground mt-2">Showing first 100 of {dpUnposted.length}</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Operational Costs ──────────────────────────────────────────── */}
+        <TabsContent value="costs" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                {opsUnposted.length === 0
+                  ? 'All paid cost submissions are posted to the GL.'
+                  : `${opsUnposted.length} submission(s) awaiting GL posting.`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Account mapping: DR category-mapped expense account · CR 1200 Cash/Bank
+              </p>
+            </div>
+            <Button
+              onClick={runOpsBridge}
+              disabled={bridgingOps || opsUnposted.length === 0}
+              className="gap-2"
+            >
+              {bridgingOps ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              Run Bridge ({opsUnposted.length})
+            </Button>
+          </div>
+
+          {opsUnposted.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4 text-violet-500" />
+                  Pending Cost Submissions
+                </CardTitle>
+                <CardDescription>Paid cost submissions not yet posted to the GL.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-muted-foreground border-b text-xs">
+                          <th className="text-left pb-2 pr-3">Date</th>
+                          <th className="text-left pb-2 pr-3">Category</th>
+                          <th className="text-left pb-2 pr-3">Description</th>
+                          <th className="text-right pb-2">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {opsUnposted.slice(0, 100).map(r => (
+                          <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-1.5 pr-3 text-xs">
+                              {r.expense_date ? format(new Date(r.expense_date), 'dd/MM/yyyy') : '—'}
+                            </td>
+                            <td className="py-1.5 pr-3">
+                              <Badge variant="outline" className="text-[10px]">
+                                {CATEGORY_LABEL[r.expense_category] ?? r.expense_category}
+                              </Badge>
+                            </td>
+                            <td className="py-1.5 pr-3 text-xs text-muted-foreground truncate max-w-[200px]">
+                              {r.description ?? '—'}
+                            </td>
+                            <td className="py-1.5 text-right font-mono text-xs">
+                              {formatNumber(r.amount_cents / 100)} {r.currency}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {opsUnposted.length > 100 && (
+                      <p className="text-xs text-muted-foreground mt-2">Showing first 100 of {opsUnposted.length}</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Bridge Log ─────────────────────────────────────────────────── */}
+        <TabsContent value="log" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Bridge Log (last 300)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : logs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No bridge activity yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-muted-foreground border-b text-xs">
+                        <th className="text-left pb-2 pr-3">Date</th>
+                        <th className="text-left pb-2 pr-3">Source</th>
+                        <th className="text-left pb-2 pr-3">Event</th>
+                        <th className="text-left pb-2 pr-3">Status</th>
+                        <th className="text-left pb-2">Journal Entry / Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map(l => (
+                        <tr key={l.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-1.5 pr-3 text-xs">{format(new Date(l.created_at), 'dd/MM/yy HH:mm')}</td>
+                          <td className="py-1.5 pr-3 text-[10px] text-muted-foreground">
+                            {l.source_table === 'down_payment_requests' ? 'Advance' : 'Ops Cost'}
+                          </td>
+                          <td className="py-1.5 pr-3 text-xs">{l.event_type}</td>
+                          <td className="py-1.5 pr-3">
+                            <Badge className={`text-[10px] border ${STATUS_COLOR[l.status] ?? ''}`}>
+                              {l.status}
+                            </Badge>
+                          </td>
+                          <td className="py-1.5 text-xs font-mono text-muted-foreground">
+                            {l.journal_entry_id
+                              ? l.journal_entry_id.slice(0, 12) + '…'
+                              : l.error_message
+                              ? <span className="text-red-500">{l.error_message.slice(0, 80)}</span>
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

@@ -74,6 +74,7 @@ const GLBridgeSettingsPanel   = lazy(() => import('./AccountingGLBridgeSettings'
 const OpeningBalancesPanel    = lazy(() => import('./AccountingOpeningBalances'));
 const GLBridgePreFundingPanel = lazy(() => import('./AccountingGLBridgePreFunding'));
 const GLBridgePayrollPanel    = lazy(() => import('./AccountingGLBridgePayroll'));
+const GLBridgeAdvancesPanel   = lazy(() => import('./AccountingGLBridgeAdvances'));
 const AnnualBudgetPanel       = lazy(() => import('./AccountingAnnualBudget'));
 const BankStmtImportPanel     = lazy(() => import('./AccountingBankStatementImport'));
 const UnifiedAssetsPanel      = lazy(() => import('./UnifiedAssetMaster'));
@@ -116,7 +117,7 @@ type AcctTab =
   | 'pl-by-department' | 'budget-utilization' | 'kpi-ratios' | 'donor-statement' | 'bs-comparison'
   | 'asset-revaluation'
   | 'opening-balances' | 'annual-budget' | 'bank-statement-import'
-  | 'gl-bridge-prefunding' | 'gl-bridge-payroll' | 'unified-assets'
+  | 'gl-bridge-prefunding' | 'gl-bridge-payroll' | 'gl-bridge-advances' | 'unified-assets'
   | 'gl-bridge-settings';
 
 interface TabDef { id: AcctTab; label: string; icon: React.ElementType; description: string }
@@ -220,6 +221,10 @@ const SECTIONS: SectionDef[] = [
       {
         id: 'gl-bridge-payroll', label: 'Payroll → GL', icon: Zap,
         description: 'Post completed payroll runs and EOSB accruals to the General Ledger — review pending runs, trigger bridge functions, and inspect the bridge log for errors.',
+      },
+      {
+        id: 'gl-bridge-advances', label: 'Advances & Costs → GL', icon: Zap,
+        description: 'Post paid field advances (down-payments) and approved operational cost submissions to the General Ledger — review pending records, trigger the bridge, and inspect errors.',
       },
       {
         id: 'annual-budget', label: 'Annual Budget', icon: PiggyBank,
@@ -615,6 +620,7 @@ export default function AccountingHub() {
         {tab === 'opening-balances'     && <Suspense fallback={<PanelLoader />}><OpeningBalancesPanel /></Suspense>}
         {tab === 'gl-bridge-prefunding' && <Suspense fallback={<PanelLoader />}><GLBridgePreFundingPanel /></Suspense>}
         {tab === 'gl-bridge-payroll'    && <Suspense fallback={<PanelLoader />}><GLBridgePayrollPanel /></Suspense>}
+        {tab === 'gl-bridge-advances'   && <Suspense fallback={<PanelLoader />}><GLBridgeAdvancesPanel /></Suspense>}
         {tab === 'annual-budget'        && <Suspense fallback={<PanelLoader />}><AnnualBudgetPanel /></Suspense>}
         {tab === 'bank-statement-import'&& <Suspense fallback={<PanelLoader />}><BankStmtImportPanel /></Suspense>}
         {tab === 'unified-assets'       && <Suspense fallback={<PanelLoader />}><UnifiedAssetsPanel /></Suspense>}
