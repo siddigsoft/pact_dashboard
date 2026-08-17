@@ -2,15 +2,15 @@
  * AccountingGLBridgeAdvances.tsx
  *
  * GL Bridge panel for:
- *   • Field Advances (down_payment_requests → status = fully_paid)
+ *   • Field Advances (down_payment_requests → status = partially_paid OR fully_paid)
  *   • Operational Cost Submissions (operational_cost_submissions → status = paid)
  *
- * Shows records that have been paid but not yet posted to the General Ledger,
- * lets Finance review them, and triggers the bridge RPCs that create
- * acct_journal_entries + acct_journal_lines rows.
+ * Each installment payment (total_paid_amount increase) is now journalled in
+ * real-time via the acct_trig_down_payment_requests trigger. Retroactive
+ * posting (for records paid before the trigger was active) is handled here.
  *
  * Bridge RPCs:
- *   post_downpayments_to_gl()      (see 20260817_gl_bridge_advances_ops.sql)
+ *   post_downpayments_to_gl()      (see 20260820_installment_gl_posting.sql)
  *   post_cost_submissions_to_gl()  (see 20260817_gl_bridge_advances_ops.sql)
  */
 
@@ -38,6 +38,14 @@ interface BridgeLog {
   error_message: string | null;
   created_at: string;
   journal_entry_id: string | null;
+  /** SDG amount covered by this log row (NULL for legacy rows pre-20260820) */
+  amount: number | null;
+}
+
+/** Minimal row used only for amount-based gap calculation */
+interface BridgeLogAmount {
+  source_id: string;
+  amount: number | null;
 }
 
 interface DownPayment {
@@ -45,6 +53,7 @@ interface DownPayment {
   site_name: string | null;
   requested_amount: number;
   total_paid_amount: number;
+  remaining_amount: number | null;
   status: string;
   updated_at: string;
   hub_name: string | null;
@@ -66,6 +75,13 @@ const STATUS_COLOR: Record<string, string> = {
   error:   'bg-red-100 text-red-700 border-red-200',
   skipped: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   pending: 'bg-blue-100 text-blue-700 border-blue-200',
+};
+
+const EVENT_LABEL: Record<string, string> = {
+  installment_payment:     'Installment (live)',
+  installment_retroactive: 'Retroactive lump-sum',
+  down_payment_fully_paid: 'Full payment (legacy)',
+  ops_cost_paid:           'Cost paid',
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -97,20 +113,21 @@ export default function AccountingGLBridgeAdvances() {
   async function load() {
     setLoading(true);
 
-    const [logRes, dpRes, opsRes] = await Promise.all([
-      // Bridge log for both source tables
+    const [logRes, dpRes, opsRes, dpAmtRes] = await Promise.all([
+      // Bridge log for display (last 300, both tables)
       supabase
         .from('acct_gl_bridge_log')
-        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id')
+        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id,amount')
         .in('source_table', ['down_payment_requests', 'operational_cost_submissions'])
         .order('created_at', { ascending: false })
         .limit(300),
 
-      // Fully-paid down-payments
+      // All partially-paid and fully-paid down-payments with payments > 0
       supabase
         .from('down_payment_requests' as any)
-        .select('id,site_name,requested_amount,total_paid_amount,status,updated_at,hub_name')
-        .eq('status', 'fully_paid')
+        .select('id,site_name,requested_amount,total_paid_amount,remaining_amount,status,updated_at,hub_name')
+        .in('status', ['partially_paid', 'fully_paid'])
+        .gt('total_paid_amount', 0)
         .order('updated_at', { ascending: false })
         .limit(500),
 
@@ -121,15 +138,46 @@ export default function AccountingGLBridgeAdvances() {
         .eq('status', 'paid')
         .order('paid_at', { ascending: false })
         .limit(500),
+
+      // All success log amounts for down_payment_requests (no row limit)
+      // Used for amount-based gap calculation — distinct from the display log above.
+      supabase
+        .from('acct_gl_bridge_log')
+        .select('source_id,amount')
+        .eq('source_table', 'down_payment_requests')
+        .eq('status', 'success'),
     ]);
 
     const allLogs = (logRes.data ?? []) as BridgeLog[];
     setLogs(allLogs);
 
-    const bridgedDpIds  = new Set(allLogs.filter(l => l.source_table === 'down_payment_requests'          && l.status === 'success').map(l => l.source_id));
-    const bridgedOpsIds = new Set(allLogs.filter(l => l.source_table === 'operational_cost_submissions'   && l.status === 'success').map(l => l.source_id));
+    // Amount-based gap detection for down-payment advances:
+    // An advance is "pending" (needs retroactive posting) when
+    //   total_paid_amount − SUM(successful log amounts) > 0.005
+    // This correctly surfaces advances where some installments previously
+    // errored and a gap remains, even though other installments succeeded.
+    const dpPostedByAdvance = new Map<string, number>();
+    ((dpAmtRes.data ?? []) as BridgeLogAmount[]).forEach(row => {
+      const prev = dpPostedByAdvance.get(row.source_id) ?? 0;
+      // amount may be NULL for legacy rows; treat NULL as 0.
+      // The migration backfill (step 0b) will populate these for existing rows,
+      // but we guard here for safety.
+      dpPostedByAdvance.set(row.source_id, prev + (row.amount ?? 0));
+    });
 
-    setDpUnposted( ((dpRes.data  ?? []) as DownPayment[]).filter(r => !bridgedDpIds.has(r.id)));
+    // Ops costs still use binary success detection (one JE per submission, not installments)
+    const bridgedOpsIds = new Set(
+      allLogs
+        .filter(l => l.source_table === 'operational_cost_submissions' && l.status === 'success')
+        .map(l => l.source_id)
+    );
+
+    setDpUnposted(
+      ((dpRes.data ?? []) as DownPayment[]).filter(r => {
+        const posted = dpPostedByAdvance.get(r.id) ?? 0;
+        return (r.total_paid_amount - posted) > 0.005;
+      })
+    );
     setOpsUnposted(((opsRes.data ?? []) as CostSubmission[]).filter(r => !bridgedOpsIds.has(r.id)));
     setLoading(false);
   }
@@ -261,11 +309,11 @@ export default function AccountingGLBridgeAdvances() {
             <div>
               <p className="text-sm font-medium">
                 {dpUnposted.length === 0
-                  ? 'All fully-paid field advances are posted to the GL.'
-                  : `${dpUnposted.length} advance(s) awaiting GL posting.`}
+                  ? 'All paid field advances are posted to the GL.'
+                  : `${dpUnposted.length} advance(s) awaiting retroactive GL posting.`}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Account mapping: DR 1510 Staff/Travel Advances · CR 1200 Cash/Bank
+                New payments post automatically per installment · Retroactive bridge posts the net paid amount · DR 1510 / CR 1200
               </p>
             </div>
             <Button
@@ -285,7 +333,9 @@ export default function AccountingGLBridgeAdvances() {
                   <ArrowRight className="h-4 w-4 text-blue-500" />
                   Pending Field Advances
                 </CardTitle>
-                <CardDescription>Fully-paid advances not yet posted to the GL.</CardDescription>
+                <CardDescription>
+                  Advances with payments not yet posted to the GL (includes partial and full payments).
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
@@ -296,8 +346,9 @@ export default function AccountingGLBridgeAdvances() {
                           <th className="text-left pb-2 pr-3">Date</th>
                           <th className="text-left pb-2 pr-3">Hub</th>
                           <th className="text-left pb-2 pr-3">Site</th>
-                          <th className="text-left pb-2 pr-3">Status</th>
-                          <th className="text-right pb-2">Amount (SDG)</th>
+                          <th className="text-left pb-2 pr-3">Stage</th>
+                          <th className="text-right pb-2 pr-3">Paid (SDG)</th>
+                          <th className="text-right pb-2">Remaining (SDG)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -305,12 +356,26 @@ export default function AccountingGLBridgeAdvances() {
                           <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
                             <td className="py-1.5 pr-3 text-xs">{format(new Date(r.updated_at), 'dd/MM/yyyy')}</td>
                             <td className="py-1.5 pr-3 text-xs text-muted-foreground">{r.hub_name ?? '—'}</td>
-                            <td className="py-1.5 pr-3 text-xs truncate max-w-[180px]">{r.site_name ?? '—'}</td>
+                            <td className="py-1.5 pr-3 text-xs truncate max-w-[160px]">{r.site_name ?? '—'}</td>
                             <td className="py-1.5 pr-3">
-                              <Badge variant="outline" className="text-[10px]">{r.status}</Badge>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] ${
+                                  r.status === 'fully_paid'
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {r.status === 'fully_paid' ? 'Final' : 'Partial'}
+                              </Badge>
                             </td>
-                            <td className="py-1.5 text-right font-mono text-xs">
-                              {formatNumber(r.total_paid_amount || r.requested_amount)}
+                            <td className="py-1.5 pr-3 text-right font-mono text-xs">
+                              {formatNumber(r.total_paid_amount)}
+                            </td>
+                            <td className="py-1.5 text-right font-mono text-xs text-muted-foreground">
+                              {r.remaining_amount != null && r.remaining_amount > 0
+                                ? formatNumber(r.remaining_amount)
+                                : '—'}
                             </td>
                           </tr>
                         ))}
@@ -429,7 +494,7 @@ export default function AccountingGLBridgeAdvances() {
                           <td className="py-1.5 pr-3 text-[10px] text-muted-foreground">
                             {l.source_table === 'down_payment_requests' ? 'Advance' : 'Ops Cost'}
                           </td>
-                          <td className="py-1.5 pr-3 text-xs">{l.event_type}</td>
+                          <td className="py-1.5 pr-3 text-xs">{EVENT_LABEL[l.event_type] ?? l.event_type}</td>
                           <td className="py-1.5 pr-3">
                             <Badge className={`text-[10px] border ${STATUS_COLOR[l.status] ?? ''}`}>
                               {l.status}
