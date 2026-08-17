@@ -184,33 +184,32 @@ export default function AccountingCOA() {
     setCountries((ctrRes.data ?? []) as Country[]);
     setCompanies(((coRes.data ?? []) as Company[]));
 
-    // Build balance map: prefer view, fall back to direct journal_entry_lines aggregate
+    // Build balance map — priority:
+    //   1. RPC  get_account_balances()  (server-side aggregate, no row-cap)
+    //   2. View vw_account_balances     (if migration was already run)
+    //   3. Skip — balances stay empty until migration is run
     const bmap = new Map<string, { dr: number; cr: number; net: number }>();
-    if (!balRes.error && balRes.data && balRes.data.length > 0) {
-      for (const b of (balRes.data as any[])) {
+
+    const buildMap = (rows: any[]) => {
+      for (const b of rows) {
         bmap.set(b.account_id, {
           dr:  Number(b.total_dr    ?? 0),
           cr:  Number(b.total_cr    ?? 0),
           net: Number(b.net_balance ?? 0),
         });
       }
-    } else {
-      // View doesn't exist yet — aggregate directly from posted journal entry lines
-      const { data: lineData } = await supabase
-        .from('acct_journal_entry_lines' as any)
-        .select('account_id, debit_credit, functional_amount, acct_journal_entries!inner(status)')
-        .eq('acct_journal_entries.status' as any, 'posted');
-      for (const l of ((lineData ?? []) as any[])) {
-        const prev = bmap.get(l.account_id) ?? { dr: 0, cr: 0, net: 0 };
-        const amt  = Number(l.functional_amount ?? 0);
-        const isDR = l.debit_credit === 'DR';
-        bmap.set(l.account_id, {
-          dr:  prev.dr + (isDR ? amt : 0),
-          cr:  prev.cr + (isDR ? 0 : amt),
-          net: prev.net + (isDR ? amt : -amt),
-        });
-      }
+    };
+
+    // Try RPC first (works even before the view exists)
+    const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('get_account_balances');
+    if (!rpcErr && rpcData && rpcData.length > 0) {
+      buildMap(rpcData);
+    } else if (!balRes.error && balRes.data && balRes.data.length > 0) {
+      // RPC not yet deployed → use view data
+      buildMap(balRes.data as any[]);
     }
+    // else: neither exists yet — balances will show "—" until migration is run
+
     setBalances(bmap);
     setLoading(false);
   };
