@@ -222,6 +222,7 @@ export default function AccountingFinanceDashboard() {
         .from('acct_gl_bridge_log')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'error')
+        .is('resolved_at', null)
         .gte('created_at', since);
       if (err) return 0;
       return count ?? 0;

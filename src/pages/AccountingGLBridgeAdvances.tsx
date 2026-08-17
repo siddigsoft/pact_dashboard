@@ -41,6 +41,7 @@ interface BridgeLog {
   journal_entry_id: string | null;
   /** SDG amount covered by this log row (NULL for legacy rows pre-20260820) */
   amount: number | null;
+  resolved_at: string | null;
 }
 
 /** Minimal row used only for amount-based gap calculation */
@@ -118,7 +119,7 @@ export default function AccountingGLBridgeAdvances() {
       // Bridge log for display (last 300, both tables)
       supabase
         .from('acct_gl_bridge_log')
-        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id,amount')
+        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id,amount,resolved_at')
         .in('source_table', ['down_payment_requests', 'operational_cost_submissions'])
         .order('created_at', { ascending: false })
         .limit(300),
@@ -250,11 +251,24 @@ export default function AccountingGLBridgeAdvances() {
     }
   }
 
+  // ── Resolve a log error row ────────────────────────────────────────────────
+  async function resolveLogRow(logId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: err } = await supabase
+      .from('acct_gl_bridge_log')
+      .update({ resolved_at: new Date().toISOString(), resolved_by: user?.id ?? null })
+      .eq('id', logId);
+    if (err) { toast.error('Failed to mark resolved'); return; }
+    setLogs(prev => prev.map(l => l.id === logId ? { ...l, resolved_at: new Date().toISOString() } : l));
+    toast.success('Error marked as resolved — it will no longer appear in the Finance Dashboard alert.');
+  }
+
   // ── Stats ─────────────────────────────────────────────────────────────────
   const dpSuccessCount  = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'success').length;
   const opsSuccessCount = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'success').length;
-  const dpErrorCount    = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'error').length;
-  const opsErrorCount   = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'error').length;
+  // Only count unresolved errors for the banner (resolved = acknowledged by Finance)
+  const dpErrorCount    = logs.filter(l => l.source_table === 'down_payment_requests'        && l.status === 'error' && !l.resolved_at).length;
+  const opsErrorCount   = logs.filter(l => l.source_table === 'operational_cost_submissions'  && l.status === 'error' && !l.resolved_at).length;
 
   if (!isAuthenticated || !allowed) {
     return (
@@ -519,7 +533,8 @@ export default function AccountingGLBridgeAdvances() {
                         <th className="text-left pb-2 pr-3">Source</th>
                         <th className="text-left pb-2 pr-3">Event</th>
                         <th className="text-left pb-2 pr-3">Status</th>
-                        <th className="text-left pb-2">Journal Entry / Error</th>
+                        <th className="text-left pb-2 pr-3">Journal Entry / Error</th>
+                        <th className="text-left pb-2">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -535,12 +550,25 @@ export default function AccountingGLBridgeAdvances() {
                               {l.status}
                             </Badge>
                           </td>
-                          <td className="py-1.5 text-xs font-mono text-muted-foreground">
+                          <td className="py-1.5 pr-3 text-xs font-mono text-muted-foreground">
                             {l.journal_entry_id
                               ? l.journal_entry_id.slice(0, 12) + '…'
                               : l.error_message
                               ? <span className="text-red-500">{l.error_message.slice(0, 80)}</span>
                               : '—'}
+                          </td>
+                          <td className="py-1.5">
+                            {l.status === 'error' && (
+                              l.resolved_at
+                                ? <span className="inline-flex items-center gap-1 text-[10px] text-green-600 font-medium">
+                                    <CheckCircle2 className="h-3 w-3" /> Resolved
+                                  </span>
+                                : <Button type="button" size="sm" variant="ghost"
+                                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => resolveLogRow(l.id)}>
+                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Mark resolved
+                                  </Button>
+                            )}
                           </td>
                         </tr>
                       ))}

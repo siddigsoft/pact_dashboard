@@ -22,7 +22,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { dispatchNotification } from '@/lib/notify';
 import { format } from 'date-fns';
 
-interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null }
+interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null; resolved_at: string | null }
 interface PreFundTxn { id: string; amount: number; currency: string; transaction_type: string; created_at: string; fund_id: string; description: string | null }
 interface Fund { id: string; name: string; code: string }
 
@@ -48,7 +48,7 @@ export default function AccountingGLBridgePreFunding() {
     const [logRes, txnRes, fundRes] = await Promise.all([
       supabase
         .from('acct_gl_bridge_log')
-        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id')
+        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id,resolved_at')
         .eq('source_table', 'pre_fund_transactions')
         .order('created_at', { ascending: false })
         .limit(200),
@@ -110,8 +110,21 @@ export default function AccountingGLBridgePreFunding() {
   const fundMap: Record<string, Fund> = {};
   funds.forEach(f => { fundMap[f.id] = f; });
 
+  // ── Resolve a log error row ────────────────────────────────────────────────
+  async function resolveLogRow(logId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: err } = await supabase
+      .from('acct_gl_bridge_log')
+      .update({ resolved_at: new Date().toISOString(), resolved_by: user?.id ?? null })
+      .eq('id', logId);
+    if (err) { toast.error('Failed to mark resolved'); return; }
+    setLogs(prev => prev.map(l => l.id === logId ? { ...l, resolved_at: new Date().toISOString() } : l));
+    toast.success('Error marked as resolved — it will no longer appear in the Finance Dashboard alert.');
+  }
+
   const successCount = logs.filter(l => l.status === 'success').length;
-  const errorCount   = logs.filter(l => l.status === 'error').length;
+  // Only count unresolved errors for the badge (resolved = acknowledged by Finance)
+  const errorCount   = logs.filter(l => l.status === 'error' && !l.resolved_at).length;
 
   if (!isAuthenticated || !allowed) {
     return (
@@ -230,7 +243,8 @@ export default function AccountingGLBridgePreFunding() {
                     <th className="text-left pb-2 pr-3">Source ID</th>
                     <th className="text-left pb-2 pr-3">Event</th>
                     <th className="text-left pb-2 pr-3">Status</th>
-                    <th className="text-left pb-2">Journal Entry</th>
+                    <th className="text-left pb-2 pr-3">Journal Entry</th>
+                    <th className="text-left pb-2">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -242,8 +256,21 @@ export default function AccountingGLBridgePreFunding() {
                       <td className="py-1.5 pr-3">
                         <Badge className={`text-xs border ${STATUS_COLOR[l.status] ?? ''}`}>{l.status}</Badge>
                       </td>
-                      <td className="py-1.5 text-xs font-mono text-muted-foreground">
+                      <td className="py-1.5 pr-3 text-xs font-mono text-muted-foreground">
                         {l.journal_entry_id ? l.journal_entry_id.slice(0, 12) + '…' : (l.error_message ? <span className="text-red-500">{l.error_message.slice(0, 60)}</span> : '—')}
+                      </td>
+                      <td className="py-1.5">
+                        {l.status === 'error' && (
+                          l.resolved_at
+                            ? <span className="inline-flex items-center gap-1 text-[10px] text-green-600 font-medium">
+                                <CheckCircle2 className="h-3 w-3" /> Resolved
+                              </span>
+                            : <Button type="button" size="sm" variant="ghost"
+                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-green-700 hover:bg-green-50"
+                                onClick={() => resolveLogRow(l.id)}>
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> Mark resolved
+                              </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

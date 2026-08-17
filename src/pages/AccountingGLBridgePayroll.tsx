@@ -23,7 +23,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { dispatchNotification } from '@/lib/notify';
 import { format } from 'date-fns';
 
-interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null }
+interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null; resolved_at: string | null }
 interface PayrollRun { id: string; period_label: string; total_amount: number; currency: string; status: string; processed_at: string | null; created_at: string }
 interface EosbRow { id: string; user_id: string; period: string; accrued_amount: number; currency: string; created_at: string }
 
@@ -48,7 +48,7 @@ export default function AccountingGLBridgePayroll() {
     const [logRes, runRes, eosbRes] = await Promise.all([
       supabase
         .from('acct_gl_bridge_log')
-        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id')
+        .select('id,source_table,source_id,event_type,status,error_message,created_at,journal_entry_id,resolved_at')
         .in('source_table', ['payroll_runs', 'eosb_accrual', 'hr_salary_advances'])
         .order('created_at', { ascending: false })
         .limit(300),
@@ -138,6 +138,18 @@ export default function AccountingGLBridgePayroll() {
     } finally {
       setBridging(null);
     }
+  }
+
+  // ── Resolve a log error row ────────────────────────────────────────────────
+  async function resolveLogRow(logId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: err } = await supabase
+      .from('acct_gl_bridge_log')
+      .update({ resolved_at: new Date().toISOString(), resolved_by: user?.id ?? null })
+      .eq('id', logId);
+    if (err) { toast.error('Failed to mark resolved'); return; }
+    setLogs(prev => prev.map(l => l.id === logId ? { ...l, resolved_at: new Date().toISOString() } : l));
+    toast.success('Error marked as resolved — it will no longer appear in the Finance Dashboard alert.');
   }
 
   if (!isAuthenticated || !allowed) {
@@ -230,7 +242,7 @@ export default function AccountingGLBridgePayroll() {
             <Tabs defaultValue="all">
               <TabsList className="mb-3">
                 <TabsTrigger value="all">All ({logs.length})</TabsTrigger>
-                <TabsTrigger value="error">Errors ({logs.filter(l=>l.status==='error').length})</TabsTrigger>
+                <TabsTrigger value="error">Errors ({logs.filter(l=>l.status==='error' && !l.resolved_at).length})</TabsTrigger>
               </TabsList>
               {(['all', 'error'] as const).map(tab => (
                 <TabsContent key={tab} value={tab}>
@@ -243,7 +255,8 @@ export default function AccountingGLBridgePayroll() {
                           <th className="text-left pb-2 pr-3">Source ID</th>
                           <th className="text-left pb-2 pr-3">Event</th>
                           <th className="text-left pb-2 pr-3">Status</th>
-                          <th className="text-left pb-2">Detail</th>
+                          <th className="text-left pb-2 pr-3">Detail</th>
+                          <th className="text-left pb-2">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -256,10 +269,23 @@ export default function AccountingGLBridgePayroll() {
                             <td className="py-1.5 pr-3">
                               <Badge className={`text-xs border ${STATUS_COLOR[l.status] ?? ''}`}>{l.status}</Badge>
                             </td>
-                            <td className="py-1.5 text-xs text-muted-foreground">
+                            <td className="py-1.5 pr-3 text-xs text-muted-foreground">
                               {l.error_message
                                 ? <span className="text-red-500">{l.error_message.slice(0,80)}</span>
                                 : l.journal_entry_id ? <span className="font-mono">{l.journal_entry_id.slice(0,12)}…</span> : '—'}
+                            </td>
+                            <td className="py-1.5">
+                              {l.status === 'error' && (
+                                l.resolved_at
+                                  ? <span className="inline-flex items-center gap-1 text-[10px] text-green-600 font-medium">
+                                      <CheckCircle2 className="h-3 w-3" /> Resolved
+                                    </span>
+                                  : <Button type="button" size="sm" variant="ghost"
+                                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-green-700 hover:bg-green-50"
+                                      onClick={() => resolveLogRow(l.id)}>
+                                      <CheckCircle2 className="h-3 w-3 mr-1" /> Mark resolved
+                                    </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
