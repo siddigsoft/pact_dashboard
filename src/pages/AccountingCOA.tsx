@@ -770,8 +770,8 @@ export default function AccountingCOA() {
           ADD / EDIT DIALOG
       ════════════════════════════════════════════════════ */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg" data-testid="dialog-account-form">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col" data-testid="dialog-account-form">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editTarget ? 'Edit Account' : 'Add Account'}</DialogTitle>
             <DialogDescription>
               {editTarget
@@ -780,7 +780,7 @@ export default function AccountingCOA() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
             {/* Code + Type */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
