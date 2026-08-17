@@ -271,14 +271,6 @@ DECLARE
   v_idempotency text;
   v_err_msg     text;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE  id = auth.uid()
-      AND  role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant')
-  ) THEN
-    RETURN jsonb_build_object('error','Access denied: Finance or Admin role required.');
-  END IF;
-
   -- Pre-fetch GENERAL fund
   SELECT id INTO v_fund_id FROM public.acct_funds
   WHERE  code = 'GENERAL' AND is_active = true LIMIT 1;
