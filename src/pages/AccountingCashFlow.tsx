@@ -287,7 +287,8 @@ export default function AccountingCashFlow() {
       {/* Filters */}
       <Card className="mb-4">
         <CardContent className="pt-4 pb-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Fiscal Period</label>
               <Select value={periodId} onValueChange={setPeriodId}>
                 <SelectTrigger className="h-9" data-testid="select-period"><SelectValue placeholder="Select period" /></SelectTrigger>
