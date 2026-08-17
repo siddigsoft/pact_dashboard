@@ -77,7 +77,7 @@ export default function AccountingJournals() {
   const [periodFilter, setPeriodFilter]   = useState<string>('all');
   const [statusFilter, setStatusFilter]   = useState<string>('all');
   const [sourceFilter, setSourceFilter]   = useState<string>('all');
-  const [countryFilter, setCountryFilter] = useState<string>(() => defaultCountryId);
+  const [countryFilter]                   = useState<string>('all'); // country filter removed — always show all
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -391,7 +391,7 @@ export default function AccountingJournals() {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Entries</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <div className="relative">
               <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search #, desc, key…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" data-testid="input-search" />
@@ -402,15 +402,6 @@ export default function AccountingJournals() {
                 <SelectItem value="all">All periods</SelectItem>
                 {periods.map(p => (
                   <SelectItem key={p.id} value={p.id}>{periodLabel(p.id)} · {p.status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger data-testid="select-country"><SelectValue placeholder="Country" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">🌐 All countries</SelectItem>
-                {countries.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
