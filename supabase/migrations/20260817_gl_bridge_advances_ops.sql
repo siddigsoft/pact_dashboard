@@ -14,6 +14,38 @@
 BEGIN;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 0. ENSURE acct_gl_bridge_config EXISTS
+--    (idempotent — safe if 20260803c_acct_gl_bridge_config.sql was already run)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.acct_gl_bridge_config (
+  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_event      text        NOT NULL UNIQUE,
+  event_label       text        NOT NULL,
+  event_description text,
+  debit_account_id  uuid        REFERENCES public.acct_accounts(id) ON DELETE SET NULL,
+  credit_account_id uuid        REFERENCES public.acct_accounts(id) ON DELETE SET NULL,
+  is_active         boolean     NOT NULL DEFAULT true,
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  updated_by        uuid        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.acct_gl_bridge_config ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Finance roles can manage GL bridge config"
+    ON public.acct_gl_bridge_config
+    FOR ALL
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND role IN ('super_admin','Admin','admin','finance','financialAdmin','accountant')
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 1. ATTACH TRIGGERS
 --    The functions acct_trig_down_payment_requests and
 --    acct_trig_operational_cost_submissions were created but never attached.
