@@ -24,13 +24,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, Search, Download, RefreshCw, BookOpen, Upload,
-  ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe, Building2, CheckCircle2, XCircle, AlertCircle,
+  ChevronRight, ChevronDown, Plus, Pencil, Trash2, Building2, CheckCircle2, XCircle, AlertCircle,
   TrendingUp, TrendingDown, Minus, ExternalLink,
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 
 interface Account {
   id: string;
@@ -114,8 +113,6 @@ export default function AccountingCOA() {
 
   const canManage = roleCanManage || overrideCanManage;
   const { toast } = useToast();
-  const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
-
   const [rows, setRows]               = useState<Account[]>([]);
   const [countries, setCountries]     = useState<Country[]>([]);
   const [companies, setCompanies]     = useState<Company[]>([]);
@@ -125,9 +122,7 @@ export default function AccountingCOA() {
   const [typeFilter, setTypeFilter]   = useState<string>('all');
   const [activeFilter, setActiveFilter]     = useState<string>('all');
   const [postableFilter, setPostableFilter] = useState<string>('all');
-  const [countryFilter, setCountryFilter]   = useState<string>('all');
   const [companyFilter, setCompanyFilter]   = useState<string>('all');
-  const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [companyFilterInitialized, setCompanyFilterInitialized] = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
@@ -135,13 +130,6 @@ export default function AccountingCOA() {
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
 
   const COA_COMPANY_KEY = 'pact-coa-company-filter';
-
-  useEffect(() => {
-    if (!acctCountryLoading && !countryFilterInitialized) {
-      setCountryFilter(defaultCountryId);
-      setCountryFilterInitialized(true);
-    }
-  }, [acctCountryLoading, defaultCountryId, countryFilterInitialized]);
 
   // Initialise company filter from localStorage once companies are loaded
   useEffect(() => {
@@ -250,7 +238,6 @@ export default function AccountingCOA() {
       if (activeFilter === 'inactive' && r.is_active) return false;
       if (postableFilter === 'postable' && !r.is_postable) return false;
       if (postableFilter === 'header' && r.is_postable) return false;
-      if (countryFilter !== 'all' && r.country_id !== countryFilter) return false;
       if (companyFilter !== 'all') {
         // Strict: only show accounts that explicitly belong to the selected company
         if (r.company_id !== companyFilter) return false;
@@ -263,7 +250,7 @@ export default function AccountingCOA() {
       }
       return true;
     });
-  }, [rows, search, typeFilter, activeFilter, postableFilter, countryFilter, companyFilter]);
+  }, [rows, search, typeFilter, activeFilter, postableFilter, companyFilter]);
 
   const childrenOf = useMemo(() => {
     const map = new Map<string | null, Account[]>();
@@ -739,21 +726,6 @@ export default function AccountingCOA() {
                 <SelectItem value="all">All types</SelectItem>
                 {ACCOUNT_TYPES.map(t => (
                   <SelectItem key={t} value={t}>{ACCT_TYPE_LABELS[t].en}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger data-testid="select-country">
-                <Globe className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Country" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All countries</SelectItem>
-                {countries.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.flag_emoji ?? ''} {c.name_en} ({c.code})
-                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
