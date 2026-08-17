@@ -129,6 +129,50 @@ export default function AccountingCOA() {
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
   const [balanceMigrationNeeded, setBalanceMigrationNeeded] = useState(false);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
+  const [detailTab, setDetailTab] = useState<'info' | 'transactions'>('info');
+  const [acctTxns, setAcctTxns] = useState<{
+    id: string; entry_date: string; reference: string; description: string;
+    debit_credit: string; functional_amount: number; functional_currency: string;
+    entry_id: string;
+  }[]>([]);
+  const [acctTxnsLoading, setAcctTxnsLoading] = useState(false);
+
+  // Reset detail tab when account changes
+  useEffect(() => { setDetailTab('info'); setAcctTxns([]); }, [detailAccount?.id]);
+
+  // Fetch journal lines for the selected account when transactions tab is active
+  useEffect(() => {
+    if (!detailAccount || detailTab !== 'transactions') return;
+    let cancelled = false;
+    setAcctTxnsLoading(true);
+    supabase
+      .from('acct_journal_lines')
+      .select(`
+        id, debit_credit, functional_amount, functional_currency, description,
+        acct_journal_entries!inner(id, entry_date, reference, description, status)
+      `)
+      .eq('account_id', detailAccount.id)
+      .eq('acct_journal_entries.status', 'posted')
+      .order('acct_journal_entries(entry_date)', { ascending: false })
+      .limit(200)
+      .then(({ data, error: err }) => {
+        if (cancelled) return;
+        if (err) { console.error(err); setAcctTxnsLoading(false); return; }
+        const rows = (data ?? []).map((l: any) => ({
+          id: l.id,
+          entry_id: l.acct_journal_entries.id,
+          entry_date: l.acct_journal_entries.entry_date,
+          reference: l.acct_journal_entries.reference ?? '',
+          description: l.description || l.acct_journal_entries.description || '',
+          debit_credit: l.debit_credit,
+          functional_amount: l.functional_amount ?? 0,
+          functional_currency: l.functional_currency ?? '',
+        }));
+        setAcctTxns(rows);
+        setAcctTxnsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [detailAccount?.id, detailTab]);
 
   const COA_COMPANY_KEY = 'pact-coa-company-filter';
 
@@ -1221,8 +1265,92 @@ export default function AccountingCOA() {
                   </SheetHeader>
                 </div>
 
+                {/* Tab switcher */}
+                <div className="flex-shrink-0 flex border-b">
+                  {(['info', 'transactions'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setDetailTab(t)}
+                      className={cn(
+                        'flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors',
+                        detailTab === t
+                          ? 'border-b-2 border-primary text-primary'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {t === 'info' ? 'Account Info' : 'Transactions'}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+
+                  {/* ── TRANSACTIONS TAB ── */}
+                  {detailTab === 'transactions' && (
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">
+                        Posted Journal Lines (latest 200)
+                      </p>
+                      {acctTxnsLoading ? (
+                        <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                        </div>
+                      ) : acctTxns.length === 0 ? (
+                        <div className="text-center py-10 text-sm text-muted-foreground">
+                          No posted transactions found for this account.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="rounded border overflow-hidden text-xs">
+                            <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-muted/60 font-semibold text-muted-foreground border-b">
+                              <div className="col-span-2">Date</div>
+                              <div className="col-span-2">Ref</div>
+                              <div className="col-span-4">Description</div>
+                              <div className="col-span-1 text-center">DC</div>
+                              <div className="col-span-3 text-right">Amount</div>
+                            </div>
+                            <div className="divide-y max-h-[420px] overflow-y-auto">
+                              {acctTxns.map(tx => (
+                                <div key={tx.id} className="grid grid-cols-12 gap-1 px-2 py-1.5 hover:bg-muted/30">
+                                  <div className="col-span-2 text-muted-foreground">{tx.entry_date?.slice(0, 10)}</div>
+                                  <div className="col-span-2 font-mono truncate" title={tx.reference}>{tx.reference || '—'}</div>
+                                  <div className="col-span-4 truncate text-muted-foreground" title={tx.description}>{tx.description || '—'}</div>
+                                  <div className={cn('col-span-1 text-center font-bold',
+                                    tx.debit_credit === 'DR' ? 'text-blue-600' : 'text-violet-600'
+                                  )}>{tx.debit_credit}</div>
+                                  <div className={cn('col-span-3 text-right font-mono font-medium',
+                                    tx.debit_credit === 'DR' ? 'text-blue-700' : 'text-violet-700'
+                                  )}>
+                                    {formatNumber(tx.functional_amount)}
+                                    {tx.functional_currency && (
+                                      <span className="text-muted-foreground ml-1">{tx.functional_currency}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground text-right">
+                            {acctTxns.length} line{acctTxns.length !== 1 ? 's' : ''} shown
+                            {acctTxns.length === 200 ? ' (limit reached — use General Ledger for full history)' : ''}
+                          </div>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border rounded py-2 hover:bg-muted/40 transition-colors"
+                        onClick={() => navigate(`/accounting?tab=ledger&account=${acct.id}`)}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Open full ledger with running balance
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── INFO TAB ── */}
+                  {detailTab === 'info' && <>
 
                   {/* Balance card */}
                   <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
@@ -1325,6 +1453,8 @@ export default function AccountingCOA() {
                   )}
 
                   <div className="text-[10px] text-muted-foreground">Version {acct.version}</div>
+
+                  </> /* end info tab */}
                 </div>
 
                 {/* Footer actions */}
