@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -106,6 +106,7 @@ type FormState = typeof BLANK_FORM;
 export default function AccountingCOA() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const { authReady } = useAppContext();
+  const navigate = useNavigate();
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const roleCanManage = hasAnyRole(['super_admin', 'admin']);
 
@@ -182,14 +183,33 @@ export default function AccountingCOA() {
     setRows((acctRes.data ?? []) as Account[]);
     setCountries((ctrRes.data ?? []) as Country[]);
     setCompanies(((coRes.data ?? []) as Company[]));
-    // Build balance map: account_id → { dr, cr, net }
+
+    // Build balance map: prefer view, fall back to direct journal_entry_lines aggregate
     const bmap = new Map<string, { dr: number; cr: number; net: number }>();
-    for (const b of ((balRes.data ?? []) as any[])) {
-      bmap.set(b.account_id, {
-        dr:  Number(b.total_dr   ?? 0),
-        cr:  Number(b.total_cr   ?? 0),
-        net: Number(b.net_balance ?? 0),
-      });
+    if (!balRes.error && balRes.data && balRes.data.length > 0) {
+      for (const b of (balRes.data as any[])) {
+        bmap.set(b.account_id, {
+          dr:  Number(b.total_dr    ?? 0),
+          cr:  Number(b.total_cr    ?? 0),
+          net: Number(b.net_balance ?? 0),
+        });
+      }
+    } else {
+      // View doesn't exist yet — aggregate directly from posted journal entry lines
+      const { data: lineData } = await supabase
+        .from('acct_journal_entry_lines' as any)
+        .select('account_id, debit_credit, functional_amount, acct_journal_entries!inner(status)')
+        .eq('acct_journal_entries.status' as any, 'posted');
+      for (const l of ((lineData ?? []) as any[])) {
+        const prev = bmap.get(l.account_id) ?? { dr: 0, cr: 0, net: 0 };
+        const amt  = Number(l.functional_amount ?? 0);
+        const isDR = l.debit_credit === 'DR';
+        bmap.set(l.account_id, {
+          dr:  prev.dr + (isDR ? amt : 0),
+          cr:  prev.cr + (isDR ? 0 : amt),
+          net: prev.net + (isDR ? amt : -amt),
+        });
+      }
     }
     setBalances(bmap);
     setLoading(false);
@@ -1293,7 +1313,7 @@ export default function AccountingCOA() {
                     variant="outline"
                     className="flex-1"
                     onClick={() => {
-                      window.location.href = `/accounting?tab=general-ledger&account=${acct.id}`;
+                      navigate(`/accounting?tab=ledger&account=${acct.id}`);
                     }}
                   >
                     <ExternalLink className="w-3.5 h-3.5 mr-1" /> View in Ledger
