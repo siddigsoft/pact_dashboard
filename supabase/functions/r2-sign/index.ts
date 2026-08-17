@@ -12,9 +12,8 @@
  *  - sign-download { key, filename? }  → { url }        (presigned GET, 1 h)
  *                    Authenticated users: always allowed (RLS on the metadata
  *                    table already gated what keys they can see).
- *                    Anonymous (QR-scan FileViewer): only for files whose
- *                    workspace_files row is public enough — mirrors the
- *                    security_level check FileViewer itself performs.
+ *                    Anonymous (share / QR FileViewer): any non-archived
+ *                    workspace_files row — the share URL is the access grant.
  *  - delete        { key }             → { ok: true }
  *                    Requires auth. Allowed for legacy user-id prefixes,
  *                    unregistered snapshot keys (orphan cleanup), or keys
@@ -102,16 +101,16 @@ serve(async (req) => {
     if (!validR2Key(key)) return json({ error: 'Invalid key' }, 400)
 
     if (!user) {
-      // Anonymous QR-scan viewer: mirror FileViewer's own gate — only files
-      // that are not restricted, not archived, and allow download.
+      // Anonymous share / QR viewer. The share URL is the access grant, including
+      // Confidential and Top Secret files. Only require a live workspace_files row.
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
       const { data: row } = await admin
         .from('workspace_files')
-        .select('id, security_level, archived')
+        .select('id, archived')
         .eq('storage_path', key)
         .eq('storage_provider', 'r2')
         .maybeSingle()
-      if (!row || row.archived || ['top_secret', 'restricted'].includes(row.security_level)) {
+      if (!row || row.archived) {
         return json({ error: 'Unauthorized' }, 401)
       }
     }
