@@ -42,17 +42,23 @@ CREATE INDEX IF NOT EXISTS idx_mmp_payment_records_enumerator
 -- RLS
 ALTER TABLE public.mmp_payment_records ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mmp_payment_records_select"
-  ON public.mmp_payment_records FOR SELECT
-  TO authenticated USING (true);
+DO $$ BEGIN
+  CREATE POLICY "mmp_payment_records_select"
+    ON public.mmp_payment_records FOR SELECT
+    TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "mmp_payment_records_insert"
-  ON public.mmp_payment_records FOR INSERT
-  TO authenticated WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "mmp_payment_records_insert"
+    ON public.mmp_payment_records FOR INSERT
+    TO authenticated WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "mmp_payment_records_update"
-  ON public.mmp_payment_records FOR UPDATE
-  TO authenticated USING (true);
+DO $$ BEGIN
+  CREATE POLICY "mmp_payment_records_update"
+    ON public.mmp_payment_records FOR UPDATE
+    TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- updated_at trigger
 CREATE OR REPLACE FUNCTION public.set_mmp_payment_records_updated_at()
