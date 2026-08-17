@@ -19,6 +19,7 @@ import { Loader2, Zap, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight } from
 import { toast } from 'sonner';
 import { parseJournalError } from '@/lib/journalErrors';
 import { formatNumber } from '@/lib/accountingFormat';
+import { dispatchNotification } from '@/lib/notify';
 import { format } from 'date-fns';
 
 interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null }
@@ -78,9 +79,26 @@ export default function AccountingGLBridgePreFunding() {
       const { data, error } = await supabase.rpc('post_prefunding_to_gl' as any, {});
       if (error) throw error;
       const result = data as { posted: number; skipped: number; errors: number } | null;
+      const errCount = result?.errors ?? 0;
       toast.success(
-        `Bridge complete — Posted: ${result?.posted ?? '?'}, Skipped: ${result?.skipped ?? '?'}, Errors: ${result?.errors ?? 0}`
+        `Bridge complete — Posted: ${result?.posted ?? '?'}, Skipped: ${result?.skipped ?? '?'}, Errors: ${errCount}`
       );
+      if (errCount > 0) {
+        dispatchNotification({
+          event: 'gl_bridge_error',
+          recipientRoles: ['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant'],
+          titleEn: 'GL Bridge Error — Pre-Funding',
+          titleAr: 'خطأ في جسر الأستاذ العام — التمويل المسبق',
+          messageEn: `${errCount} pre-funding transaction posting${errCount > 1 ? 's' : ''} failed during the GL bridge run. Review the bridge log to identify and resolve the errors before COA balances diverge further.`,
+          messageAr: `فشل ترحيل ${errCount} معاملة تمويل مسبق خلال تشغيل جسر الأستاذ العام. راجع سجل الجسر لتحديد الأخطاء وحلها قبل أن تتباعد أرصدة الأستاذ العام.`,
+          priority: 'high',
+          entityType: 'gl_bridge',
+          actionUrl: '/accounting?tab=gl-bridge',
+          sendEmail: true,
+          sendWhatsApp: false,
+          metadata: { errors: errCount, posted: result?.posted ?? 0, source_table: 'pre_fund_transactions' },
+        });
+      }
       await load();
     } catch (err: any) {
       toast.error(`Bridge failed: ${parseJournalError(err)}`);

@@ -20,6 +20,7 @@ import { Loader2, Zap, RefreshCw, AlertTriangle, CheckCircle2, DollarSign, Arrow
 import { toast } from 'sonner';
 import { parseJournalError } from '@/lib/journalErrors';
 import { formatNumber } from '@/lib/accountingFormat';
+import { dispatchNotification } from '@/lib/notify';
 import { format } from 'date-fns';
 
 interface BridgeLog { id: string; source_table: string; source_id: string; event_type: string; status: string; error_message: string | null; created_at: string; journal_entry_id: string | null }
@@ -81,7 +82,24 @@ export default function AccountingGLBridgePayroll() {
       const { data, error } = await supabase.rpc('post_payroll_to_gl' as any, {});
       if (error) throw error;
       const res = data as { posted: number; skipped: number; errors: number } | null;
-      toast.success(`Payroll bridge done — Posted: ${res?.posted ?? '?'}, Skipped: ${res?.skipped ?? '?'}, Errors: ${res?.errors ?? 0}`);
+      const errCount = res?.errors ?? 0;
+      toast.success(`Payroll bridge done — Posted: ${res?.posted ?? '?'}, Skipped: ${res?.skipped ?? '?'}, Errors: ${errCount}`);
+      if (errCount > 0) {
+        dispatchNotification({
+          event: 'gl_bridge_error',
+          recipientRoles: ['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant'],
+          titleEn: 'GL Bridge Error — Payroll',
+          titleAr: 'خطأ في جسر الأستاذ العام — الرواتب',
+          messageEn: `${errCount} payroll posting${errCount > 1 ? 's' : ''} failed during the GL bridge run. Review the bridge log to identify and resolve the errors before COA balances diverge further.`,
+          messageAr: `فشل ترحيل ${errCount} قيد راتب خلال تشغيل جسر الأستاذ العام. راجع سجل الجسر لتحديد الأخطاء وحلها قبل أن تتباعد أرصدة الأستاذ العام.`,
+          priority: 'high',
+          entityType: 'gl_bridge',
+          actionUrl: '/accounting?tab=gl-bridge',
+          sendEmail: true,
+          sendWhatsApp: false,
+          metadata: { errors: errCount, posted: res?.posted ?? 0, source_table: 'payroll_runs' },
+        });
+      }
       await load();
     } catch (err: any) {
       toast.error(`Bridge failed: ${parseJournalError(err)}`);
@@ -96,7 +114,24 @@ export default function AccountingGLBridgePayroll() {
       const { data, error } = await supabase.rpc('post_eosb_to_gl' as any, {});
       if (error) throw error;
       const res = data as { posted: number; errors: number } | null;
-      toast.success(`EOSB bridge done — Posted: ${res?.posted ?? '?'}, Errors: ${res?.errors ?? 0}`);
+      const errCount = res?.errors ?? 0;
+      toast.success(`EOSB bridge done — Posted: ${res?.posted ?? '?'}, Errors: ${errCount}`);
+      if (errCount > 0) {
+        dispatchNotification({
+          event: 'gl_bridge_error',
+          recipientRoles: ['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant'],
+          titleEn: 'GL Bridge Error — EOSB Accruals',
+          titleAr: 'خطأ في جسر الأستاذ العام — مكافأة نهاية الخدمة',
+          messageEn: `${errCount} EOSB accrual posting${errCount > 1 ? 's' : ''} failed during the GL bridge run. Review the bridge log to identify and resolve the errors before COA balances diverge further.`,
+          messageAr: `فشل ترحيل ${errCount} قيد مكافأة نهاية خدمة خلال تشغيل جسر الأستاذ العام. راجع سجل الجسر لتحديد الأخطاء وحلها قبل أن تتباعد أرصدة الأستاذ العام.`,
+          priority: 'high',
+          entityType: 'gl_bridge',
+          actionUrl: '/accounting?tab=gl-bridge',
+          sendEmail: true,
+          sendWhatsApp: false,
+          metadata: { errors: errCount, posted: res?.posted ?? 0, source_table: 'eosb_accrual' },
+        });
+      }
       await load();
     } catch (err: any) {
       toast.error(`EOSB bridge failed: ${parseJournalError(err)}`);

@@ -25,6 +25,7 @@ import { Loader2, Zap, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Recei
 import { toast } from 'sonner';
 import { parseJournalError } from '@/lib/journalErrors';
 import { formatNumber } from '@/lib/accountingFormat';
+import { dispatchNotification } from '@/lib/notify';
 import { format } from 'date-fns';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -191,7 +192,24 @@ export default function AccountingGLBridgeAdvances() {
       const { data, error } = await (supabase as any).rpc('post_downpayments_to_gl', {});
       if (error) throw error;
       const r = data as { posted: number; skipped: number; errors: number } | null;
-      toast.success(`Advances bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${r?.errors ?? 0}`);
+      const errCount = r?.errors ?? 0;
+      toast.success(`Advances bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${errCount}`);
+      if (errCount > 0) {
+        dispatchNotification({
+          event: 'gl_bridge_error',
+          recipientRoles: ['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant'],
+          titleEn: 'GL Bridge Error — Field Advances',
+          titleAr: 'خطأ في جسر الأستاذ العام — السلف الميدانية',
+          messageEn: `${errCount} field advance posting${errCount > 1 ? 's' : ''} failed during the GL bridge run. Review the bridge log to identify and resolve the errors before COA balances diverge further.`,
+          messageAr: `فشل ترحيل ${errCount} سلفة ميدانية خلال تشغيل جسر الأستاذ العام. راجع سجل الجسر لتحديد الأخطاء وحلها قبل أن تتباعد أرصدة الأستاذ العام.`,
+          priority: 'high',
+          entityType: 'gl_bridge',
+          actionUrl: '/accounting?tab=gl-bridge',
+          sendEmail: true,
+          sendWhatsApp: false,
+          metadata: { errors: errCount, posted: r?.posted ?? 0, source_table: 'down_payment_requests' },
+        });
+      }
       await load();
     } catch (err: any) {
       toast.error(`Bridge failed: ${parseJournalError(err)}`);
@@ -206,7 +224,24 @@ export default function AccountingGLBridgeAdvances() {
       const { data, error } = await (supabase as any).rpc('post_cost_submissions_to_gl', {});
       if (error) throw error;
       const r = data as { posted: number; skipped: number; errors: number } | null;
-      toast.success(`Costs bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${r?.errors ?? 0}`);
+      const errCount = r?.errors ?? 0;
+      toast.success(`Costs bridge — Posted: ${r?.posted ?? '?'}, Skipped: ${r?.skipped ?? '?'}, Errors: ${errCount}`);
+      if (errCount > 0) {
+        dispatchNotification({
+          event: 'gl_bridge_error',
+          recipientRoles: ['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant'],
+          titleEn: 'GL Bridge Error — Operational Costs',
+          titleAr: 'خطأ في جسر الأستاذ العام — التكاليف التشغيلية',
+          messageEn: `${errCount} operational cost posting${errCount > 1 ? 's' : ''} failed during the GL bridge run. Review the bridge log to identify and resolve the errors before COA balances diverge further.`,
+          messageAr: `فشل ترحيل ${errCount} تكلفة تشغيلية خلال تشغيل جسر الأستاذ العام. راجع سجل الجسر لتحديد الأخطاء وحلها قبل أن تتباعد أرصدة الأستاذ العام.`,
+          priority: 'high',
+          entityType: 'gl_bridge',
+          actionUrl: '/accounting?tab=gl-bridge',
+          sendEmail: true,
+          sendWhatsApp: false,
+          metadata: { errors: errCount, posted: r?.posted ?? 0, source_table: 'operational_cost_submissions' },
+        });
+      }
       await load();
     } catch (err: any) {
       toast.error(`Bridge failed: ${parseJournalError(err)}`);

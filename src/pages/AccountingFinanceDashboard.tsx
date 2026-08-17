@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
 import { fetchAccountingFinanceKpis } from '@/services/accountingFinanceKpis';
@@ -212,6 +213,23 @@ export default function AccountingFinanceDashboard() {
     staleTime: 1000 * 60 * 2,
   });
 
+  // GL Bridge: unresolved error rows in the last 24 h
+  const { data: bridgeErrorCount = 0 } = useQuery<number>({
+    queryKey: ['gl-bridge-errors-24h'],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error: err } = await supabase
+        .from('acct_gl_bridge_log')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'error')
+        .gte('created_at', since);
+      if (err) return 0;
+      return count ?? 0;
+    },
+    enabled: authReady && allowed,
+    staleTime: 60_000,
+  });
+
   const errMsg = error ? (error as Error).message : null;
   const wrap = <T,>(d: T | null | undefined): KPIState<T> => ({
     data: d ?? null,
@@ -262,6 +280,8 @@ export default function AccountingFinanceDashboard() {
     alerts.push({ icon: Landmark, color: 'text-indigo-500', label: `${cash.data.unreconciledCount} bank transactions are unreconciled`, action: 'Reconcile', href: '/accounting/bank-recon' });
   if (revenue.data && revenue.data.netIncome < 0)
     alerts.push({ icon: TrendingDown, color: 'text-rose-500', label: `Net loss of ${formatNumber(Math.abs(revenue.data.netIncome), 0)} YTD — review expense vs revenue`, action: 'Statements', href: '/accounting/reports' });
+  if (bridgeErrorCount > 0)
+    alerts.push({ icon: Zap, color: 'text-red-600', label: `${bridgeErrorCount} GL bridge posting${bridgeErrorCount === 1 ? '' : 's'} failed in the last 24 h — COA balances may be incomplete`, action: 'Fix', href: '/accounting?tab=gl-bridge' });
 
   const apTotal = ap.data ? ap.data.outstanding : 0;
 
