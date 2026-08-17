@@ -16,11 +16,16 @@ import { Switch } from '@/components/ui/switch';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, Search, Download, RefreshCw, BookOpen, Upload,
   ChevronRight, ChevronDown, Plus, Pencil, Trash2, Globe, Building2, CheckCircle2, XCircle, AlertCircle,
+  TrendingUp, TrendingDown, Minus, ExternalLink,
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
@@ -124,6 +129,7 @@ export default function AccountingCOA() {
   const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
+  const [detailAccount, setDetailAccount] = useState<Account | null>(null);
 
   useEffect(() => {
     if (!acctCountryLoading && !countryFilterInitialized) {
@@ -495,13 +501,20 @@ export default function AccountingCOA() {
 
     return (
       <div key={acct.id} data-testid={`row-acct-${acct.id}`}>
-        <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b items-center hover:bg-muted/40 group">
+        <div
+          className="grid grid-cols-12 gap-2 px-3 py-2 border-b items-center hover:bg-muted/40 group cursor-pointer"
+          onClick={() => setDetailAccount(acct)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && setDetailAccount(acct)}
+          aria-label={`View details for ${acct.code} ${acct.name_en}`}
+        >
           {/* Code */}
           <div className="col-span-2 flex items-center gap-1" style={{ paddingLeft: `${depth * 16}px` }}>
             {kids.length > 0 ? (
               <button
                 type="button"
-                onClick={() => toggle(acct.id)}
+                onClick={e => { e.stopPropagation(); toggle(acct.id); }}
                 className="p-0.5 hover:bg-muted rounded"
                 aria-expanded={isOpen}
                 data-testid={`button-expand-${acct.id}`}
@@ -556,7 +569,7 @@ export default function AccountingCOA() {
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-1">
                 <button
                   type="button"
-                  onClick={() => openEdit(acct)}
+                  onClick={e => { e.stopPropagation(); openEdit(acct); }}
                   className="p-1 rounded hover:bg-blue-50 text-blue-600"
                   title="Edit account"
                   data-testid={`button-edit-${acct.id}`}
@@ -565,7 +578,7 @@ export default function AccountingCOA() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void openDelete(acct)}
+                  onClick={e => { e.stopPropagation(); void openDelete(acct); }}
                   className="p-1 rounded hover:bg-rose-50 text-rose-600"
                   title="Delete account"
                   data-testid={`button-delete-${acct.id}`}
@@ -1115,6 +1128,182 @@ export default function AccountingCOA() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ════════════════════════════════════════════════════
+          ACCOUNT DETAIL SHEET
+      ════════════════════════════════════════════════════ */}
+      <Sheet open={!!detailAccount} onOpenChange={open => { if (!open) setDetailAccount(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
+          {detailAccount && (() => {
+            const acct  = detailAccount;
+            const ctr   = countries.find(c => c.id === acct.country_id);
+            const co    = companies.find(c => c.id === acct.company_id);
+            const bal   = balances.get(acct.id);
+            const net   = bal?.net ?? 0;
+            const hasActivity = !!bal;
+            const isDebitNormal = new Set(['asset','expense']).has(acct.account_type);
+            const isNormal = isDebitNormal ? net >= 0 : net <= 0;
+            const parentAcct = acct.parent_id ? rows.find(r => r.id === acct.parent_id) : null;
+
+            return (
+              <>
+                {/* Header */}
+                <div className={cn('px-6 pt-6 pb-4 flex-shrink-0 border-b', TYPE_TONE[acct.account_type])}>
+                  <SheetHeader className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={cn('text-[10px] px-1.5', TYPE_TONE[acct.account_type])}>
+                        {ACCT_TYPE_LABELS[acct.account_type]?.en ?? acct.account_type}
+                      </Badge>
+                      {!acct.is_active && <Badge variant="outline" className="text-[10px] bg-zinc-100 text-zinc-700">Inactive</Badge>}
+                      {!acct.is_postable && <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700">Header</Badge>}
+                      {acct.deprecated && <Badge variant="outline" className="text-[10px] bg-rose-100 text-rose-700">Deprecated</Badge>}
+                    </div>
+                    <SheetTitle className="text-xl font-bold leading-tight">{acct.code}</SheetTitle>
+                    <SheetDescription asChild>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{acct.name_en}</p>
+                        {acct.name_ar && (
+                          <p className="text-sm text-muted-foreground" dir="rtl" lang="ar">{acct.name_ar}</p>
+                        )}
+                      </div>
+                    </SheetDescription>
+                  </SheetHeader>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+
+                  {/* Balance card */}
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                    <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">Account Balance (Posted)</p>
+                    {hasActivity ? (
+                      <>
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground mb-0.5">Debit Total</p>
+                            <p className="font-mono text-sm font-semibold text-blue-700">{formatNumber(bal!.dr)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground mb-0.5">Credit Total</p>
+                            <p className="font-mono text-sm font-semibold text-violet-700">{formatNumber(bal!.cr)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground mb-0.5">Net Balance</p>
+                            <p className={cn('font-mono text-sm font-bold flex items-center justify-center gap-1',
+                              isNormal ? 'text-emerald-700' : 'text-rose-600'
+                            )}>
+                              {net > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : net < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                              {formatNumber(Math.abs(net))}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-center text-muted-foreground">
+                          {isDebitNormal ? 'Debit-normal' : 'Credit-normal'} account
+                          {isNormal ? ' — balance is on the expected side' : ' — balance is on the abnormal side'}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-2">No posted journal entries yet</p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Classification */}
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">Classification</p>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Type</p>
+                        <p className="font-medium capitalize">{acct.account_type}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Subtype</p>
+                        <p className="font-medium">{acct.subtype || <span className="text-muted-foreground">—</span>}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Country</p>
+                        <p className="font-medium">{ctr ? `${ctr.flag_emoji ?? ''} ${ctr.name_en}` : <span className="text-muted-foreground">Unassigned</span>}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Company</p>
+                        <p className="font-medium">{co?.name_en ?? <span className="text-muted-foreground">Unassigned</span>}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Currency</p>
+                        <p className="font-medium">{acct.account_currency ?? <span className="text-muted-foreground">Company default</span>}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Parent Account</p>
+                        <p className="font-medium font-mono text-xs">{parentAcct ? `${parentAcct.code} — ${parentAcct.name_en}` : <span className="text-muted-foreground">Root</span>}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Settings */}
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">Settings</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Active',               value: acct.is_active },
+                        { label: 'Postable',             value: acct.is_postable },
+                        { label: 'Allow Reconciliation', value: acct.allow_reconciliation },
+                        { label: 'Deprecated',           value: acct.deprecated },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-center gap-2 text-sm">
+                          {value
+                            ? <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                            : <XCircle      className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+                          }
+                          <span className={value ? '' : 'text-muted-foreground'}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {acct.notes && (
+                    <>
+                      <Separator />
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide">Notes</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{acct.notes}</p>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="text-[10px] text-muted-foreground">Version {acct.version}</div>
+                </div>
+
+                {/* Footer actions */}
+                <div className="flex-shrink-0 border-t px-6 py-3 flex gap-2">
+                  {canManage && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => { setDetailAccount(null); openEdit(acct); }}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1" /> Edit Account
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      window.location.href = `/accounting?tab=general-ledger&account=${acct.id}`;
+                    }}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" /> View in Ledger
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
     </div>
   );
