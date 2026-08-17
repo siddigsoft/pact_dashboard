@@ -170,11 +170,9 @@
   const SIDEBAR_GROUP_SHELL = "py-1 px-2";
   const SIDEBAR_GROUP_LABEL =
     "min-h-8 h-auto py-1 px-2.5 text-[11px] leading-snug tracking-wide font-semibold cursor-pointer flex items-center gap-2 rounded-lg transition-colors";
-  // One neutral treatment for every section header. Colour in the sidebar is
-  // reserved for state (active item, badges) — a different hue per section
-  // reads as decoration, not information.
+  // Base class for section headers — individual iconColor overrides the icon hue per-section.
   const SIDEBAR_SECTION_LABEL =
-    "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60";
+    "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60";
   // min-h + h-auto so long labels wrap to a second line instead of truncating
   const SIDEBAR_NAV_ITEM =
     "min-h-9 h-auto py-1.5 rounded-lg text-[13px] font-medium leading-snug transition-all duration-200";
@@ -1350,23 +1348,23 @@
 
           {(() => {
             // ── Section config: parentGroup value → display config ──────────────
-            type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string };
+            type SectionCfg = { label: string; Icon: React.ElementType; labelClass: string; iconColor: string };
             const SECTION_CFG: Record<string, SectionCfg> = {
-              'workspace':     { label: 'My Workspace',            Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL },
-              'programme':     { label: 'Programme Management',    Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL },
-              'incentives':    { label: 'Incentive Bonuses',        Icon: Award,           labelClass: SIDEBAR_SECTION_LABEL },
-              'comms':         { label: 'Communication',           Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL },
-              'fieldops':      { label: 'Field Operations',        Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL },
-              'coordination':  { label: 'Coordination & Oversight',Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL },
-              'finance':       { label: 'Payments & Finance',      Icon: Banknote,        labelClass: SIDEBAR_SECTION_LABEL },
-              'accounting':    { label: 'Accounting',              Icon: BookOpen,        labelClass: SIDEBAR_SECTION_LABEL },
-              'hr':            { label: 'HR & People',             Icon: Users,           labelClass: SIDEBAR_SECTION_LABEL },
-              'crm':           { label: 'CRM',                     Icon: Handshake,       labelClass: SIDEBAR_SECTION_LABEL },
-              'surveys':       { label: 'Surveys',                 Icon: ClipboardList,   labelClass: SIDEBAR_SECTION_LABEL },
-              'analytics':     { label: 'Analytics & Reports',     Icon: BarChart3,       labelClass: SIDEBAR_SECTION_LABEL },
-              'admin':         { label: 'Administration',          Icon: Settings,        labelClass: SIDEBAR_SECTION_LABEL },
-              'help':          { label: 'Help & Support',          Icon: HelpCircle,      labelClass: SIDEBAR_SECTION_LABEL },
-              'superadmin':    { label: 'Super Admin',             Icon: ShieldCheck,     labelClass: SIDEBAR_SECTION_LABEL },
+              'workspace':     { label: 'My Workspace',             Icon: LayoutDashboard, labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-indigo-500 dark:text-indigo-400'  },
+              'programme':     { label: 'Programme Management',     Icon: FolderKanban,    labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-blue-500 dark:text-blue-400'      },
+              'incentives':    { label: 'Incentive Bonuses',        Icon: Award,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-amber-500 dark:text-amber-400'    },
+              'comms':         { label: 'Communication',            Icon: MessageSquare,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-emerald-500 dark:text-emerald-400'},
+              'fieldops':      { label: 'Field Operations',         Icon: Activity,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-orange-500 dark:text-orange-400'  },
+              'coordination':  { label: 'Coordination & Oversight', Icon: Network,         labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
+              'finance':       { label: 'Payments & Finance',       Icon: Banknote,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-green-500 dark:text-green-400'    },
+              'accounting':    { label: 'Accounting',               Icon: BookOpen,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-teal-500 dark:text-teal-400'      },
+              'hr':            { label: 'HR & People',              Icon: Users,           labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-pink-500 dark:text-pink-400'      },
+              'crm':           { label: 'CRM',                      Icon: Handshake,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-violet-500 dark:text-violet-400'  },
+              'surveys':       { label: 'Surveys',                  Icon: ClipboardList,   labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-cyan-500 dark:text-cyan-400'      },
+              'analytics':     { label: 'Analytics & Reports',      Icon: BarChart3,       labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-purple-500 dark:text-purple-400'  },
+              'admin':         { label: 'Administration',           Icon: Settings,        labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
+              'help':          { label: 'Help & Support',           Icon: HelpCircle,      labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-slate-500 dark:text-slate-400'    },
+              'superadmin':    { label: 'Super Admin',              Icon: ShieldCheck,     labelClass: SIDEBAR_SECTION_LABEL, iconColor: 'text-rose-500 dark:text-rose-400'      },
             };
 
             // Group sub-groups by parentGroup; track min order for sorting sections
@@ -1436,7 +1434,7 @@
               }
             };
 
-            const renderMenuItems = (items: MenuGroup['items'], nested = false) => {
+            const renderMenuItems = (items: MenuGroup['items'], nested = false, iconColor = 'text-slate-500 dark:text-slate-400') => {
               if (nested) {
                 return (
                   <SidebarMenuSub className="mx-2 gap-0.5 border-l border-slate-200/80 dark:border-gray-700">
@@ -1460,7 +1458,7 @@
                                   "h-3.5 w-3.5 shrink-0",
                                   isActive
                                     ? "text-blue-700 dark:text-blue-300"
-                                    : "text-slate-500 dark:text-slate-400"
+                                    : iconColor
                                 )}
                               />
                               <span className="flex-1">{item.title}</span>
@@ -1521,7 +1519,7 @@
                                 "h-4 w-4 shrink-0",
                                 isActive
                                   ? "text-blue-700 dark:text-blue-300"
-                                  : "text-slate-500 dark:text-slate-400"
+                                  : iconColor
                               )}
                             />
                             <span className="flex-1">{item.title}</span>
@@ -1554,7 +1552,7 @@
               );
             };
 
-            const renderSubGroups = (subGroups: SubGroup[]) =>
+            const renderSubGroups = (subGroups: SubGroup[], iconColor = 'text-slate-500 dark:text-slate-400') =>
               subGroups.sort((a, b) => a.order - b.order).map(subGroup => {
                 const isSubCollapsed = collapsedGroups.has(subGroup.id);
                 return (
@@ -1577,7 +1575,7 @@
                       </button>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      {renderMenuItems(subGroup.items, true)}
+                      {renderMenuItems(subGroup.items, true, iconColor)}
                     </CollapsibleContent>
                   </Collapsible>
                 );
@@ -1589,7 +1587,7 @@
               if (!cfg || subGroups.length === 0) return null;
               const parentKey = `${parentGroupId}-parent`;
               const isCollapsed = collapsedGroups.has(parentKey);
-              const { label, Icon, labelClass } = cfg;
+              const { label, Icon, labelClass, iconColor } = cfg;
               return (
                 <Collapsible key={`${parentKey}${keySuffix}`} open={!isCollapsed}>
                   <SidebarGroup className={SIDEBAR_GROUP_SHELL}>
@@ -1600,13 +1598,13 @@
                         data-testid={`group-label-${parentKey}${keySuffix}`}
                       >
                         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isCollapsed && "-rotate-90")} />
-                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
                         <span className="flex-1">{label}</span>
                       </SidebarGroupLabel>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarGroupContent className="space-y-1 pt-0.5">
-                        {renderSubGroups(subGroups)}
+                        {renderSubGroups(subGroups, iconColor)}
                       </SidebarGroupContent>
                     </CollapsibleContent>
                   </SidebarGroup>
