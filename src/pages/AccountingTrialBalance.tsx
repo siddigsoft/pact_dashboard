@@ -13,7 +13,6 @@ import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { ensureArabicFont, setArabicFont, setLatinFont, ARABIC_FONT_NAME } from '@/lib/jspdfArabic';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
@@ -36,7 +35,6 @@ interface AccountMeta { id: string; account_type: string; subtype: string; count
 export default function AccountingTrialBalance() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -45,15 +43,6 @@ export default function AccountingTrialBalance() {
   const [accountsMeta, setAccountsMeta] = useState<Record<string, AccountMeta>>({});
   const [periodId, setPeriodId] = useState<string>('');
   const [fundId, setFundId] = useState<string>('all');
-  const [countryFilter, setCountryFilter] = useState<string>('all');
-  const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
-
-  useEffect(() => {
-    if (!acctCountryLoading && !countryFilterInitialized) {
-      setCountryFilter(defaultCountryId);
-      setCountryFilterInitialized(true);
-    }
-  }, [acctCountryLoading, defaultCountryId, countryFilterInitialized]);
   const [search, setSearch] = useState('');
 
   const [tb, setTb] = useState<TbRow[]>([]);
@@ -134,10 +123,6 @@ export default function AccountingTrialBalance() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return tb.filter(r => {
-      if (countryFilter !== 'all') {
-        const meta = accountsMeta[r.account_id];
-        if (meta?.country_id !== countryFilter) return false;
-      }
       if (q) {
         return r.account_code.toLowerCase().includes(q)
           || (r.account_name_en ?? '').toLowerCase().includes(q)
@@ -145,7 +130,7 @@ export default function AccountingTrialBalance() {
       }
       return true;
     });
-  }, [tb, search, countryFilter, accountsMeta]);
+  }, [tb, search, accountsMeta]);
 
   const totals = useMemo(() => {
     let dr = 0, cr = 0;
@@ -300,15 +285,6 @@ export default function AccountingTrialBalance() {
               <SelectContent>
                 <SelectItem value="all">All funds</SelectItem>
                 {funds.map(f => <SelectItem key={f.id} value={f.id}>{f.code} — {f.name_en}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger data-testid="select-country"><SelectValue placeholder="Country" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">🌐 All countries</SelectItem>
-                {countries.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>
-                ))}
               </SelectContent>
             </Select>
             <div className="relative">

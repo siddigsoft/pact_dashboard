@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -50,7 +49,6 @@ export default function AccountingBankRecon() {
   const overrideCanEdit = usePageManageOverride('acct-bank-recon', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const { toast } = useToast();
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +40,6 @@ function netBalance(row: TbRow, type: string): number {
 export default function AccountingFinancialStatements() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -50,20 +48,11 @@ export default function AccountingFinancialStatements() {
   const [accountsMeta, setAccountsMeta] = useState<Record<string, AccountMeta>>({});
   const [periodId, setPeriodId] = useState('');
   const [fundId, setFundId] = useState('all');
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [countryInit, setCountryInit] = useState(false);
   const [tb, setTb] = useState<TbRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [bootstrap, setBootstrap] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
-
-  useEffect(() => {
-    if (!acctLoading && !countryInit) {
-      setCountryFilter(defaultCountryId ?? 'all');
-      setCountryInit(true);
-    }
-  }, [acctLoading, defaultCountryId, countryInit]);
 
   useEffect(() => {
     (async () => {
@@ -112,13 +101,7 @@ export default function AccountingFinancialStatements() {
     return `${y?.code ?? '?'} P${String(p.period_no).padStart(2, '0')} · ${format(parseISO(p.start_date), 'MMM d')} – ${format(parseISO(p.end_date), 'MMM d, yyyy')}`;
   };
 
-  const filteredTb = useMemo(() => {
-    if (countryFilter === 'all') return tb;
-    return tb.filter(r => {
-      const meta = accountsMeta[r.account_id];
-      return meta?.country_id === countryFilter;
-    });
-  }, [tb, countryFilter, accountsMeta]);
+  const filteredTb = tb;
 
   // Income Statement data
   const incomeData = useMemo(() => {
@@ -155,11 +138,7 @@ export default function AccountingFinancialStatements() {
     return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity, isBalanced };
   }, [filteredTb, accountsMeta, incomeData.netSurplus]);
 
-  const selectedCurrency = useMemo(() => {
-    if (countryFilter === 'all') return ACCT_FUNCTIONAL_CCY;
-    const c = countries.find(x => x.id === countryFilter);
-    return c?.currency_code ?? ACCT_FUNCTIONAL_CCY;
-  }, [countryFilter, countries]);
+  const selectedCurrency = ACCT_FUNCTIONAL_CCY;
 
   const exportIncomeStatementCsv = () => {
     const header = ['Account Code', 'Name (EN)', 'Name (AR)', 'Amount'];
@@ -379,16 +358,6 @@ export default function AccountingFinancialStatements() {
       <Card className="mb-4">
         <CardContent className="pt-4 pb-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Country Scope</label>
-              <Select value={countryFilter} onValueChange={setCountryFilter}>
-                <SelectTrigger data-testid="select-country"><SelectValue placeholder="All countries" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Countries</SelectItem>
-                  {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en} ({c.currency_code})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Fiscal Period</label>
               <Select value={periodId} onValueChange={setPeriodId}>

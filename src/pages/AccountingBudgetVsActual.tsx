@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,7 +48,6 @@ export default function AccountingBudgetVsActual() {
   const overrideCanEdit = usePageManageOverride('acct-budget-variance', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const { toast } = useToast();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
@@ -59,8 +57,6 @@ export default function AccountingBudgetVsActual() {
   const [accountsMeta, setAccountsMeta] = useState<Record<string, AccountMeta>>({});
   const [periodId, setPeriodId] = useState('');
   const [fundId, setFundId] = useState('all');
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [countryInit, setCountryInit] = useState(false);
   const [tb, setTb] = useState<TbRow[]>([]);
   const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([]);
   const [encMap, setEncMap] = useState<Record<string, number>>({});
@@ -75,10 +71,6 @@ export default function AccountingBudgetVsActual() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!acctLoading && !countryInit) { setCountryFilter(defaultCountryId ?? 'all'); setCountryInit(true); }
-  }, [acctLoading, defaultCountryId, countryInit]);
 
   useEffect(() => {
     (async () => {
@@ -186,7 +178,7 @@ export default function AccountingBudgetVsActual() {
   useEffect(() => { if (!bootstrap && periodId) void runReport(); }, [periodId, fundId, bootstrap]);
 
   const selectedPeriod = useMemo(() => periods.find(p => p.id === periodId), [periods, periodId]);
-  const selectedCurrency = useMemo(() => { const c = countries.find(x => x.id === countryFilter); return c?.currency_code ?? 'SDG'; }, [countryFilter, countries]);
+  const selectedCurrency = 'SDG';
 
   const periodLabel = (id: string) => {
     const p = periods.find(x => x.id === id); if (!p) return '—';
@@ -214,7 +206,6 @@ export default function AccountingBudgetVsActual() {
     const allAccountIds = new Set([...tb.map(r => r.account_id), ...budgetLines.map(b => b.account_id)]);
     for (const aid of allAccountIds) {
       const meta = accountsMeta[aid]; if (!meta) continue;
-      if (countryFilter !== 'all' && meta.country_id !== countryFilter) continue;
       if (typeFilter !== 'all' && meta.account_type !== typeFilter) continue;
       const q = search.toLowerCase();
       if (q && !meta.code.toLowerCase().includes(q) && !meta.name_en.toLowerCase().includes(q)) continue;
@@ -230,7 +221,7 @@ export default function AccountingBudgetVsActual() {
       result.push({ account_id: aid, account_code: meta.code, account_name_en: meta.name_en, account_name_ar: meta.name_ar ?? '', account_type: meta.account_type, budget, actual, encumbrance, variance, pct, budgetLineId: bl?.id ?? null });
     }
     return result.sort((a, b) => a.account_code.localeCompare(b.account_code));
-  }, [tb, budgetLines, accountsMeta, countryFilter, typeFilter, search, budgetMap, encMap]);
+  }, [tb, budgetLines, accountsMeta, typeFilter, search, budgetMap, encMap]);
 
   const totals = useMemo(() => {
     const b = rows.reduce((s, r) => s + r.budget, 0);
@@ -354,16 +345,6 @@ export default function AccountingBudgetVsActual() {
       <Card className="mb-4">
         <CardContent className="pt-4 pb-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Country Scope</label>
-              <Select value={countryFilter} onValueChange={setCountryFilter}>
-                <SelectTrigger data-testid="select-country"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Countries</SelectItem>
-                  {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Fiscal Period</label>
               <Select value={periodId} onValueChange={setPeriodId}>

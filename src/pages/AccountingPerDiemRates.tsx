@@ -36,7 +36,6 @@ export default function AccountingPerDiemRates() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [countryFilter, setCountryFilter] = useState('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PerDiem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -62,11 +61,10 @@ export default function AccountingPerDiemRates() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter(r => {
-      if (countryFilter !== 'all' && r.country_id !== countryFilter) return false;
       if (q) return (r.city ?? '').toLowerCase().includes(q) || ((r.countries as any)?.name_en ?? '').toLowerCase().includes(q);
       return true;
     });
-  }, [rows, search, countryFilter]);
+  }, [rows, search]);
 
   const openAdd = () => { setEditTarget(null); setForm(BLANK); setFormOpen(true); };
   const openEdit = (r: PerDiem) => {
@@ -115,10 +113,6 @@ export default function AccountingPerDiemRates() {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <div className="relative flex-1 min-w-48"><Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" /><Input placeholder="Search country, city…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" /></div>
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All countries" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">All countries</SelectItem>{countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji} {c.name_en}</SelectItem>)}</SelectContent>
-            </Select>
           </div>
 
           {loading ? <PageLoader compact />

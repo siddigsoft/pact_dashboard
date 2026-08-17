@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { usePageManageOverride } from '@/hooks/usePageManageOverride';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -52,7 +51,6 @@ export default function AccountingBudgetPlanning() {
   const overrideCanEdit = usePageManageOverride('acct-budget-planning', roleCanEdit);
 
   const canEdit = roleCanEdit || overrideCanEdit;
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const { toast } = useToast();
 
   const [years, setYears]       = useState<FiscalYear[]>([]);
@@ -66,8 +64,6 @@ export default function AccountingBudgetPlanning() {
   const [fundId, setFundId]     = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [search, setSearch]     = useState('');
-  const [countryFilter, setCountryFilter] = useState('all');
-  const [countries, setCountries] = useState<{ id: string; name_en: string }[]>([]);
 
   const [loading, setLoading]   = useState(true);
   const [tableExists, setTableExists] = useState(true);
@@ -110,9 +106,6 @@ export default function AccountingBudgetPlanning() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!acctLoading && defaultCountryId) setCountryFilter(defaultCountryId);
-  }, [acctLoading, defaultCountryId]);
 
   /* ── load budget lines for selected period/fund ── */
   const loadBudgetLines = useCallback(async (pid: string, fid: string) => {
@@ -233,7 +226,6 @@ export default function AccountingBudgetPlanning() {
     for (const bl of budgetLines) budgetMap[bl.account_id] = bl;
     return accounts
       .filter(a => typeFilter === 'all' || a.account_type === typeFilter)
-      .filter(a => countryFilter === 'all' || a.country_id === countryFilter || !a.country_id)
       .filter(a => {
         if (!search) return true;
         const q = search.toLowerCase();
@@ -247,7 +239,7 @@ export default function AccountingBudgetPlanning() {
         obrId:    budgetMap[a.id]?.obr_id    ?? null,
         obrNotes: budgetMap[a.id]?.obr_notes ?? null,
       }));
-  }, [accounts, budgetLines, typeFilter, countryFilter, search]);
+  }, [accounts, budgetLines, typeFilter, search]);
 
   const selectedPeriod = periods.find(p => p.id === periodId);
   const filteredPeriods = yearId ? periods.filter(p => p.fiscal_year_id === yearId) : periods;
@@ -473,7 +465,6 @@ export default function AccountingBudgetPlanning() {
       : ['account_code', 'budget_amount'];
     const templateRows = accounts
       .filter(a => typeFilter === 'all' || a.account_type === typeFilter)
-      .filter(a => countryFilter === 'all' || a.country_id === countryFilter || !a.country_id)
       .map(a => withFund
         ? [a.code, selectedFund?.code ?? '', '0']
         : [a.code, '0']
@@ -571,15 +562,6 @@ export default function AccountingBudgetPlanning() {
             <SelectItem value="equity">Equity</SelectItem>
           </SelectContent>
         </Select>
-        {countries.length > 1 && (
-          <Select value={countryFilter} onValueChange={setCountryFilter}>
-            <SelectTrigger className="w-[150px] h-9" data-testid="select-country"><SelectValue placeholder="Country" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Countries</SelectItem>
-              {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.name_en}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search accounts…" className="pl-9 h-9 text-sm" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-budget" />

@@ -24,7 +24,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Plus, Trash2, CheckCircle2, AlertTriangle, Upload, Download, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadCsv, formatNumber } from '@/lib/accountingFormat';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 
@@ -47,7 +46,6 @@ function newLine(): BalanceLine {
 export default function AccountingOpeningBalances() {
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
-  const { countryId } = useAccountingCountry();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [years, setYears] = useState<FiscalYear[]>([]);

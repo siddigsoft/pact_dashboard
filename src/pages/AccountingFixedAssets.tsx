@@ -109,7 +109,6 @@ export default function AccountingFixedAssets() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('active');
-  const [countryFilter, setCountryFilter] = useState('all');
   const [dialog, setDialog] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [form, setForm] = useState<Partial<Asset>>(BLANK);
@@ -151,11 +150,10 @@ export default function AccountingFixedAssets() {
     return assets.filter(a => {
       if (catFilter !== 'all' && a.category !== catFilter) return false;
       if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-      if (countryFilter !== 'all' && a.country_id !== countryFilter) return false;
       if (q) return a.name_en.toLowerCase().includes(q) || (a.asset_tag ?? '').toLowerCase().includes(q) || (a.serial_number ?? '').toLowerCase().includes(q);
       return true;
     });
-  }, [assets, search, catFilter, statusFilter, countryFilter]);
+  }, [assets, search, catFilter, statusFilter]);
 
   const summaryStats = useMemo(() => {
     const active = assets.filter(a => a.status === 'active');
@@ -510,13 +508,6 @@ export default function AccountingFixedAssets() {
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger className="w-40 h-9" data-testid="select-country"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Countries</SelectItem>
-                {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

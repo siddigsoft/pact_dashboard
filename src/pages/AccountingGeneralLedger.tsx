@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,7 +25,6 @@ export default function AccountingGeneralLedger() {
   const isColVisible = useColumnVisibility('accounting-general-ledger');
   const { hasAnyRole, isAuthenticated } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
-  const { countryId: defaultCountryId, loading: acctLoading } = useAccountingCountry();
   const [searchParams] = useSearchParams();
 
   const bootstrapQuery = useGlBootstrapQuery(allowed && isAuthenticated);
@@ -36,20 +34,11 @@ export default function AccountingGeneralLedger() {
   const countries = bootstrapQuery.data?.countries ?? [];
   const bootstrap = bootstrapQuery.isLoading;
 
-  const [countryFilter, setCountryFilter] = useState<string>('all');
-  const [countryInit, setCountryInit] = useState(false);
   const [accountId, setAccountId] = useState<string>('');
   const [periodId, setPeriodId] = useState<string>('');
   const [accountSearch, setAccountSearch] = useState('');
   const [page, setPage] = useState(0);
   const [periodInit, setPeriodInit] = useState(false);
-
-  useEffect(() => {
-    if (!acctLoading && !countryInit) {
-      setCountryFilter(defaultCountryId ?? 'all');
-      setCountryInit(true);
-    }
-  }, [acctLoading, defaultCountryId, countryInit]);
 
   useEffect(() => {
     if (periodInit || !bootstrapQuery.data) return;
@@ -65,11 +54,10 @@ export default function AccountingGeneralLedger() {
   const filteredAccounts = useMemo(() => {
     const q = accountSearch.toLowerCase();
     return accounts.filter(a => {
-      if (countryFilter !== 'all' && a.country_id !== countryFilter) return false;
       if (!q) return true;
       return a.code.toLowerCase().includes(q) || a.name_en.toLowerCase().includes(q) || (a.name_ar ?? '').includes(q);
     });
-  }, [accounts, countryFilter, accountSearch]);
+  }, [accounts, accountSearch]);
 
   const selectedPeriod = useMemo(() => periods.find(p => p.id === periodId), [periods, periodId]);
   const selectedAccount = useMemo(() => accounts.find(a => a.id === accountId), [accounts, accountId]);
@@ -218,16 +206,6 @@ export default function AccountingGeneralLedger() {
       <Card className="mb-4">
         <CardContent className="pt-4 pb-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Country Scope</label>
-              <Select value={countryFilter} onValueChange={v => { setCountryFilter(v); setAccountId(''); }}>
-                <SelectTrigger data-testid="select-country"><SelectValue placeholder="All countries" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Countries</SelectItem>
-                  {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en} ({c.currency_code})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Account</label>
               <div className="relative">

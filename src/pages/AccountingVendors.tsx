@@ -57,7 +57,6 @@ export default function AccountingVendors() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [showInactive, setShowInactive] = useState(false);
-  const [countryFilter, setCountryFilter] = useState('all');
 
   const loadVendors = useCallback(async () => {
     setLoading(true);
@@ -98,11 +97,10 @@ export default function AccountingVendors() {
     return vendors.filter(v => {
       if (!showInactive && !v.is_active) return false;
       if (typeFilter !== 'all' && v.vendor_type !== typeFilter) return false;
-      if (countryFilter !== 'all' && v.country_id !== countryFilter) return false;
       if (q) return v.name_en.toLowerCase().includes(q) || (v.name_ar ?? '').includes(q) || (v.vendor_code ?? '').toLowerCase().includes(q) || (v.tax_id ?? '').toLowerCase().includes(q);
       return true;
     });
-  }, [vendors, search, typeFilter, showInactive, countryFilter]);
+  }, [vendors, search, typeFilter, showInactive]);
 
   const openDialog = (v?: Vendor) => {
     setEditingVendor(v ?? null);
@@ -223,13 +221,6 @@ export default function AccountingVendors() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {VENDOR_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={countryFilter} onValueChange={setCountryFilter}>
-              <SelectTrigger className="w-44 h-9" data-testid="select-country"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Countries</SelectItem>
-                {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
               </SelectContent>
             </Select>
             <Button variant={showInactive ? 'default' : 'outline'} size="sm" onClick={() => setShowInactive(p => !p)} data-testid="button-show-inactive">
