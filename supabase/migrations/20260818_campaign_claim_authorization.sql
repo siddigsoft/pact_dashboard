@@ -203,8 +203,8 @@ DROP POLICY IF EXISTS mmp_site_entries_village_campaign_restrict ON public.mmp_s
 
 CREATE POLICY mmp_site_entries_village_campaign_restrict
   ON public.mmp_site_entries
-  FOR UPDATE
   AS RESTRICTIVE
+  FOR UPDATE
   USING (
     -- Allow unrestricted updates to non-village-campaign rows
     COALESCE(additional_data->>'source', '') != 'village_campaign'
