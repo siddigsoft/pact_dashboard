@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { r2SignedUrl } from '@/lib/r2Storage';
+import { fetchSharedFile, sanitizeShareCode } from '@/lib/workspaceShare';
 import {
   Loader2, Download, AlertCircle, File, FileImage,
   FileSpreadsheet, FileVideo, FileAudio, FileText,
@@ -108,20 +109,15 @@ export default function FileViewer() {
   const [urlReady, setUrlReady] = useState(false);
 
   useEffect(() => {
-    if (!fileId) { setError('No file specified.'); setLoading(false); return; }
+    const code = sanitizeShareCode(fileId);
+    if (!code) { setError('No file specified.'); setLoading(false); return; }
     let cancelled = false;
 
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId);
-    const query  = supabase.from('workspace_files')
-      .select('id, name, mime_type, extension, public_url, storage_path, storage_provider, file_size, description, security_level');
-
     (async () => {
-      // Case-insensitive short_code match — codes are mixed-case (e.g. R226KVHG).
-      const { data, error: err } = await (isUUID ? query.eq('id', fileId) : query.ilike('short_code', fileId))
-        .eq('archived', false)
-        .maybeSingle();
+      // Capability lookup — works for guests (WhatsApp / mobile Safari have no session).
+      const data = await fetchSharedFile(code);
       if (cancelled) return;
-      if (err || !data) {
+      if (!data) {
         setError('File not found or is no longer available.');
         setLoading(false);
         return;

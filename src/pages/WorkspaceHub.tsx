@@ -617,7 +617,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
             ) : folder ? (
               <>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Anyone with this link can open the folder and its contents — the same as a file share link. Recipients must be signed in. Treat the link like a password.
+                  Anyone with this link can open the folder and its contents — the same as a file share link. Treat the link like a password.
                 </p>
                 <div className="flex gap-2">
                   <Input
