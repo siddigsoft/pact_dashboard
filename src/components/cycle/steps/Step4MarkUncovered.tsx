@@ -11,7 +11,7 @@ import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, Chev
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import type { RoleFlags } from '../CycleCloseWizard';
-import { pendingUnconfirmedReasonSiteIds } from '../CycleCloseWizard';
+import { pendingUnconfirmedReasonSiteIds, justBecameFullyConfirmed } from '../CycleCloseWizard';
 import { filterByHubAccess, getHubAccessInfo } from '@/utils/hubAccessControl';
 import { exportFormattedNotCovered } from '@/utils/cycleCloseExport';
 import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
@@ -81,9 +81,10 @@ interface Props {
   currentUser?: any;
   roleFlags?: RoleFlags;
   onDraftsSaved?: (pendingSiteIds: string[]) => Promise<void> | void;
+  onAllConfirmed?: () => Promise<void> | void;
 }
 
-export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved }: Props) {
+export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved, onAllConfirmed }: Props) {
   const [sites, setSites] = useState<UncoveredSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -518,22 +519,40 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     const current = wizardState.uncoveredReasons[siteId];
     if (!current?.reason) return;
     const nowIso = new Date().toISOString();
-    updateWizardState({
-      uncoveredReasons: {
-        ...wizardState.uncoveredReasons,
-        [siteId]: {
-          ...current,
-          status: 'confirmed',
-          confirmedBy: currentUser?.id ?? null,
-          confirmedAt: nowIso,
-        },
+    const nextReasons = {
+      ...wizardState.uncoveredReasons,
+      [siteId]: {
+        ...current,
+        status: 'confirmed' as const,
+        confirmedBy: currentUser?.id ?? null,
+        confirmedAt: nowIso,
       },
-    });
-    await (supabase as any).rpc('confirm_not_covered_reason', {
+    };
+    updateWizardState({ uncoveredReasons: nextReasons });
+    const { error } = await (supabase as any).rpc('confirm_not_covered_reason', {
       p_site_id: siteId,
       p_confirmation_note: current.confirmationNote ?? '',
       p_confirm: true,
     });
+    if (error) {
+      console.warn('[Step4MarkUncovered] confirm failed:', error);
+      updateWizardState({ uncoveredReasons: wizardState.uncoveredReasons });
+      return;
+    }
+    if (
+      onAllConfirmed
+      && justBecameFullyConfirmed(
+        wizardState.uncoveredReasons,
+        nextReasons,
+        sites.map(s => s.id),
+      )
+    ) {
+      try {
+        await onAllConfirmed();
+      } catch (err) {
+        console.warn('[Step4MarkUncovered] admin confirmation notification failed:', err);
+      }
+    }
   };
 
   const returnReasonToDraft = async (siteId: string) => {

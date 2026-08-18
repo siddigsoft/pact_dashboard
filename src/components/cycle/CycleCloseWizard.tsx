@@ -184,6 +184,37 @@ export function newPendingDraftSiteIds(alreadyNotifiedIds: string[], pendingIds:
   return pendingIds.filter(id => !seen.has(id));
 }
 
+export function allSiteReasonsConfirmed(
+  siteIds: string[],
+  uncoveredReasons: Record<string, UncoveredReason>
+): boolean {
+  if (siteIds.length === 0) return false;
+  return siteIds.every((id) => {
+    const reason = uncoveredReasons[id];
+    return !!reason?.reason && reason.status === 'confirmed';
+  });
+}
+
+export function justBecameFullyConfirmed(
+  previousReasons: Record<string, UncoveredReason>,
+  nextReasons: Record<string, UncoveredReason>,
+  siteIds: string[],
+): boolean {
+  return !allSiteReasonsConfirmed(siteIds, previousReasons)
+    && allSiteReasonsConfirmed(siteIds, nextReasons);
+}
+
+export function isCycleCloseFinalizerProfile(profile: {
+  role?: string | null;
+  additional_roles?: unknown;
+}): boolean {
+  const flags = getCycleCloseRoleFlags({
+    role: profile.role,
+    additionalRoles: profile.additional_roles,
+  });
+  return flags.isAdmin || flags.isSuperAdmin || flags.isFOM;
+}
+
 function isSupervisorProfile(profile: {
   role?: string | null;
   additional_roles?: unknown;
@@ -237,6 +268,7 @@ export default function CycleCloseWizard({
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const step4NotifiedMmpIdsRef = useRef<Set<string>>(new Set());
   const step4DraftNotifiedSiteIdsRef = useRef<Set<string>>(new Set());
+  const step4AdminNotifiedMmpIdsRef = useRef<Set<string>>(new Set());
 
   const updateWizardState = (patch: Partial<WizardState>) => {
     setWizardState(prev => ({ ...prev, ...patch }));
@@ -582,6 +614,62 @@ export default function CycleCloseWizard({
     });
   };
 
+  const notifyStep4AdminsAllConfirmed = async () => {
+    const mmpId = wizardState.selectedMmpId;
+    if (!mmpId || !roleFlags.isSupervisor) return;
+    if (step4AdminNotifiedMmpIdsRef.current.has(mmpId)) return;
+    step4AdminNotifiedMmpIdsRef.current.add(mmpId);
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, role, additional_roles')
+      .eq('status', 'approved');
+    if (profilesError) {
+      console.warn('[CycleCloseWizard] admin recipient profile lookup failed:', profilesError);
+      step4AdminNotifiedMmpIdsRef.current.delete(mmpId);
+      return;
+    }
+
+    const adminIds = (profiles ?? [])
+      .filter(isCycleCloseFinalizerProfile)
+      .map(p => p.id)
+      .filter(id => id !== currentUser?.id);
+    if (adminIds.length === 0) {
+      step4AdminNotifiedMmpIdsRef.current.delete(mmpId);
+      return;
+    }
+
+    const actionUrl = `/mmp?action=close-cycle&step=5&mmpId=${mmpId}`;
+    const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
+    const supervisorName = currentUser?.full_name ?? currentUser?.name ?? 'A supervisor';
+    const titleEn = `Uncovered sites confirmed — continue close: ${cycleName}`;
+    const titleAr = `تم تأكيد المواقع غير المغطاة — تابع الإغلاق: ${cycleName}`;
+    const messageEn = `${supervisorName} confirmed all uncovered sites for ${cycleName}. You can continue Cycle Close at Exceptions.`;
+    const messageAr = `أكد ${supervisorName} جميع المواقع غير المغطاة لدورة ${cycleName}. يمكنك متابعة إغلاق الدورة من خطوة الاستثناءات.`;
+
+    await dispatchNotification({
+      event: 'cycle_close_step4_all_confirmed',
+      recipientIds: adminIds,
+      recipientRoles: ['admin', 'fom', 'superAdmin'],
+      titleEn,
+      titleAr,
+      messageEn,
+      messageAr,
+      priority: 'high',
+      entityType: 'mmpFile',
+      entityId: mmpId,
+      actionUrl,
+      sendEmail: true,
+      triggeredBy: currentUser?.id,
+      triggeredByName: currentUser?.full_name ?? currentUser?.name,
+      metadata: {
+        cycle: cycleName,
+        supervisor: supervisorName,
+        mmp_code: wizardState.selectedMmp?.mmp_id ?? wizardState.selectedMmp?.code ?? undefined,
+      },
+    });
+  };
+
   const handleNext = async () => {
     if (isStep4ContributorOnly) return;
     if (currentStep === 1 && wizardState.selectedMmpId) {
@@ -711,7 +799,11 @@ export default function CycleCloseWizard({
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
             {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
             {currentStep === 4 && (
-              <Step4MarkUncovered {...stepProps} onDraftsSaved={notifyStep4SupervisorsOfDrafts} />
+              <Step4MarkUncovered
+                {...stepProps}
+                onDraftsSaved={notifyStep4SupervisorsOfDrafts}
+                onAllConfirmed={notifyStep4AdminsAllConfirmed}
+              />
             )}
             {currentStep === 5 && <Step5Exceptions {...stepProps} />}
             {currentStep === 6 && <Step6Reconciliation {...stepProps} />}

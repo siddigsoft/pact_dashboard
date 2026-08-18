@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  allSiteReasonsConfirmed,
   allUncoveredReasonsConfirmed,
   getCycleCloseRoleFlags,
+  isCycleCloseFinalizerProfile,
   isCycleCloseStep4ContributorOnly,
+  justBecameFullyConfirmed,
   newPendingDraftSiteIds,
   pendingUnconfirmedReasonSiteIds,
 } from '../CycleCloseWizard';
@@ -82,5 +85,50 @@ describe('newPendingDraftSiteIds', () => {
 
     const added = newPendingDraftSiteIds(['site-1', 'site-2'], ['site-1', 'site-2', 'site-3']);
     expect(added).toEqual(['site-3']);
+  });
+});
+
+describe('justBecameFullyConfirmed', () => {
+  const draft = { reason: 'weather', note: '', flagged: false, status: 'draft' as const };
+  const confirmed = { reason: 'weather', note: '', flagged: false, status: 'confirmed' as const };
+  const siteIds = ['site-1', 'site-2'];
+
+  it('is true only when the last remaining uncovered site becomes confirmed', () => {
+    expect(allSiteReasonsConfirmed(siteIds, {
+      'site-1': confirmed,
+      'site-2': draft,
+    })).toBe(false);
+
+    expect(justBecameFullyConfirmed(
+      { 'site-1': confirmed, 'site-2': draft },
+      { 'site-1': confirmed, 'site-2': confirmed },
+      siteIds,
+    )).toBe(true);
+  });
+
+  it('does not fire again when a site is already fully confirmed', () => {
+    expect(justBecameFullyConfirmed(
+      { 'site-1': confirmed, 'site-2': confirmed },
+      { 'site-1': confirmed, 'site-2': confirmed },
+      siteIds,
+    )).toBe(false);
+  });
+
+  it('does not fire when confirming one site while others remain draft', () => {
+    expect(justBecameFullyConfirmed(
+      { 'site-1': draft, 'site-2': draft },
+      { 'site-1': confirmed, 'site-2': draft },
+      siteIds,
+    )).toBe(false);
+  });
+});
+
+describe('isCycleCloseFinalizerProfile', () => {
+  it('targets admin, super admin, and FOM for the post-confirmation handoff', () => {
+    expect(isCycleCloseFinalizerProfile({ role: 'admin' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'super_admin' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'fom' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'supervisor' })).toBe(false);
+    expect(isCycleCloseFinalizerProfile({ role: 'coordinator' })).toBe(false);
   });
 });
