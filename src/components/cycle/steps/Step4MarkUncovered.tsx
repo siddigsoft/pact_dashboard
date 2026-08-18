@@ -124,8 +124,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     resolvedSitesRef.current = wizardState.resolvedSites;
     unmatchedRef.current     = wizardState.unmatchedMmpSiteIds;
     loadUncoveredSites();
-    loadCoverageBreakdown();
-    loadSiteStatusDetails();
+    loadCoverageAndDetails();
   }, [wizardState.selectedMmpId, wizardState.resolvedSites, wizardState.unmatchedMmpSiteIds, wizardState.matchResults]);
 
   const loadUncoveredSites = async () => {
@@ -217,47 +216,10 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     setLoading(false);
   };
 
-  // ── Coverage breakdown by state ───────────────────────────────────────────
-  const loadCoverageBreakdown = async () => {
-    const { data: allSites } = await supabase
-      .from('mmp_site_entries')
-      .select('id, state')
-      .eq('mmp_file_id', wizardState.selectedMmpId!);
-
-    if (!allSites?.length) return;
-
-    // IDs confirmed in Step 2 matching
-    const confirmedIds = new Set(
-      wizardState.matchResults
-        .filter(r => r.action === 'confirm' || r.action === 'extra' || r.status === 'auto')
-        .map(r => r.matchedSiteId)
-        .filter(Boolean) as string[]
-    );
-    const notCoveredIds = new Set([
-      ...(wizardState.unmatchedMmpSiteIds ?? []),
-      ...Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k),
-      ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
-    ]);
-
-    // Group by state
-    const byState: Record<string, { total: number; confirmed: number; notCovered: number }> = {};
-    for (const s of allSites) {
-      const st = s.state ?? 'Unknown';
-      if (!byState[st]) byState[st] = { total: 0, confirmed: 0, notCovered: 0 };
-      byState[st].total++;
-      if (confirmedIds.has(s.id)) byState[st].confirmed++;
-      if (notCoveredIds.has(s.id)) byState[st].notCovered++;
-    }
-
-    setCoverageRows(
-      Object.entries(byState)
-        .sort((a, b) => b[1].total - a[1].total)
-        .map(([label, v]) => ({ label, ...v }))
-    );
-  };
-
-  // ── Full per-site status table ────────────────────────────────────────────
-  const loadSiteStatusDetails = async () => {
+  // ── Coverage breakdown + full site details — ONE shared fetch ────────────
+  // Previously these were two separate functions each running an identical
+  // full-table scan on mmp_site_entries.  Merged here to cut that to one query.
+  const loadCoverageAndDetails = async () => {
     if (!wizardState.selectedMmpId) return;
     setSiteDetailsLoading(true);
 
@@ -268,24 +230,48 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     if (!allSites?.length) { setSiteDetailsLoading(false); return; }
 
-    // Build a map: mmpSiteId → first matchResult that claimed it
-    const siteToMatch: Record<string, typeof wizardState.matchResults[0]> = {};
-    for (const r of wizardState.matchResults) {
-      if (r.matchedSiteId && !siteToMatch[r.matchedSiteId]) {
-        siteToMatch[r.matchedSiteId] = r;
-      }
-    }
-
-    const notInWfpSet     = new Set(wizardState.unmatchedMmpSiteIds ?? []);
-    const resolvedNotCov  = new Set(
+    // ── Pre-compute sets used by both sections ────────────────────────────────
+    const confirmedIds = new Set(
+      wizardState.matchResults
+        .filter(r => r.action === 'confirm' || r.action === 'extra' || r.status === 'auto')
+        .map(r => r.matchedSiteId).filter(Boolean) as string[]
+    );
+    const notCoveredIdsSet = new Set([
+      ...(wizardState.unmatchedMmpSiteIds ?? []),
+      ...Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k),
+      ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
+    ]);
+    const notInWfpSet    = new Set(wizardState.unmatchedMmpSiteIds ?? []);
+    const resolvedNotCov = new Set(
       Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k)
     );
-    const primaryWfpCol   = wizardState.matchingPairs[0]?.wfpColumn ?? '';
+
+    // ── Coverage breakdown by state ───────────────────────────────────────────
+    const byState: Record<string, { total: number; confirmed: number; notCovered: number }> = {};
+    for (const s of allSites) {
+      const st = (s as any).state ?? 'Unknown';
+      if (!byState[st]) byState[st] = { total: 0, confirmed: 0, notCovered: 0 };
+      byState[st].total++;
+      if (confirmedIds.has(s.id))        byState[st].confirmed++;
+      if (notCoveredIdsSet.has(s.id))    byState[st].notCovered++;
+    }
+    setCoverageRows(
+      Object.entries(byState)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([label, v]) => ({ label, ...v }))
+    );
+
+    // ── Full per-site status details ─────────────────────────────────────────
+    const siteToMatch: Record<string, typeof wizardState.matchResults[0]> = {};
+    for (const r of wizardState.matchResults) {
+      if (r.matchedSiteId && !siteToMatch[r.matchedSiteId]) siteToMatch[r.matchedSiteId] = r;
+    }
+    const primaryWfpCol = wizardState.matchingPairs[0]?.wfpColumn ?? '';
 
     const details: SiteDetail[] = allSites.map(s => {
-      const mr            = siteToMatch[s.id] ?? null;
-      const notInWfp      = notInWfpSet.has(s.id);
-      const notCovReason  = wizardState.uncoveredReasons[s.id];
+      const mr           = siteToMatch[s.id] ?? null;
+      const notInWfp     = notInWfpSet.has(s.id);
+      const notCovReason = wizardState.uncoveredReasons[s.id];
 
       let matching_status: SiteDetail['matching_status'];
       let action_taken: string | null = null;
@@ -297,39 +283,33 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       } else if (mr.status === 'auto') {
         matching_status = 'Auto-Confirmed';
       } else if (mr.status === 'actioned') {
-        if (mr.action === 'confirm') { matching_status = 'Confirmed'; action_taken = 'Confirm'; }
-        else if (mr.action === 'extra') { matching_status = 'Extra'; action_taken = 'Extra'; }
-        else if (mr.action === 'reject') { matching_status = 'Rejected'; action_taken = 'Reject'; }
-        else { matching_status = 'Confirmed'; action_taken = mr.action ?? null; }
+        if (mr.action === 'confirm')      { matching_status = 'Confirmed'; action_taken = 'Confirm'; }
+        else if (mr.action === 'extra')   { matching_status = 'Extra';     action_taken = 'Extra'; }
+        else if (mr.action === 'reject')  { matching_status = 'Rejected';  action_taken = 'Reject'; }
+        else                              { matching_status = 'Confirmed'; action_taken = mr.action ?? null; }
       } else if (mr.status === 'review') {
         matching_status = 'Needs Review';
       } else {
         matching_status = 'Unmatched WFP Row';
       }
 
-      const covered =
-        matching_status === 'Auto-Confirmed' ||
-        matching_status === 'Confirmed' ||
-        matching_status === 'Extra';
-      const notCovered =
-        notInWfp ||
-        matching_status === 'Rejected' ||
-        resolvedNotCov.has(s.id);
+      const covered    = matching_status === 'Auto-Confirmed' || matching_status === 'Confirmed' || matching_status === 'Extra';
+      const notCovered = notInWfp || matching_status === 'Rejected' || resolvedNotCov.has(s.id);
 
       return {
         id:               s.id,
-        site_code:        s.site_code ?? '',
-        site_name:        s.site_name ?? '',
-        state:            s.state ?? '',
-        locality:         s.locality ?? '',
-        hub_office:       s.hub_office ?? '',
-        activity_at_site: s.activity_at_site ?? null,
-        main_activity:    s.main_activity ?? null,
-        system_status:    s.status ?? '—',
+        site_code:        (s as any).site_code        ?? '',
+        site_name:        (s as any).site_name        ?? '',
+        state:            (s as any).state            ?? '',
+        locality:         (s as any).locality         ?? '',
+        hub_office:       (s as any).hub_office       ?? '',
+        activity_at_site: (s as any).activity_at_site ?? null,
+        main_activity:    (s as any).main_activity    ?? null,
+        system_status:    (s as any).status           ?? '—',
         wfp_in_file:      !!mr,
         wfp_row_primary:  mr ? (mr.wfpRow[primaryWfpCol] ?? null) : null,
-        match_score:      mr ? mr.matchScore : null,
-        match_level:      mr ? mr.matchLevel : null,
+        match_score:      mr ? mr.matchScore  : null,
+        match_level:      mr ? mr.matchLevel  : null,
         matching_status,
         action_taken,
         not_covered_reason: notCovReason?.reason ?? null,

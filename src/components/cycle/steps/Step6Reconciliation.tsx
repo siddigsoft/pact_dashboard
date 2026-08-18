@@ -77,25 +77,27 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     }
 
     // Resolve profile names for all enumerator UUIDs in one batch
+    // ── Profiles + advances in parallel (were sequential) ────────────────────
     const allEnumIds = Object.keys(byEnum);
-    if (allEnumIds.length > 0) {
-      const { data: profileRows } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', allEnumIds);
-      for (const p of (profileRows ?? [])) {
-        if (byEnum[p.id] && p.full_name) byEnum[p.id].name = p.full_name;
-      }
-    }
+    const entryIds   = (entries ?? []).map((e: any) => e.id);
 
-    // Advances are in down_payment_requests, linked via mmp_site_entry_id.
-    // There is no mmp_file_id column on down_payment_requests — join via entry IDs.
-    const entryIds = (entries ?? []).map((e: any) => e.id);
-    const { data: advances } = await supabase
-      .from('down_payment_requests')
-      .select('mmp_site_entry_id, total_paid_amount, requested_amount, status')
-      .in('mmp_site_entry_id', entryIds)
-      .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
+    const [profileResult, advancesResult] = await Promise.all([
+      allEnumIds.length
+        ? supabase.from('profiles').select('id, full_name').in('id', allEnumIds)
+        : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+      entryIds.length
+        ? supabase
+            .from('down_payment_requests')
+            .select('mmp_site_entry_id, total_paid_amount, requested_amount, status')
+            .in('mmp_site_entry_id', entryIds)
+            .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid'])
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    for (const p of (profileResult.data ?? [])) {
+      if (byEnum[p.id] && p.full_name) byEnum[p.id].name = p.full_name;
+    }
+    const advances = advancesResult.data;
 
     // Map entry_id → enumerator UUID so we can attribute advances to enumerators
     const entryToEnum: Record<string, string> = {};

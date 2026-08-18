@@ -128,37 +128,30 @@ export default function Step5Exceptions({
     const notCoveredIds = Object.keys(wizardState.uncoveredReasons);
     if (!notCoveredIds.length) { setLoading(false); return; }
 
-    const { data: siteData } = await supabase
-      .from('mmp_site_entries')
-      .select('id, site_name, state, locality, accepted_by')
-      .in('id', notCoveredIds);
+    // ── Round 1: site details + advances in parallel ──────────────────────────
+    const [siteResult, advancesResult] = await Promise.all([
+      supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, state, locality, accepted_by')
+        .in('id', notCoveredIds),
+      supabase
+        .from('down_payment_requests')
+        .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status, supervisor_approved_by')
+        .in('mmp_site_entry_id', notCoveredIds)
+        .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']),
+    ]);
 
+    const siteData = siteResult.data;
     if (!siteData?.length) { setLoading(false); return; }
 
-    // Resolve enumerator names
-    const enumUuids = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
-    const nameMap: Record<string, string> = {};
-    if (enumUuids.length) {
-      const { data: profileRows } = await supabase
-        .from('profiles').select('id, full_name').in('id', enumUuids);
-      for (const p of (profileRows ?? [])) { if (p.full_name) nameMap[p.id] = p.full_name; }
-    }
-
-    // Load advances per site entry (include id + approver for downstream actions)
-    const { data: advances } = await supabase
-      .from('down_payment_requests')
-      .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status, supervisor_approved_by')
-      .in('mmp_site_entry_id', notCoveredIds)
-      .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
-
-    // Build per-site map (take the record with the highest paid amount if multiple)
+    // Build per-site advance map (highest paid amount wins)
     interface AdvanceRec {
       id: string; paidAmount: number; requestedAmount: number;
       status: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
       approvedById: string | null;
     }
     const advanceBySite: Record<string, AdvanceRec> = {};
-    for (const a of (advances ?? []) as any[]) {
+    for (const a of (advancesResult.data ?? []) as any[]) {
       const siteId = a.mmp_site_entry_id as string;
       const paid   = (a.total_paid_amount as number) ?? 0;
       const req    = (a.requested_amount as number) ?? 0;
@@ -174,18 +167,25 @@ export default function Step5Exceptions({
       }
     }
 
-    // Resolve approver names (supervisor_approved_by UUIDs)
+    // ── Round 2: enumerator names + approver names in parallel ─────────────────
+    const enumUuids     = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
     const approverUuids = [...new Set(
       Object.values(advanceBySite).map(r => r.approvedById).filter(Boolean) as string[]
     )];
+
+    const [profileResult, approverResult] = await Promise.all([
+      enumUuids.length
+        ? supabase.from('profiles').select('id, full_name').in('id', enumUuids)
+        : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+      approverUuids.length
+        ? supabase.from('profiles').select('id, full_name').in('id', approverUuids)
+        : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+    ]);
+
+    const nameMap: Record<string, string> = {};
+    for (const p of (profileResult.data ?? [])) { if (p.full_name) nameMap[p.id] = p.full_name; }
     const approverNameMap: Record<string, string> = {};
-    if (approverUuids.length) {
-      const { data: approverRows } = await supabase
-        .from('profiles').select('id, full_name').in('id', approverUuids);
-      for (const p of (approverRows ?? [])) {
-        if (p.full_name) approverNameMap[p.id] = p.full_name;
-      }
-    }
+    for (const p of (approverResult.data ?? [])) { if (p.full_name) approverNameMap[p.id] = p.full_name; }
 
     const exceptionSites: ExceptionSite[] = (siteData as any[])
       .filter((s: any) => s.accepted_by && advanceBySite[s.id])
