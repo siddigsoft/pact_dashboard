@@ -171,6 +171,10 @@ export default function CycleCloseWizard({
   initialStep,
   initialMmpId,
 }: Props) {
+  const roleFlags = getCycleCloseRoleFlags(currentUser);
+  const canFinalizeClose = roleFlags.isFOM || roleFlags.isAdmin || roleFlags.isSuperAdmin;
+  const isStep4ContributorOnly = !canFinalizeClose && (roleFlags.isCoordinator || roleFlags.isSupervisor);
+
   // Block ALL form submissions on the document for the wizard's lifetime.
   // Without this, any <form> in the layout (search bars, background dialogs,
   // portals) can accidentally submit and cause a full page reload when the user
@@ -186,12 +190,17 @@ export default function CycleCloseWizard({
     return () => document.removeEventListener('submit', blockSubmit, true);
   }, []);
 
-  const [currentStep, setCurrentStep] = useState(initialStep && initialStep >= 1 && initialStep <= 7 ? initialStep : 1);
-  const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
-    'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
-  ]);
+  const [currentStep, setCurrentStep] = useState(
+    isStep4ContributorOnly ? 4 : (initialStep && initialStep >= 1 && initialStep <= 7 ? initialStep : 1)
+  );
+  const [stepStatuses, setStepStatuses] = useState<StepStatus[]>(
+    isStep4ContributorOnly
+      ? ['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']
+      : ['in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started']
+  );
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
+  const [contributorCycles, setContributorCycles] = useState<any[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const step4NotifiedMmpIdsRef = useRef<Set<string>>(new Set());
 
@@ -199,36 +208,64 @@ export default function CycleCloseWizard({
     setWizardState(prev => ({ ...prev, ...patch }));
   };
 
-  const roleFlags = getCycleCloseRoleFlags(currentUser);
-  const canFinalizeClose = roleFlags.isFOM || roleFlags.isAdmin || roleFlags.isSuperAdmin;
-  const isStep4ContributorOnly = !canFinalizeClose && (roleFlags.isCoordinator || roleFlags.isSupervisor);
+  const applySelectedCycle = (mmp: any) => {
+    if (!mmp?.id) return;
+    updateWizardState({
+      selectedMmpId: mmp.id,
+      selectedMmp: mmp,
+      uploadedFileName: null,
+      fileColumns: [],
+      fileRows: [],
+      columnMapping: {},
+      fileConfirmed: false,
+      mmpColumns: [],
+      mmpRawRows: [],
+      matchingPairs: [],
+      matchResults: [],
+      unmatchedMmpSiteIds: [],
+      resolvedSites: {},
+      uncoveredReasons: {},
+      exceptionDecisions: {},
+      paymentActions: {},
+      overrides: {},
+      cycleClosedAt: null,
+    });
+  };
 
   useEffect(() => {
     if (!isStep4ContributorOnly) return;
-    if (initialMmpId) {
-      setCurrentStep(4);
-      setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
-      return;
-    }
-    setCurrentStep(1);
-    setStepStatuses(['in_progress', 'blocked', 'blocked', 'not_started', 'blocked', 'blocked', 'blocked']);
-  }, [isStep4ContributorOnly, initialMmpId]);
+    setCurrentStep(4);
+    setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
+  }, [isStep4ContributorOnly]);
 
   useEffect(() => {
-    const mmpId = initialMmpId ?? null;
-    if (!mmpId) return;
-    updateWizardState({ selectedMmpId: mmpId });
+    const requestedId = initialMmpId ?? null;
+    if (!isStep4ContributorOnly && !requestedId) return;
+    let cancelled = false;
     (async () => {
+      if (requestedId) {
+        const { data } = await supabase
+          .from('mmp_files')
+          .select('id, name, month, year, hub, cycle_status, status, created_at')
+          .eq('id', requestedId)
+          .single();
+        if (!cancelled && data) applySelectedCycle(data);
+      }
+      if (!isStep4ContributorOnly) return;
       const { data } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year')
-        .eq('id', mmpId)
-        .single();
-      if (data) {
-        updateWizardState({ selectedMmp: data as any, selectedMmpId: data.id });
-      }
+        .select('id, name, month, year, hub, cycle_status, status, created_at')
+        .not('status', 'eq', 'rejected')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (cancelled || !data?.length) return;
+      const open = data.filter((m: any) => String(m.cycle_status ?? 'active').toLowerCase() !== 'closed');
+      const closing = open.filter((m: any) => String(m.cycle_status ?? '').toLowerCase() === 'closing');
+      setContributorCycles(open.length > 0 ? open : data);
+      if (!requestedId) applySelectedCycle(closing[0] ?? open[0] ?? data[0]);
     })();
-  }, [initialMmpId]);
+    return () => { cancelled = true; };
+  }, [initialMmpId, isStep4ContributorOnly]);
 
   // ── Auto-save to localStorage whenever step ≥ 2 state changes ─────────────
   useEffect(() => {
@@ -301,8 +338,7 @@ export default function CycleCloseWizard({
 
   const goToStep = (step: number) => {
     if (isStep4ContributorOnly) {
-      if (step === 1) setCurrentStep(1);
-      if (step === 4 && wizardState.selectedMmpId) setCurrentStep(4);
+      if (step === 4) setCurrentStep(4);
       return;
     }
     if (step < currentStep || stepStatuses[step - 1] !== 'not_started') {
@@ -401,13 +437,7 @@ export default function CycleCloseWizard({
   };
 
   const handleNext = async () => {
-    if (isStep4ContributorOnly) {
-      if (currentStep === 1 && wizardState.selectedMmpId) {
-        setCurrentStep(4);
-        setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
-      }
-      return;
-    }
+    if (isStep4ContributorOnly) return;
     if (currentStep === 3) {
       try {
         await notifyStep4Stakeholders();
@@ -420,16 +450,11 @@ export default function CycleCloseWizard({
   };
 
   const handleBack = () => {
-    if (isStep4ContributorOnly) {
-      if (currentStep === 4) setCurrentStep(1);
-      return;
-    }
+    if (isStep4ContributorOnly) return;
     setCurrentStep(s => Math.max(s - 1, 1));
   };
 
-  const canGoBack = isStep4ContributorOnly
-    ? currentStep === 4
-    : currentStep > 1 && !wizardState.cycleClosedAt;
+  const canGoBack = !isStep4ContributorOnly && currentStep > 1 && !wizardState.cycleClosedAt;
   const isClosed = !!wizardState.cycleClosedAt;
   const canOverride = isFOM || isAdmin || isSuperAdmin;
 
@@ -458,9 +483,23 @@ export default function CycleCloseWizard({
           <div className="flex items-center gap-2">
             <Archive className="h-5 w-5 text-amber-400" />
             <span className="font-semibold text-base">Cycle Close Wizard</span>
-            {wizardState.selectedMmp && (
+            {isStep4ContributorOnly && contributorCycles.length > 0 ? (
+              <select
+                className="ml-2 bg-slate-700 text-slate-100 text-sm rounded px-2 py-1 max-w-[240px]"
+                value={wizardState.selectedMmpId ?? ''}
+                onChange={(e) => {
+                  const mmp = contributorCycles.find((c: any) => c.id === e.target.value);
+                  if (mmp) applySelectedCycle(mmp);
+                }}
+                data-testid="select-contributor-cycle"
+              >
+                {contributorCycles.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            ) : wizardState.selectedMmp ? (
               <span className="text-slate-300 text-sm ml-2">— {wizardState.selectedMmp.name}</span>
-            )}
+            ) : null}
           </div>
           <Button
             type="button"
@@ -481,7 +520,7 @@ export default function CycleCloseWizard({
             const status = stepStatuses[idx];
             const isActive = stepNum === currentStep;
             const isClickable = isStep4ContributorOnly
-              ? stepNum === 1 || (stepNum === 4 && !!wizardState.selectedMmpId)
+              ? stepNum === 4
               : (stepNum < currentStep || status === 'done');
             return (
               <div key={stepNum} className="flex items-center gap-1 flex-shrink-0">
@@ -526,7 +565,6 @@ export default function CycleCloseWizard({
                 savedSession={savedSession}
                 onResume={handleResume}
                 onStartFresh={handleStartFresh}
-                nextLabel={isStep4ContributorOnly ? 'Open Step 4 →' : undefined}
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
