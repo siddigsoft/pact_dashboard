@@ -252,21 +252,14 @@ export default function CycleCloseWizard({
     return () => document.removeEventListener('submit', blockSubmit, true);
   }, []);
 
-<<<<<<< HEAD
-  const [currentStep, setCurrentStep] = useState(1);
-  const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
-    'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
-  ]);
-=======
   const [currentStep, setCurrentStep] = useState(
-    isStep4ContributorOnly ? 4 : (initialStep && initialStep >= 1 && initialStep <= 7 ? initialStep : 1)
+    isStep4ContributorOnly ? 3 : (initialStep && initialStep >= 1 && initialStep <= 6 ? initialStep : 1)
   );
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>(
     isStep4ContributorOnly
-      ? ['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']
-      : ['in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started']
+      ? ['done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']
+      : ['in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started']
   );
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
   const [contributorCycleReady, setContributorCycleReady] = useState(!isStep4ContributorOnly);
@@ -314,8 +307,8 @@ export default function CycleCloseWizard({
 
   useEffect(() => {
     if (!isStep4ContributorOnly) return;
-    setCurrentStep(4);
-    setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
+    setCurrentStep(3);
+    setStepStatuses(['done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
   }, [isStep4ContributorOnly]);
 
   useEffect(() => {
@@ -446,7 +439,7 @@ export default function CycleCloseWizard({
 
   const goToStep = (step: number) => {
     if (isStep4ContributorOnly) {
-      if (step === 4) setCurrentStep(4);
+      if (step === 3) setCurrentStep(3);
       return;
     }
     if (step < currentStep || stepStatuses[step - 1] !== 'not_started') {
@@ -462,31 +455,8 @@ export default function CycleCloseWizard({
       return wizardState.matchResults.length > 0 && !hasUnactioned && !hasResubmit;
     }
     if (currentStep === 3) {
-<<<<<<< HEAD
-      // Step 3 = Mark Uncovered (was Step 4).
-      // All three sources of uncovered sites must have a reason before advancing:
-      // (1) WFP-rejected / unmatched rows from Step 2 matching
-      // (2) Sites explicitly resolved as not_covered in Step 2 inline resolution section
-      // (3) MMP sites that had no WFP file row at all ("Not in clean data")
-      const notCoveredIds = new Set<string>([
-        ...wizardState.matchResults
-          .filter(r => r.action === 'reject' || r.status === 'unmatched')
-          .map(r => r.matchedSiteId).filter(Boolean) as string[],
-        ...Object.keys(wizardState.resolvedSites)
-          .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
-        ...(wizardState.unmatchedMmpSiteIds ?? []),
-      ]);
-      return [...notCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
-=======
-      // Resubmit-flagged sites mean the cycle cannot close — they must be cleared first
-      const hasResubmit = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
-      return !hasResubmit;
-    }
-    if (currentStep === 4) {
-      // Step 4 advances only when every uncovered site has a reason
-      // AND has been supervisor-confirmed.
+      // Step 3 = Mark Uncovered. Every uncovered site needs a supervisor-confirmed reason.
       return allUncoveredReasonsConfirmed(wizardState);
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
     }
     if (currentStep === 4) {
       // Step 4 = Exceptions (was Step 5)
@@ -537,12 +507,12 @@ export default function CycleCloseWizard({
 
     if (recipients.size === 0) return;
 
-    const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
+    const actionUrl = `/mmp?action=close-cycle&step=3&mmpId=${mmpId}`;
     const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
-    const titleEn = `Cycle Close Step 4 is ready: ${cycleName}`;
-    const titleAr = `الخطوة ٤ من إغلاق الدورة جاهزة: ${cycleName}`;
-    const messageEn = `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope. ${uniqueIds.length} site(s) require uncovered reasons.`;
-    const messageAr = `يرجى إكمال الخطوة ٤ (تحديد المواقع غير المغطاة) ضمن نطاق الولاية/المركز الخاص بك. ${uniqueIds.length} موقع(اً) يحتاج سبباً.`;
+    const titleEn = `Cycle Close Step 3 is ready: ${cycleName}`;
+    const titleAr = `الخطوة ٣ من إغلاق الدورة جاهزة: ${cycleName}`;
+    const messageEn = `Please complete Step 3 (Mark Uncovered) for your assigned state/hub scope. ${uniqueIds.length} site(s) require uncovered reasons.`;
+    const messageAr = `يرجى إكمال الخطوة ٣ (تحديد المواقع غير المغطاة) ضمن نطاق الولاية/المركز الخاص بك. ${uniqueIds.length} موقع(اً) يحتاج سبباً.`;
 
     await dispatchNotification({
       event: 'cycle_close_step4_ready',
@@ -610,13 +580,13 @@ export default function CycleCloseWizard({
       .map(p => p.id);
     if (supervisorIds.length === 0) return;
 
-    const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
+    const actionUrl = `/mmp?action=close-cycle&step=3&mmpId=${mmpId}`;
     const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
     const pendingCount = pendingSiteIds.length;
     const titleEn = `Uncovered reasons ready for confirmation: ${cycleName}`;
     const titleAr = `أسباب المواقع غير المغطاة جاهزة للتأكيد: ${cycleName}`;
-    const messageEn = `${pendingCount} uncovered site(s) now have draft reasons. Please review and confirm in Step 4.`;
-    const messageAr = `${pendingCount} موقع(اً) غير مغطى أصبح له سبب مسودة. يرجى المراجعة والتأكيد في الخطوة ٤.`;
+    const messageEn = `${pendingCount} uncovered site(s) now have draft reasons. Please review and confirm in Step 3.`;
+    const messageAr = `${pendingCount} موقع(اً) غير مغطى أصبح له سبب مسودة. يرجى المراجعة والتأكيد في الخطوة ٣.`;
 
     await dispatchNotification({
       event: 'cycle_close_step4_drafts_saved',
@@ -665,7 +635,7 @@ export default function CycleCloseWizard({
       return;
     }
 
-    const actionUrl = `/mmp?action=close-cycle&step=5&mmpId=${mmpId}`;
+    const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
     const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
     const supervisorName = currentUser?.full_name ?? currentUser?.name ?? 'A supervisor';
     const titleEn = `Uncovered sites confirmed — continue close: ${cycleName}`;
@@ -701,11 +671,11 @@ export default function CycleCloseWizard({
     if (currentStep === 1 && wizardState.selectedMmpId) {
       await markCycleClosing(wizardState.selectedMmpId);
     }
-    if (currentStep === 3) {
+    if (currentStep === 2) {
       try {
         await notifyStep4Stakeholders();
       } catch (err) {
-        console.warn('[CycleCloseWizard] Step 4 notifications failed:', err);
+        console.warn('[CycleCloseWizard] Step 3 notifications failed:', err);
       }
     }
     markStepDone(currentStep);
@@ -769,7 +739,7 @@ export default function CycleCloseWizard({
             const status = stepStatuses[idx];
             const isActive = stepNum === currentStep;
             const isClickable = isStep4ContributorOnly
-              ? stepNum === 4
+              ? stepNum === 3
               : (stepNum < currentStep || status === 'done');
             return (
               <div key={stepNum} className="flex items-center gap-1 flex-shrink-0">
@@ -823,24 +793,16 @@ export default function CycleCloseWizard({
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
-<<<<<<< HEAD
-            {currentStep === 3 && <Step3MarkUncovered {...stepProps} />}
-            {currentStep === 4 && <Step5Exceptions {...stepProps} />}
-            {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 6 && <Step7FinalClose {...stepProps} />}
-=======
-            {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
-            {currentStep === 4 && (
-              <Step4MarkUncovered
+            {currentStep === 3 && (
+              <Step3MarkUncovered
                 {...stepProps}
                 onDraftsSaved={notifyStep4SupervisorsOfDrafts}
                 onAllConfirmed={notifyStep4AdminsAllConfirmed}
               />
             )}
-            {currentStep === 5 && <Step5Exceptions {...stepProps} />}
-            {currentStep === 6 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 7 && <Step7FinalClose {...stepProps} />}
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
+            {currentStep === 4 && <Step5Exceptions {...stepProps} />}
+            {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
+            {currentStep === 6 && <Step7FinalClose {...stepProps} />}
           </>
         )}
       </div>
