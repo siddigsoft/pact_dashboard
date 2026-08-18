@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { WizardState } from '../CycleCloseWizard';
 import type { RoleFlags } from '../CycleCloseWizard';
+import { allUncoveredReasonsConfirmed, uncoveredSiteIdsFromWizardState } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportCycleCloseWorkbook, type CheckResult } from '@/utils/cycleCloseExport';
@@ -118,20 +119,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   // Step 3: no resubmit-pending sites
   const allSitesResolved = Object.values(wizardState.resolvedSites).every(v => v !== 'resubmit');
 
-  // Step 4: every site from all three uncovered sources must have a reason
-  // and must be supervisor-confirmed.
-  const allNotCoveredIds = new Set<string>([
-    ...matchResults
-      .filter(r => r.action === 'reject' || r.status === 'unmatched')
-      .map(r => r.matchedSiteId).filter(Boolean) as string[],
-    ...Object.keys(wizardState.resolvedSites)
-      .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
-    ...(wizardState.unmatchedMmpSiteIds ?? []),
-  ]);
-  const allReasonsConfirmed = [...allNotCoveredIds].every(id => {
-    const reason = wizardState.uncoveredReasons[id];
-    return !!reason?.reason && reason?.status === 'confirmed';
-  });
+  // Step 3: every truly uncovered site must have a supervisor-confirmed reason.
+  const allReasonsConfirmed = allUncoveredReasonsConfirmed(wizardState);
 
   const allExceptionsDecided = Object.keys(wizardState.exceptionDecisions).every(k => !!wizardState.exceptionDecisions[k]?.decision);
 
@@ -177,6 +166,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
   const totalSites = matchResults.length;
   const confirmedSites = matchResults.filter(r => r.status === 'auto' || r.action === 'confirm').length;
+  const allNotCoveredIds = new Set(uncoveredSiteIdsFromWizardState(wizardState));
   const notCoveredCount = allNotCoveredIds.size;
 
   const handleOverride = async () => {

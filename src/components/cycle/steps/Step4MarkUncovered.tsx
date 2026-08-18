@@ -86,9 +86,10 @@ interface Props {
   canOverride?: boolean;
   onDraftsSaved?: (pendingSiteIds: string[]) => Promise<void> | void;
   onAllConfirmed?: () => Promise<void> | void;
+  isStep4ContributorOnly?: boolean;
 }
 
-export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved, onAllConfirmed, isSuperAdmin, canOverride }: Props) {
+export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved, onAllConfirmed, isSuperAdmin, canOverride, isStep4ContributorOnly }: Props) {
   const [sites, setSites] = useState<UncoveredSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1450,10 +1451,18 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
             </Button>
           )}
         </div>
-        <Button type="button" onClick={saveAndNext} disabled={!canAdvance || saving} data-testid="button-next-step4">
-          {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-          Next: Resolve Exceptions →
-        </Button>
+        {isStep4ContributorOnly ? (
+          <p className="text-sm text-muted-foreground text-right max-w-sm">
+            {allConfirmed
+              ? 'All uncovered sites are confirmed. Admin / FOM will continue to Exceptions.'
+              : 'Confirm every uncovered reason. Admin / FOM continues to Exceptions after that.'}
+          </p>
+        ) : (
+          <Button type="button" onClick={saveAndNext} disabled={!canAdvance || saving} data-testid="button-next-step4">
+            {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Next: Resolve Exceptions →
+          </Button>
+        )}
       </div>
     </div>
   );

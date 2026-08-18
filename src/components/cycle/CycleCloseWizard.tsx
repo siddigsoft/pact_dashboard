@@ -152,17 +152,19 @@ export function isCycleCloseStep4ContributorOnly(currentUser: any): boolean {
   return (flags.isCoordinator || flags.isSupervisor) && !flags.isFOM && !flags.isAdmin && !flags.isSuperAdmin;
 }
 
-export function allUncoveredReasonsConfirmed(wizardState: WizardState): boolean {
-  const notCoveredIds = new Set<string>([
+export function uncoveredSiteIdsFromWizardState(wizardState: WizardState): string[] {
+  return [...new Set([
     ...wizardState.matchResults
-      .filter(r => r.action === 'reject' || r.status === 'unmatched')
+      .filter(r => r.action === 'reject')
       .map(r => r.matchedSiteId).filter(Boolean) as string[],
     ...Object.keys(wizardState.resolvedSites)
       .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
     ...(wizardState.unmatchedMmpSiteIds ?? []),
-  ]);
+  ])];
+}
 
-  return [...notCoveredIds].every((id) => {
+export function allUncoveredReasonsConfirmed(wizardState: WizardState): boolean {
+  return uncoveredSiteIdsFromWizardState(wizardState).every((id) => {
     const reason = wizardState.uncoveredReasons[id];
     return !!reason?.reason && reason?.status === 'confirmed';
   });
@@ -478,12 +480,7 @@ export default function CycleCloseWizard({
     const mmpId = wizardState.selectedMmpId;
     if (!mmpId || step4NotifiedMmpIdsRef.current.has(mmpId)) return;
 
-    const notCoveredIds = [
-      ...Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k),
-      ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
-      ...(wizardState.unmatchedMmpSiteIds ?? []),
-    ];
-    const uniqueIds = [...new Set(notCoveredIds)];
+    const uniqueIds = uncoveredSiteIdsFromWizardState(wizardState);
     if (uniqueIds.length === 0) return;
 
     await markCycleClosing(mmpId);
@@ -708,6 +705,7 @@ export default function CycleCloseWizard({
     canAdvance,
     canGoBack,
     goToStep,
+    isStep4ContributorOnly,
   };
 
   return (

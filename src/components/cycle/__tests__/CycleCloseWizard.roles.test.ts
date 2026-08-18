@@ -61,6 +61,22 @@ describe('allUncoveredReasonsConfirmed', () => {
     wizardState.uncoveredReasons['site-2'].status = 'confirmed';
     expect(allUncoveredReasonsConfirmed(wizardState)).toBe(true);
   });
+
+  it('does not block advance when unmatched WFP rows keep a leftover best-guess site id', () => {
+    const wizardState: any = {
+      matchResults: [
+        { action: undefined, status: 'unmatched', matchedSiteId: 'covered-site' },
+        { action: 'confirm', status: 'auto', matchedSiteId: 'covered-site' },
+      ],
+      resolvedSites: {},
+      unmatchedMmpSiteIds: ['uncovered-site'],
+      uncoveredReasons: {
+        'uncovered-site': { reason: 'duplicate_site', status: 'confirmed' },
+      },
+    };
+
+    expect(allUncoveredReasonsConfirmed(wizardState)).toBe(true);
+  });
 });
 
 describe('pendingUnconfirmedReasonSiteIds', () => {
