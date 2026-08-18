@@ -44,7 +44,7 @@ import {
   Search, Download, RefreshCw, Upload, CheckCircle2,
   Clock, XCircle, RotateCcw, ArrowRightLeft, Banknote,
   ExternalLink, Info, Building2, User, Calendar,
-  ChevronDown, ChevronRight, Lock,
+  ChevronDown, ChevronRight, Lock, Filter, X,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,6 +85,7 @@ interface AdvanceSummaryRow {
   requestedAmount: number;
   paidAmount: number;
   status: string;
+  mmpId: string;
   mmpName: string;
   cycleStatus: string;
   glBridgeStatus: 'posted' | 'error' | 'pending' | 'none';
@@ -120,6 +121,7 @@ interface RecoveryRow {
   siteName: string;
   state: string;
   hub: string;
+  mmpId: string;
   mmpName: string;
   disbursedAmount: number;
   recoveredAmount: number;
@@ -216,12 +218,23 @@ export default function FieldPaymentsCentre() {
   const userRole = currentUser?.role?.toLowerCase() ?? '';
   const isFinance = isSuperAdmin || ['admin', 'financialadmin', 'superadmin', 'accountant'].includes(userRole);
 
+  // ── Shared cross-tab filters ────────────────────────────────────────────────
+  const [filterHub, setFilterHub]   = useState('');
+  const [filterState, setFilterState] = useState('');
+  const [filterMmp, setFilterMmp]   = useState(mmpFilter); // pre-seed from URL ?mmp=
+  const [mmps, setMmps] = useState<{ id: string; name: string; hub: string }[]>([]);
+
+  // Load MMP list once on mount (lightweight — id/name/hub only)
+  useEffect(() => {
+    supabase.from('mmp_files').select('id, name, hub').order('created_at', { ascending: false }).limit(300)
+      .then(({ data }) => setMmps(data ?? []));
+  }, []);
+
   // ── Tab 1: Fees state ──────────────────────────────────────────────────────
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [feesLoading, setFeesLoading] = useState(false);
   const [feeSearch, setFeeSearch] = useState('');
   const [feeStatusFilter, setFeeStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
-  const [feeMmpFilter, setFeeMmpFilter] = useState(mmpFilter);
   const [feeSelected, setFeeSelected] = useState<Set<string>>(new Set());
   const [payDialog, setPayDialog] = useState<PayDialog>({
     open: false, rows: [], amount: 0, method: 'Cash',
@@ -357,7 +370,7 @@ export default function FieldPaymentsCentre() {
         .select(`
           id, status, requested_amount, total_paid_amount, updated_at,
           site_name, hub_name, state,
-          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(name, cycle_status))
+          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(id, name, cycle_status))
         `)
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
         .order('updated_at', { ascending: false })
@@ -401,6 +414,7 @@ export default function FieldPaymentsCentre() {
           requestedAmount: r.requested_amount ?? 0,
           paidAmount: r.total_paid_amount ?? 0,
           status: r.status,
+          mmpId: mmp.id ?? '',
           mmpName: mmp.name ?? '—',
           cycleStatus: mmp.cycle_status ?? '—',
           glBridgeStatus: glMap[r.id] ?? 'none',
@@ -480,7 +494,7 @@ export default function FieldPaymentsCentre() {
         .from('down_payment_requests')
         .select(`
           id, requested_amount, total_paid_amount, status, updated_at, hub_name, state, site_name,
-          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(name))
+          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(id, name))
         `)
         .in('status', ['paid', 'partially_paid', 'fully_paid'])
         .order('updated_at');
@@ -534,6 +548,7 @@ export default function FieldPaymentsCentre() {
             siteName: r.site_name ?? '—',
             state: r.state ?? '—',
             hub: r.hub_name ?? '—',
+            mmpId: mmp.id ?? '',
             mmpName: mmp.name ?? '—',
             disbursedAmount: disbursed,
             recoveredAmount: recovered,
@@ -731,12 +746,40 @@ export default function FieldPaymentsCentre() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Shared filter option lists (derived from loaded data + MMP list)
+  // ─────────────────────────────────────────────────────────────────────────
+  const uniqueHubs = useMemo(() =>
+    [...new Set(mmps.map(m => m.hub).filter(Boolean))].sort() as string[],
+  [mmps]);
+
+  // Cascade: state options come from whichever tabs have been loaded
+  const uniqueStates = useMemo(() => {
+    const states = new Set<string>();
+    fees.forEach(r => r.state && r.state !== '—' && states.add(r.state));
+    advances.forEach(r => r.state && r.state !== '—' && states.add(r.state));
+    exceptions.forEach(r => r.state && r.state !== '—' && states.add(r.state));
+    recovery.forEach(r => r.state && r.state !== '—' && states.add(r.state));
+    return [...states].sort();
+  }, [fees, advances, exceptions, recovery]);
+
+  // MMP options cascade by hub
+  const uniqueMmpOptions = useMemo(() =>
+    filterHub ? mmps.filter(m => m.hub === filterHub) : mmps,
+  [mmps, filterHub]);
+
+  const activeFilterCount = [filterHub, filterState, filterMmp].filter(Boolean).length;
+
+  const clearFilters = () => { setFilterHub(''); setFilterState(''); setFilterMmp(''); };
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Filtered data
   // ─────────────────────────────────────────────────────────────────────────
   const filteredFees = useMemo(() => {
     let rows = fees;
+    if (filterHub)    rows = rows.filter(r => r.mmpHub === filterHub);
+    if (filterState)  rows = rows.filter(r => r.state === filterState);
+    if (filterMmp)    rows = rows.filter(r => r.mmpId === filterMmp);
     if (feeStatusFilter !== 'all') rows = rows.filter(r => r.feePaidStatus === feeStatusFilter);
-    if (feeMmpFilter) rows = rows.filter(r => r.mmpId === feeMmpFilter || r.mmpName.toLowerCase().includes(feeMmpFilter.toLowerCase()));
     if (feeSearch) {
       const q = feeSearch.toLowerCase();
       rows = rows.filter(r =>
@@ -746,10 +789,13 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [fees, feeStatusFilter, feeMmpFilter, feeSearch]);
+  }, [fees, filterHub, filterState, filterMmp, feeStatusFilter, feeSearch]);
 
   const filteredAdvances = useMemo(() => {
     let rows = advances;
+    if (filterHub)   rows = rows.filter(r => r.hub === filterHub);
+    if (filterState) rows = rows.filter(r => r.state === filterState);
+    if (filterMmp)   rows = rows.filter(r => r.mmpId === filterMmp);
     if (advStatusFilter !== 'all') rows = rows.filter(r => r.status === advStatusFilter);
     if (advSearch) {
       const q = advSearch.toLowerCase();
@@ -760,10 +806,12 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [advances, advStatusFilter, advSearch]);
+  }, [advances, filterHub, filterState, filterMmp, advStatusFilter, advSearch]);
 
   const filteredExceptions = useMemo(() => {
     let rows = exceptions;
+    if (filterState) rows = rows.filter(r => r.state === filterState);
+    if (filterMmp)   rows = rows.filter(r => r.mmpFileId === filterMmp);
     if (excDecisionFilter !== 'all') rows = rows.filter(r => r.decision === excDecisionFilter);
     if (excStatusFilter === 'pending') rows = rows.filter(r => !r.executed);
     if (excStatusFilter === 'done')    rows = rows.filter(r => r.executed);
@@ -776,17 +824,23 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [exceptions, excDecisionFilter, excStatusFilter, excSearch]);
+  }, [exceptions, filterState, filterMmp, excDecisionFilter, excStatusFilter, excSearch]);
 
   const filteredRecovery = useMemo(() => {
-    if (!recSearch) return recovery;
-    const q = recSearch.toLowerCase();
-    return recovery.filter(r =>
-      r.enumeratorName.toLowerCase().includes(q) ||
-      r.siteName.toLowerCase().includes(q) ||
-      r.mmpName.toLowerCase().includes(q)
-    );
-  }, [recovery, recSearch]);
+    let rows = recovery;
+    if (filterHub)   rows = rows.filter(r => r.hub === filterHub);
+    if (filterState) rows = rows.filter(r => r.state === filterState);
+    if (filterMmp)   rows = rows.filter(r => r.mmpId === filterMmp);
+    if (recSearch) {
+      const q = recSearch.toLowerCase();
+      rows = rows.filter(r =>
+        r.enumeratorName.toLowerCase().includes(q) ||
+        r.siteName.toLowerCase().includes(q) ||
+        r.mmpName.toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }, [recovery, filterHub, filterState, filterMmp, recSearch]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Summary cards
@@ -876,6 +930,60 @@ export default function FieldPaymentsCentre() {
           <p className={`text-xl font-bold ${recStats.total > 0 ? 'text-amber-600' : 'text-green-600'}`}>{recStats.total}</p>
           {recStats.overdue > 0 && <p className="text-xs text-red-500">{recStats.overdue} overdue &gt;30d</p>}
         </Card>
+      </div>
+
+      {/* ── Shared cross-tab filters ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-wrap bg-slate-50 dark:bg-slate-900/50 border rounded-lg px-3 py-2">
+        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-muted-foreground">Filter all tabs:</span>
+
+        {/* Hub */}
+        <Select value={filterHub || '__all__'} onValueChange={v => {
+          setFilterHub(v === '__all__' ? '' : v);
+          setFilterState('');
+          setFilterMmp('');
+        }}>
+          <SelectTrigger className="h-8 text-xs w-36">
+            <SelectValue placeholder="All Hubs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Hubs</SelectItem>
+            {uniqueHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* State */}
+        <Select value={filterState || '__all__'} onValueChange={v => setFilterState(v === '__all__' ? '' : v)}>
+          <SelectTrigger className="h-8 text-xs w-40">
+            <SelectValue placeholder="All States" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All States</SelectItem>
+            {uniqueStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* MMP */}
+        <Select value={filterMmp || '__all__'} onValueChange={v => setFilterMmp(v === '__all__' ? '' : v)}>
+          <SelectTrigger className="h-8 text-xs w-52">
+            <SelectValue placeholder="All MMPs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All MMPs</SelectItem>
+            {uniqueMmpOptions.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {activeFilterCount > 0 && (
+          <>
+            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+              {activeFilterCount} active
+            </Badge>
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground" onClick={clearFilters}>
+              <X className="h-3 w-3" /> Clear
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Tabs */}
