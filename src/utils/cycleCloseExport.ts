@@ -87,7 +87,14 @@ export interface ExceptionSite {
   locality: string;
   enumeratorId?: string;
   enumeratorName: string;
+  /** Actual disbursed amount (0 for approved-not-yet-paid) */
   advancePaid: number;
+  /** Original requested/approved amount */
+  requestedAmount: number;
+  /** Payment status from down_payment_requests */
+  advanceStatus: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
+  /** down_payment_requests.id for downstream actions */
+  advanceId: string;
 }
 
 // ── Low-level cell helpers ────────────────────────────────────────────────────
@@ -294,34 +301,73 @@ export async function exportFormattedNotCovered(
 
 // ── Step 5: Exceptions Report ─────────────────────────────────────────────────
 
+const DECISION_LABELS: Record<string, string> = {
+  roll:     'Roll to Next MMP — رحّل للدورة التالية',
+  return:   'Return Required — استرداد مطلوب',
+  writeoff: 'Write-Off — شطب',
+  redirect: 'Redirect to Enumerator Fees — تحويل لأتعاب المعددين',
+  cancel:   'Cancel & Void — إلغاء وشطب',
+  hold:     'Hold for Next MMP — تعليق للدورة التالية',
+  reassign: 'Reassign to Covered Site — إعادة تعيين لموقع مغطى',
+  reduce:   'Reduce & Approve — تعديل وتحديد المبلغ',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  paid:           '✓ Paid',
+  fully_paid:     '✓ Fully Paid',
+  partially_paid: '⚡ Partially Paid',
+  approved:       '⏳ Approved (Unpaid)',
+};
+
 export async function exportFormattedExceptions(
   exceptions: ExceptionSite[],
   wizardState: WizardState,
 ): Promise<void> {
   const headers = [
     'Site Name', 'State', 'Locality', 'Enumerator',
-    'Advance Paid (SDG)', 'Decision', 'Amount Redirected / Rolled (SDG)',
-    'Justification', 'Approved By',
+    'Advance Status', 'Disbursed (SDG)', 'Requested (SDG)',
+    'Decision (EN · AR)', 'Amount (SDG)', 'Justification', 'Target Site', 'Approved By',
   ];
+
+  // Split paid vs. approved for colour coding
+  const rowBgFn = (i: number): string | null => {
+    const site = exceptions[i];
+    if (!site) return null;
+    const status = site.advanceStatus;
+    if (status === 'paid' || status === 'fully_paid') return C.green;
+    if (status === 'partially_paid') return C.blue;
+    return C.amberR; // approved (unpaid)
+  };
+
   const rows: CellVal[][] = exceptions.map(e => {
     const d = wizardState.exceptionDecisions[e.siteId];
     return [
       e.siteName, e.state, e.locality, e.enumeratorName,
-      e.advancePaid,
-      d?.decision ?? 'Pending',
-      d?.amount ?? '',
+      STATUS_LABELS[e.advanceStatus] ?? e.advanceStatus,
+      e.advancePaid > 0 ? e.advancePaid : '',
+      e.requestedAmount > 0 ? e.requestedAmount : '',
+      d?.decision ? (DECISION_LABELS[d.decision] ?? d.decision) : 'Pending',
+      d?.amount ?? d?.targetSiteId ?? '',
       d?.justification ?? '',
+      d?.targetSiteId ?? '',
       d?.approvedBy ?? '',
     ];
   });
-  const totalAdvances = exceptions.reduce((s, e) => s + e.advancePaid, 0);
+
+  const totalDisbursed = exceptions.reduce((s, e) => s + e.advancePaid, 0);
+  const totalRequested = exceptions.reduce((s, e) => s + e.requestedAmount, 0);
+  const paid    = exceptions.filter(e => e.advanceStatus !== 'approved');
+  const pending = exceptions.filter(e => e.advanceStatus === 'approved');
 
   const wb = new ExcelJS.Workbook();
   buildSheet(wb, 'Exceptions', 'Cycle Close — Advance Exceptions',
     `Cycle: ${cycleName(wizardState)}`,
-    `Generated: ${new Date().toLocaleString()} · ${rows.length} exception sites · Total advances: SDG ${totalAdvances.toLocaleString()}`,
+    `Generated: ${new Date().toLocaleString()} · ${paid.length} disbursed · ${pending.length} approved (unpaid)`,
     headers, rows,
-    { totalsRow: ['TOTAL', '', '', '', totalAdvances, '', '', '', ''] });
+    {
+      rowBgFn,
+      totalsRow: ['TOTAL', '', '', '', '', totalDisbursed, totalRequested, '', '', '', '', ''],
+    });
   await saveWb(wb, `exceptions-report-${cycleName(wizardState)}.xlsx`);
 }
 

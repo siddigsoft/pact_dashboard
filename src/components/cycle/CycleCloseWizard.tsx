@@ -25,10 +25,15 @@ export interface SavedSession {
 }
 
 export interface ExceptionDecision {
-  decision: 'roll' | 'return' | 'writeoff' | 'redirect';
+  /** Paid-advance options: roll / return / writeoff / redirect
+   *  Approved (unpaid) options: cancel / hold / reassign / reduce */
+  decision: 'roll' | 'return' | 'writeoff' | 'redirect' | 'cancel' | 'hold' | 'reassign' | 'reduce';
+  /** Amount to redirect (redirect) or reduced approved amount (reduce) */
   amount?: number;
   justification?: string;
   approvedBy?: string;
+  /** For 'reassign': the covered mmp_site_entry_id to move this advance to */
+  targetSiteId?: string;
 }
 
 export interface UncoveredReason {

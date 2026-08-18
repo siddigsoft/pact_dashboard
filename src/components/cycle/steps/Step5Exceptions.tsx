@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react';
+import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import type { WizardState, ExceptionDecision } from '../CycleCloseWizard';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
@@ -21,65 +21,113 @@ interface Props {
   currentUser: any;
 }
 
-const DECISIONS = [
+// ── Decision sets ─────────────────────────────────────────────────────────────
+
+const DECISIONS_PAID = [
   {
     value: 'roll',
     label: 'Roll to Next MMP',
     labelAr: 'رحّل إلى الدورة التالية',
     desc: 'Treat as pre-payment for the next cycle.',
     descAr: 'تُعامَل كدفعة مقدمة للدورة القادمة.',
-    track: 'Tracked in Step 6 Reconciliation of the next cycle as an existing advance for this enumerator.',
-    trackAr: 'يظهر في المطابقة المالية (الخطوة ٦) للدورة القادمة كسلفة قائمة للمعدد.',
-    color: 'blue',
+    track: 'Flagged as a rollover advance. Finance uses the Exception Tracker to link it to the enumerator\'s site in the next MMP.',
+    trackAr: 'تُعلَّم كسلفة منقولة. تربطها المالية بموقع المعدد في الدورة القادمة عبر صفحة متابعة الاستثناءات.',
   },
   {
     value: 'return',
     label: 'Return Required',
     labelAr: 'استرداد مطلوب',
-    desc: 'Enumerator must return the money.',
-    descAr: 'يجب على المعدد إعادة المبلغ.',
-    track: 'Logged in Step 6 Reconciliation as a scheduled recovery. Finance generates a recovery payment record.',
-    trackAr: 'يُسجَّل في الخطوة ٦ كاسترداد مجدوَل. تُنشئ المالية سجل استرداد الدفع.',
-    color: 'red',
+    desc: 'Enumerator must return the cash.',
+    descAr: 'يجب على المعدد إعادة المبلغ نقداً.',
+    track: 'Logged in Step 6 Reconciliation as a scheduled recovery. Finance generates a recovery receipt record.',
+    trackAr: 'يُسجَّل في الخطوة ٦ كاسترداد مجدوَل. تُنشئ المالية سجل استلام الاسترداد.',
   },
   {
     value: 'writeoff',
     label: 'Write-Off',
     labelAr: 'شطب',
-    desc: 'Amount is too small or unrecoverable.',
-    descAr: 'المبلغ صغير جداً أو يتعذر استرداده.',
-    track: 'Recorded in mmp_payment_records with type "writeoff". Visible in Step 6 Reconciliation and the Excel workbook Exceptions sheet.',
-    trackAr: 'يُحفظ في سجلات المدفوعات بنوع "شطب". يظهر في الخطوة ٦ وورقة الاستثناءات في ملف Excel.',
-    color: 'amber',
+    desc: 'Amount is too small or unrecoverable. Justification required.',
+    descAr: 'المبلغ صغير جداً أو يتعذر استرداده. مطلوب مبرر.',
+    track: 'Recorded as "writeoff" in mmp_payment_records. Visible in Step 6 and the Final Close workbook Exceptions sheet.',
+    trackAr: 'يُحفظ بنوع "شطب" في سجلات المدفوعات. يظهر في الخطوة ٦ وورقة الاستثناءات.',
   },
   {
     value: 'redirect',
     label: 'Redirect to Enumerator Fees',
     labelAr: 'تحويل إلى أتعاب المعددين',
-    desc: 'Enumerator did related work — redirect to fee line.',
+    desc: 'Enumerator did related work — reclassify to the fee line.',
     descAr: 'قام المعدد بعمل ذي صلة — يُحوَّل إلى بند الأتعاب.',
-    track: 'Creates a GL journal entry: Debit Enumerator Fees / Credit Transport Advance. Visible in the GL ledger and the Exceptions sheet of the Final Close workbook.',
-    trackAr: 'يُنشئ قيداً محاسبياً: مدين أتعاب المعددين / دائن سلفة النقل. يظهر في دفتر الأستاذ العام وورقة الاستثناءات.',
-    color: 'green',
+    track: 'GL journal entry: Debit Enumerator Fees / Credit Transport Advance. Visible in GL ledger and Exceptions sheet.',
+    trackAr: 'قيد محاسبي: مدين أتعاب المعددين / دائن سلفة النقل. يظهر في دفتر الأستاذ العام.',
   },
-];
+] as const;
 
-export default function Step5Exceptions({ wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride, currentUser }: Props) {
-  const [exceptions, setExceptions] = useState<ExceptionSite[]>([]);
-  const [loading, setLoading] = useState(true);
+const DECISIONS_APPROVED = [
+  {
+    value: 'cancel',
+    label: 'Cancel & Void',
+    labelAr: 'إلغاء وشطب الطلب',
+    desc: 'Cancel the advance request before disbursement — no money moves.',
+    descAr: 'إلغاء طلب السلفة قبل الصرف — لا يتحرك أي مبلغ.',
+    track: 'Advance request marked "cancelled". No payment record created. Visible in the Exceptions sheet.',
+    trackAr: 'يُعلَّم الطلب بحالة "ملغى". لا يُنشأ أي سجل دفع.',
+  },
+  {
+    value: 'hold',
+    label: 'Hold for Next MMP',
+    labelAr: 'تعليق ونقل للدورة التالية',
+    desc: 'Keep approved but defer payment to the next cycle.',
+    descAr: 'يبقى الطلب موافقاً عليه مع تأجيل الصرف للدورة القادمة.',
+    track: 'Marked "on hold". Finance uses the Exception Tracker to link it to the next MMP and release payment.',
+    trackAr: 'يُعلَّم معلقاً. تربطه المالية بالدورة القادمة عبر صفحة متابعة الاستثناءات وتُصرف الدفعة.',
+  },
+  {
+    value: 'reassign',
+    label: 'Reassign to Covered Site',
+    labelAr: 'إعادة تعيين لموقع مغطى',
+    desc: 'Move this advance to a site the enumerator DID cover in this cycle.',
+    descAr: 'نقل السلفة إلى موقع قام المعدد بتغطيته في هذه الدورة.',
+    track: 'Advance re-linked to the selected confirmed site. Visible in Step 6 Reconciliation.',
+    trackAr: 'تُربط السلفة بالموقع المؤكد المحدد. تظهر في مطابقة الخطوة ٦.',
+  },
+  {
+    value: 'reduce',
+    label: 'Reduce & Approve',
+    labelAr: 'تعديل وتحديد المبلغ',
+    desc: 'Approve a smaller amount reflecting confirmed work only.',
+    descAr: 'الموافقة على مبلغ أقل يعكس العمل المؤكد فعلياً.',
+    track: 'Advance request updated with the reduced amount and approved for payment.',
+    trackAr: 'يُحدَّث الطلب بالمبلغ المعدَّل ويُوافق عليه للصرف.',
+  },
+] as const;
+
+type PaidDecision    = typeof DECISIONS_PAID[number]['value'];
+type ApprovedDecision = typeof DECISIONS_APPROVED[number]['value'];
+
+const isPaidSite    = (s: ExceptionSite) => s.advanceStatus !== 'approved';
+const isApprovedSite = (s: ExceptionSite) => s.advanceStatus === 'approved';
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function Step5Exceptions({
+  wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride,
+}: Props) {
+  const [exceptions, setExceptions]           = useState<ExceptionSite[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [showPaidGuide, setShowPaidGuide]     = useState(false);
+  const [showApprGuide, setShowApprGuide]     = useState(false);
 
   useEffect(() => {
     if (wizardState.selectedMmpId) loadExceptions();
   }, [wizardState.selectedMmpId, wizardState.uncoveredReasons]);
 
+  // ── Data loading ────────────────────────────────────────────────────────────
+
   const loadExceptions = async () => {
     setLoading(true);
-
     const notCoveredIds = Object.keys(wizardState.uncoveredReasons);
     if (!notCoveredIds.length) { setLoading(false); return; }
 
-    // Get site data for not-covered sites — do NOT use profiles!accepted_by join
-    // (accepted_by has no FK constraint to profiles, the join silently fails)
     const { data: siteData } = await supabase
       .from('mmp_site_entries')
       .select('id, site_name, state, locality, accepted_by')
@@ -87,67 +135,87 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
 
     if (!siteData?.length) { setLoading(false); return; }
 
-    // Resolve enumerator names via separate profiles lookup
+    // Resolve enumerator names
     const enumUuids = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
     const nameMap: Record<string, string> = {};
     if (enumUuids.length) {
       const { data: profileRows } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', enumUuids);
-      for (const p of (profileRows ?? [])) {
-        if (p.full_name) nameMap[p.id] = p.full_name;
-      }
+        .from('profiles').select('id, full_name').in('id', enumUuids);
+      for (const p of (profileRows ?? [])) { if (p.full_name) nameMap[p.id] = p.full_name; }
     }
 
-    // Advances are stored in down_payment_requests, linked via mmp_site_entry_id
-    // (there is no mmp_file_id on down_payment_requests — join through entries)
+    // Load advances per site entry (include id for downstream actions)
     const { data: advances } = await supabase
       .from('down_payment_requests')
-      .select('mmp_site_entry_id, total_paid_amount, requested_amount, status')
+      .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status')
       .in('mmp_site_entry_id', notCoveredIds)
       .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
 
-    // Map advance totals to the enumerator of each site entry
-    const entryToEnum: Record<string, string> = {};
-    for (const s of (siteData as any[])) {
-      if (s.accepted_by) entryToEnum[s.id] = s.accepted_by;
+    // Build per-site map (take the record with the highest paid amount if multiple)
+    interface AdvanceRec {
+      id: string; paidAmount: number; requestedAmount: number;
+      status: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
     }
-
-    const advanceByEnum: Record<string, number> = {};
-    for (const a of (advances ?? [])) {
-      const enumId = entryToEnum[(a as any).mmp_site_entry_id];
-      if (!enumId) continue;
-      const amount = (a as any).total_paid_amount ?? (a as any).requested_amount ?? 0;
-      advanceByEnum[enumId] = (advanceByEnum[enumId] ?? 0) + amount;
+    const advanceBySite: Record<string, AdvanceRec> = {};
+    for (const a of (advances ?? []) as any[]) {
+      const siteId = a.mmp_site_entry_id as string;
+      const paid   = (a.total_paid_amount as number) ?? 0;
+      const req    = (a.requested_amount as number) ?? 0;
+      const existing = advanceBySite[siteId];
+      if (!existing || paid > existing.paidAmount) {
+        advanceBySite[siteId] = {
+          id: a.id as string,
+          paidAmount: paid,
+          requestedAmount: req,
+          status: a.status as AdvanceRec['status'],
+        };
+      }
     }
 
     const exceptionSites: ExceptionSite[] = (siteData as any[])
-      .filter((s: any) => s.accepted_by && advanceByEnum[s.accepted_by] > 0)
-      .map((s: any) => ({
-        siteId: s.id,
-        siteName: s.site_name,
-        state: s.state,
-        locality: s.locality,
-        enumeratorId: s.accepted_by,
-        enumeratorName: nameMap[s.accepted_by] ?? 'Unknown',
-        advancePaid: advanceByEnum[s.accepted_by] ?? 0,
-      }));
+      .filter((s: any) => s.accepted_by && advanceBySite[s.id])
+      .map((s: any) => {
+        const adv = advanceBySite[s.id];
+        return {
+          siteId:          s.id as string,
+          siteName:        s.site_name as string,
+          state:           s.state as string,
+          locality:        s.locality as string,
+          enumeratorId:    s.accepted_by as string,
+          enumeratorName:  nameMap[s.accepted_by] ?? 'Unknown',
+          advancePaid:     adv.paidAmount,
+          requestedAmount: adv.requestedAmount,
+          advanceStatus:   adv.status,
+          advanceId:       adv.id,
+        };
+      });
 
     setExceptions(exceptionSites);
     setLoading(false);
   };
 
+  // ── State helpers ───────────────────────────────────────────────────────────
+
   const setDecision = (siteId: string, patch: Partial<ExceptionDecision>) => {
-    const current = wizardState.exceptionDecisions[siteId] ?? {};
+    const current = wizardState.exceptionDecisions[siteId] ?? {} as ExceptionDecision;
     updateWizardState({
       exceptionDecisions: { ...wizardState.exceptionDecisions, [siteId]: { ...current, ...patch } },
     });
   };
 
-  const exportExceptions = () => {
-    void exportFormattedExceptions(exceptions, wizardState);
+  const isSiteComplete = (site: ExceptionSite): boolean => {
+    const d = wizardState.exceptionDecisions[site.siteId];
+    if (!d?.decision) return false;
+    if (d.decision === 'redirect')  return !!d.justification && (d.amount ?? 0) > 0 && (d.amount ?? 0) <= site.advancePaid;
+    if (d.decision === 'writeoff')  return !!d.justification;
+    if (d.decision === 'reduce')    return (d.amount ?? 0) > 0 && (d.amount ?? 0) < site.requestedAmount;
+    if (d.decision === 'reassign')  return !!d.targetSiteId;
+    return true;
   };
+
+  const exportExceptions = () => void exportFormattedExceptions(exceptions, wizardState);
+
+  // ── Loading / empty ─────────────────────────────────────────────────────────
 
   if (loading) return (
     <div className="flex items-center gap-2 justify-center py-12 text-muted-foreground">
@@ -155,21 +223,14 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
     </div>
   );
 
-  const allDecided = exceptions.every(e => {
-    const d = wizardState.exceptionDecisions[e.siteId];
-    if (!d?.decision) return false;
-    if (d.decision === 'redirect') return !!d.justification && (d.amount ?? 0) > 0 && (d.amount ?? 0) <= e.advancePaid;
-    if (d.decision === 'writeoff') return !!d.justification;
-    return true;
-  });
+  const paidSites     = exceptions.filter(isPaidSite);
+  const approvedSites = exceptions.filter(isApprovedSite);
+  const allDecided    = exceptions.every(isSiteComplete);
 
   if (exceptions.length === 0) {
     return (
       <div className="max-w-3xl mx-auto p-6 space-y-6">
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
-          <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
-        </div>
+        <Header />
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
           <CheckCircle2 className="h-5 w-5 text-green-600" />
           <p className="text-sm text-green-800 font-medium">No exceptions — no not-covered sites had advance payments. Ready to continue.</p>
@@ -184,161 +245,137 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
-        <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
-        <p className="text-muted-foreground text-sm">
-          These not-covered sites had advance payments already paid to their enumerators. Each one needs a decision before the cycle can close.
-        </p>
-        <p className="text-sm text-muted-foreground" dir="rtl">المواقع غير المغطاة التي صُرفت مدفوعاتها مسبقاً للمعددين — يجب اتخاذ قرار بشأن كل منها قبل إغلاق الدورة.</p>
+      <Header />
+
+      {/* ── Summary counts ── */}
+      <div className="flex flex-wrap gap-2 text-sm">
+        <span className="px-3 py-1 rounded-full bg-green-100 text-green-800 font-medium border border-green-300">
+          💰 {paidSites.length} disbursed advance{paidSites.length !== 1 ? 's' : ''}
+        </span>
+        <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800 font-medium border border-amber-300">
+          ⏳ {approvedSites.length} approved (not yet paid)
+        </span>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
-        <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-3 w-full">
-          <p className="font-semibold">4 options per site — ٤ خيارات لكل موقع</p>
-          {DECISIONS.map(d => (
-            <div key={d.value} className="space-y-0.5">
-              <p>
-                <strong>{d.label}</strong>
-                <span className="mx-1 text-blue-500">·</span>
-                <strong dir="rtl">{d.labelAr}</strong>
-                <span className="text-blue-600 ml-2">—</span>
-                <span className="ml-1">{d.desc}</span>
-              </p>
-              <p dir="rtl" className="text-xs text-blue-700 dark:text-blue-300">{d.descAr}</p>
-              <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                <span className="font-medium">📍 Tracked:</span> {d.track}
-              </p>
-              <p dir="rtl" className="text-xs text-blue-600 dark:text-blue-400">
-                <span className="font-medium">📍 المتابعة:</span> {d.trackAr}
-              </p>
+      {/* ── Section A: Disbursed advances ── */}
+      {paidSites.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-sm text-green-700 dark:text-green-400">
+                💰 Disbursed Advances — سلف تم صرفها
+              </h3>
+              <p className="text-xs text-muted-foreground">Money has left the system — choose a recovery action for each site.</p>
             </div>
-          ))}
-        </div>
-      </div>
+            <Button type="button" variant="ghost" size="sm" className="text-xs gap-1"
+              onClick={() => setShowPaidGuide(v => !v)}>
+              <Info className="h-3.5 w-3.5" />
+              {showPaidGuide ? 'Hide' : 'Show'} options guide
+              {showPaidGuide ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
+          </div>
 
-      <div className="space-y-4">
-        {exceptions.map(site => {
-          const d = wizardState.exceptionDecisions[site.siteId];
-          const isDone = d?.decision && (d.decision !== 'redirect' || (!!d.justification && (d.amount ?? 0) > 0)) && (d.decision !== 'writeoff' || !!d.justification);
-          return (
-            <div key={site.siteId} className={`border rounded-lg p-4 space-y-4 ${isDone ? 'border-green-300 bg-green-50/20' : ''}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-sm">{site.siteName}</p>
-                  <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumeratorName}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">
-                    Advance: SDG {site.advancePaid.toLocaleString()}
-                  </Badge>
-                  {isDone && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Select value={d?.decision ?? ''} onValueChange={v => setDecision(site.siteId, { decision: v as ExceptionDecision['decision'] })}>
-                  <SelectTrigger className="w-full" data-testid={`select-decision-${site.siteId}`}>
-                    <SelectValue placeholder="Select recovery action…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DECISIONS.map(dec => (
-                      <SelectItem key={dec.value} value={dec.value}>
-                        <div className="flex flex-col gap-0.5 py-0.5">
-                          <span className="font-medium">{dec.label} · <span dir="rtl">{dec.labelAr}</span></span>
-                          <span className="text-muted-foreground text-xs">{dec.desc}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {d?.decision === 'redirect' && (
-                  <div className="space-y-2 pl-2 border-l-2 border-amber-400">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium w-32">Amount to redirect</label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={site.advancePaid}
-                        value={d?.amount ?? ''}
-                        onChange={e => setDecision(site.siteId, { amount: Number(e.target.value) })}
-                        className="w-36 h-8 text-sm"
-                        placeholder={`Max: ${site.advancePaid}`}
-                        data-testid={`input-redirect-amount-${site.siteId}`}
-                      />
-                      <span className="text-xs text-muted-foreground">SDG (max: {site.advancePaid})</span>
-                    </div>
-                    {(d?.amount ?? 0) > site.advancePaid && (
-                      <p className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        Redirect amount cannot exceed the advance paid (SDG {site.advancePaid})
-                      </p>
-                    )}
-                    <Textarea
-                      placeholder="Justification (required) — why is this advance being redirected to enumerator fees?"
-                      value={d?.justification ?? ''}
-                      onChange={e => setDecision(site.siteId, { justification: e.target.value })}
-                      rows={2}
-                      className="text-sm"
-                      data-testid={`input-redirect-justification-${site.siteId}`}
-                    />
-                    {!canOverride && (
-                      <p className="text-xs text-amber-600">⚠️ Redirect decisions must be approved by FOM or Admin</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">GL effect: Debit Enumerator Fees / Credit Transport Advance</p>
-                  </div>
-                )}
-
-                {d?.decision === 'writeoff' && (
-                  <Textarea
-                    placeholder="Write-off justification (required)…"
-                    value={d?.justification ?? ''}
-                    onChange={e => setDecision(site.siteId, { justification: e.target.value })}
-                    rows={2}
-                    className="text-sm"
-                    data-testid={`input-writeoff-justification-${site.siteId}`}
-                  />
-                )}
-
-                {d?.decision && (() => {
-                  const chosen = DECISIONS.find(x => x.value === d.decision);
-                  return chosen ? (
-                    <div className="rounded-md bg-muted/60 border border-border px-3 py-2 space-y-1">
-                      <p className="text-xs text-muted-foreground flex items-start gap-1">
-                        <span className="font-medium shrink-0">📍 Tracked:</span>
-                        <span>{chosen.track}</span>
-                      </p>
-                      <p dir="rtl" className="text-xs text-muted-foreground">
-                        <span className="font-medium">📍 المتابعة:</span> {chosen.trackAr}
-                      </p>
-                    </div>
-                  ) : null;
-                })()}
-
-                {!d?.decision && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    You must select a recovery action for {site.siteName} before closing.
+          {showPaidGuide && (
+            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-sm space-y-3">
+              {DECISIONS_PAID.map(d => (
+                <div key={d.value} className="space-y-0.5">
+                  <p>
+                    <strong>{d.label}</strong>
+                    <span className="mx-1 text-green-500">·</span>
+                    <strong dir="rtl">{d.labelAr}</strong>
+                    <span className="mx-2 text-green-600">—</span>
+                    <span>{d.desc}</span>
                   </p>
-                )}
-              </div>
+                  <p dir="rtl" className="text-xs text-green-700 dark:text-green-300">{d.descAr}</p>
+                  <p className="text-xs text-green-600 dark:text-green-400">📍 {d.track}</p>
+                  <p dir="rtl" className="text-xs text-green-600 dark:text-green-400">📍 {d.trackAr}</p>
+                </div>
+              ))}
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          {paidSites.map(site => (
+            <SiteCard
+              key={site.siteId}
+              site={site}
+              decision={wizardState.exceptionDecisions[site.siteId]}
+              decisions={DECISIONS_PAID as any}
+              isDone={isSiteComplete(site)}
+              canOverride={canOverride}
+              setDecision={setDecision}
+              variant="paid"
+            />
+          ))}
+        </section>
+      )}
+
+      {/* ── Section B: Approved but unpaid ── */}
+      {approvedSites.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-sm text-amber-700 dark:text-amber-400">
+                ⏳ Approved — Not Yet Paid — موافق عليها ولم تُصرف بعد
+              </h3>
+              <p className="text-xs text-muted-foreground">Money is still in the system — different options apply since no cash has moved.</p>
+              <p dir="rtl" className="text-xs text-muted-foreground">المبلغ لا يزال في النظام — خيارات مختلفة تنطبق لأن لا مبالغ صُرفت بعد.</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="text-xs gap-1"
+              onClick={() => setShowApprGuide(v => !v)}>
+              <Info className="h-3.5 w-3.5" />
+              {showApprGuide ? 'Hide' : 'Show'} options guide
+              {showApprGuide ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
+          </div>
+
+          {showApprGuide && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm space-y-3">
+              {DECISIONS_APPROVED.map(d => (
+                <div key={d.value} className="space-y-0.5">
+                  <p>
+                    <strong>{d.label}</strong>
+                    <span className="mx-1 text-amber-500">·</span>
+                    <strong dir="rtl">{d.labelAr}</strong>
+                    <span className="mx-2 text-amber-600">—</span>
+                    <span>{d.desc}</span>
+                  </p>
+                  <p dir="rtl" className="text-xs text-amber-700 dark:text-amber-300">{d.descAr}</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">📍 {d.track}</p>
+                  <p dir="rtl" className="text-xs text-amber-600 dark:text-amber-400">📍 {d.trackAr}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {approvedSites.map(site => (
+            <SiteCard
+              key={site.siteId}
+              site={site}
+              decision={wizardState.exceptionDecisions[site.siteId]}
+              decisions={DECISIONS_APPROVED as any}
+              isDone={isSiteComplete(site)}
+              canOverride={canOverride}
+              setDecision={setDecision}
+              variant="approved"
+            />
+          ))}
+        </section>
+      )}
 
       {!allDecided && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>All exceptions must have a decision before advancing.</AlertDescription>
+          <AlertDescription>
+            All exceptions must have a decision before advancing. — يجب اتخاذ قرار لجميع الاستثناءات قبل المتابعة.
+          </AlertDescription>
         </Alert>
       )}
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
-          {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step5">← Back</Button>}
+          {canGoBack && (
+            <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step5">← Back</Button>
+          )}
           <Button type="button" variant="outline" size="sm" onClick={exportExceptions} data-testid="button-export-exceptions">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export Exceptions Report
@@ -348,6 +385,209 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
           Next: Financial Reconciliation →
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── Shared header ─────────────────────────────────────────────────────────────
+
+function Header() {
+  return (
+    <div className="space-y-1">
+      <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
+      <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
+      <p className="text-muted-foreground text-sm">
+        Not-covered sites with advance payments linked to their enumerators. Each requires a decision before the cycle can close.
+      </p>
+      <p className="text-sm text-muted-foreground" dir="rtl">
+        مواقع غير مغطاة مرتبطة بسلف مدفوعة للمعددين — يجب اتخاذ قرار بشأن كل منها قبل إغلاق الدورة.
+      </p>
+    </div>
+  );
+}
+
+// ── Site card ─────────────────────────────────────────────────────────────────
+
+interface SiteCardProps {
+  site: ExceptionSite;
+  decision: ExceptionDecision | undefined;
+  decisions: ReadonlyArray<{
+    value: string; label: string; labelAr: string; desc: string; descAr: string; track: string; trackAr: string;
+  }>;
+  isDone: boolean;
+  canOverride: boolean;
+  setDecision: (siteId: string, patch: Partial<ExceptionDecision>) => void;
+  variant: 'paid' | 'approved';
+}
+
+function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecision, variant }: SiteCardProps) {
+  const isPartial = site.advanceStatus === 'partially_paid';
+
+  const badgeEl = variant === 'paid' ? (
+    <Badge className={`text-xs ${isPartial
+      ? 'bg-blue-100 text-blue-700 border-blue-300'
+      : 'bg-green-100 text-green-800 border-green-300'}`}>
+      {isPartial
+        ? `Paid SDG ${site.advancePaid.toLocaleString()} of ${site.requestedAmount.toLocaleString()}`
+        : `✓ Paid: SDG ${site.advancePaid.toLocaleString()}`}
+    </Badge>
+  ) : (
+    <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">
+      ⏳ Approved (Unpaid): SDG {site.requestedAmount.toLocaleString()}
+    </Badge>
+  );
+
+  const borderClass = isDone
+    ? 'border-green-300 bg-green-50/20'
+    : variant === 'paid'
+      ? 'border-green-200'
+      : 'border-amber-200';
+
+  const chosen = decisions.find(x => x.value === d?.decision);
+
+  return (
+    <div className={`border rounded-lg p-4 space-y-3 ${borderClass}`}>
+      {/* Site header */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold text-sm">{site.siteName}</p>
+          <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumeratorName}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {badgeEl}
+          {isDone && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+        </div>
+      </div>
+
+      {/* Decision selector */}
+      <Select
+        value={d?.decision ?? ''}
+        onValueChange={v => setDecision(site.siteId, { decision: v as ExceptionDecision['decision'] })}
+      >
+        <SelectTrigger className="w-full" data-testid={`select-decision-${site.siteId}`}>
+          <SelectValue placeholder="Select recovery action… — اختر إجراء الاسترداد" />
+        </SelectTrigger>
+        <SelectContent>
+          {decisions.map(dec => (
+            <SelectItem key={dec.value} value={dec.value}>
+              <div className="flex flex-col gap-0.5 py-0.5 max-w-sm">
+                <span className="font-medium">
+                  {dec.label} · <span dir="rtl">{dec.labelAr}</span>
+                </span>
+                <span className="text-muted-foreground text-xs">{dec.desc}</span>
+              </div>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* ── Extra inputs per decision ── */}
+
+      {d?.decision === 'redirect' && (
+        <div className="space-y-2 pl-3 border-l-2 border-green-400">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="text-xs font-medium w-32">Amount to redirect</label>
+            <Input
+              type="number" min={0} max={site.advancePaid}
+              value={d?.amount ?? ''}
+              onChange={e => setDecision(site.siteId, { amount: Number(e.target.value) })}
+              className="w-36 h-8 text-sm"
+              placeholder={`Max: ${site.advancePaid}`}
+              data-testid={`input-redirect-amount-${site.siteId}`}
+            />
+            <span className="text-xs text-muted-foreground">SDG (max: {site.advancePaid.toLocaleString()})</span>
+          </div>
+          {(d?.amount ?? 0) > site.advancePaid && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Amount cannot exceed paid amount (SDG {site.advancePaid.toLocaleString()})
+            </p>
+          )}
+          <Textarea
+            placeholder="Justification (required) — why is this advance being redirected to enumerator fees?"
+            value={d?.justification ?? ''}
+            onChange={e => setDecision(site.siteId, { justification: e.target.value })}
+            rows={2} className="text-sm"
+            data-testid={`input-redirect-justification-${site.siteId}`}
+          />
+          {!canOverride && (
+            <p className="text-xs text-amber-600">⚠️ Redirect decisions must be approved by FOM or Admin</p>
+          )}
+          <p className="text-xs text-muted-foreground">GL: Debit Enumerator Fees / Credit Transport Advance</p>
+        </div>
+      )}
+
+      {d?.decision === 'writeoff' && (
+        <Textarea
+          placeholder="Write-off justification (required) — المبرر مطلوب…"
+          value={d?.justification ?? ''}
+          onChange={e => setDecision(site.siteId, { justification: e.target.value })}
+          rows={2} className="text-sm"
+          data-testid={`input-writeoff-justification-${site.siteId}`}
+        />
+      )}
+
+      {d?.decision === 'reduce' && (
+        <div className="space-y-2 pl-3 border-l-2 border-amber-400">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="text-xs font-medium w-36">Reduced amount to approve</label>
+            <Input
+              type="number" min={1} max={site.requestedAmount - 1}
+              value={d?.amount ?? ''}
+              onChange={e => setDecision(site.siteId, { amount: Number(e.target.value) })}
+              className="w-36 h-8 text-sm"
+              placeholder={`< ${site.requestedAmount}`}
+              data-testid={`input-reduce-amount-${site.siteId}`}
+            />
+            <span className="text-xs text-muted-foreground">SDG (requested: {site.requestedAmount.toLocaleString()})</span>
+          </div>
+          {(d?.amount ?? 0) >= site.requestedAmount && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Reduced amount must be less than the approved amount (SDG {site.requestedAmount.toLocaleString()})
+            </p>
+          )}
+        </div>
+      )}
+
+      {d?.decision === 'reassign' && (
+        <div className="space-y-1 pl-3 border-l-2 border-green-400">
+          <p className="text-xs text-muted-foreground">
+            Target site ID (covered site in this MMP for this enumerator). This will be fully supported via the Exception Tracker page after cycle close.
+          </p>
+          <p dir="rtl" className="text-xs text-muted-foreground">
+            سيتم دعم عملية إعادة التعيين بالكامل عبر صفحة متابعة الاستثناءات بعد إغلاق الدورة.
+          </p>
+          <Input
+            placeholder="Target site ID…"
+            value={d?.targetSiteId ?? ''}
+            onChange={e => setDecision(site.siteId, { targetSiteId: e.target.value })}
+            className="h-8 text-sm font-mono"
+            data-testid={`input-reassign-site-${site.siteId}`}
+          />
+        </div>
+      )}
+
+      {/* ── Tracking note (once decision selected) ── */}
+      {chosen && (
+        <div className="rounded-md bg-muted/60 border border-border px-3 py-2 space-y-1">
+          <p className="text-xs text-muted-foreground flex items-start gap-1">
+            <span className="font-medium shrink-0">📍 Tracked:</span>
+            <span>{chosen.track}</span>
+          </p>
+          <p dir="rtl" className="text-xs text-muted-foreground">
+            <span className="font-medium">📍 المتابعة:</span> {chosen.trackAr}
+          </p>
+        </div>
+      )}
+
+      {/* ── Not-decided warning ── */}
+      {!d?.decision && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          You must select a recovery action for {site.siteName} before closing.
+        </p>
+      )}
     </div>
   );
 }
