@@ -8,27 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Download, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
-import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-
-interface EnumRow {
-  enumeratorId: string;
-  enumeratorName: string;
-  sitesAssigned: number;
-  wfpConfirmed: number;
-  wfpRejected: number;
-  notCovered: number;
-  advancePaid: number;
-  transportRate: number;
-  feeRate: number;
-  transportEarned: number;
-  feesEarned: number;
-  totalEarned: number;
-  netToPay: number;
-  rowType: 'green' | 'amber' | 'red' | 'blue';
-  paymentDone: boolean;
-}
+import {
+  type EnumRow,
+  exportFormattedReconciliation,
+  exportFormattedPaymentRun,
+} from '@/utils/cycleCloseExport';
 
 interface Props {
   wizardState: WizardState;
@@ -238,36 +224,11 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
   };
 
   const exportReconciliation = () => {
-    const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
-      Enumerator: r.enumeratorName,
-      'Sites Assigned': r.sitesAssigned,
-      'WFP Confirmed': r.wfpConfirmed,
-      'WFP Rejected': r.wfpRejected,
-      'Not Covered': r.notCovered,
-      'Advance Paid (SDG)': r.advancePaid,
-      'Transport Earned (SDG)': r.transportEarned,
-      'Fees Earned (SDG)': r.feesEarned,
-      'Total Earned (SDG)': r.totalEarned,
-      'Net to Pay (SDG)': r.netToPay,
-      Status: r.rowType === 'green' ? 'Owed payment' : r.rowType === 'red' ? 'Overpaid' : r.rowType === 'blue' ? 'No advance' : 'Balanced',
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Reconciliation');
-    XLSX.writeFile(wb, 'enumerator-reconciliation.xlsx');
+    void exportFormattedReconciliation(rows, wizardState);
   };
 
   const exportPaymentRunSheet = () => {
-    const payable = rows.filter(r => r.rowType === 'green' || r.rowType === 'blue');
-    const ws = XLSX.utils.json_to_sheet(payable.map(r => ({
-      Enumerator: r.enumeratorName,
-      'Transport (SDG)': r.transportEarned,
-      'Fees (SDG)': r.feesEarned,
-      'Net to Pay (SDG)': r.rowType === 'blue' ? r.totalEarned : r.netToPay,
-      'Payment Status': r.paymentDone ? 'Generated' : 'Pending',
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payment Run Sheet');
-    XLSX.writeFile(wb, 'payment-run-sheet.xlsx');
+    void exportFormattedPaymentRun(rows, wizardState);
   };
 
   const exportFinancialSummaryPDF = () => {

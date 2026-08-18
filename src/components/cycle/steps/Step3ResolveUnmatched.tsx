@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertTriangle, AlertCircle, Info, Download, CheckCircle2, Loader2 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
-import * as XLSX from 'xlsx';
+import { exportFormattedRejectedSites } from '@/utils/cycleCloseExport';
 
 interface UnresolvedSite {
   id: string;
@@ -100,19 +100,7 @@ export default function Step3ResolveUnmatched({ wizardState, updateWizardState, 
   };
 
   const exportRejectedReport = () => {
-    const rows = sites.map(s => ({
-      'Site Name': s.site_name,
-      State: s.state,
-      Locality: s.locality,
-      Enumerator: s.enumerator_name,
-      Status: s.status,
-      'Rejection Reason': s.rejection_reason ?? '',
-      'Action Taken': wizardState.resolvedSites[s.id] ?? 'Pending',
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Rejected Sites');
-    XLSX.writeFile(wb, 'rejected-sites-report.xlsx');
+    void exportFormattedRejectedSites(sites, wizardState);
   };
 
   if (loading) {

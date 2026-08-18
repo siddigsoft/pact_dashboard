@@ -12,9 +12,9 @@ import {
   Archive, Loader2, Info
 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
-import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { exportCycleCloseWorkbook, type CheckResult } from '@/utils/cycleCloseExport';
 
 interface CheckItem {
   id: number;
@@ -120,14 +120,16 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const generateCycleCloseReports = async () => {
-    // PDF
+    const cname = wizardState.selectedMmp?.name ?? 'cycle';
+
+    // ── PDF summary (kept as official one-page signed record) ────────────────
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text('PACT Cycle Close — Official Record', 14, 20);
     doc.setFontSize(11);
     doc.text(`Cycle: ${wizardState.selectedMmp?.name ?? ''}`, 14, 32);
     doc.text(`Closed by: ${currentUser?.full_name ?? 'User'} on ${new Date().toLocaleString()}`, 14, 40);
-    doc.text(`Sites: ${confirmedSites} confirmed, ${notCoveredCount} not covered (of ${totalSites} total)`, 14, 48);
+    doc.text(`Sites: ${confirmedSites} confirmed, ${allNotCoveredIds.size} not covered (of ${totalSites} total)`, 14, 48);
     (autoTable as any)(doc, {
       startY: 58,
       head: [['Check', 'Status', 'Override?']],
@@ -150,48 +152,16 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         ]),
       });
     }
-    doc.save(`cycle-close-official-${wizardState.selectedMmp?.name ?? 'cycle'}.pdf`);
+    doc.save(`cycle-close-official-${cname}.pdf`);
 
-    // Excel (6 sheets)
-    const wb = XLSX.utils.book_new();
-
-    // Sheet 1: Site Summary
-    const siteRows = (wizardState.matchResults).map(r => ({
-      'Site Name': r.matchedSiteName ?? r.wfpRow['site_name'] ?? '',
-      'WFP Status': r.status,
-      'Match Type': r.matchLevel,
-      'Action': r.action ?? r.status,
+    // ── Formatted multi-sheet Excel workbook (all stages + advances) ─────────
+    const checkResults: CheckResult[] = checks.map(c => ({
+      id: c.id,
+      label: c.label,
+      passes: c.passes,
+      override: wizardState.overrides[c.id],
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteRows), 'Site Summary');
-
-    // Sheet 2: Not Covered
-    const ncRows = Object.entries(wizardState.uncoveredReasons).map(([id, r]) => ({
-      'Site ID': id,
-      Reason: r.reason,
-      Note: r.note,
-      'Follow-Up Required': r.flagged ? 'Yes' : 'No',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ncRows.length ? ncRows : [{}]), 'Not Covered Sites');
-
-    // Sheet 3: Exceptions
-    const exRows = Object.entries(wizardState.exceptionDecisions).map(([id, d]) => ({
-      'Site ID': id,
-      Decision: d.decision,
-      Amount: d.amount ?? '',
-      Justification: d.justification ?? '',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exRows.length ? exRows : [{}]), 'Exceptions');
-
-    // Sheet 4: Overrides
-    const ovRows = Object.entries(wizardState.overrides).map(([id, ov]) => ({
-      'Check': checks.find(c => c.id === Number(id))?.label ?? id,
-      'Override By': ov.by,
-      'When': new Date(ov.at).toLocaleString(),
-      'Justification': ov.justification,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ovRows.length ? ovRows : [{}]), 'Override Log');
-
-    XLSX.writeFile(wb, `cycle-close-workbook-${wizardState.selectedMmp?.name ?? 'cycle'}.xlsx`);
+    await exportCycleCloseWorkbook(wizardState, currentUser, checkResults);
   };
 
   const handleCloseCycle = async () => {

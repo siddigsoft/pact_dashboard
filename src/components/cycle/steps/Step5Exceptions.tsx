@@ -9,17 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react';
 import type { WizardState, ExceptionDecision } from '../CycleCloseWizard';
-import * as XLSX from 'xlsx';
-
-interface ExceptionSite {
-  siteId: string;
-  siteName: string;
-  state: string;
-  locality: string;
-  enumeratorId: string;
-  enumeratorName: string;
-  advancePaid: number;
-}
+import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
 interface Props {
   wizardState: WizardState;
@@ -120,24 +110,7 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
   };
 
   const exportExceptions = () => {
-    const rows = exceptions.map(e => {
-      const d = wizardState.exceptionDecisions[e.siteId];
-      return {
-        'Site Name': e.siteName,
-        State: e.state,
-        Locality: e.locality,
-        Enumerator: e.enumeratorName,
-        'Advance Paid (SDG)': e.advancePaid,
-        Decision: d?.decision ?? 'Pending',
-        'Amount Redirected/Rolled': d?.amount ?? '',
-        Justification: d?.justification ?? '',
-        'Approved By': d?.approvedBy ?? '',
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Exceptions');
-    XLSX.writeFile(wb, 'exceptions-report.xlsx');
+    void exportFormattedExceptions(exceptions, wizardState);
   };
 
   if (loading) return (

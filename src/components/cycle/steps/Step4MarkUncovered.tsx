@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight, Search, ArrowUpDown, Maximize2, Minimize2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
-import * as XLSX from 'xlsx';
+import { exportFormattedNotCovered } from '@/utils/cycleCloseExport';
 import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
 
 const NOT_COVERED_REASONS = [
@@ -376,62 +376,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   };
 
   const exportNotCoveredReport = () => {
-    const sourceLabel = (src: UncoveredSite['source']) =>
-      src === 'not_in_wfp'      ? 'Not in WFP File'
-      : src === 'rejected_match' ? 'WFP Rejected'
-      : src === 'not_covered'    ? 'Unresolved (Step 3)'
-      : 'DB: Not Covered';
-
-    // Sheet 1 — individual uncovered sites
-    const siteRows = sites.map(s => {
-      const r = wizardState.uncoveredReasons[s.id];
-      return {
-        'Site Name':           s.site_name,
-        State:                 s.state,
-        Locality:              s.locality,
-        'Hub / Office':        s.hub_office,
-        'Enumerator / Accepted By': s.enumerator_name,
-        Source:                sourceLabel(s.source),
-        Reason:                r?.reason ?? 'Not assigned',
-        Notes:                 r?.note ?? '',
-        'Flagged for Follow-Up': r?.flagged ? 'Yes' : 'No',
-      };
-    });
-    const wsSites = XLSX.utils.json_to_sheet(siteRows);
-
-    // Sheet 2 — coverage breakdown by state (mirrors the on-screen table)
-    const coverageSummaryRows = [
-      ...coverageRows.map(row => {
-        const pct = row.total ? Math.round((row.confirmed / row.total) * 100) : 0;
-        return {
-          State:         row.label,
-          'Total Sites': row.total,
-          'Confirmed':   row.confirmed,
-          'Not Covered': row.notCovered,
-          'Coverage %':  `${pct}%`,
-        };
-      }),
-      // Totals row
-      (() => {
-        const total = coverageRows.reduce((s, r) => s + r.total, 0);
-        const conf  = coverageRows.reduce((s, r) => s + r.confirmed, 0);
-        const nc    = coverageRows.reduce((s, r) => s + r.notCovered, 0);
-        const pct   = total ? Math.round((conf / total) * 100) : 0;
-        return {
-          State:         'TOTAL',
-          'Total Sites': total,
-          'Confirmed':   conf,
-          'Not Covered': nc,
-          'Coverage %':  `${pct}%`,
-        };
-      })(),
-    ];
-    const wsCoverage = XLSX.utils.json_to_sheet(coverageSummaryRows);
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsSites,    'Uncovered Sites');
-    XLSX.utils.book_append_sheet(wb, wsCoverage, 'Coverage by State');
-    XLSX.writeFile(wb, 'not-covered-sites-report.xlsx');
+    void exportFormattedNotCovered(sites, coverageRows, wizardState);
   };
 
   if (loading) {
@@ -551,16 +496,29 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           return Object.values(r.wfpRow).some(v => String(v).toLowerCase().includes(searchLow));
         });
 
-        const exportUnmatched = () => {
-          const rows = unmatchedRows.map((r, i) => {
-            const out: Record<string, string> = { '#': String(i + 1) };
-            wfpCols.forEach(col => { out[col] = r.wfpRow[col] ?? ''; });
-            return out;
+        const exportUnmatched = async () => {
+          const ExcelJS = (await import('exceljs')).default;
+          const { saveAs } = await import('file-saver');
+          const wb = new ExcelJS.Workbook();
+          const ws = wb.addWorksheet('Unmatched WFP Rows');
+          const headers = ['#', ...wfpCols];
+          const hr = ws.addRow(headers);
+          hr.eachCell(c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0891b2' } };
+            c.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
           });
-          const ws = XLSX.utils.json_to_sheet(rows);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, 'Unmatched WFP Rows');
-          XLSX.writeFile(wb, 'unmatched-wfp-rows.xlsx');
+          ws.views = [{ state: 'frozen', ySplit: 1 }];
+          unmatchedRows.forEach((r, i) => {
+            const vals = [i + 1, ...wfpCols.map(col => r.wfpRow[col] ?? '')];
+            const dr = ws.addRow(vals);
+            dr.eachCell(c => {
+              c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i % 2 === 0 ? 'FFFFFFFF' : 'FFf0f9ff' } };
+              c.font = { size: 10, name: 'Calibri' };
+            });
+          });
+          headers.forEach((h, i) => { ws.getColumn(i + 1).width = Math.min(Math.max(h.length + 4, 12), 40); });
+          const buf = await wb.xlsx.writeBuffer();
+          saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `unmatched-wfp-rows-${wizardState.selectedMmp?.name ?? 'cycle'}.xlsx`);
         };
 
         return (
@@ -744,29 +702,41 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         // How many uncovered in current filter still need a reason
         const pendingInView = filtered.filter(s => uncoveredSiteIds.has(s.id) && !wizardState.uncoveredReasons[s.id]?.reason).length;
 
-        const exportSiteStatus = () => {
-          const rows = filtered.map(s => ({
-            'Site Code':          s.site_code,
-            'Site Name':          s.site_name,
-            State:                s.state,
-            Locality:             s.locality,
-            'Hub / Office':       s.hub_office,
-            'System Status':      s.system_status,
-            'In WFP File':        s.wfp_in_file ? 'Yes' : 'No',
-            'WFP Row (Primary)':  s.wfp_row_primary ?? '—',
-            'Match Score':        s.match_score != null ? `${s.match_score}%` : '—',
-            'Match Level':        s.match_level ?? '—',
-            'Matching Status':    s.matching_status,
-            'Action Taken':       s.action_taken ?? '—',
-            Coverage:             s.coverage,
-            'Activity at Site':   s.activity_at_site ?? '—',
-            'Main Activity':      s.main_activity ?? '—',
-            'Not-Covered Reason': s.not_covered_reason ?? (wizardState.uncoveredReasons[s.id]?.reason ?? '—'),
-          }));
-          const ws = XLSX.utils.json_to_sheet(rows);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, 'Site Status');
-          XLSX.writeFile(wb, 'site-status-full.xlsx');
+        const exportSiteStatus = async () => {
+          const headers = [
+            'Site Code', 'Site Name', 'State', 'Locality', 'Hub / Office',
+            'System Status', 'In WFP File', 'WFP Row (Primary)', 'Match Score',
+            'Match Level', 'Matching Status', 'Action Taken', 'Coverage',
+            'Activity at Site', 'Main Activity', 'Not-Covered Reason',
+          ];
+          const ExcelJS = (await import('exceljs')).default;
+          const { saveAs } = await import('file-saver');
+          const wb = new ExcelJS.Workbook();
+          const sheet = wb.addWorksheet('Site Status');
+          const hr = sheet.addRow(headers);
+          hr.eachCell(c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0891b2' } };
+            c.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10, name: 'Calibri' };
+          });
+          sheet.views = [{ state: 'frozen', ySplit: 1 }];
+          filtered.forEach((s, i) => {
+            const dr = sheet.addRow([
+              s.site_code, s.site_name, s.state, s.locality, s.hub_office,
+              s.system_status, s.wfp_in_file ? 'Yes' : 'No',
+              s.wfp_row_primary ?? '—',
+              s.match_score != null ? `${s.match_score}%` : '—',
+              s.match_level ?? '—', s.matching_status, s.action_taken ?? '—',
+              s.coverage, s.activity_at_site ?? '—', s.main_activity ?? '—',
+              s.not_covered_reason ?? (wizardState.uncoveredReasons[s.id]?.reason ?? '—'),
+            ]);
+            dr.eachCell(c => {
+              c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i % 2 === 0 ? 'FFFFFFFF' : 'FFf0f9ff' } };
+              c.font = { size: 10, name: 'Calibri' };
+            });
+          });
+          headers.forEach((h, i) => { sheet.getColumn(i + 1).width = Math.min(Math.max(h.length + 4, 12), 40); });
+          const buf = await wb.xlsx.writeBuffer();
+          saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `site-status-${wizardState.selectedMmp?.name ?? 'cycle'}.xlsx`);
         };
 
         const SortTh = ({ col, label, className = '' }: { col: keyof SiteDetail; label: string; className?: string }) => (

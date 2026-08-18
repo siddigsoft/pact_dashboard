@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
 import { runMatching, type MatchCandidate, type MatchPair } from '@/utils/fuzzyMatcher';
+import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
 
 // ─── MMP columns to fetch from the database ────────────────────────────────
 // NOTE: accepted_by is a plain text / uuid column with no FK to profiles,
@@ -385,23 +386,7 @@ export default function Step2UploadMatch({
   };
 
   const exportMatchingReport = () => {
-    const pairs = wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn);
-    const rows = wizardState.matchResults.map(r => {
-      const row: Record<string, string> = {};
-      pairs.forEach(p => {
-        row[`WFP: ${p.wfpColumn}`] = r.wfpRow[p.wfpColumn] ?? '';
-      });
-      row['Matched MMP Entry'] = r.matchedSiteName ?? 'No match';
-      row['Match Score'] = r.matchScore + '%';
-      row['Match Type'] = r.matchLevel;
-      row['Method'] = r.manualMatchSiteId ? 'Manual' : 'Auto';
-      row['Action'] = r.action ?? r.status;
-      return row;
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Matching Report');
-    XLSX.writeFile(wb, 'matching-report.xlsx');
+    void exportFormattedMatchingReport(wizardState);
   };
 
   // ── Derived values ────────────────────────────────────────────────────────
