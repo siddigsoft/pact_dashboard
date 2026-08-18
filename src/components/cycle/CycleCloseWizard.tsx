@@ -244,20 +244,25 @@ export default function CycleCloseWizard({
     let cancelled = false;
     (async () => {
       if (requestedId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('mmp_files')
-          .select('id, name, month, year, hub, cycle_status, status, created_at')
+          .select('id, name, month, hub, cycle_status, status, created_at')
           .eq('id', requestedId)
           .single();
+        if (error) console.warn('[CycleCloseWizard] cycle lookup failed:', error);
         if (!cancelled && data) applySelectedCycle(data);
       }
       if (!isStep4ContributorOnly) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year, hub, cycle_status, status, created_at')
+        .select('id, name, month, hub, cycle_status, status, created_at')
         .not('status', 'eq', 'rejected')
         .order('created_at', { ascending: false })
         .limit(50);
+      if (error) {
+        console.warn('[CycleCloseWizard] cycle list failed:', error);
+        return;
+      }
       if (cancelled || !data?.length) return;
       const open = data.filter((m: any) => String(m.cycle_status ?? 'active').toLowerCase() !== 'closed');
       const closing = open.filter((m: any) => String(m.cycle_status ?? '').toLowerCase() === 'closing');

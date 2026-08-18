@@ -155,7 +155,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
   const loadUncoveredSites = async () => {
     setLoading(true);
-
+    try {
     // Sites marked as not_covered in Step 3
     const step3NotCovered = Object.entries(wizardState.resolvedSites)
       .filter(([, v]) => v === 'not_covered')
@@ -175,11 +175,16 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     if (allIds.length === 0) {
       // Fall back: check DB for any already-marked not_covered sites
       // NOTE: accepted_by has no FK to profiles — do NOT use a join here
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, hub_office, accepted_by, status, not_covered_reason, not_covered_note, needs_followup, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
+        .select('id, site_name, state, locality, hub_office, accepted_by, status, not_covered_reason, not_covered_reason_other, not_covered_flag, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('status', 'not_covered');
+      if (error) {
+        console.error('loadUncoveredSites fallback error:', error);
+        setSites([]);
+        return;
+      }
       const scoped = scopeRows(data ?? []);
       setSites(scoped.map((s: any) => ({
         id: s.id,
@@ -194,8 +199,8 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         if (!s.not_covered_reason) return acc;
         acc[s.id] = {
           reason: s.not_covered_reason,
-          note: s.not_covered_note ?? '',
-          flagged: !!s.needs_followup,
+          note: s.not_covered_note ?? s.not_covered_reason_other ?? '',
+          flagged: !!(s.needs_followup ?? s.not_covered_flag),
           status: (s.not_covered_confirm_status === 'confirmed' ? 'confirmed' : 'draft'),
           confirmedBy: s.not_covered_confirmed_by ?? null,
           confirmedAt: s.not_covered_confirmed_at ?? null,
@@ -214,7 +219,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     // then do a separate lookup for any enumerator names we need.
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, hub_office, accepted_by, not_covered_reason, not_covered_note, needs_followup, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
+      .select('id, site_name, state, locality, hub_office, accepted_by, not_covered_reason, not_covered_reason_other, not_covered_flag, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
       .in('id', allIds);
 
     if (error) {
@@ -261,8 +266,8 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       if (!s.not_covered_reason) return acc;
       acc[s.id] = {
         reason: s.not_covered_reason,
-        note: s.not_covered_note ?? '',
-        flagged: !!s.needs_followup,
+        note: s.not_covered_note ?? s.not_covered_reason_other ?? '',
+        flagged: !!(s.needs_followup ?? s.not_covered_flag),
         status: (s.not_covered_confirm_status === 'confirmed' ? 'confirmed' : 'draft'),
         confirmedBy: s.not_covered_confirmed_by ?? null,
         confirmedAt: s.not_covered_confirmed_at ?? null,
@@ -273,7 +278,12 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     if (Object.keys(restored).length) {
       updateWizardState({ uncoveredReasons: { ...wizardState.uncoveredReasons, ...restored } });
     }
-    setLoading(false);
+    } catch (err) {
+      console.error('loadUncoveredSites failed:', err);
+      setSites([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Coverage breakdown by state ───────────────────────────────────────────
