@@ -205,9 +205,14 @@ export default function CycleCloseWizard({
 
   useEffect(() => {
     if (!isStep4ContributorOnly) return;
-    setCurrentStep(4);
-    setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
-  }, [isStep4ContributorOnly]);
+    if (initialMmpId) {
+      setCurrentStep(4);
+      setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
+      return;
+    }
+    setCurrentStep(1);
+    setStepStatuses(['in_progress', 'blocked', 'blocked', 'not_started', 'blocked', 'blocked', 'blocked']);
+  }, [isStep4ContributorOnly, initialMmpId]);
 
   useEffect(() => {
     const mmpId = initialMmpId ?? null;
@@ -296,7 +301,8 @@ export default function CycleCloseWizard({
 
   const goToStep = (step: number) => {
     if (isStep4ContributorOnly) {
-      if (step === 4) setCurrentStep(4);
+      if (step === 1) setCurrentStep(1);
+      if (step === 4 && wizardState.selectedMmpId) setCurrentStep(4);
       return;
     }
     if (step < currentStep || stepStatuses[step - 1] !== 'not_started') {
@@ -395,7 +401,13 @@ export default function CycleCloseWizard({
   };
 
   const handleNext = async () => {
-    if (isStep4ContributorOnly) return;
+    if (isStep4ContributorOnly) {
+      if (currentStep === 1 && wizardState.selectedMmpId) {
+        setCurrentStep(4);
+        setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
+      }
+      return;
+    }
     if (currentStep === 3) {
       try {
         await notifyStep4Stakeholders();
@@ -408,11 +420,16 @@ export default function CycleCloseWizard({
   };
 
   const handleBack = () => {
-    if (isStep4ContributorOnly) return;
+    if (isStep4ContributorOnly) {
+      if (currentStep === 4) setCurrentStep(1);
+      return;
+    }
     setCurrentStep(s => Math.max(s - 1, 1));
   };
 
-  const canGoBack = !isStep4ContributorOnly && currentStep > 1 && !wizardState.cycleClosedAt;
+  const canGoBack = isStep4ContributorOnly
+    ? currentStep === 4
+    : currentStep > 1 && !wizardState.cycleClosedAt;
   const isClosed = !!wizardState.cycleClosedAt;
   const canOverride = isFOM || isAdmin || isSuperAdmin;
 
@@ -463,7 +480,9 @@ export default function CycleCloseWizard({
             const stepNum = idx + 1;
             const status = stepStatuses[idx];
             const isActive = stepNum === currentStep;
-            const isClickable = !isStep4ContributorOnly && (stepNum < currentStep || status === 'done');
+            const isClickable = isStep4ContributorOnly
+              ? stepNum === 1 || (stepNum === 4 && !!wizardState.selectedMmpId)
+              : (stepNum < currentStep || status === 'done');
             return (
               <div key={stepNum} className="flex items-center gap-1 flex-shrink-0">
                 <button
@@ -497,13 +516,7 @@ export default function CycleCloseWizard({
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto">
-        {isStep4ContributorOnly && !wizardState.selectedMmpId ? (
-          <div className="max-w-2xl mx-auto p-6">
-            <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 text-sm text-amber-900">
-              Step 4 access is enabled for your role. Open this workflow from the notification link so the correct cycle is pre-selected.
-            </div>
-          </div>
-        ) : isClosed ? (
+        {isClosed ? (
           <Step7FinalClose {...stepProps} />
         ) : (
           <>
@@ -513,6 +526,7 @@ export default function CycleCloseWizard({
                 savedSession={savedSession}
                 onResume={handleResume}
                 onStartFresh={handleStartFresh}
+                nextLabel={isStep4ContributorOnly ? 'Open Step 4 →' : undefined}
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}

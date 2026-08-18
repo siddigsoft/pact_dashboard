@@ -19,6 +19,7 @@ interface Props {
   savedSession?: SavedSession | null;
   onResume?: () => void;
   onStartFresh?: () => void;
+  nextLabel?: string;
 }
 
 function formatSavedAt(iso: string): string {
@@ -51,7 +52,7 @@ const STEP_LABELS: Record<number, string> = {
 
 export default function Step1SelectCycle({
   wizardState, updateWizardState, onNext, canAdvance,
-  savedSession, onResume, onStartFresh,
+  savedSession, onResume, onStartFresh, nextLabel,
 }: Props) {
   const [openCycles, setOpenCycles] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -371,7 +372,7 @@ export default function Step1SelectCycle({
           disabled={!canAdvance || isAlreadyClosed}
           data-testid="button-start-guided-close"
         >
-          Start Guided Close →
+          {nextLabel ?? 'Start Guided Close →'}
         </Button>
       </div>
     </div>
