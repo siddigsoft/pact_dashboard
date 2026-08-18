@@ -11,7 +11,7 @@ import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 import { supabase } from '@/integrations/supabase/client';
-import { insertNotificationsToDb } from '@/services/notification-insert';
+import { dispatchNotification } from '@/lib/notify';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
@@ -366,28 +366,31 @@ export default function CycleCloseWizard({
 
     const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
     const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
-    const rows = Array.from(recipients).map((recipientId) => ({
-      recipient_id: recipientId,
-      user_id: recipientId,
-      title_en: `Cycle Close Step 4 is ready: ${cycleName}`,
-      title_ar: `الخطوة ٤ من إغلاق الدورة جاهزة: ${cycleName}`,
-      message_en: `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope.`,
-      message_ar: `يرجى إكمال الخطوة ٤ (تحديد المواقع غير المغطاة) ضمن نطاق الولاية/المركز الخاص بك.`,
-      event_type: 'workflow',
-      entity_id: mmpId,
-      entity_type: 'mmpFile',
-      action_url: actionUrl,
+    const titleEn = `Cycle Close Step 4 is ready: ${cycleName}`;
+    const titleAr = `الخطوة ٤ من إغلاق الدورة جاهزة: ${cycleName}`;
+    const messageEn = `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope. ${uniqueIds.length} site(s) require uncovered reasons.`;
+    const messageAr = `يرجى إكمال الخطوة ٤ (تحديد المواقع غير المغطاة) ضمن نطاق الولاية/المركز الخاص بك. ${uniqueIds.length} موقع(اً) يحتاج سبباً.`;
+
+    await dispatchNotification({
+      event: 'cycle_close_step4_ready',
+      recipientIds: Array.from(recipients),
+      titleEn,
+      titleAr,
+      messageEn,
+      messageAr,
       priority: 'high',
-      status: 'pending',
-      title: `Cycle Close Step 4 is ready: ${cycleName}`,
-      message: `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope.`,
-      link: actionUrl,
-      related_entity_id: mmpId,
-      related_entity_type: 'mmpFile',
-      type: 'warning',
-      is_read: false,
-    }));
-    await insertNotificationsToDb(rows);
+      entityType: 'mmpFile',
+      entityId: mmpId,
+      actionUrl,
+      sendEmail: true,
+      triggeredBy: currentUser?.id,
+      triggeredByName: currentUser?.full_name ?? currentUser?.name,
+      metadata: {
+        cycle: cycleName,
+        uncovered_count: uniqueIds.length,
+        mmp_code: wizardState.selectedMmp?.mmp_id ?? wizardState.selectedMmp?.code ?? undefined,
+      },
+    });
     step4NotifiedMmpIdsRef.current.add(mmpId);
   };
 
