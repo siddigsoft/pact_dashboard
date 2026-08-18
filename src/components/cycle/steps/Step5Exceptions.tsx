@@ -22,10 +22,46 @@ interface Props {
 }
 
 const DECISIONS = [
-  { value: 'roll', label: 'Roll to Next MMP', desc: 'Treat as pre-payment for the next cycle' },
-  { value: 'return', label: 'Return Required', desc: 'Enumerator must return the money' },
-  { value: 'writeoff', label: 'Write-Off', desc: 'Amount is too small or unrecoverable' },
-  { value: 'redirect', label: 'Redirect to Enumerator Fees', desc: 'Enumerator did related work — redirect to fee line (GL: Debit Enumerator Fees / Credit Transport Advance)' },
+  {
+    value: 'roll',
+    label: 'Roll to Next MMP',
+    labelAr: 'رحّل إلى الدورة التالية',
+    desc: 'Treat as pre-payment for the next cycle.',
+    descAr: 'تُعامَل كدفعة مقدمة للدورة القادمة.',
+    track: 'Tracked in Step 6 Reconciliation of the next cycle as an existing advance for this enumerator.',
+    trackAr: 'يظهر في المطابقة المالية (الخطوة ٦) للدورة القادمة كسلفة قائمة للمعدد.',
+    color: 'blue',
+  },
+  {
+    value: 'return',
+    label: 'Return Required',
+    labelAr: 'استرداد مطلوب',
+    desc: 'Enumerator must return the money.',
+    descAr: 'يجب على المعدد إعادة المبلغ.',
+    track: 'Logged in Step 6 Reconciliation as a scheduled recovery. Finance generates a recovery payment record.',
+    trackAr: 'يُسجَّل في الخطوة ٦ كاسترداد مجدوَل. تُنشئ المالية سجل استرداد الدفع.',
+    color: 'red',
+  },
+  {
+    value: 'writeoff',
+    label: 'Write-Off',
+    labelAr: 'شطب',
+    desc: 'Amount is too small or unrecoverable.',
+    descAr: 'المبلغ صغير جداً أو يتعذر استرداده.',
+    track: 'Recorded in mmp_payment_records with type "writeoff". Visible in Step 6 Reconciliation and the Excel workbook Exceptions sheet.',
+    trackAr: 'يُحفظ في سجلات المدفوعات بنوع "شطب". يظهر في الخطوة ٦ وورقة الاستثناءات في ملف Excel.',
+    color: 'amber',
+  },
+  {
+    value: 'redirect',
+    label: 'Redirect to Enumerator Fees',
+    labelAr: 'تحويل إلى أتعاب المعددين',
+    desc: 'Enumerator did related work — redirect to fee line.',
+    descAr: 'قام المعدد بعمل ذي صلة — يُحوَّل إلى بند الأتعاب.',
+    track: 'Creates a GL journal entry: Debit Enumerator Fees / Credit Transport Advance. Visible in the GL ledger and the Exceptions sheet of the Final Close workbook.',
+    trackAr: 'يُنشئ قيداً محاسبياً: مدين أتعاب المعددين / دائن سلفة النقل. يظهر في دفتر الأستاذ العام وورقة الاستثناءات.',
+    color: 'green',
+  },
 ];
 
 export default function Step5Exceptions({ wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride, currentUser }: Props) {
@@ -159,9 +195,26 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-          <p className="font-medium">4 options per site</p>
-          {DECISIONS.map(d => <p key={d.value}><strong>{d.label}:</strong> {d.desc}</p>)}
+        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-3 w-full">
+          <p className="font-semibold">4 options per site — ٤ خيارات لكل موقع</p>
+          {DECISIONS.map(d => (
+            <div key={d.value} className="space-y-0.5">
+              <p>
+                <strong>{d.label}</strong>
+                <span className="mx-1 text-blue-500">·</span>
+                <strong dir="rtl">{d.labelAr}</strong>
+                <span className="text-blue-600 ml-2">—</span>
+                <span className="ml-1">{d.desc}</span>
+              </p>
+              <p dir="rtl" className="text-xs text-blue-700 dark:text-blue-300">{d.descAr}</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                <span className="font-medium">📍 Tracked:</span> {d.track}
+              </p>
+              <p dir="rtl" className="text-xs text-blue-600 dark:text-blue-400">
+                <span className="font-medium">📍 المتابعة:</span> {d.trackAr}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -192,8 +245,10 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
                   <SelectContent>
                     {DECISIONS.map(dec => (
                       <SelectItem key={dec.value} value={dec.value}>
-                        <span className="font-medium">{dec.label}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">— {dec.desc}</span>
+                        <div className="flex flex-col gap-0.5 py-0.5">
+                          <span className="font-medium">{dec.label} · <span dir="rtl">{dec.labelAr}</span></span>
+                          <span className="text-muted-foreground text-xs">{dec.desc}</span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -246,6 +301,21 @@ export default function Step5Exceptions({ wizardState, updateWizardState, onNext
                     data-testid={`input-writeoff-justification-${site.siteId}`}
                   />
                 )}
+
+                {d?.decision && (() => {
+                  const chosen = DECISIONS.find(x => x.value === d.decision);
+                  return chosen ? (
+                    <div className="rounded-md bg-muted/60 border border-border px-3 py-2 space-y-1">
+                      <p className="text-xs text-muted-foreground flex items-start gap-1">
+                        <span className="font-medium shrink-0">📍 Tracked:</span>
+                        <span>{chosen.track}</span>
+                      </p>
+                      <p dir="rtl" className="text-xs text-muted-foreground">
+                        <span className="font-medium">📍 المتابعة:</span> {chosen.trackAr}
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
 
                 {!d?.decision && (
                   <p className="text-xs text-destructive flex items-center gap-1">
