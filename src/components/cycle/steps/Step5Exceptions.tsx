@@ -144,10 +144,10 @@ export default function Step5Exceptions({
       for (const p of (profileRows ?? [])) { if (p.full_name) nameMap[p.id] = p.full_name; }
     }
 
-    // Load advances per site entry (include id for downstream actions)
+    // Load advances per site entry (include id + approver for downstream actions)
     const { data: advances } = await supabase
       .from('down_payment_requests')
-      .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status')
+      .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status, supervisor_approved_by')
       .in('mmp_site_entry_id', notCoveredIds)
       .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']);
 
@@ -155,6 +155,7 @@ export default function Step5Exceptions({
     interface AdvanceRec {
       id: string; paidAmount: number; requestedAmount: number;
       status: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
+      approvedById: string | null;
     }
     const advanceBySite: Record<string, AdvanceRec> = {};
     for (const a of (advances ?? []) as any[]) {
@@ -168,7 +169,21 @@ export default function Step5Exceptions({
           paidAmount: paid,
           requestedAmount: req,
           status: a.status as AdvanceRec['status'],
+          approvedById: (a.supervisor_approved_by as string | null) ?? null,
         };
+      }
+    }
+
+    // Resolve approver names (supervisor_approved_by UUIDs)
+    const approverUuids = [...new Set(
+      Object.values(advanceBySite).map(r => r.approvedById).filter(Boolean) as string[]
+    )];
+    const approverNameMap: Record<string, string> = {};
+    if (approverUuids.length) {
+      const { data: approverRows } = await supabase
+        .from('profiles').select('id, full_name').in('id', approverUuids);
+      for (const p of (approverRows ?? [])) {
+        if (p.full_name) approverNameMap[p.id] = p.full_name;
       }
     }
 
@@ -187,6 +202,7 @@ export default function Step5Exceptions({
           requestedAmount: adv.requestedAmount,
           advanceStatus:   adv.status,
           advanceId:       adv.id,
+          approvedByName:  adv.approvedById ? (approverNameMap[adv.approvedById] ?? 'Unknown approver') : undefined,
         };
       });
 
@@ -449,9 +465,24 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
     <div className={`border rounded-lg p-4 space-y-3 ${borderClass}`}>
       {/* Site header */}
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="space-y-0.5">
           <p className="font-semibold text-sm">{site.siteName}</p>
           <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumeratorName}</p>
+          {site.approvedByName ? (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-foreground/70">Approved by:</span>
+              <span>{site.approvedByName}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                variant === 'paid'
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {variant === 'paid' ? 'Paid' : 'Approved — not yet paid'}
+              </span>
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground/60 italic">Approver not recorded</p>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {badgeEl}

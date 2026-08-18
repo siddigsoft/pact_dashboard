@@ -95,6 +95,8 @@ export interface ExceptionSite {
   advanceStatus: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
   /** down_payment_requests.id for downstream actions */
   advanceId: string;
+  /** Name of the supervisor/admin who approved this advance */
+  approvedByName?: string;
 }
 
 // ── Low-level cell helpers ────────────────────────────────────────────────────
