@@ -13,7 +13,7 @@ import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
 // ─── Session persistence ────────────────────────────────────────────────────
-const STORAGE_VERSION = 'v1';
+const STORAGE_VERSION = 'v2'; // bumped: 7-step → 6-step (Step 3 merged into Step 2)
 const getKey = (mmpId: string) => `pact_ccw_${STORAGE_VERSION}_${mmpId}`;
 
 export interface SavedSession {
