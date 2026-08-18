@@ -126,10 +126,10 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const checks: CheckItem[] = [
     { id: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
     { id: 2, label: 'All matches resolved', description: 'No "needs review" rows remaining', jumpStep: 2, passes: allMatchesResolved },
-    { id: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden', jumpStep: 3, passes: allSitesResolved },
-    { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 4, passes: allReasonsAssigned },
-    { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 5, passes: allExceptionsDecided },
-    { id: 6, label: 'All enumerators reconciled', description: 'Every enumerator has a settlement status', jumpStep: 6, passes: hasPaymentActions },
+    { id: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden — resolve in Upload & Match', jumpStep: 2, passes: allSitesResolved },
+    { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 3, passes: allReasonsAssigned },
+    { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 4, passes: allExceptionsDecided },
+    { id: 6, label: 'All enumerators reconciled', description: 'Every enumerator has a settlement status', jumpStep: 5, passes: hasPaymentActions },
     { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
     // Note: check 7 is not auto-computed (requires a separate DB query the wizard doesn't cache).
     // FOM must verify manually; the override mechanism exists if it's acceptable to close with pending submissions.
@@ -521,8 +521,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Step 7 — Final Review &amp; Close</h2>
-        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٧ — المراجعة النهائية وإغلاق الدورة</p>
+        <h2 className="text-xl font-semibold">Step 6 — Final Review &amp; Close</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٦ — المراجعة النهائية وإغلاق الدورة</p>
         <p className="text-muted-foreground text-sm">All 9 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
       </div>
 

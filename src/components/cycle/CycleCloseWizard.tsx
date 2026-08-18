@@ -4,8 +4,7 @@ import { X, CheckCircle2, Circle, AlertCircle, Clock, ChevronRight, Archive } fr
 import { Button } from '@/components/ui/button';
 import Step1SelectCycle from './steps/Step1SelectCycle';
 import Step2UploadMatch from './steps/Step2UploadMatch';
-import Step3ResolveUnmatched from './steps/Step3ResolveUnmatched';
-import Step4MarkUncovered from './steps/Step4MarkUncovered';
+import Step3MarkUncovered from './steps/Step4MarkUncovered';
 import Step5Exceptions from './steps/Step5Exceptions';
 import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
@@ -68,13 +67,12 @@ export interface WizardState {
 }
 
 const STEPS = [
-  { label: 'Select Cycle',      arLabel: 'اختيار الدورة',           shortLabel: '1' },
-  { label: 'Upload & Match',    arLabel: 'رفع الملف والمطابقة',      shortLabel: '2' },
-  { label: 'Resolve Unmatched', arLabel: 'حل غير المتطابقة',         shortLabel: '3' },
-  { label: 'Mark Uncovered',    arLabel: 'المواقع غير المغطاة',       shortLabel: '4' },
-  { label: 'Exceptions',        arLabel: 'الاستثناءات',               shortLabel: '5' },
-  { label: 'Reconciliation',    arLabel: 'المراجعة',                  shortLabel: '6' },
-  { label: 'Final Close',       arLabel: 'الإغلاق النهائي',           shortLabel: '7' },
+  { label: 'Select Cycle',   arLabel: 'اختيار الدورة',       shortLabel: '1' },
+  { label: 'Upload & Match', arLabel: 'رفع الملف والمطابقة', shortLabel: '2' },
+  { label: 'Mark Uncovered', arLabel: 'المواقع غير المغطاة', shortLabel: '3' },
+  { label: 'Exceptions',     arLabel: 'الاستثناءات',          shortLabel: '4' },
+  { label: 'Reconciliation', arLabel: 'المراجعة',             shortLabel: '5' },
+  { label: 'Final Close',    arLabel: 'الإغلاق النهائي',      shortLabel: '6' },
 ];
 
 const initialState: WizardState = {
@@ -124,7 +122,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
 
   const [currentStep, setCurrentStep] = useState(1);
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
-    'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
+    'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
   ]);
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
@@ -198,7 +196,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     setStepStatuses(prev => {
       const next = [...prev];
       next[step - 1] = 'done';
-      if (step < 7) next[step] = 'in_progress';
+      if (step < 6) next[step] = 'in_progress';
       return next;
     });
   };
@@ -213,17 +211,14 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     if (currentStep === 1) return !!wizardState.selectedMmpId;
     if (currentStep === 2) {
       const hasUnactioned = wizardState.matchResults.some(r => r.status === 'review');
-      return wizardState.matchResults.length > 0 && !hasUnactioned;
+      const hasResubmit   = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
+      return wizardState.matchResults.length > 0 && !hasUnactioned && !hasResubmit;
     }
     if (currentStep === 3) {
-      // Resubmit-flagged sites mean the cycle cannot close — they must be cleared first
-      const hasResubmit = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
-      return !hasResubmit;
-    }
-    if (currentStep === 4) {
+      // Step 3 = Mark Uncovered (was Step 4).
       // All three sources of uncovered sites must have a reason before advancing:
-      // (1) WFP-rejected / unmatched rows from Step 2
-      // (2) Sites resolved as not_covered in Step 3
+      // (1) WFP-rejected / unmatched rows from Step 2 matching
+      // (2) Sites explicitly resolved as not_covered in Step 2 inline resolution section
       // (3) MMP sites that had no WFP file row at all ("Not in clean data")
       const notCoveredIds = new Set<string>([
         ...wizardState.matchResults
@@ -235,12 +230,13 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       ]);
       return [...notCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
     }
-    if (currentStep === 5) {
+    if (currentStep === 4) {
+      // Step 4 = Exceptions (was Step 5)
       const exceptions = Object.keys(wizardState.exceptionDecisions);
       return exceptions.every(k => !!wizardState.exceptionDecisions[k].decision);
     }
-    if (currentStep === 6) {
-      // No payment action may still be pending before advancing to final close
+    if (currentStep === 5) {
+      // Step 5 = Reconciliation (was Step 6)
       return !Object.values(wizardState.paymentActions).some(a => !a.done);
     }
     return false;
@@ -248,7 +244,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
 
   const handleNext = () => {
     markStepDone(currentStep);
-    setCurrentStep(s => Math.min(s + 1, 7));
+    setCurrentStep(s => Math.min(s + 1, 6));
   };
 
   const handleBack = () => {
@@ -351,11 +347,10 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
-            {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
-            {currentStep === 4 && <Step4MarkUncovered {...stepProps} />}
-            {currentStep === 5 && <Step5Exceptions {...stepProps} />}
-            {currentStep === 6 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 7 && <Step7FinalClose {...stepProps} />}
+            {currentStep === 3 && <Step3MarkUncovered {...stepProps} />}
+            {currentStep === 4 && <Step5Exceptions {...stepProps} />}
+            {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
+            {currentStep === 6 && <Step7FinalClose {...stepProps} />}
           </>
         )}
       </div>

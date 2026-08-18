@@ -11,8 +11,10 @@ import { Input } from '@/components/ui/input';
 import {
   Upload, AlertCircle, CheckCircle2, Info, Loader2, Download, Search,
   XCircle, AlertTriangle, ChevronDown, ChevronUp, Plus, X as XIcon,
-  Database, FileSpreadsheet,
+  Database, FileSpreadsheet, Flag, ShieldCheck,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import type { WizardState } from '../CycleCloseWizard';
 import { runMatching, type MatchCandidate, type MatchPair } from '@/utils/fuzzyMatcher';
 import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
@@ -88,11 +90,12 @@ interface Props {
   onBack: () => void;
   canAdvance: boolean;
   canGoBack: boolean;
+  canOverride: boolean;
   currentUser: any;
 }
 
 export default function Step2UploadMatch({
-  wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser,
+  wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, canOverride, currentUser,
 }: Props) {
   const [dragOver, setDragOver]         = useState(false);
   const [fileError, setFileError]       = useState<string | null>(null);
@@ -114,6 +117,11 @@ export default function Step2UploadMatch({
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   // Track whether pairs have been auto-initialised for the current MMP + file combo
   const [pairsInitialized, setPairsInitialized] = useState(false);
+
+  // ── Inline resolution (absorbed from old Step 3) ─────────────────────────
+  const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; siteId: string; siteName: string } | null>(null);
+  const [overrideJustification, setOverrideJustification] = useState('');
+  const [overrideSaving, setOverrideSaving] = useState(false);
 
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const lastColumnsKey = useRef('');
@@ -1188,6 +1196,191 @@ export default function Step2UploadMatch({
         </div>
       )}
 
+      {/* ── Inline resolution of rejected / unmatched sites (was Step 3) ───── */}
+      {(() => {
+        const confirmedIds = new Set(
+          wizardState.matchResults
+            .filter(r => r.action === 'confirm' || r.status === 'auto')
+            .map(r => r.matchedSiteId).filter(Boolean) as string[]
+        );
+        const rejectedIds = new Set(
+          wizardState.matchResults
+            .filter(r => r.action === 'reject')
+            .map(r => r.matchedSiteId).filter(Boolean) as string[]
+        );
+        const unmatchedIds = new Set(wizardState.unmatchedMmpSiteIds ?? []);
+        const resolvedIds  = new Set(Object.keys(wizardState.resolvedSites));
+
+        const unresolvedSites = candidates.filter(c =>
+          (rejectedIds.has(c.id) || unmatchedIds.has(c.id)) && !resolvedIds.has(c.id)
+        );
+        const resubmitCount = Object.values(wizardState.resolvedSites).filter(v => v === 'resubmit').length;
+
+        if (unresolvedSites.length === 0 && resubmitCount === 0 && candidates.length === 0) return null;
+
+        return (
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                Unresolved Sites
+                {unresolvedSites.length > 0 && (
+                  <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-xs px-2 py-0.5">{unresolvedSites.length} pending</span>
+                )}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Sites rejected in matching or not present in the WFP file — choose an action for each.
+              </p>
+            </div>
+
+            {resubmitCount > 0 && (
+              <Alert variant="destructive">
+                <Flag className="h-4 w-4" />
+                <AlertDescription>
+                  {resubmitCount} site{resubmitCount !== 1 ? 's are' : ' is'} flagged for re-submission — the cycle cannot advance until they are cleared.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {unresolvedSites.length === 0 && resubmitCount === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                <CheckCircle2 className="h-4 w-4" />
+                All sites accounted for — rejected / unmatched sites have been resolved.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {unresolvedSites.map(site => {
+                  const isRejected = rejectedIds.has(site.id);
+                  const siteName = (site.data as any).site_name ?? site.label;
+                  const state    = (site.data as any).state ?? '—';
+                  const locality = (site.data as any).locality ?? '—';
+                  return (
+                    <div key={site.id} className="border rounded-lg p-3 flex items-start justify-between gap-3 bg-amber-50/30">
+                      <div>
+                        <p className="text-sm font-medium">{siteName}</p>
+                        <p className="text-xs text-muted-foreground">{state} / {locality}</p>
+                        <span className={`inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded border ${
+                          isRejected
+                            ? 'bg-red-100 text-red-700 border-red-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {isRejected ? 'WFP Rejected' : 'Not in WFP file'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <Button
+                          type="button" size="sm" variant="outline" className="text-xs h-7"
+                          onClick={() => updateWizardState({ resolvedSites: { ...wizardState.resolvedSites, [site.id]: 'not_covered' } })}
+                        >
+                          Mark Not Covered
+                        </Button>
+                        <Button
+                          type="button" size="sm" variant="outline"
+                          className="text-xs h-7 text-blue-700 border-blue-200 hover:bg-blue-50"
+                          onClick={() => updateWizardState({ resolvedSites: { ...wizardState.resolvedSites, [site.id]: 'resubmit' } })}
+                        >
+                          <Flag className="h-3 w-3 mr-1" /> Flag Resubmit
+                        </Button>
+                        {canOverride && (
+                          <Button
+                            type="button" size="sm" variant="outline"
+                            className="text-xs h-7 text-amber-700 border-amber-300 hover:bg-amber-50"
+                            onClick={() => { setOverrideJustification(''); setOverrideDialog({ open: true, siteId: site.id, siteName }); }}
+                          >
+                            <ShieldCheck className="h-3 w-3 mr-1" /> Override
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Show flagged-for-resubmit sites so user can un-flag them */}
+                {Object.entries(wizardState.resolvedSites)
+                  .filter(([, v]) => v === 'resubmit')
+                  .map(([siteId]) => {
+                    const site = candidates.find(c => c.id === siteId);
+                    const siteName = site ? ((site.data as any).site_name ?? site.label) : siteId;
+                    return (
+                      <div key={siteId} className="border border-blue-200 rounded-lg p-3 flex items-start justify-between gap-3 bg-blue-50/30">
+                        <div>
+                          <p className="text-sm font-medium">{siteName}</p>
+                          <span className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-200">
+                            Flagged for Re-submission
+                          </span>
+                        </div>
+                        <Button
+                          type="button" size="sm" variant="outline"
+                          className="text-xs h-7 text-slate-600 flex-shrink-0"
+                          onClick={() => {
+                            const next = { ...wizardState.resolvedSites };
+                            delete next[siteId];
+                            updateWizardState({ resolvedSites: next });
+                          }}
+                        >
+                          <XIcon className="h-3 w-3 mr-1" /> Clear flag
+                        </Button>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            {/* Override dialog */}
+            <Dialog open={!!overrideDialog?.open} onOpenChange={() => setOverrideDialog(null)}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Override to Confirmed — {overrideDialog?.siteName}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      This override is logged permanently with your name and timestamp. It cannot be undone without reopening the cycle.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Justification (required)</label>
+                    <Textarea
+                      placeholder="Explain why this site should be confirmed despite WFP rejection…"
+                      value={overrideJustification}
+                      onChange={e => setOverrideJustification(e.target.value)}
+                      rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">{overrideJustification.length} characters (minimum 10)</p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setOverrideDialog(null)}>Cancel</Button>
+                  <Button
+                    type="button"
+                    disabled={overrideJustification.length < 10 || overrideSaving}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={async () => {
+                      if (!overrideDialog) return;
+                      setOverrideSaving(true);
+                      await supabase.from('mmp_site_entries').update({
+                        status: 'wfp_confirmed',
+                        wfp_override_justification: overrideJustification,
+                        wfp_override_by: currentUser?.id,
+                        wfp_override_at: new Date().toISOString(),
+                      }).eq('id', overrideDialog.siteId);
+                      updateWizardState({
+                        resolvedSites: { ...wizardState.resolvedSites, [overrideDialog.siteId]: 'override_confirmed' },
+                      });
+                      setOverrideSaving(false);
+                      setOverrideDialog(null);
+                      setOverrideJustification('');
+                    }}
+                  >
+                    {overrideSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    Confirm Override
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        );
+      })()}
+
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
           {canGoBack && (
@@ -1214,7 +1407,7 @@ export default function Step2UploadMatch({
           disabled={!canAdvance}
           data-testid="button-next-step2"
         >
-          Next: Resolve Unmatched →
+          Next: Mark Uncovered →
         </Button>
       </div>
     </div>
