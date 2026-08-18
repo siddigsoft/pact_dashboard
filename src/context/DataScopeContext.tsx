@@ -53,6 +53,8 @@ const SCOPE_RULES: ScopeRule[] = [
     prefixes: [
       '/wallet',
       '/down-payment',
+      '/down-payment-approval',
+      '/cycle-exceptions',
       '/pre-funding',
       '/finance-hub',
       '/cost-submission',
