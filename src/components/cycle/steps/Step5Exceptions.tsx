@@ -498,7 +498,7 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
   );
 
   const borderClass = isDone
-    ? 'border-green-300 bg-green-50/20'
+    ? 'border-green-400'
     : variant === 'paid'
       ? 'border-green-200'
       : 'border-amber-200';
@@ -506,7 +506,16 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
   const chosen = decisions.find(x => x.value === d?.decision);
 
   return (
-    <div className={`border rounded-lg p-4 space-y-3 ${borderClass}`}>
+    <div className={`border rounded-lg overflow-hidden ${borderClass}`}>
+      {/* ── Done banner ─────────────────────────────────────────────── */}
+      {isDone && chosen && (
+        <div className="bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2 text-green-700 text-xs font-semibold">
+          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+          Decision recorded — {chosen.label}
+          <span className="ml-auto text-green-500 text-[10px] font-normal">Ready to advance ✓</span>
+        </div>
+      )}
+      <div className="p-4 space-y-3">
       {/* Site header */}
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-0.5">
@@ -696,7 +705,12 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
         onValueChange={v => setDecision(site.siteId, { decision: v as ExceptionDecision['decision'] })}
       >
         <SelectTrigger className="w-full" data-testid={`select-decision-${site.siteId}`}>
-          <SelectValue placeholder="Select recovery action… — اختر إجراء الاسترداد" />
+          {/* Show only the compact label in the trigger — full description is in the dropdown and tracking note */}
+          <SelectValue placeholder="Select recovery action… — اختر إجراء الاسترداد">
+            {chosen
+              ? <span className="font-medium">{chosen.label} <span className="text-muted-foreground font-normal" dir="rtl">· {chosen.labelAr}</span></span>
+              : null}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {decisions.map(dec => (
@@ -819,6 +833,7 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
           You must select a recovery action for {site.siteName} before closing.
         </p>
       )}
+      </div>
     </div>
   );
 }
