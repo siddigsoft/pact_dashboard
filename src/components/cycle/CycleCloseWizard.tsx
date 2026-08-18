@@ -804,7 +804,7 @@ export default function CycleCloseWizard({
             )}
             {currentStep === 4 && <Step5Exceptions {...stepProps} />}
             {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 6 && <Step7FinalClose {...stepProps} />
+            {currentStep === 6 && <Step7FinalClose {...stepProps} />}
           </>
         )}
       </div>
