@@ -354,7 +354,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       const mr            = siteToMatch[s.id] ?? null;
       const notInWfp      = notInWfpSet.has(s.id);
       const notCovReason  = wizardState.uncoveredReasons[s.id];
-      const sys = String(s.status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+      const sys = String((s as any).status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
       const dbNotCovered = sys === 'not_covered';
       const dbCovered = sys === 'completed' || sys === 'complete' || sys === 'accepted' || sys === 'verified' || sys === 'covered';
 
@@ -603,10 +603,10 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           </div>
         </div>
       ) : isAdminLike ? (
-        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
           <AlertCircle className="h-4 w-4 text-amber-700" />
-          <AlertDescription>
-            Read-only stage: Coordinators must enter uncovered reasons and Supervisors must confirm them before Admin/Super Admin can proceed.
+          <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
+            <span className="font-medium">Read-only stage:</span> Coordinators must enter uncovered reasons and Supervisors must confirm them before Admin/Super Admin can proceed.
           </AlertDescription>
         </Alert>
       ) : null}

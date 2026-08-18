@@ -252,6 +252,8 @@ export default function CycleCloseWizard({
     return () => document.removeEventListener('submit', blockSubmit, true);
   }, []);
 
+  // Contributor-only users land on step 3 (Mark Uncovered). All others start at
+  // initialStep if provided (clamped to 1–6), or step 1 by default.
   const [currentStep, setCurrentStep] = useState(
     isStep4ContributorOnly ? 3 : (initialStep && initialStep >= 1 && initialStep <= 6 ? initialStep : 1)
   );
@@ -455,7 +457,7 @@ export default function CycleCloseWizard({
       return wizardState.matchResults.length > 0 && !hasUnactioned && !hasResubmit;
     }
     if (currentStep === 3) {
-      // Step 3 = Mark Uncovered. Every uncovered site needs a supervisor-confirmed reason.
+      // Step 3 = Mark Uncovered: every not-covered site must have a supervisor-confirmed reason.
       return allUncoveredReasonsConfirmed(wizardState);
     }
     if (currentStep === 4) {
