@@ -368,7 +368,7 @@ export default function FieldPaymentsCentre() {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await supabase
         .from('down_payment_requests')
-        .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, state, mmp_site_entry_id')
+        .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, state_name, mmp_site_entry_id')
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
         .order('updated_at', { ascending: false })
         .limit(500);
@@ -421,7 +421,7 @@ export default function FieldPaymentsCentre() {
           id: r.id,
           enumeratorName: entry.accepted_by ? (nameMap[entry.accepted_by] ?? '—') : '—',
           siteName: r.site_name ?? '—',
-          state: r.state ?? '—',
+          state: (r as any).state_name ?? '—',
           hub: r.hub_name ?? '—',
           requestedAmount: r.requested_amount ?? 0,
           paidAmount: r.total_paid_amount ?? 0,
@@ -505,7 +505,7 @@ export default function FieldPaymentsCentre() {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await supabase
         .from('down_payment_requests')
-        .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, state, site_name, mmp_site_entry_id')
+        .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, state_name, site_name, mmp_site_entry_id')
         .in('status', ['paid', 'partially_paid', 'fully_paid'])
         .order('updated_at');
       if (error) throw error;
@@ -565,7 +565,7 @@ export default function FieldPaymentsCentre() {
             advanceId: r.id,
             enumeratorName: (entry as any).accepted_by ? (nameMap[(entry as any).accepted_by] ?? '—') : '—',
             siteName: r.site_name ?? '—',
-            state: r.state ?? '—',
+            state: (r as any).state_name ?? '—',
             hub: r.hub_name ?? '—',
             mmpId: (mmp as any).id ?? '',
             mmpName: (mmp as any).name ?? '—',

@@ -1,12 +1,10 @@
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Download, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Download, Info, AlertTriangle, ExternalLink, ArrowRight } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -26,12 +24,10 @@ interface Props {
   currentUser: any;
 }
 
-export default function Step6Reconciliation({ wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride, currentUser }: Props) {
+export default function Step6Reconciliation({ wizardState, onNext, onBack, canGoBack }: Props) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<EnumRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [writeoffDialog, setWriteoffDialog] = useState<{ open: boolean; enumId: string; name: string } | null>(null);
-  const [writeoffJustification, setWriteoffJustification] = useState('');
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (wizardState.selectedMmpId) buildReconciliation();
@@ -68,7 +64,6 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     for (const e of (entries ?? [])) {
       const id = resolveEnumId(e);
       if (!id) continue;
-      // Fallback name from additional_data text fields
       const ad = (e as any).additional_data ?? {};
       const adName = ad.collector_name || ad.accepted_by_name || ad.enumerator_name ||
                      ad.data_collector_name || ad.collectorName || 'Unknown';
@@ -76,8 +71,7 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
       byEnum[id].entries.push(e);
     }
 
-    // Resolve profile names for all enumerator UUIDs in one batch
-    // ── Profiles + advances in parallel (were sequential) ────────────────────
+    // Resolve profile names + advances in parallel
     const allEnumIds = Object.keys(byEnum);
     const entryIds   = (entries ?? []).map((e: any) => e.id);
 
@@ -117,7 +111,6 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     const tableRows: EnumRow[] = Object.entries(byEnum).map(([enumId, data]) => {
       const sitesAssigned = data.entries.length;
 
-      // Earnings are computed from per-site fees of WFP-confirmed sites only
       const confirmedEntries = data.entries.filter(e => confirmedMatchIds.has(e.id));
       const wfpConfirmed = confirmedEntries.length;
       const wfpRejected = data.entries.filter(e =>
@@ -127,13 +120,11 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
 
       const advancePaid = advanceByEnum[enumId] ?? 0;
 
-      // Sum per-site transport and enumerator fees for confirmed sites
       const transportEarned = confirmedEntries.reduce((s, e) => s + (Number(e.transport_fee) || 0), 0);
       const feesEarned      = confirmedEntries.reduce((s, e) => s + (Number(e.enumerator_fee) || 0), 0);
       const totalEarned     = transportEarned + feesEarned;
       const netToPay        = totalEarned - advancePaid;
 
-      // Representative rates (shown in UI for reference; may vary per site)
       const transportRate = confirmedEntries.length > 0
         ? Math.round(transportEarned / confirmedEntries.length)
         : 0;
@@ -161,7 +152,7 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
         totalEarned,
         netToPay,
         rowType,
-        paymentDone: !!wizardState.paymentActions[enumId]?.done,
+        paymentDone: false, // read-only step — payment happens in Field Payments Centre
       };
     });
 
@@ -169,69 +160,8 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     setLoading(false);
   };
 
-  const handleGeneratePayment = async (row: EnumRow, type: 'balance' | 'full') => {
-    setSaving(true);
-    await supabase.from('mmp_payment_records').insert({
-      mmp_file_id: wizardState.selectedMmpId,
-      enumerator_id: row.enumeratorId,
-      transport_amount: row.transportEarned,
-      fee_amount: row.feesEarned,
-      net_amount: type === 'full' ? row.totalEarned : row.netToPay,
-      payment_type: type,
-      created_by: currentUser?.id,
-      status: 'pending',
-    }).select().maybeSingle();
-    updateWizardState({
-      paymentActions: { ...wizardState.paymentActions, [row.enumeratorId]: { action: 'pay', done: true } },
-    });
-    setRows(prev => prev.map(r => r.enumeratorId === row.enumeratorId ? { ...r, paymentDone: true } : r));
-    setSaving(false);
-  };
-
-  const handleScheduleRecovery = async (row: EnumRow) => {
-    setSaving(true);
-    await supabase.from('mmp_payment_records').insert({
-      mmp_file_id: wizardState.selectedMmpId,
-      enumerator_id: row.enumeratorId,
-      net_amount: Math.abs(row.netToPay),
-      payment_type: 'recovery',
-      created_by: currentUser?.id,
-      status: 'pending_recovery',
-    });
-    updateWizardState({
-      paymentActions: { ...wizardState.paymentActions, [row.enumeratorId]: { action: 'recover', done: true } },
-    });
-    setRows(prev => prev.map(r => r.enumeratorId === row.enumeratorId ? { ...r, paymentDone: true } : r));
-    setSaving(false);
-  };
-
-  const handleWriteoff = async () => {
-    if (!writeoffDialog || writeoffJustification.length < 10) return;
-    setSaving(true);
-    await supabase.from('mmp_payment_records').insert({
-      mmp_file_id: wizardState.selectedMmpId,
-      enumerator_id: writeoffDialog.enumId,
-      payment_type: 'writeoff',
-      writeoff_justification: writeoffJustification,
-      writeoff_by: currentUser?.id,
-      status: 'written_off',
-    });
-    updateWizardState({
-      paymentActions: { ...wizardState.paymentActions, [writeoffDialog.enumId]: { action: 'writeoff', done: true } },
-    });
-    setRows(prev => prev.map(r => r.enumeratorId === writeoffDialog.enumId ? { ...r, paymentDone: true } : r));
-    setSaving(false);
-    setWriteoffDialog(null);
-    setWriteoffJustification('');
-  };
-
-  const exportReconciliation = () => {
-    void exportFormattedReconciliation(rows, wizardState);
-  };
-
-  const exportPaymentRunSheet = () => {
-    void exportFormattedPaymentRun(rows, wizardState);
-  };
+  const exportReconciliation = () => void exportFormattedReconciliation(rows, wizardState);
+  const exportPaymentRunSheet = () => void exportFormattedPaymentRun(rows, wizardState);
 
   const exportFinancialSummaryPDF = () => {
     const doc = new jsPDF();
@@ -248,9 +178,9 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     doc.save('cycle-financial-summary.pdf');
   };
 
-  const totalAdvances = rows.reduce((s, r) => s + r.advancePaid, 0);
-  const totalEarned = rows.reduce((s, r) => s + r.totalEarned, 0);
-  const totalToPay = rows.filter(r => r.netToPay > 0).reduce((s, r) => s + r.netToPay, 0);
+  const totalAdvances  = rows.reduce((s, r) => s + r.advancePaid, 0);
+  const totalEarned    = rows.reduce((s, r) => s + r.totalEarned, 0);
+  const totalToPay     = rows.filter(r => r.netToPay > 0).reduce((s, r) => s + r.netToPay, 0);
   const totalToRecover = rows.filter(r => r.netToPay < 0).reduce((s, r) => s + Math.abs(r.netToPay), 0);
 
   const discrepancySites = wizardState.matchResults.filter(r =>
@@ -264,6 +194,14 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     return 'bg-amber-50 dark:bg-amber-950/20 border-amber-200';
   };
 
+  // Derive a direct link to Field Payments Centre (Fees tab), pre-filtered to this MMP
+  const fieldPaymentsUrl = `/field-payments?tab=fees${wizardState.selectedMmpId ? '&mmp=' + wizardState.selectedMmpId : ''}`;
+  const recoveryUrl = `/field-payments?tab=recovery${wizardState.selectedMmpId ? '&mmp=' + wizardState.selectedMmpId : ''}`;
+
+  // Counts for CTA
+  const sitesToPay     = rows.filter(r => r.rowType === 'green' || r.rowType === 'blue').length;
+  const sitesToRecover = rows.filter(r => r.rowType === 'red').length;
+
   if (loading) return (
     <div className="flex items-center gap-2 justify-center py-12 text-muted-foreground">
       <Loader2 className="h-5 w-5 animate-spin" /> Building reconciliation…
@@ -275,18 +213,66 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 5 — Financial Reconciliation</h2>
         <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٥ — المراجعة والمطابقة المالية</p>
-        <p className="text-muted-foreground text-sm">One row per enumerator. Review earnings vs. advances and generate payments or recoveries.</p>
+        <p className="text-muted-foreground text-sm">Review earnings vs. advances. Download the reports below, then pay fees via Field Payments Centre.</p>
       </div>
 
+      {/* Legend */}
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800 dark:text-blue-200">
-          <p><span className="inline-block w-3 h-3 bg-green-500 rounded-sm mr-1" />Green = owe money to enumerator &nbsp;
-          <span className="inline-block w-3 h-3 bg-amber-400 rounded-sm mr-1" />Amber = balanced &nbsp;
-          <span className="inline-block w-3 h-3 bg-red-500 rounded-sm mr-1" />Red = overpaid &nbsp;
-          <span className="inline-block w-3 h-3 bg-blue-500 rounded-sm mr-1" />Blue = no advance taken</p>
+          <p>
+            <span className="inline-block w-3 h-3 bg-green-500 rounded-sm mr-1" />Green = owe money to enumerator &nbsp;
+            <span className="inline-block w-3 h-3 bg-amber-400 rounded-sm mr-1" />Amber = balanced &nbsp;
+            <span className="inline-block w-3 h-3 bg-red-500 rounded-sm mr-1" />Red = overpaid &nbsp;
+            <span className="inline-block w-3 h-3 bg-blue-500 rounded-sm mr-1" />Blue = no advance taken
+          </p>
         </div>
       </div>
+
+      {/* ── Action required banner ── */}
+      {(sitesToPay > 0 || sitesToRecover > 0) && (
+        <div className="border-2 border-amber-300 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-200 text-sm">Payments must be completed in Field Payments Centre</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                This step is a financial view only. Actual fee disbursements and advance recoveries are processed in Field Payments Centre — Finance marks each payment with a receipt, and the system updates the payment status automatically.
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5" dir="rtl">
+                هذه الخطوة للمراجعة فقط. تتم مدفوعات الأتعاب والاسترداد في مركز المدفوعات الميدانية.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sitesToPay > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white text-xs gap-1.5"
+                onClick={() => navigate(fieldPaymentsUrl)}
+                data-testid="button-go-to-field-payments-fees"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Pay {sitesToPay} enumerator{sitesToPay !== 1 ? 's' : ''} — Field Payments Centre (Fees)
+              </Button>
+            )}
+            {sitesToRecover > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-xs border-red-300 text-red-700 hover:bg-red-50 gap-1.5"
+                onClick={() => navigate(recoveryUrl)}
+                data-testid="button-go-to-field-payments-recovery"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Recover from {sitesToRecover} overpaid enumerator{sitesToRecover !== 1 ? 's' : ''} — Field Payments Centre (Recovery)
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Discrepancy warning */}
       {discrepancySites.length > 0 && (
@@ -298,10 +284,13 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
         </Alert>
       )}
 
-      {/* Reconciliation table */}
+      {/* Reconciliation rows — read-only display */}
       <div className="space-y-3">
+        {rows.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground text-sm">No enumerator data found for this MMP.</div>
+        )}
         {rows.map(row => (
-          <div key={row.enumeratorId} className={`border rounded-lg p-4 space-y-3 ${rowColor(row)}`}>
+          <div key={row.enumeratorId} className={`border rounded-lg p-4 space-y-2 ${rowColor(row)}`}>
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div>
                 <p className="font-semibold text-sm">{row.enumeratorName}</p>
@@ -324,37 +313,36 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
                 </div>
               </div>
             </div>
-
-            {row.paymentDone ? (
-              <div className="flex items-center gap-1.5 text-xs text-green-700">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Action recorded — sent to finance queue
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {(row.rowType === 'green') && (
-                  <Button type="button" size="sm" className="bg-green-600 hover:bg-green-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'balance')} disabled={saving} data-testid={`button-generate-payment-${row.enumeratorId}`}>
-                    Generate Payment (SDG {row.netToPay.toLocaleString()})
-                  </Button>
-                )}
-                {row.rowType === 'blue' && (
-                  <Button type="button" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => handleGeneratePayment(row, 'full')} disabled={saving} data-testid={`button-generate-full-payment-${row.enumeratorId}`}>
-                    Generate Full Payment — Transport SDG {row.transportEarned.toLocaleString()} + Fees SDG {row.feesEarned.toLocaleString()}
-                  </Button>
-                )}
-                {row.rowType === 'red' && (
-                  <>
-                    <Button type="button" size="sm" variant="outline" className="text-xs border-red-300 text-red-700 hover:bg-red-50" onClick={() => handleScheduleRecovery(row)} disabled={saving} data-testid={`button-schedule-recovery-${row.enumeratorId}`}>
-                      Schedule Recovery (SDG {Math.abs(row.netToPay).toLocaleString()})
-                    </Button>
-                    {canOverride && (
-                      <Button type="button" size="sm" variant="outline" className="text-xs border-slate-300" onClick={() => setWriteoffDialog({ open: true, enumId: row.enumeratorId, name: row.enumeratorName })} data-testid={`button-writeoff-${row.enumeratorId}`}>
-                        Write-Off
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
+            {/* Per-row action hint */}
+            {row.rowType === 'green' && (
+              <button
+                type="button"
+                onClick={() => navigate(fieldPaymentsUrl)}
+                className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 hover:underline"
+              >
+                <ArrowRight className="h-3 w-3" />
+                Pay balance (SDG {row.netToPay.toLocaleString()}) in Field Payments Centre → Fees tab
+              </button>
+            )}
+            {row.rowType === 'blue' && (
+              <button
+                type="button"
+                onClick={() => navigate(fieldPaymentsUrl)}
+                className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 hover:underline"
+              >
+                <ArrowRight className="h-3 w-3" />
+                Pay full amount (SDG {row.totalEarned.toLocaleString()}) in Field Payments Centre → Fees tab
+              </button>
+            )}
+            {row.rowType === 'red' && (
+              <button
+                type="button"
+                onClick={() => navigate(recoveryUrl)}
+                className="flex items-center gap-1 text-xs text-red-700 hover:text-red-900 hover:underline"
+              >
+                <ArrowRight className="h-3 w-3" />
+                Recover SDG {Math.abs(row.netToPay).toLocaleString()} in Field Payments Centre → Recovery tab
+              </button>
             )}
           </div>
         ))}
@@ -379,39 +367,22 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
         </div>
       </div>
 
-      {/* Write-off dialog */}
-      <Dialog open={!!writeoffDialog?.open} onOpenChange={() => setWriteoffDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Write-Off Overpayment — {writeoffDialog?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Textarea
-              placeholder="Justification for write-off (required, min 10 characters)…"
-              value={writeoffJustification}
-              onChange={e => setWriteoffJustification(e.target.value)}
-              rows={3}
-              data-testid="input-writeoff-justification-step6"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setWriteoffDialog(null)}>Cancel</Button>
-            <Button type="button" onClick={handleWriteoff} disabled={writeoffJustification.length < 10 || saving} className="bg-red-600 hover:bg-red-700 text-white" data-testid="button-confirm-writeoff-step6">
-              {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Confirm Write-Off
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex flex-wrap items-center gap-2">
           {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step6">← Back</Button>}
-          <Button type="button" variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation"><Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)</Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run"><Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet</Button>
-          <Button type="button" variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf"><Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)</Button>
+          <Button type="button" variant="outline" size="sm" onClick={exportReconciliation} data-testid="button-export-reconciliation">
+            <Download className="h-3.5 w-3.5 mr-1" />Reconciliation (Excel)
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={exportPaymentRunSheet} data-testid="button-export-payment-run">
+            <Download className="h-3.5 w-3.5 mr-1" />Payment Run Sheet
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={exportFinancialSummaryPDF} data-testid="button-export-financial-pdf">
+            <Download className="h-3.5 w-3.5 mr-1" />Financial Summary (PDF)
+          </Button>
         </div>
-        <Button type="button" onClick={onNext} data-testid="button-next-step6">Next: Final Review & Close →</Button>
+        <Button type="button" onClick={onNext} data-testid="button-next-step6">
+          Next: Final Review &amp; Close →
+        </Button>
       </div>
     </div>
   );
