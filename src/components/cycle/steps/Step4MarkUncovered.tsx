@@ -366,6 +366,9 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       const mr            = siteToMatch[s.id] ?? null;
       const notInWfp      = notInWfpSet.has(s.id);
       const notCovReason  = wizardState.uncoveredReasons[s.id];
+      const sys = String(s.status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+      const dbNotCovered = sys === 'not_covered';
+      const dbCovered = sys === 'completed' || sys === 'complete' || sys === 'accepted' || sys === 'verified' || sys === 'covered';
 
       let matching_status: SiteDetail['matching_status'];
       let action_taken: string | null = null;
@@ -373,7 +376,9 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       if (notInWfp) {
         matching_status = 'Not in WFP File';
       } else if (!mr) {
-        matching_status = 'Unmatched WFP Row';
+        if (dbNotCovered) matching_status = 'Not in WFP File';
+        else if (dbCovered) matching_status = 'Confirmed';
+        else matching_status = 'Unmatched WFP Row';
       } else if (mr.status === 'auto') {
         matching_status = 'Auto-Confirmed';
       } else if (mr.status === 'actioned') {
@@ -388,10 +393,14 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       }
 
       const covered =
-        matching_status === 'Auto-Confirmed' ||
-        matching_status === 'Confirmed' ||
-        matching_status === 'Extra';
+        !dbNotCovered && (
+          matching_status === 'Auto-Confirmed' ||
+          matching_status === 'Confirmed' ||
+          matching_status === 'Extra' ||
+          dbCovered
+        );
       const notCovered =
+        dbNotCovered ||
         notInWfp ||
         matching_status === 'Rejected' ||
         resolvedNotCov.has(s.id);

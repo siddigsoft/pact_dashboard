@@ -200,7 +200,7 @@ export default function CycleCloseWizard({
   );
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
-  const [contributorCycles, setContributorCycles] = useState<any[]>([]);
+  const [contributorCycleReady, setContributorCycleReady] = useState(!isStep4ContributorOnly);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const step4NotifiedMmpIdsRef = useRef<Set<string>>(new Set());
 
@@ -232,6 +232,15 @@ export default function CycleCloseWizard({
     });
   };
 
+  const markCycleClosing = async (mmpId: string) => {
+    const { error } = await supabase
+      .from('mmp_files')
+      .update({ cycle_status: 'closing' })
+      .eq('id', mmpId)
+      .neq('cycle_status', 'closed');
+    if (error) console.warn('[CycleCloseWizard] failed to mark cycle closing:', error);
+  };
+
   useEffect(() => {
     if (!isStep4ContributorOnly) return;
     setCurrentStep(4);
@@ -251,6 +260,7 @@ export default function CycleCloseWizard({
           .single();
         if (error) console.warn('[CycleCloseWizard] cycle lookup failed:', error);
         if (!cancelled && data) applySelectedCycle(data);
+        if (!isStep4ContributorOnly) return;
       }
       if (!isStep4ContributorOnly) return;
       const { data, error } = await supabase
@@ -258,16 +268,38 @@ export default function CycleCloseWizard({
         .select('id, name, month, hub, cycle_status, status, created_at')
         .not('status', 'eq', 'rejected')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(80);
       if (error) {
         console.warn('[CycleCloseWizard] cycle list failed:', error);
+        if (!cancelled) setContributorCycleReady(true);
         return;
       }
-      if (cancelled || !data?.length) return;
+      if (cancelled || !data?.length) {
+        if (!cancelled) setContributorCycleReady(true);
+        return;
+      }
       const open = data.filter((m: any) => String(m.cycle_status ?? 'active').toLowerCase() !== 'closed');
-      const closing = open.filter((m: any) => String(m.cycle_status ?? '').toLowerCase() === 'closing');
-      setContributorCycles(open.length > 0 ? open : data);
-      if (!requestedId) applySelectedCycle(closing[0] ?? open[0] ?? data[0]);
+      const { data: uncovered } = await supabase
+        .from('mmp_site_entries')
+        .select('mmp_file_id')
+        .eq('status', 'not_covered')
+        .in('mmp_file_id', open.map((m: any) => m.id));
+      const uncoveredCount = new Map<string, number>();
+      for (const row of uncovered ?? []) {
+        const id = (row as any).mmp_file_id as string;
+        uncoveredCount.set(id, (uncoveredCount.get(id) ?? 0) + 1);
+      }
+      const ranked = open
+        .map((m: any) => ({
+          mmp: m,
+          uncovered: uncoveredCount.get(m.id) ?? 0,
+          closing: String(m.cycle_status ?? '').toLowerCase() === 'closing',
+        }))
+        .filter(x => x.uncovered > 0 || x.closing)
+        .sort((a, b) => b.uncovered - a.uncovered || Number(b.closing) - Number(a.closing));
+      const pick = ranked[0]?.mmp ?? null;
+      if (!requestedId && pick) applySelectedCycle(pick);
+      setContributorCycleReady(true);
     })();
     return () => { cancelled = true; };
   }, [initialMmpId, isStep4ContributorOnly]);
@@ -390,6 +422,8 @@ export default function CycleCloseWizard({
     const uniqueIds = [...new Set(notCoveredIds)];
     if (uniqueIds.length === 0) return;
 
+    await markCycleClosing(mmpId);
+
     await supabase
       .from('mmp_site_entries')
       .update({ status: 'not_covered' })
@@ -443,6 +477,9 @@ export default function CycleCloseWizard({
 
   const handleNext = async () => {
     if (isStep4ContributorOnly) return;
+    if (currentStep === 1 && wizardState.selectedMmpId) {
+      await markCycleClosing(wizardState.selectedMmpId);
+    }
     if (currentStep === 3) {
       try {
         await notifyStep4Stakeholders();
@@ -488,23 +525,9 @@ export default function CycleCloseWizard({
           <div className="flex items-center gap-2">
             <Archive className="h-5 w-5 text-amber-400" />
             <span className="font-semibold text-base">Cycle Close Wizard</span>
-            {isStep4ContributorOnly && contributorCycles.length > 0 ? (
-              <select
-                className="ml-2 bg-slate-700 text-slate-100 text-sm rounded px-2 py-1 max-w-[240px]"
-                value={wizardState.selectedMmpId ?? ''}
-                onChange={(e) => {
-                  const mmp = contributorCycles.find((c: any) => c.id === e.target.value);
-                  if (mmp) applySelectedCycle(mmp);
-                }}
-                data-testid="select-contributor-cycle"
-              >
-                {contributorCycles.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            ) : wizardState.selectedMmp ? (
+            {wizardState.selectedMmp && (
               <span className="text-slate-300 text-sm ml-2">— {wizardState.selectedMmp.name}</span>
-            ) : null}
+            )}
           </div>
           <Button
             type="button"
@@ -560,7 +583,13 @@ export default function CycleCloseWizard({
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto">
-        {isClosed ? (
+        {isStep4ContributorOnly && contributorCycleReady && !wizardState.selectedMmpId ? (
+          <div className="max-w-2xl mx-auto p-6">
+            <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 text-sm text-amber-900">
+              No cycle is currently in close. Coordinators and supervisors only see the MMP that an admin or FOM has started closing.
+            </div>
+          </div>
+        ) : isClosed ? (
           <Step7FinalClose {...stepProps} />
         ) : (
           <>
