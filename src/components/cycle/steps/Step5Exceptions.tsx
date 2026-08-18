@@ -40,8 +40,8 @@ const DECISIONS_PAID = [
     labelAr: 'استرداد مطلوب',
     desc: 'Enumerator must return the cash.',
     descAr: 'يجب على المعدد إعادة المبلغ نقداً.',
-    track: 'Logged in Step 6 Reconciliation as a scheduled recovery. Finance generates a recovery receipt record.',
-    trackAr: 'يُسجَّل في الخطوة ٦ كاسترداد مجدوَل. تُنشئ المالية سجل استلام الاسترداد.',
+    track: 'Finance processes the cash return via Field Payments Centre (Recovery tab). A receipt record is created there.',
+    trackAr: 'تُعالج المالية استرداد النقد عبر مركز المدفوعات الميدانية (تبويب الاسترداد). يُنشأ سجل الاستلام هناك.',
   },
   {
     value: 'writeoff',
@@ -88,8 +88,8 @@ const DECISIONS_APPROVED = [
     labelAr: 'إعادة تعيين لموقع مغطى',
     desc: 'Move this advance to a site the enumerator DID cover in this cycle.',
     descAr: 'نقل السلفة إلى موقع قام المعدد بتغطيته في هذه الدورة.',
-    track: 'Advance re-linked to the selected confirmed site. Visible in Step 6 Reconciliation.',
-    trackAr: 'تُربط السلفة بالموقع المؤكد المحدد. تظهر في مطابقة الخطوة ٦.',
+    track: 'Advance re-linked to the selected confirmed site. Visible in Step 5 Reconciliation and the Final Close workbook.',
+    trackAr: 'تُربط السلفة بالموقع المؤكد المحدد. تظهر في مطابقة الخطوة ٥ وتقرير الإغلاق.',
   },
   {
     value: 'reduce',

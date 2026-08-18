@@ -36,6 +36,9 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'mmp_recall_initiated':       { title_en: 'MMP Recall Initiated',                 title_ar: 'تم بدء استرداد خطة المراقبة الشهرية',         category: 'assignments',  priority: 'high'   },
   'mmp_reclaim_approved':       { title_en: 'MMP Reclaim Approved',                 title_ar: 'تمت الموافقة على مطالبة خطة المراقبة',        category: 'approvals',    priority: 'normal' },
   'mmp_cycle_closed':           { title_en: 'MMP Cycle Closed',                     title_ar: 'تم إغلاق دورة خطة المراقبة الشهرية',         category: 'system',       priority: 'normal' },
+  'cycle_close_step4_ready':    { title_en: 'Cycle Close Step 4 Ready',             title_ar: 'الخطوة ٤ من إغلاق الدورة جاهزة',             category: 'approvals',    priority: 'high'   },
+  'cycle_close_step4_drafts_saved': { title_en: 'Uncovered Reasons Ready for Confirmation', title_ar: 'أسباب المواقع غير المغطاة جاهزة للتأكيد', category: 'approvals', priority: 'high' },
+  'cycle_close_step4_all_confirmed': { title_en: 'Uncovered Sites Confirmed — Continue Close', title_ar: 'تم تأكيد المواقع غير المغطاة — تابع الإغلاق', category: 'approvals', priority: 'high' },
   // Tasks — full lifecycle
   'task_created':               { title_en: 'New Task Created',                     title_ar: 'تم إنشاء مهمة جديدة',                         category: 'assignments',  priority: 'normal' },
   'task_assigned':              { title_en: 'Task Assigned to You',                 title_ar: 'تم تعيين مهمة لك',                            category: 'assignments',  priority: 'normal' },
@@ -203,6 +206,9 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'mmp_completed':               'email_notify_project_milestones',
   'site_visit_completed':        'email_notify_project_milestones',
   'mmp_cycle_closed':            'email_notify_project_milestones',
+  'cycle_close_step4_ready':     'email_notify_approval_needed',
+  'cycle_close_step4_drafts_saved': 'email_notify_approval_needed',
+  'cycle_close_step4_all_confirmed': 'email_notify_approval_needed',
   'project_stage_advanced':      'email_notify_project_milestones',
   'project_stage_assigned':      'email_notify_project_milestones',
   'project_milestone_overdue':   'email_notify_project_milestones',
@@ -549,10 +555,12 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.due_date)      items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق',  value: metadata.due_date })
     if (metadata.responsible_unit) items.push({ label_en: 'Responsible Unit', label_ar: 'الجهة المسؤولة', value: metadata.responsible_unit })
   }
-  if (['mmp_assigned', 'mmp_recall_initiated', 'mmp_cycle_closed', 'mmp_completed'].includes(eventType)) {
+  if (['mmp_assigned', 'mmp_recall_initiated', 'mmp_cycle_closed', 'mmp_completed', 'cycle_close_step4_ready', 'cycle_close_step4_drafts_saved', 'cycle_close_step4_all_confirmed'].includes(eventType)) {
     if (metadata.mmp_code)   items.push({ label_en: 'MMP Code',        label_ar: 'رمز الخطة',       value: metadata.mmp_code })
     if (metadata.site_name)  items.push({ label_en: 'Site',            label_ar: 'الموقع',          value: metadata.site_name })
     if (metadata.cycle)      items.push({ label_en: 'Cycle',           label_ar: 'الدورة',          value: metadata.cycle })
+    if (metadata.uncovered_count != null) items.push({ label_en: 'Sites pending', label_ar: 'المواقع المعلقة', value: String(metadata.uncovered_count) })
+    if (metadata.supervisor) items.push({ label_en: 'Confirmed by', label_ar: 'أكّده', value: String(metadata.supervisor) })
   }
   if (['budget_threshold_80', 'budget_threshold_100'].includes(eventType)) {
     if (metadata.budget_line) items.push({ label_en: 'Budget Line',    label_ar: 'بند الميزانية',   value: metadata.budget_line })
@@ -1183,6 +1191,7 @@ serve(async (req) => {
           if (metadata.site_name)    waData.site_name   = metadata.site_name
           if (metadata.mmp_code)     waData.mmp_code    = metadata.mmp_code
           if (metadata.cycle)        waData.cycle       = metadata.cycle
+          if (metadata.uncovered_count != null) waData.uncovered_count = String(metadata.uncovered_count)
           if (metadata.stage)        waData.stage       = metadata.stage
           if (metadata.milestone)    waData.milestone   = metadata.milestone
           if (metadata.due_date)     waData.due_date    = metadata.due_date

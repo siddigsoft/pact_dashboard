@@ -19,6 +19,7 @@ interface Props {
   savedSession?: SavedSession | null;
   onResume?: () => void;
   onStartFresh?: () => void;
+  nextLabel?: string;
 }
 
 function formatSavedAt(iso: string): string {
@@ -39,19 +40,19 @@ function formatSavedAt(iso: string): string {
   }
 }
 
+// Matches the current 6-step wizard (Step3 "Resolve Unmatched" was merged into Step2)
 const STEP_LABELS: Record<number, string> = {
   1: 'Select Cycle',
   2: 'Upload & Match',
-  3: 'Resolve Unmatched',
-  4: 'Mark Uncovered',
-  5: 'Exceptions',
-  6: 'Reconciliation',
-  7: 'Final Close',
+  3: 'Mark Uncovered',
+  4: 'Exceptions',
+  5: 'Reconciliation',
+  6: 'Final Close',
 };
 
 export default function Step1SelectCycle({
   wizardState, updateWizardState, onNext, canAdvance,
-  savedSession, onResume, onStartFresh,
+  savedSession, onResume, onStartFresh, nextLabel,
 }: Props) {
   const [openCycles, setOpenCycles] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -67,6 +68,7 @@ export default function Step1SelectCycle({
       .from('mmp_files')
       .select('id, name, status, hub, created_at, month, cycle_status')
       .not('status', 'eq', 'rejected')
+      .neq('cycle_status', 'closed')    // exclude already-closed cycles
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
     else setOpenCycles(data ?? []);
@@ -118,7 +120,7 @@ export default function Step1SelectCycle({
     if (!wizardState.selectedMmpId) return;
     const { data } = await supabase
       .from('mmp_site_entries')
-      .select('site_name, state, locality, activity, status, data_collector_id')
+      .select('site_name, state, locality, activity, status, accepted_by, claimed_by, visit_started_by')
       .eq('mmp_file_id', wizardState.selectedMmpId);
 
     const rows = (data ?? []).map((r: any) => ({
@@ -127,7 +129,7 @@ export default function Step1SelectCycle({
       Locality: r.locality,
       Activity: r.activity,
       Status: r.status,
-      'Enumerator ID': r.data_collector_id ?? '',
+      'Enumerator ID': r.accepted_by ?? r.claimed_by ?? r.visit_started_by ?? '',
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -373,7 +375,7 @@ export default function Step1SelectCycle({
           disabled={!canAdvance || isAlreadyClosed}
           data-testid="button-start-guided-close"
         >
-          Start Guided Close →
+          {nextLabel ?? 'Start Guided Close →'}
         </Button>
       </div>
     </div>

@@ -13,12 +13,14 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { WizardState } from '../CycleCloseWizard';
+import type { RoleFlags } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportCycleCloseWorkbook, type CheckResult } from '@/utils/cycleCloseExport';
 
 interface CheckItem {
-  id: number;
+  id: number;        // stable key used for overrides storage — never renumber
+  displayNum: number; // sequential 1–N shown to the user
   label: string;
   description: string;
   jumpStep: number;
@@ -33,11 +35,13 @@ interface Props {
   onBack: () => void;
   canGoBack: boolean;
   canOverride: boolean;
+  canFinalizeClose?: boolean;
+  roleFlags?: RoleFlags;
   currentUser: any;
   goToStep?: (step: number) => void;
 }
 
-export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, currentUser, goToStep }: Props) {
+export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, canFinalizeClose, roleFlags, currentUser, goToStep }: Props) {
   const navigate = useNavigate();
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [closingDialog, setClosingDialog] = useState(false);
@@ -115,6 +119,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const allSitesResolved = Object.values(wizardState.resolvedSites).every(v => v !== 'resubmit');
 
   // Step 4: every site from all three uncovered sources must have a reason
+  // and must be supervisor-confirmed.
   const allNotCoveredIds = new Set<string>([
     ...matchResults
       .filter(r => r.action === 'reject' || r.status === 'unmatched')
@@ -123,24 +128,26 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
     ...(wizardState.unmatchedMmpSiteIds ?? []),
   ]);
-  const allReasonsAssigned = [...allNotCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
+  const allReasonsConfirmed = [...allNotCoveredIds].every(id => {
+    const reason = wizardState.uncoveredReasons[id];
+    return !!reason?.reason && reason?.status === 'confirmed';
+  });
 
   const allExceptionsDecided = Object.keys(wizardState.exceptionDecisions).every(k => !!wizardState.exceptionDecisions[k]?.decision);
 
+  // id = stable key for overrides storage (never renumber); displayNum = sequential label shown to user.
+  // Check id:6 ("All enumerators reconciled") was removed — it was keyed off wizardState.paymentActions
+  // which Step 5 (Reconciliation) no longer writes. The real fee-payment gate is check id:8 below.
   const checks: CheckItem[] = [
-    { id: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
-    { id: 2, label: 'All matches resolved', description: 'No "needs review" rows remaining', jumpStep: 2, passes: allMatchesResolved },
-    { id: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden — resolve in Upload & Match', jumpStep: 2, passes: allSitesResolved },
-    { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 3, passes: allReasonsAssigned },
-    { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 4, passes: allExceptionsDecided },
-    // Check 6 removed: "All enumerators reconciled" was keyed off wizardState.paymentActions
-    // which the Reconciliation step (Step 5) no longer writes. Payment is now done in
-    // Field Payments Centre; check 8 below is the real fee-payment gate.
-    { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
-    // Note: check 7 is not auto-computed (requires a separate DB query the wizard doesn't cache).
-    // FOM must verify manually; the override mechanism exists if it's acceptable to close with pending submissions.
+    { id: 1, displayNum: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
+    { id: 2, displayNum: 2, label: 'All matches resolved', description: 'No "needs review" rows remaining', jumpStep: 2, passes: allMatchesResolved },
+    { id: 3, displayNum: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden — resolve in Upload & Match', jumpStep: 2, passes: allSitesResolved },
+    { id: 4, displayNum: 4, label: 'Not-covered reasons confirmed', description: 'Every not-covered site has a supervisor-confirmed reason', jumpStep: 3, passes: allReasonsConfirmed },
+    { id: 5, displayNum: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 4, passes: allExceptionsDecided },
+    { id: 7, displayNum: 6, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
+    // Note: check 6 (id:7) is not auto-computed — FOM must verify manually; the override mechanism exists if acceptable to close with pending submissions.
     {
-      id: 8,
+      id: 8, displayNum: 7,
       label: 'Enumerator fees paid',
       description: unpaidFeeCount === null
         ? 'Checking fee payment status…'
@@ -152,7 +159,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       fixItUrl: '/field-payments?tab=fees',
     },
     {
-      id: 9,
+      id: 9, displayNum: 8,
       label: 'Exception actions executed',
       description: pendingExcCount === null
         ? 'Checking exception action status…'
@@ -339,6 +346,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const handleCloseCycle = async () => {
+    if (!mayFinalize) return;
     if (!allPassed || !confirmChecked) return;
     // If no pre-approved snapshot, require the admin to have typed CONFIRM
     if (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM') return;
@@ -403,6 +411,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const isClosed = !!wizardState.cycleClosedAt;
+  const mayFinalize = !!canFinalizeClose;
 
   if (isClosed) {
     const allDecisions = Object.values(wizardState.exceptionDecisions);
@@ -529,8 +538,18 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 6 — Final Review &amp; Close</h2>
         <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٦ — المراجعة النهائية وإغلاق الدورة</p>
-        <p className="text-muted-foreground text-sm">All 9 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
+        <p className="text-muted-foreground text-sm">All 8 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
       </div>
+
+      {!mayFinalize && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-700" />
+          <AlertDescription>
+            Read-only final close stage: only FOM, Admin, or Super Admin can close a cycle.
+            {roleFlags?.isSupervisor ? ' Supervisor role detected.' : roleFlags?.isCoordinator ? ' Coordinator role detected.' : ''}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -556,7 +575,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{check.id}. {check.label}</p>
+                  <p className="text-sm font-medium">{check.displayNum}. {check.label}</p>
                   {status === 'override' && (
                     <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">
                       Overridden by {wizardState.overrides[check.id]?.by}
@@ -640,7 +659,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           <Button
             type="button"
             onClick={() => setClosingDialog(true)}
-            disabled={!confirmChecked || (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM')}
+            disabled={!mayFinalize || !confirmChecked || (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM')}
             className="bg-green-600 hover:bg-green-700 text-white"
             data-testid="button-close-cycle"
           >
@@ -703,7 +722,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setClosingDialog(false)}>Cancel</Button>
-            <Button type="button" onClick={handleCloseCycle} disabled={closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
+            <Button type="button" onClick={handleCloseCycle} disabled={!mayFinalize || closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
               {closing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Archive className="h-3.5 w-3.5 mr-1.5" />}
               {closing ? 'Closing…' : 'Close Cycle Now'}
             </Button>

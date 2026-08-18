@@ -2200,11 +2200,18 @@ const MMP = () => {
   // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
   const canClaimSites = !isAdmin && !isICT && !isFOM && (isDataCollector || isCoordinator);
   const [showCycleWizard, setShowCycleWizard] = useState(false);
+  const [cycleWizardInit, setCycleWizardInit] = useState<{ initialStep?: number; initialMmpId?: string | null }>({});
+
+  const canAccessCycleWizard = isFOM || isAdmin || isSuperAdmin || isSupervisor || isCoordinator;
 
   // Auto-open the Close Cycle wizard when navigated to via ?action=close-cycle
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('action') === 'close-cycle' && (isFOM || isAdmin || isSuperAdmin)) {
+    if (params.get('action') === 'close-cycle' && canAccessCycleWizard) {
+      const rawStep = Number(params.get('step') || '1');
+      const initialStep = Number.isFinite(rawStep) && rawStep >= 1 && rawStep <= 7 ? rawStep : undefined;
+      const initialMmpId = params.get('mmpId');
+      setCycleWizardInit({ initialStep, initialMmpId });
       setShowCycleWizard(true);
       // Clean the URL so a refresh doesn't re-open it
       navigate('/mmp', { replace: true });
@@ -4573,6 +4580,7 @@ const MMP = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+<<<<<<< HEAD
             {isSuperAdmin && mmpFiles.some((m: any) => m.cycle_status === 'closed' || m.cycleStatus === 'closed') && (
               <Button
                 onClick={() => { setReopenMmpId(''); setReopenReason(''); setReopenConfirmed(false); setReopenDialogOpen(true); }}
@@ -4585,14 +4593,20 @@ const MMP = () => {
               </Button>
             )}
             {(isFOM || isAdmin || isSuperAdmin) && (
+=======
+            {canAccessCycleWizard && (
+>>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
               <Button
-                onClick={() => setShowCycleWizard(true)}
+                onClick={() => {
+                  setCycleWizardInit({});
+                  setShowCycleWizard(true);
+                }}
                 size="sm"
                 className="bg-amber-500 hover:bg-amber-600 text-white shadow-md flex items-center gap-1.5 text-xs"
                 data-testid="button-open-cycle-wizard"
               >
                 <Archive className="h-3.5 w-3.5" />
-                Close Cycle
+                Cycle Close Workflow
               </Button>
             )}
             {isAdmin && (
@@ -7836,11 +7850,16 @@ const MMP = () => {
           </div>
         )}>
           <CycleCloseWizard
-            onClose={() => setShowCycleWizard(false)}
+            onClose={() => {
+              setShowCycleWizard(false);
+              setCycleWizardInit({});
+            }}
             isFOM={isFOM}
             isAdmin={isAdmin}
             isSuperAdmin={isSuperAdmin}
             currentUser={currentUser}
+            initialStep={cycleWizardInit.initialStep}
+            initialMmpId={cycleWizardInit.initialMmpId}
           />
         </ErrorBoundary>
       )}
