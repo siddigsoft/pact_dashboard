@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS cycle_exception_actions (
   -- Execution tracking (deferred rollover/hold actions)
   executed            boolean NOT NULL DEFAULT false,
   executed_at         timestamptz,
-  executed_by         uuid REFERENCES profiles(id),
+  executed_by         uuid REFERENCES profiles(id) ON DELETE SET NULL,
   executed_by_name    text,
   execution_note      text,
 

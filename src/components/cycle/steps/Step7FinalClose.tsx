@@ -349,9 +349,17 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const mayFinalize = !!canFinalizeClose;
 
   if (isClosed) {
-    // Count deferred rollover actions (roll/hold decisions needing Finance follow-up)
-    const deferredCount = Object.values(wizardState.exceptionDecisions)
-      .filter(d => d.decision === 'roll' || d.decision === 'hold').length;
+    const allDecisions = Object.values(wizardState.exceptionDecisions);
+    // Roll / Hold → Rollover Tracker
+    const rolloverCount = allDecisions.filter(d => d.decision === 'roll' || d.decision === 'hold').length;
+    // Write-off / Return / Redirect → Resolution Centre
+    const resolutionCount = allDecisions.filter(d =>
+      d.decision === 'writeoff' || d.decision === 'return' || d.decision === 'redirect'
+    ).length;
+    // Immediate (cancel/reduce/reassign) — already done, no follow-up needed
+    const immediateCount = allDecisions.filter(d =>
+      d.decision === 'cancel' || d.decision === 'reduce' || d.decision === 'reassign'
+    ).length;
 
     return (
       <div className="max-w-2xl mx-auto p-6 space-y-6 text-center">
@@ -367,17 +375,45 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           </p>
         </div>
 
-        {deferredCount > 0 && (
-          <div className="border border-blue-300 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 text-sm space-y-2">
+        {/* ── Summary of all exception decisions ─────────────────────────── */}
+        {allDecisions.length > 0 && (
+          <div className="text-left border rounded-lg divide-y overflow-hidden">
+            <div className="bg-muted/40 px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Exception Decision Summary
+            </div>
+            {immediateCount > 0 && (
+              <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <span className="text-green-700">✅ Executed immediately at close</span>
+                <span className="font-semibold">{immediateCount} advance{immediateCount > 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {rolloverCount > 0 && (
+              <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <span className="text-blue-700">📋 Pending — rollover / hold</span>
+                <span className="font-semibold">{rolloverCount} advance{rolloverCount > 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {resolutionCount > 0 && (
+              <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <span className="text-amber-700">⚠️ Pending — write-off / return / redirect</span>
+                <span className="font-semibold">{resolutionCount} advance{resolutionCount > 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Banner 1: Roll / Hold → Rollover Tracker ───────────────────── */}
+        {rolloverCount > 0 && (
+          <div className="text-left border border-blue-300 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 text-sm space-y-2">
             <p className="font-semibold text-blue-800 dark:text-blue-200">
-              📋 {deferredCount} rollover action{deferredCount > 1 ? 's' : ''} pending Finance follow-up
+              📋 {rolloverCount} rollover action{rolloverCount > 1 ? 's' : ''} pending Finance follow-up
             </p>
             <p className="text-blue-700 dark:text-blue-300">
-              {deferredCount} exception{deferredCount > 1 ? 's were' : ' was'} marked "Roll to Next MMP" or "Hold".
-              Finance must complete the rollover by linking each advance to the enumerator's site in the target cycle.
+              {rolloverCount} exception{rolloverCount > 1 ? 's were' : ' was'} marked "Roll to Next MMP" or "Hold".
+              Finance must link each advance to the enumerator's confirmed site in the target cycle.
             </p>
-            <p dir="rtl" className="text-xs text-blue-700">
-              {deferredCount} استثناء محدد كـ "رحّل للدورة التالية" أو "تعليق". يجب على المالية إتمام الترحيل.
+            <p dir="rtl" className="text-xs text-blue-700 dark:text-blue-400">
+              {rolloverCount} استثناء محدد كـ "رحّل للدورة التالية" أو "تعليق". يجب على المالية إتمام الترحيل.
             </p>
             <Button
               type="button"
@@ -387,6 +423,37 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             >
               <ExternalLink className="h-4 w-4 mr-1.5" />
               Open Exception Rollover Tracker
+            </Button>
+          </div>
+        )}
+
+        {/* ── Banner 2: Write-off / Return / Redirect → Resolution Centre ── */}
+        {resolutionCount > 0 && (
+          <div className="text-left border border-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 text-sm space-y-2">
+            <p className="font-semibold text-amber-800 dark:text-amber-200">
+              ⚠️ {resolutionCount} resolution action{resolutionCount > 1 ? 's' : ''} require Finance action
+            </p>
+            <p className="text-amber-700 dark:text-amber-300">
+              {resolutionCount} exception{resolutionCount > 1 ? 's were' : ' was'} marked for
+              {' '}
+              {[
+                allDecisions.some(d => d.decision === 'writeoff') && 'Write-Off',
+                allDecisions.some(d => d.decision === 'return')   && 'Return Collection',
+                allDecisions.some(d => d.decision === 'redirect') && 'Project Redirect',
+              ].filter(Boolean).join(' / ')}.
+              Finance must complete each action in the Resolution Centre.
+            </p>
+            <p dir="rtl" className="text-xs text-amber-700 dark:text-amber-400">
+              {resolutionCount} استثناء يتطلب إجراءً من المالية (شطب / استرداد / إعادة توجيه).
+            </p>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white mt-1"
+              onClick={() => navigate('/cycle-exceptions/resolution')}
+              data-testid="button-go-to-resolution"
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              Open Exception Resolution Centre
             </Button>
           </div>
         )}
