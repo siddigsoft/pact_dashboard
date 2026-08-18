@@ -22,7 +22,7 @@ const CostPredictionsPanel     = lazy(() => import('./CostPredictions'));
 const ExchangeRatesPanel       = lazy(() => import('./ExchangeRates'));
 const SalaryRetainerPanel      = lazy(() => import('./SalaryRetainerReport'));
 const MonthEndPanel            = lazy(() => import('./MonthEndFinancialSummary'));
-const EnumeratorFeesPanel      = lazy(() => import('./EnumeratorFeesReport'));
+const FieldPaymentsCentrePanel = lazy(() => import('./FieldPaymentsCentre'));
 const DuplicatePaymentsPanel   = lazy(() => import('./DuplicatePaymentsReport'));
 const CampaignAdvancesPanel    = lazy(() => import('@/components/finance/CampaignAdvancesPanel'));
 
@@ -101,8 +101,8 @@ const SECTIONS: SectionDef[] = [
         description: 'End-of-month financial summary showing closing balances, reconciliation status, and a snapshot of all financial activity for sign-off and archiving.',
       },
       {
-        id: 'enumerator-fees', label: 'Enumerator Fees Report', icon: Receipt,
-        description: 'Track enumerator and transport fees across all MMP site visits, and mark fees as paid for visits completed outside the app.',
+        id: 'enumerator-fees', label: 'Field Payments Centre', icon: Receipt,
+        description: 'Unified enumerator fee payments, transport advance tracking, exception recovery, and outstanding balance tracker.',
       },
     ],
   },
@@ -186,7 +186,7 @@ export default function FinanceHub() {
         {tab === 'exchange-rates'      && <Suspense fallback={<PanelLoader />}><ExchangeRatesPanel /></Suspense>}
         {tab === 'salary-retainer'     && <Suspense fallback={<PanelLoader />}><SalaryRetainerPanel /></Suspense>}
         {tab === 'month-end'           && <Suspense fallback={<PanelLoader />}><MonthEndPanel /></Suspense>}
-        {tab === 'enumerator-fees'     && <Suspense fallback={<PanelLoader />}><EnumeratorFeesPanel /></Suspense>}
+        {tab === 'enumerator-fees'     && <Suspense fallback={<PanelLoader />}><FieldPaymentsCentrePanel /></Suspense>}
         {tab === 'campaign-advances'   && <Suspense fallback={<PanelLoader />}><CampaignAdvancesPanel /></Suspense>}
       </div>
     </HubLayout>

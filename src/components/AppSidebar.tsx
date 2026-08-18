@@ -554,8 +554,8 @@
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isCountryDirector || isSeniorManagement)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Tracker", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
-    if (!isHidden('/enumerator-fees-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      approvalItems.push({ id: 'enumerator-fees-report', title: "Enumerator Fees Report", url: "/enumerator-fees-report", icon: Receipt, priority: 3.5, isPinned: isPinned('/enumerator-fees-report') });
+    if (!isHidden('/field-payments') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+      approvalItems.push({ id: 'field-payments', title: "Field Payments Centre", url: "/field-payments", icon: Receipt, priority: 3.5, isPinned: isPinned('/field-payments') });
     }
     if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
       approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
@@ -584,7 +584,7 @@
       fhReportItems.push({ id: 'finance-hub-fx',            title: 'Exchange Rates',            url: '/finance-hub?tab=exchange-rates',      icon: ArrowLeftRight,priority: 5, isPinned: isPinned('/finance-hub?tab=exchange-rates') });
       fhReportItems.push({ id: 'finance-hub-salary-rpt',    title: 'Salary & Retainer Report',  url: '/finance-hub?tab=salary-retainer',     icon: Users,         priority: 6, isPinned: isPinned('/finance-hub?tab=salary-retainer') });
       fhReportItems.push({ id: 'finance-hub-month-end',     title: 'Month-End Summary',         url: '/finance-hub?tab=month-end',           icon: CalendarCheck, priority: 7, isPinned: isPinned('/finance-hub?tab=month-end') });
-      fhReportItems.push({ id: 'finance-hub-enum-fees',     title: 'Enumerator Fees Report',    url: '/finance-hub?tab=enumerator-fees',     icon: Receipt,       priority: 8, isPinned: isPinned('/finance-hub?tab=enumerator-fees') });
+      fhReportItems.push({ id: 'finance-hub-field-pay',     title: 'Field Payments Centre',     url: '/field-payments',                      icon: Receipt,       priority: 8, isPinned: isPinned('/field-payments') });
       groups.push({ id: 'finance-hub-reports', label: 'Finance Reports', order: 5.31, items: fhReportItems, parentGroup: 'finance' } as any);
     }
 

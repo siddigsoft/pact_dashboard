@@ -80,6 +80,7 @@ const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
 const DownPaymentApproval = lazy(() => import('./pages/DownPaymentApproval'));
 const AdvanceRequestsReport = lazy(() => import('./pages/AdvanceRequestsReport'));
 const EnumeratorFeesReport = lazy(() => import('./pages/EnumeratorFeesReport'));
+const FieldPaymentsCentre = lazy(() => import('./pages/FieldPaymentsCentre'));
 const SupervisorApprovals = lazy(() => import('./pages/SupervisorApprovals'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
@@ -622,7 +623,8 @@ const AppRoutes = () => {
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
         <Route path="/advance-requests-report" element={<Navigate to="/finance-hub?tab=advance-report" replace />} />
-        <Route path="/enumerator-fees-report" element={<EnumeratorFeesReport />} />
+        <Route path="/enumerator-fees-report" element={<Navigate to="/field-payments?tab=fees" replace />} />
+        <Route path="/field-payments" element={<FieldPaymentsCentre />} />
         <Route path="/down-payment-advance-report" element={<Navigate to="/finance-hub?tab=advance-report" replace />} />
         <Route path="/cost-predictions" element={<Navigate to="/finance-hub?tab=cost-predictions" replace />} />
         <Route path="/exchange-rates" element={<Navigate to="/finance-hub?tab=exchange-rates" replace />} />
