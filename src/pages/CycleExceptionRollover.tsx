@@ -26,7 +26,7 @@ import {
   RefreshCw, ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUserContext } from '@/context/UserContext';
+import { useUser } from '@/context/user/UserContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ interface EnumeratorSite {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CycleExceptionRollover() {
-  const { currentUser } = useUserContext();
+  const { currentUser } = useUser();
   const navigate = useNavigate();
 
   const [actions, setActions]         = useState<ExceptionAction[]>([]);
