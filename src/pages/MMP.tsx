@@ -4580,7 +4580,6 @@ const MMP = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-<<<<<<< HEAD
             {isSuperAdmin && mmpFiles.some((m: any) => m.cycle_status === 'closed' || m.cycleStatus === 'closed') && (
               <Button
                 onClick={() => { setReopenMmpId(''); setReopenReason(''); setReopenConfirmed(false); setReopenDialogOpen(true); }}
@@ -4592,10 +4591,7 @@ const MMP = () => {
                 Reopen Cycle
               </Button>
             )}
-            {(isFOM || isAdmin || isSuperAdmin) && (
-=======
             {canAccessCycleWizard && (
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
               <Button
                 onClick={() => {
                   setCycleWizardInit({});
