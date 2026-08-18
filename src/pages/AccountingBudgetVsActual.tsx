@@ -25,7 +25,6 @@ interface AccountMeta { id: string; code: string; name_en: string; name_ar: stri
 interface FiscalYear { id: string; code: string }
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface Fund { id: string; code: string; name_en: string }
-interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
 interface BudgetLine { id: string; account_id: string; period_id: string | null; fund_id: string | null; budget_amount: number }
 
 interface BvARow {
@@ -53,7 +52,6 @@ export default function AccountingBudgetVsActual() {
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
   const [accountsMeta, setAccountsMeta] = useState<Record<string, AccountMeta>>({});
   const [periodId, setPeriodId] = useState('');
   const [fundId, setFundId] = useState('all');
@@ -74,17 +72,15 @@ export default function AccountingBudgetVsActual() {
 
   useEffect(() => {
     (async () => {
-      const [yRes, pRes, fRes, aRes, cRes] = await Promise.all([
+      const [yRes, pRes, fRes, aRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
         supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
         supabase.from('acct_funds').select('id, code, name_en').eq('is_active', true).order('code'),
         supabase.from('acct_accounts').select('id, code, name_en, name_ar, account_type, country_id').order('code'),
-        supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
       ]);
       setYears((yRes.data ?? []) as FiscalYear[]);
       setPeriods((pRes.data ?? []) as Period[]);
       setFunds((fRes.data ?? []) as Fund[]);
-      setCountries((cRes.data ?? []) as Country[]);
       const am: Record<string, AccountMeta> = {};
       for (const a of (aRes.data ?? [])) am[a.id] = a as AccountMeta;
       setAccountsMeta(am);

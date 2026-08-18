@@ -20,7 +20,6 @@ import autoTable from 'jspdf-autotable';
 interface Account { id: string; code: string; name_en: string; account_type: string; subtype: string | null }
 interface FiscalYear { id: string; code: string }
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
-interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
 interface JLRow { account_id: string; debit_credit: string; functional_amount: number; posting_date: string }
 
 type CFCategory = 'operating' | 'investing' | 'financing';
@@ -45,7 +44,6 @@ export default function AccountingCashFlow() {
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
   const [accounts, setAccounts] = useState<Record<string, Account>>({});
   const [periodId, setPeriodId] = useState('');
   const [jLines, setJLines] = useState<JLRow[]>([]);
@@ -57,18 +55,16 @@ export default function AccountingCashFlow() {
 
   useEffect(() => {
     (async () => {
-      const [yRes, pRes, aRes, cRes] = await Promise.all([
+      const [yRes, pRes, aRes] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
         supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
         supabase.from('acct_accounts').select('id, code, name_en, account_type, subtype').eq('is_active', true).order('code'),
-        supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
       ]);
       setYears((yRes.data ?? []) as FiscalYear[]);
       setPeriods((pRes.data ?? []) as Period[]);
       const am: Record<string, Account> = {};
       for (const a of (aRes.data ?? [])) am[a.id] = a as Account;
       setAccounts(am);
-      setCountries((cRes.data ?? []) as Country[]);
       const first = (pRes.data ?? []).find((p: any) => p.status === 'open' || p.status === 'soft_closed');
       if (first) setPeriodId(first.id);
       setBootstrap(false);
