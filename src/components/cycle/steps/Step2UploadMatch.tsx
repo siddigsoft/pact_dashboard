@@ -203,8 +203,13 @@ export default function Step2UploadMatch({
       mmpRawRows: cands.map(c => c.data),
     });
 
-    // Resolve UUID-shaped accepted_by values to profile names (secondary lookup —
-    // no FK exists so we can't join directly).
+    // Show the table immediately — profile names resolve in the background
+    setCandidatesLoading(false);
+    setPairsInitialized(false);
+
+    // Resolve UUID-shaped accepted_by values to profile names (non-blocking —
+    // table is already visible; names patch in when the lookup returns).
+    // No FK exists so we can't join directly.
     const isUuid = (v: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     const uuids = [...new Set(
@@ -219,10 +224,6 @@ export default function Step2UploadMatch({
       for (const p of profiles ?? []) if (p.full_name) map[p.id] = p.full_name;
       setProfileNameMap(map);
     }
-
-    setCandidatesLoading(false);
-    // Trigger pair auto-detect on next render
-    setPairsInitialized(false);
   };
 
   // ── Parse uploaded WFP file ───────────────────────────────────────────────

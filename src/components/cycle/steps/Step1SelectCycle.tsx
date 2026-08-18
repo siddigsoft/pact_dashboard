@@ -97,17 +97,19 @@ export default function Step1SelectCycle({
       cycleClosedAt: null,
     });
 
-    const { count: sc } = await supabase
-      .from('mmp_site_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('mmp_file_id', mmpId);
+    // Both stat queries are independent — fire in parallel
+    const [{ count: sc }, { data: entries }] = await Promise.all([
+      supabase
+        .from('mmp_site_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('mmp_file_id', mmpId),
+      supabase
+        .from('mmp_site_entries')
+        .select('accepted_by')
+        .eq('mmp_file_id', mmpId)
+        .not('accepted_by', 'is', null),
+    ]);
     setSiteCount(sc ?? 0);
-
-    const { data: entries } = await supabase
-      .from('mmp_site_entries')
-      .select('accepted_by')
-      .eq('mmp_file_id', mmpId)
-      .not('accepted_by', 'is', null);
     const uniqueEnums = new Set((entries ?? []).map((e: any) => e.accepted_by).filter(Boolean));
     setEnumeratorCount(uniqueEnums.size);
   };
