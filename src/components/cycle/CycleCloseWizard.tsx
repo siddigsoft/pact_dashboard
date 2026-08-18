@@ -10,6 +10,8 @@ import Step5Exceptions from './steps/Step5Exceptions';
 import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
+import { supabase } from '@/integrations/supabase/client';
+import { insertNotificationsToDb } from '@/services/notification-insert';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
@@ -40,6 +42,10 @@ export interface UncoveredReason {
   reason: string;
   note: string;
   flagged: boolean;
+  status?: 'draft' | 'confirmed';
+  confirmedBy?: string | null;
+  confirmedAt?: string | null;
+  confirmationNote?: string | null;
 }
 
 export interface WizardState {
@@ -104,9 +110,67 @@ interface Props {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   currentUser: any;
+  initialStep?: number;
+  initialMmpId?: string | null;
 }
 
-export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin, currentUser }: Props) {
+export interface RoleFlags {
+  isCoordinator: boolean;
+  isSupervisor: boolean;
+  isFOM: boolean;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+}
+
+const normalizeRole = (value: string) => value.toLowerCase().replace(/[\s_()-]+/g, '');
+
+export function getCycleCloseRoleFlags(currentUser: any) {
+  const roles = [
+    currentUser?.role,
+    ...(Array.isArray(currentUser?.roles) ? currentUser.roles : []),
+    ...(Array.isArray(currentUser?.additionalRoles)
+      ? currentUser.additionalRoles.map((r: any) => r?.role).filter(Boolean)
+      : []),
+  ]
+    .filter(Boolean)
+    .map((r: string) => normalizeRole(String(r)));
+
+  const hasAny = (variants: string[]) => variants.some(v => roles.includes(v));
+
+  const isCoordinator = hasAny(['coordinator']);
+  const isSupervisor = hasAny(['supervisor', 'hubsupervisor']);
+  const isFOM = hasAny(['fom', 'fieldoperationmanager']);
+  const isAdmin = hasAny(['admin']);
+  const isSuperAdmin = hasAny(['superadmin']);
+
+  return { isCoordinator, isSupervisor, isFOM, isAdmin, isSuperAdmin };
+}
+
+export function allUncoveredReasonsConfirmed(wizardState: WizardState): boolean {
+  const notCoveredIds = new Set<string>([
+    ...wizardState.matchResults
+      .filter(r => r.action === 'reject' || r.status === 'unmatched')
+      .map(r => r.matchedSiteId).filter(Boolean) as string[],
+    ...Object.keys(wizardState.resolvedSites)
+      .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
+    ...(wizardState.unmatchedMmpSiteIds ?? []),
+  ]);
+
+  return [...notCoveredIds].every((id) => {
+    const reason = wizardState.uncoveredReasons[id];
+    return !!reason?.reason && reason?.status === 'confirmed';
+  });
+}
+
+export default function CycleCloseWizard({
+  onClose,
+  isFOM,
+  isAdmin,
+  isSuperAdmin,
+  currentUser,
+  initialStep,
+  initialMmpId,
+}: Props) {
   // Block ALL form submissions on the document for the wizard's lifetime.
   // Without this, any <form> in the layout (search bars, background dialogs,
   // portals) can accidentally submit and cause a full page reload when the user
@@ -122,17 +186,44 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     return () => document.removeEventListener('submit', blockSubmit, true);
   }, []);
 
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialStep && initialStep >= 1 && initialStep <= 7 ? initialStep : 1);
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
     'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
   ]);
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const step4NotifiedMmpIdsRef = useRef<Set<string>>(new Set());
 
   const updateWizardState = (patch: Partial<WizardState>) => {
     setWizardState(prev => ({ ...prev, ...patch }));
   };
+
+  const roleFlags = getCycleCloseRoleFlags(currentUser);
+  const canFinalizeClose = roleFlags.isFOM || roleFlags.isAdmin || roleFlags.isSuperAdmin;
+  const isStep4ContributorOnly = !canFinalizeClose && (roleFlags.isCoordinator || roleFlags.isSupervisor);
+
+  useEffect(() => {
+    if (!isStep4ContributorOnly) return;
+    setCurrentStep(4);
+    setStepStatuses(['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']);
+  }, [isStep4ContributorOnly]);
+
+  useEffect(() => {
+    const mmpId = initialMmpId ?? null;
+    if (!mmpId) return;
+    updateWizardState({ selectedMmpId: mmpId });
+    (async () => {
+      const { data } = await supabase
+        .from('mmp_files')
+        .select('id, name, month, year')
+        .eq('id', mmpId)
+        .single();
+      if (data) {
+        updateWizardState({ selectedMmp: data as any, selectedMmpId: data.id });
+      }
+    })();
+  }, [initialMmpId]);
 
   // ── Auto-save to localStorage whenever step ≥ 2 state changes ─────────────
   useEffect(() => {
@@ -204,6 +295,10 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
   };
 
   const goToStep = (step: number) => {
+    if (isStep4ContributorOnly) {
+      if (step === 4) setCurrentStep(4);
+      return;
+    }
     if (step < currentStep || stepStatuses[step - 1] !== 'not_started') {
       setCurrentStep(step);
     }
@@ -221,19 +316,9 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       return !hasResubmit;
     }
     if (currentStep === 4) {
-      // All three sources of uncovered sites must have a reason before advancing:
-      // (1) WFP-rejected / unmatched rows from Step 2
-      // (2) Sites resolved as not_covered in Step 3
-      // (3) MMP sites that had no WFP file row at all ("Not in clean data")
-      const notCoveredIds = new Set<string>([
-        ...wizardState.matchResults
-          .filter(r => r.action === 'reject' || r.status === 'unmatched')
-          .map(r => r.matchedSiteId).filter(Boolean) as string[],
-        ...Object.keys(wizardState.resolvedSites)
-          .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
-        ...(wizardState.unmatchedMmpSiteIds ?? []),
-      ]);
-      return [...notCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
+      // Step 4 advances only when every uncovered site has a reason
+      // AND has been supervisor-confirmed.
+      return allUncoveredReasonsConfirmed(wizardState);
     }
     if (currentStep === 5) {
       const exceptions = Object.keys(wizardState.exceptionDecisions);
@@ -246,16 +331,85 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     return false;
   }, [currentStep, wizardState]);
 
-  const handleNext = () => {
+  const notifyStep4Stakeholders = async () => {
+    const mmpId = wizardState.selectedMmpId;
+    if (!mmpId || step4NotifiedMmpIdsRef.current.has(mmpId)) return;
+
+    const notCoveredIds = [
+      ...Object.entries(wizardState.resolvedSites).filter(([, v]) => v === 'not_covered').map(([k]) => k),
+      ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
+      ...(wizardState.unmatchedMmpSiteIds ?? []),
+    ];
+    const uniqueIds = [...new Set(notCoveredIds)];
+    if (uniqueIds.length === 0) return;
+
+    await supabase
+      .from('mmp_site_entries')
+      .update({ status: 'not_covered' })
+      .in('id', uniqueIds);
+
+    const { data: rpcRecipients, error: rpcRecipientsError } = await (supabase as any).rpc(
+      'get_cycle_close_step4_recipients',
+      { p_site_ids: uniqueIds }
+    );
+    if (rpcRecipientsError) {
+      console.warn('[CycleCloseWizard] recipient RPC failed:', rpcRecipientsError);
+      return;
+    }
+    const recipients = new Set<string>(
+      (rpcRecipients ?? [])
+        .map((r: any) => r?.user_id)
+        .filter(Boolean)
+    );
+
+    if (recipients.size === 0) return;
+
+    const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
+    const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
+    const rows = Array.from(recipients).map((recipientId) => ({
+      recipient_id: recipientId,
+      user_id: recipientId,
+      title_en: `Cycle Close Step 4 is ready: ${cycleName}`,
+      title_ar: `الخطوة ٤ من إغلاق الدورة جاهزة: ${cycleName}`,
+      message_en: `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope.`,
+      message_ar: `يرجى إكمال الخطوة ٤ (تحديد المواقع غير المغطاة) ضمن نطاق الولاية/المركز الخاص بك.`,
+      event_type: 'workflow',
+      entity_id: mmpId,
+      entity_type: 'mmpFile',
+      action_url: actionUrl,
+      priority: 'high',
+      status: 'pending',
+      title: `Cycle Close Step 4 is ready: ${cycleName}`,
+      message: `Please complete Step 4 (Mark Uncovered) for your assigned state/hub scope.`,
+      link: actionUrl,
+      related_entity_id: mmpId,
+      related_entity_type: 'mmpFile',
+      type: 'warning',
+      is_read: false,
+    }));
+    await insertNotificationsToDb(rows);
+    step4NotifiedMmpIdsRef.current.add(mmpId);
+  };
+
+  const handleNext = async () => {
+    if (isStep4ContributorOnly) return;
+    if (currentStep === 3) {
+      try {
+        await notifyStep4Stakeholders();
+      } catch (err) {
+        console.warn('[CycleCloseWizard] Step 4 notifications failed:', err);
+      }
+    }
     markStepDone(currentStep);
     setCurrentStep(s => Math.min(s + 1, 7));
   };
 
   const handleBack = () => {
+    if (isStep4ContributorOnly) return;
     setCurrentStep(s => Math.max(s - 1, 1));
   };
 
-  const canGoBack = currentStep > 1 && !wizardState.cycleClosedAt;
+  const canGoBack = !isStep4ContributorOnly && currentStep > 1 && !wizardState.cycleClosedAt;
   const isClosed = !!wizardState.cycleClosedAt;
   const canOverride = isFOM || isAdmin || isSuperAdmin;
 
@@ -266,6 +420,8 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
     isAdmin,
     isSuperAdmin,
     canOverride,
+    canFinalizeClose,
+    roleFlags,
     currentUser,
     onNext: handleNext,
     onBack: handleBack,
@@ -304,7 +460,7 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
             const stepNum = idx + 1;
             const status = stepStatuses[idx];
             const isActive = stepNum === currentStep;
-            const isClickable = stepNum < currentStep || status === 'done';
+            const isClickable = !isStep4ContributorOnly && (stepNum < currentStep || status === 'done');
             return (
               <div key={stepNum} className="flex items-center gap-1 flex-shrink-0">
                 <button
@@ -338,7 +494,13 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto">
-        {isClosed ? (
+        {isStep4ContributorOnly && !wizardState.selectedMmpId ? (
+          <div className="max-w-2xl mx-auto p-6">
+            <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 text-sm text-amber-900">
+              Step 4 access is enabled for your role. Open this workflow from the notification link so the correct cycle is pre-selected.
+            </div>
+          </div>
+        ) : isClosed ? (
           <Step7FinalClose {...stepProps} />
         ) : (
           <>

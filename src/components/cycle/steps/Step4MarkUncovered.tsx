@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,6 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, ChevronDown, ChevronRight, Search, ArrowUpDown, Maximize2, Minimize2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
+import type { RoleFlags } from '../CycleCloseWizard';
+import { filterByHubAccess, getHubAccessInfo } from '@/utils/hubAccessControl';
 import { exportFormattedNotCovered } from '@/utils/cycleCloseExport';
 import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
 
@@ -75,9 +77,11 @@ interface Props {
   onBack: () => void;
   canAdvance: boolean;
   canGoBack: boolean;
+  currentUser?: any;
+  roleFlags?: RoleFlags;
 }
 
-export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack }: Props) {
+export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags }: Props) {
   const [sites, setSites] = useState<UncoveredSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -99,6 +103,31 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [showUnmatchedWfp, setShowUnmatchedWfp] = useState(false);
   const [unmatchedWfpSearch, setUnmatchedWfpSearch] = useState('');
   const [expandedUnmatchedRows, setExpandedUnmatchedRows] = useState<Set<number>>(new Set());
+  const [draftSaving, setDraftSaving] = useState(false);
+
+  const isCoordinator = !!roleFlags?.isCoordinator;
+  const isSupervisor = !!roleFlags?.isSupervisor;
+  const isAdminLike = !!roleFlags?.isAdmin || !!roleFlags?.isSuperAdmin;
+  const canEditReasons = isCoordinator;
+  const canConfirmReasons = isSupervisor;
+  const shouldScopeToAssignment = isCoordinator || isSupervisor;
+  const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser ?? null), [currentUser]);
+
+  const normalize = (value: string | null | undefined) =>
+    (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const baseState = (value: string | null | undefined) =>
+    normalize(value).replace(/state$/, '');
+  const assignedStateBase = baseState(currentUser?.stateId || currentUser?.state_id || '');
+
+  const scopeRows = useCallback(<T extends { state?: string; hub_office?: string }>(rows: T[]): T[] => {
+    if (!shouldScopeToAssignment) return rows;
+    if (hubAccessInfo.isHubSupervisor) {
+      const byHub = filterByHubAccess(rows as any[], hubAccessInfo as any) as T[];
+      if (byHub.length > 0) return byHub;
+    }
+    if (!assignedStateBase) return rows;
+    return rows.filter(r => baseState(r.state) === assignedStateBase);
+  }, [assignedStateBase, hubAccessInfo, shouldScopeToAssignment]);
 
   // Refs to prevent re-running loaders when wizard state object references change
   // without the underlying data actually changing.
@@ -148,10 +177,11 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       // NOTE: accepted_by has no FK to profiles — do NOT use a join here
       const { data } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, hub_office, accepted_by, status')
+        .select('id, site_name, state, locality, hub_office, accepted_by, status, not_covered_reason, not_covered_note, needs_followup, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('status', 'not_covered');
-      setSites((data ?? []).map((s: any) => ({
+      const scoped = scopeRows(data ?? []);
+      setSites(scoped.map((s: any) => ({
         id: s.id,
         site_name: s.site_name,
         state: s.state ?? '',
@@ -160,6 +190,22 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         enumerator_name: '—',
         source: 'manual' as const,
       })));
+      const restored = scoped.reduce((acc: Record<string, UncoveredReason>, s: any) => {
+        if (!s.not_covered_reason) return acc;
+        acc[s.id] = {
+          reason: s.not_covered_reason,
+          note: s.not_covered_note ?? '',
+          flagged: !!s.needs_followup,
+          status: (s.not_covered_confirm_status === 'confirmed' ? 'confirmed' : 'draft'),
+          confirmedBy: s.not_covered_confirmed_by ?? null,
+          confirmedAt: s.not_covered_confirmed_at ?? null,
+          confirmationNote: s.not_covered_confirmation_note ?? null,
+        };
+        return acc;
+      }, {});
+      if (Object.keys(restored).length) {
+        updateWizardState({ uncoveredReasons: { ...wizardState.uncoveredReasons, ...restored } });
+      }
       setLoading(false);
       return;
     }
@@ -168,7 +214,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     // then do a separate lookup for any enumerator names we need.
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, hub_office, accepted_by')
+      .select('id, site_name, state, locality, hub_office, accepted_by, not_covered_reason, not_covered_note, needs_followup, not_covered_confirm_status, not_covered_confirmed_by, not_covered_confirmed_at, not_covered_confirmation_note')
       .in('id', allIds);
 
     if (error) {
@@ -177,6 +223,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       return;
     }
 
+    const scopedData = scopeRows(data ?? []);
     const notInWfpSet = new Set(notInWfpIds);
     const step3Set    = new Set(step3NotCovered);
 
@@ -184,7 +231,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     const isUuid = (v: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     const uuids = [...new Set(
-      (data ?? []).map((s: any) => s.accepted_by).filter((v: any) => v && isUuid(String(v)))
+      scopedData.map((s: any) => s.accepted_by).filter((v: any) => v && isUuid(String(v)))
     )];
     const nameMap: Record<string, string> = {};
     if (uuids.length) {
@@ -195,7 +242,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       for (const p of profiles ?? []) if (p.full_name) nameMap[p.id] = p.full_name;
     }
 
-    setSites((data ?? []).map((s: any) => {
+    setSites(scopedData.map((s: any) => {
       const raw = s.accepted_by ?? '';
       const resolved = raw && isUuid(raw) ? (nameMap[raw] ?? raw) : (raw || '—');
       return {
@@ -210,6 +257,22 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
               : 'rejected_match',
       };
     }));
+    const restored = scopedData.reduce((acc: Record<string, UncoveredReason>, s: any) => {
+      if (!s.not_covered_reason) return acc;
+      acc[s.id] = {
+        reason: s.not_covered_reason,
+        note: s.not_covered_note ?? '',
+        flagged: !!s.needs_followup,
+        status: (s.not_covered_confirm_status === 'confirmed' ? 'confirmed' : 'draft'),
+        confirmedBy: s.not_covered_confirmed_by ?? null,
+        confirmedAt: s.not_covered_confirmed_at ?? null,
+        confirmationNote: s.not_covered_confirmation_note ?? null,
+      };
+      return acc;
+    }, {});
+    if (Object.keys(restored).length) {
+      updateWizardState({ uncoveredReasons: { ...wizardState.uncoveredReasons, ...restored } });
+    }
     setLoading(false);
   };
 
@@ -221,6 +284,11 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       .eq('mmp_file_id', wizardState.selectedMmpId!);
 
     if (!allSites?.length) return;
+    const scopedSites = scopeRows(allSites ?? []);
+    if (!scopedSites.length) {
+      setCoverageRows([]);
+      return;
+    }
 
     // IDs confirmed in Step 2 matching
     const confirmedIds = new Set(
@@ -237,7 +305,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     // Group by state
     const byState: Record<string, { total: number; confirmed: number; notCovered: number }> = {};
-    for (const s of allSites) {
+    for (const s of scopedSites) {
       const st = s.state ?? 'Unknown';
       if (!byState[st]) byState[st] = { total: 0, confirmed: 0, notCovered: 0 };
       byState[st].total++;
@@ -263,6 +331,12 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       .eq('mmp_file_id', wizardState.selectedMmpId);
 
     if (!allSites?.length) { setSiteDetailsLoading(false); return; }
+    const scopedAllSites = scopeRows(allSites ?? []);
+    if (!scopedAllSites.length) {
+      setSiteDetails([]);
+      setSiteDetailsLoading(false);
+      return;
+    }
 
     // Build a map: mmpSiteId → first matchResult that claimed it
     const siteToMatch: Record<string, typeof wizardState.matchResults[0]> = {};
@@ -278,7 +352,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     );
     const primaryWfpCol   = wizardState.matchingPairs[0]?.wfpColumn ?? '';
 
-    const details: SiteDetail[] = allSites.map(s => {
+    const details: SiteDetail[] = scopedAllSites.map(s => {
       const mr            = siteToMatch[s.id] ?? null;
       const notInWfp      = notInWfpSet.has(s.id);
       const notCovReason  = wizardState.uncoveredReasons[s.id];
@@ -338,12 +412,19 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   };
 
   const setReason = (siteId: string, patch: Partial<UncoveredReason>) => {
-    const current = wizardState.uncoveredReasons[siteId] ?? { reason: '', note: '', flagged: false };
+    const current = wizardState.uncoveredReasons[siteId] ?? { reason: '', note: '', flagged: false, status: 'draft' };
     const reasonMeta = NOT_COVERED_REASONS.find(r => r.value === (patch.reason ?? current.reason));
     updateWizardState({
       uncoveredReasons: {
         ...wizardState.uncoveredReasons,
-        [siteId]: { ...current, ...patch, flagged: !!reasonMeta?.flagged },
+        [siteId]: {
+          ...current,
+          ...patch,
+          flagged: !!reasonMeta?.flagged,
+          status: 'draft',
+          confirmedBy: null,
+          confirmedAt: null,
+        },
       },
     });
   };
@@ -353,7 +434,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     const reasonMeta = NOT_COVERED_REASONS.find(r => r.value === bulkReason);
     const patch: Record<string, UncoveredReason> = {};
     selected.forEach(id => {
-      patch[id] = { reason: bulkReason, note: bulkNote, flagged: !!reasonMeta?.flagged };
+      patch[id] = { reason: bulkReason, note: bulkNote, flagged: !!reasonMeta?.flagged, status: 'draft', confirmedBy: null, confirmedAt: null };
     });
     updateWizardState({ uncoveredReasons: { ...wizardState.uncoveredReasons, ...patch } });
     setSelected(new Set());
@@ -361,18 +442,92 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     setBulkNote('');
   };
 
+  const persistReasonDraft = async (siteId: string, reasonData: UncoveredReason) => {
+    const { error } = await (supabase as any).rpc('set_not_covered_reason', {
+      p_site_id: siteId,
+      p_reason: reasonData.reason,
+      p_note: reasonData.note ?? '',
+      p_flagged: !!reasonData.flagged,
+    });
+    if (error) throw error;
+  };
+
+  const persistSupervisorConfirmation = async (siteId: string, reasonData: UncoveredReason) => {
+    if (reasonData.status !== 'confirmed') return;
+    const { error } = await (supabase as any).rpc('confirm_not_covered_reason', {
+      p_site_id: siteId,
+      p_confirmation_note: reasonData.confirmationNote ?? '',
+      p_confirm: true,
+    });
+    if (error) throw error;
+  };
+
+  const saveDraftReasons = async () => {
+    setDraftSaving(true);
+    try {
+      for (const [siteId, reasonData] of Object.entries(wizardState.uncoveredReasons)) {
+        if (!reasonData.reason) continue;
+        await persistReasonDraft(siteId, reasonData);
+        await persistSupervisorConfirmation(siteId, reasonData);
+      }
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
   const saveAndNext = async () => {
     setSaving(true);
-    for (const [siteId, reasonData] of Object.entries(wizardState.uncoveredReasons)) {
-      await supabase.from('mmp_site_entries').update({
-        status: 'not_covered',
-        not_covered_reason: reasonData.reason,
-        not_covered_note: reasonData.note,
-        needs_followup: reasonData.flagged,
-      }).eq('id', siteId);
+    try {
+      await saveDraftReasons();
+      onNext();
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onNext();
+  };
+
+  const confirmReason = async (siteId: string) => {
+    if (!canConfirmReasons) return;
+    const current = wizardState.uncoveredReasons[siteId];
+    if (!current?.reason) return;
+    const nowIso = new Date().toISOString();
+    updateWizardState({
+      uncoveredReasons: {
+        ...wizardState.uncoveredReasons,
+        [siteId]: {
+          ...current,
+          status: 'confirmed',
+          confirmedBy: currentUser?.id ?? null,
+          confirmedAt: nowIso,
+        },
+      },
+    });
+    await (supabase as any).rpc('confirm_not_covered_reason', {
+      p_site_id: siteId,
+      p_confirmation_note: current.confirmationNote ?? '',
+      p_confirm: true,
+    });
+  };
+
+  const returnReasonToDraft = async (siteId: string) => {
+    if (!canConfirmReasons) return;
+    const current = wizardState.uncoveredReasons[siteId];
+    if (!current?.reason) return;
+    updateWizardState({
+      uncoveredReasons: {
+        ...wizardState.uncoveredReasons,
+        [siteId]: {
+          ...current,
+          status: 'draft',
+          confirmedBy: null,
+          confirmedAt: null,
+        },
+      },
+    });
+    await (supabase as any).rpc('confirm_not_covered_reason', {
+      p_site_id: siteId,
+      p_confirmation_note: current.confirmationNote ?? '',
+      p_confirm: false,
+    });
   };
 
   const exportNotCoveredReport = () => {
@@ -384,6 +539,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   }
 
   const allAssigned = sites.every(s => !!wizardState.uncoveredReasons[s.id]?.reason);
+  const allConfirmed = sites.every(s => !!wizardState.uncoveredReasons[s.id]?.reason && wizardState.uncoveredReasons[s.id]?.status === 'confirmed');
   const flaggedCount = Object.values(wizardState.uncoveredReasons).filter(r => r.flagged).length;
 
   return (
@@ -401,6 +557,15 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
           <p>Sites with Security Concerns or Access Denied are automatically flagged with a red badge and generate a follow-up action item for the next cycle. You can select multiple sites and assign the same reason in bulk.</p>
         </div>
       </div>
+
+      {isAdminLike && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertCircle className="h-4 w-4 text-amber-700" />
+          <AlertDescription>
+            Read-only stage: Coordinators must enter uncovered reasons and Supervisors must confirm them before Admin/Super Admin can proceed.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* ── Coverage breakdown by state ── */}
       {coverageRows.length > 0 && (
@@ -918,7 +1083,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                     <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">
                       {selected.size} site{selected.size > 1 ? 's' : ''} selected — bulk assign:
                     </span>
-                    <Select value={bulkReason} onValueChange={setBulkReason}>
+                    <Select value={bulkReason} onValueChange={setBulkReason} disabled={!canEditReasons}>
                       <SelectTrigger className="h-7 text-xs w-52" data-testid="select-bulk-reason">
                         <SelectValue placeholder="Select reason…" />
                       </SelectTrigger>
@@ -930,13 +1095,14 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                       placeholder="Optional note…"
                       value={bulkNote}
                       onChange={e => setBulkNote(e.target.value)}
+                      disabled={!canEditReasons}
                       className="h-7 min-h-[1.75rem] text-xs resize-none flex-1 min-w-32"
                       rows={1}
                     />
-                    <Button type="button" size="sm" className="h-7 text-xs" onClick={applyBulk} disabled={!bulkReason} data-testid="button-apply-bulk">
+                    <Button type="button" size="sm" className="h-7 text-xs" onClick={applyBulk} disabled={!bulkReason || !canEditReasons} data-testid="button-apply-bulk">
                       Apply to {selected.size}
                     </Button>
-                    <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setSelected(new Set())}>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setSelected(new Set())} disabled={!canEditReasons}>
                       Clear
                     </Button>
                   </div>
@@ -964,6 +1130,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                           <th className="px-3 py-2.5 w-8">
                             <Checkbox
                               checked={selected.size > 0 && [...filtered].filter(s => uncoveredSiteIds.has(s.id)).every(s => selected.has(s.id))}
+                              disabled={!canEditReasons}
                               onCheckedChange={v => {
                                 const ids = filtered.filter(s => uncoveredSiteIds.has(s.id)).map(s => s.id);
                                 setSelected(prev => {
@@ -1020,6 +1187,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                                 {needsReason ? (
                                   <Checkbox
                                     checked={isSelected}
+                                    disabled={!canEditReasons}
                                     onCheckedChange={v => setSelected(prev => {
                                       const n = new Set(prev);
                                       v ? n.add(s.id) : n.delete(s.id);
@@ -1106,9 +1274,20 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                                         <AlertTriangle className="h-3 w-3" /> Follow-up flagged
                                       </span>
                                     )}
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge variant="outline" className={`text-[10px] ${assigned?.status === 'confirmed' ? 'text-green-700 border-green-300 bg-green-50' : 'text-amber-700 border-amber-300 bg-amber-50'}`}>
+                                        {assigned?.status === 'confirmed' ? 'Supervisor Confirmed' : 'Draft'}
+                                      </Badge>
+                                      {assigned?.confirmedAt && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {new Date(assigned.confirmedAt).toLocaleString()}
+                                        </span>
+                                      )}
+                                    </div>
                                     <Select
                                       value={assigned?.reason ?? ''}
                                       onValueChange={v => setReason(s.id, { reason: v })}
+                                      disabled={!canEditReasons}
                                     >
                                       <SelectTrigger className={`h-7 text-[11px] w-full ${assigned?.reason ? 'border-green-300 bg-green-50' : 'border-orange-300 bg-orange-50'}`} data-testid={`select-reason-${s.id}`}>
                                         <SelectValue placeholder="Select reason…" />
@@ -1122,10 +1301,34 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                                         placeholder="Specify…"
                                         value={assigned?.note ?? ''}
                                         onChange={e => setReason(s.id, { note: e.target.value })}
+                                        disabled={!canEditReasons}
                                         className="h-6 min-h-[1.5rem] text-[11px] w-full resize-none"
                                         rows={1}
                                         data-testid={`input-reason-note-${s.id}`}
                                       />
+                                    )}
+                                    {canConfirmReasons && assigned?.reason && (
+                                      <div className="flex items-center gap-1.5">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          className="h-6 text-[10px] bg-green-600 hover:bg-green-700 text-white px-2"
+                                          onClick={() => void confirmReason(s.id)}
+                                          disabled={assigned?.status === 'confirmed'}
+                                        >
+                                          Confirm
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-6 text-[10px] px-2"
+                                          onClick={() => void returnReasonToDraft(s.id)}
+                                          disabled={assigned?.status !== 'confirmed'}
+                                        >
+                                          Return to Draft
+                                        </Button>
+                                      </div>
                                     )}
                                   </div>
                                 ) : (
@@ -1159,6 +1362,12 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
                       {sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length} site{sites.filter(s => !wizardState.uncoveredReasons[s.id]?.reason).length !== 1 ? 's' : ''} still need a reason before advancing
                     </span>
                   )}
+                  {sites.length > 0 && allAssigned && !allConfirmed && (
+                    <span className="ml-auto text-amber-700 font-medium">
+                      <AlertCircle className="h-3 w-3 inline mr-0.5" />
+                      {sites.filter(s => wizardState.uncoveredReasons[s.id]?.status !== 'confirmed').length} site{sites.filter(s => wizardState.uncoveredReasons[s.id]?.status !== 'confirmed').length !== 1 ? 's' : ''} still need supervisor confirmation
+                    </span>
+                  )}
                   {sites.length === 0 && (
                     <span className="ml-auto text-green-700 font-medium flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" /> No uncovered sites — ready to continue
@@ -1190,8 +1399,14 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
           {canGoBack && <Button type="button" variant="outline" size="sm" onClick={onBack} data-testid="button-back-step4">← Back</Button>}
+          {(canEditReasons || canConfirmReasons) && (
+            <Button type="button" variant="outline" size="sm" onClick={() => void saveDraftReasons()} disabled={draftSaving}>
+              {draftSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save Draft
+            </Button>
+          )}
         </div>
-        <Button type="button" onClick={saveAndNext} disabled={!allAssigned || saving} data-testid="button-next-step4">
+        <Button type="button" onClick={saveAndNext} disabled={!canAdvance || saving} data-testid="button-next-step4">
           {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Next: Resolve Exceptions →
         </Button>

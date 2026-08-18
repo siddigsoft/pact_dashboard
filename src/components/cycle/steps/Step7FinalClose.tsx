@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { WizardState } from '../CycleCloseWizard';
+import type { RoleFlags } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportCycleCloseWorkbook, type CheckResult } from '@/utils/cycleCloseExport';
@@ -32,11 +33,13 @@ interface Props {
   onBack: () => void;
   canGoBack: boolean;
   canOverride: boolean;
+  canFinalizeClose?: boolean;
+  roleFlags?: RoleFlags;
   currentUser: any;
   goToStep?: (step: number) => void;
 }
 
-export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, currentUser, goToStep }: Props) {
+export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, canFinalizeClose, roleFlags, currentUser, goToStep }: Props) {
   const navigate = useNavigate();
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [closingDialog, setClosingDialog] = useState(false);
@@ -72,6 +75,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const allSitesResolved = Object.values(wizardState.resolvedSites).every(v => v !== 'resubmit');
 
   // Step 4: every site from all three uncovered sources must have a reason
+  // and must be supervisor-confirmed.
   const allNotCoveredIds = new Set<string>([
     ...matchResults
       .filter(r => r.action === 'reject' || r.status === 'unmatched')
@@ -80,7 +84,10 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
     ...(wizardState.unmatchedMmpSiteIds ?? []),
   ]);
-  const allReasonsAssigned = [...allNotCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
+  const allReasonsConfirmed = [...allNotCoveredIds].every(id => {
+    const reason = wizardState.uncoveredReasons[id];
+    return !!reason?.reason && reason?.status === 'confirmed';
+  });
 
   const allExceptionsDecided = Object.keys(wizardState.exceptionDecisions).every(k => !!wizardState.exceptionDecisions[k]?.decision);
 
@@ -92,7 +99,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     { id: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
     { id: 2, label: 'All matches resolved', description: 'No "needs review" rows remaining', jumpStep: 2, passes: allMatchesResolved },
     { id: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden', jumpStep: 3, passes: allSitesResolved },
-    { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 4, passes: allReasonsAssigned },
+    { id: 4, label: 'Not-covered reasons confirmed', description: 'Every not-covered site has a supervisor-confirmed reason', jumpStep: 4, passes: allReasonsConfirmed },
     { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 5, passes: allExceptionsDecided },
     { id: 6, label: 'All enumerators reconciled', description: 'Every enumerator has a settlement status', jumpStep: 6, passes: hasPaymentActions },
     { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
@@ -274,6 +281,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const handleCloseCycle = async () => {
+    if (!mayFinalize) return;
     if (!allPassed || !confirmChecked) return;
     // If no pre-approved snapshot, require the admin to have typed CONFIRM
     if (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM') return;
@@ -338,6 +346,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   };
 
   const isClosed = !!wizardState.cycleClosedAt;
+  const mayFinalize = !!canFinalizeClose;
 
   if (isClosed) {
     // Count deferred rollover actions (roll/hold decisions needing Finance follow-up)
@@ -399,6 +408,16 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٧ — المراجعة النهائية وإغلاق الدورة</p>
         <p className="text-muted-foreground text-sm">All 7 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
       </div>
+
+      {!mayFinalize && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-700" />
+          <AlertDescription>
+            Read-only final close stage: only FOM, Admin, or Super Admin can close a cycle.
+            {roleFlags?.isSupervisor ? ' Supervisor role detected.' : roleFlags?.isCoordinator ? ' Coordinator role detected.' : ''}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -503,7 +522,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           <Button
             type="button"
             onClick={() => setClosingDialog(true)}
-            disabled={!confirmChecked || (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM')}
+            disabled={!mayFinalize || !confirmChecked || (incentiveStatus === 'missing' && incentiveConfirmText.trim() !== 'CONFIRM')}
             className="bg-green-600 hover:bg-green-700 text-white"
             data-testid="button-close-cycle"
           >
@@ -566,7 +585,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setClosingDialog(false)}>Cancel</Button>
-            <Button type="button" onClick={handleCloseCycle} disabled={closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
+            <Button type="button" onClick={handleCloseCycle} disabled={!mayFinalize || closing} className="bg-green-600 hover:bg-green-700 text-white" data-testid="button-confirm-final-close">
               {closing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Archive className="h-3.5 w-3.5 mr-1.5" />}
               {closing ? 'Closing…' : 'Close Cycle Now'}
             </Button>
