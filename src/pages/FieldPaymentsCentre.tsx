@@ -365,49 +365,61 @@ export default function FieldPaymentsCentre() {
   const loadAdvances = useCallback(async () => {
     setAdvancesLoading(true);
     try {
+      // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await supabase
         .from('down_payment_requests')
-        .select(`
-          id, status, requested_amount, total_paid_amount, updated_at,
-          site_name, hub_name, state,
-          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(id, name, cycle_status))
-        `)
+        .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, state, mmp_site_entry_id')
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
         .order('updated_at', { ascending: false })
         .limit(500);
-
       if (error) throw error;
 
-      // Resolve enumerator names
-      const enumIds = [...new Set(
-        (data ?? []).map((r: any) => r.mmp_site_entries?.accepted_by).filter(Boolean)
-      )];
-      const nameMap: Record<string, string> = {};
-      if (enumIds.length) {
-        const { data: prs } = await supabase.from('profiles').select('id, full_name').in('id', enumIds);
-        for (const p of prs ?? []) { if (p.full_name) nameMap[p.id] = p.full_name; }
+      // Step 2: resolve mmp_site_entries → mmp_files in two separate queries
+      const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
+      const entryMap: Record<string, { accepted_by: string | null; mmp_file_id: string | null }> = {};
+      if (siteEntryIds.length) {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, accepted_by, mmp_file_id')
+          .in('id', siteEntryIds);
+        for (const e of entries ?? []) entryMap[e.id] = { accepted_by: e.accepted_by, mmp_file_id: e.mmp_file_id };
       }
 
-      // GL bridge status per advance
-      const advIds = (data ?? []).map((r: any) => r.id);
-      const glMap: Record<string, 'posted' | 'error' | 'pending'> = {};
-      if (advIds.length) {
-        const { data: logs } = await supabase
-          .from('acct_gl_bridge_log')
-          .select('source_id, status')
-          .eq('source_table', 'down_payment_requests')
-          .in('source_id', advIds.map(String));
-        for (const l of logs ?? []) {
-          glMap[l.source_id] = l.status === 'success' ? 'posted' : l.status === 'error' ? 'error' : 'pending';
-        }
+      const mmpFileIds = [...new Set(Object.values(entryMap).map(e => e.mmp_file_id).filter(Boolean))] as string[];
+      const mmpMap: Record<string, { id: string; name: string; cycle_status: string }> = {};
+      if (mmpFileIds.length) {
+        const { data: mmpFiles } = await supabase
+          .from('mmp_files')
+          .select('id, name, cycle_status')
+          .in('id', mmpFileIds);
+        for (const m of mmpFiles ?? []) mmpMap[m.id] = m;
       }
+
+      // Step 3: resolve enumerator names + GL bridge in parallel
+      const enumIds = [...new Set(Object.values(entryMap).map(e => e.accepted_by).filter(Boolean))] as string[];
+      const advIds  = (data ?? []).map((r: any) => r.id as string);
+      const nameMap: Record<string, string> = {};
+      const glMap:   Record<string, 'posted' | 'error' | 'pending'> = {};
+
+      await Promise.all([
+        enumIds.length ? supabase.from('profiles').select('id, full_name').in('id', enumIds).then(({ data: prs }) => {
+          for (const p of prs ?? []) { if (p.full_name) nameMap[p.id] = p.full_name; }
+        }) : Promise.resolve(),
+        advIds.length ? supabase.from('acct_gl_bridge_log').select('source_id, status')
+          .eq('source_table', 'down_payment_requests').in('source_id', advIds).then(({ data: logs }) => {
+            for (const l of logs ?? []) {
+              glMap[l.source_id] = l.status === 'success' ? 'posted' : l.status === 'error' ? 'error' : 'pending';
+            }
+          }) : Promise.resolve(),
+      ]);
 
       const rows: AdvanceSummaryRow[] = (data ?? []).map((r: any) => {
-        const entry = r.mmp_site_entries ?? {};
-        const mmp   = entry.mmp_files ?? {};
+        const entry  = entryMap[r.mmp_site_entry_id] ?? {};
+        const mmpFid = entry.mmp_file_id ?? '';
+        const mmp    = mmpMap[mmpFid] ?? {};
         return {
           id: r.id,
-          enumeratorName: nameMap[entry.accepted_by] ?? '—',
+          enumeratorName: entry.accepted_by ? (nameMap[entry.accepted_by] ?? '—') : '—',
           siteName: r.site_name ?? '—',
           state: r.state ?? '—',
           hub: r.hub_name ?? '—',
@@ -415,8 +427,8 @@ export default function FieldPaymentsCentre() {
           paidAmount: r.total_paid_amount ?? 0,
           status: r.status,
           mmpId: mmp.id ?? '',
-          mmpName: mmp.name ?? '—',
-          cycleStatus: mmp.cycle_status ?? '—',
+          mmpName: (mmp as any).name ?? '—',
+          cycleStatus: (mmp as any).cycle_status ?? '—',
           glBridgeStatus: glMap[r.id] ?? 'none',
           paidAt: r.updated_at,
         };
@@ -490,53 +502,60 @@ export default function FieldPaymentsCentre() {
   const loadRecovery = useCallback(async () => {
     setRecoveryLoading(true);
     try {
+      // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await supabase
         .from('down_payment_requests')
-        .select(`
-          id, requested_amount, total_paid_amount, status, updated_at, hub_name, state, site_name,
-          mmp_site_entries!mmp_site_entry_id(accepted_by, mmp_files!mmp_file_id(id, name))
-        `)
+        .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, state, site_name, mmp_site_entry_id')
         .in('status', ['paid', 'partially_paid', 'fully_paid'])
         .order('updated_at');
-
       if (error) throw error;
 
-      // Resolve enumerator names
-      const enumIds = [...new Set(
-        (data ?? []).map((r: any) => r.mmp_site_entries?.accepted_by).filter(Boolean)
-      )];
-      const nameMap: Record<string, string> = {};
-      if (enumIds.length) {
-        const { data: prs } = await supabase.from('profiles').select('id, full_name').in('id', enumIds);
-        for (const p of prs ?? []) { if (p.full_name) nameMap[p.id] = p.full_name; }
+      // Step 2: resolve mmp_site_entries → mmp_files
+      const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
+      const entryMap: Record<string, { id: string; accepted_by: string | null; mmp_file_id: string | null }> = {};
+      if (siteEntryIds.length) {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, accepted_by, mmp_file_id')
+          .in('id', siteEntryIds);
+        for (const e of entries ?? []) entryMap[e.id] = { id: e.id, accepted_by: e.accepted_by, mmp_file_id: e.mmp_file_id };
       }
 
-      // Check which have been offset by a fee payment
-      const advIds = (data ?? []).map((r: any) => r.id);
-      const offsetMap: Record<string, number> = {};
-      if (advIds.length) {
-        // A fee payment on the same site means the advance was recovered via fee deduction
-        const siteIds = (data ?? []).map((r: any) => r.mmp_site_entries?.id).filter(Boolean);
-        if (siteIds.length) {
-          const { data: feeSites } = await supabase
-            .from('mmp_site_entries')
-            .select('id, fee_paid_status, enumerator_fee, transport_fee')
-            .in('id', siteIds)
-            .eq('fee_paid_status', 'paid');
-          const paidSiteIds = new Set((feeSites ?? []).map((s: any) => s.id));
-          for (const r of (data ?? []) as any[]) {
-            const siteId = r.mmp_site_entries?.id;
-            if (siteId && paidSiteIds.has(siteId)) {
-              offsetMap[r.id] = r.total_paid_amount ?? 0;
-            }
-          }
-        }
+      const mmpFileIds = [...new Set(Object.values(entryMap).map(e => e.mmp_file_id).filter(Boolean))] as string[];
+      const mmpMap: Record<string, { id: string; name: string }> = {};
+      if (mmpFileIds.length) {
+        const { data: mmpFiles } = await supabase.from('mmp_files').select('id, name').in('id', mmpFileIds);
+        for (const m of mmpFiles ?? []) mmpMap[m.id] = m;
       }
+
+      // Step 3: enumerator names + fee-offset check in parallel
+      const enumIds    = [...new Set(Object.values(entryMap).map(e => e.accepted_by).filter(Boolean))] as string[];
+      const siteIdList = Object.values(entryMap).map(e => e.id).filter(Boolean);
+      const nameMap:  Record<string, string>  = {};
+      const offsetMap: Record<string, number> = {};
+
+      await Promise.all([
+        enumIds.length ? supabase.from('profiles').select('id, full_name').in('id', enumIds).then(({ data: prs }) => {
+          for (const p of prs ?? []) { if (p.full_name) nameMap[p.id] = p.full_name; }
+        }) : Promise.resolve(),
+        siteIdList.length ? supabase.from('mmp_site_entries')
+          .select('id, fee_paid_status').in('id', siteIdList).eq('fee_paid_status', 'paid')
+          .then(({ data: feeSites }) => {
+            const paidSiteIds = new Set((feeSites ?? []).map((s: any) => s.id));
+            for (const r of (data ?? []) as any[]) {
+              const entry = entryMap[r.mmp_site_entry_id];
+              if (entry?.id && paidSiteIds.has(entry.id)) {
+                offsetMap[r.id] = r.total_paid_amount ?? 0;
+              }
+            }
+          }) : Promise.resolve(),
+      ]);
 
       const rows: RecoveryRow[] = (data ?? [])
         .map((r: any): RecoveryRow => {
-          const entry = r.mmp_site_entries ?? {};
-          const mmp   = entry.mmp_files ?? {};
+          const entry     = entryMap[r.mmp_site_entry_id] ?? {};
+          const mmpFid    = (entry as any).mmp_file_id ?? '';
+          const mmp       = mmpMap[mmpFid] ?? {};
           const disbursed  = r.total_paid_amount ?? 0;
           const recovered  = offsetMap[r.id] ?? 0;
           const outstanding = Math.max(disbursed - recovered, 0);
@@ -544,12 +563,12 @@ export default function FieldPaymentsCentre() {
           return {
             id: r.id,
             advanceId: r.id,
-            enumeratorName: nameMap[entry.accepted_by] ?? '—',
+            enumeratorName: (entry as any).accepted_by ? (nameMap[(entry as any).accepted_by] ?? '—') : '—',
             siteName: r.site_name ?? '—',
             state: r.state ?? '—',
             hub: r.hub_name ?? '—',
-            mmpId: mmp.id ?? '',
-            mmpName: mmp.name ?? '—',
+            mmpId: (mmp as any).id ?? '',
+            mmpName: (mmp as any).name ?? '—',
             disbursedAmount: disbursed,
             recoveredAmount: recovered,
             outstandingAmount: outstanding,
