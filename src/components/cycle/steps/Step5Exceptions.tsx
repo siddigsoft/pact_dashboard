@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
+  Calendar, CreditCard, User, Hash, Receipt, Building2 } from 'lucide-react';
 import type { WizardState, ExceptionDecision } from '../CycleCloseWizard';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
@@ -136,7 +137,14 @@ export default function Step5Exceptions({
         .in('id', notCoveredIds),
       supabase
         .from('down_payment_requests')
-        .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status, supervisor_approved_by')
+        .select([
+          'id', 'mmp_site_entry_id', 'status',
+          'total_paid_amount', 'requested_amount', 'remaining_amount',
+          'payment_type', 'installment_plan', 'paid_installments', 'wallet_transaction_ids',
+          'requested_by', 'requested_at',
+          'supervisor_approved_by', 'supervisor_approved_at',
+          'admin_processed_by', 'admin_processed_at',
+        ].join(', '))
         .in('mmp_site_entry_id', notCoveredIds)
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']),
     ]);
@@ -146,9 +154,21 @@ export default function Step5Exceptions({
 
     // Build per-site advance map (highest paid amount wins)
     interface AdvanceRec {
-      id: string; paidAmount: number; requestedAmount: number;
+      id: string;
+      paidAmount: number;
+      requestedAmount: number;
+      remainingAmount: number | null;
       status: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
       approvedById: string | null;
+      requestedById: string | null;
+      requestedAt: string | null;
+      paymentType: 'full_advance' | 'installments' | null;
+      supervisorApprovedAt: string | null;
+      adminProcessedById: string | null;
+      adminProcessedAt: string | null;
+      installmentPlan: any[];
+      paidInstallments: any[];
+      walletTransactionIds: string[];
     }
     const advanceBySite: Record<string, AdvanceRec> = {};
     for (const a of (advancesResult.data ?? []) as any[]) {
@@ -161,48 +181,71 @@ export default function Step5Exceptions({
           id: a.id as string,
           paidAmount: paid,
           requestedAmount: req,
+          remainingAmount: a.remaining_amount ?? null,
           status: a.status as AdvanceRec['status'],
           approvedById: (a.supervisor_approved_by as string | null) ?? null,
+          requestedById: (a.requested_by as string | null) ?? null,
+          requestedAt: (a.requested_at as string | null) ?? null,
+          paymentType: (a.payment_type as 'full_advance' | 'installments' | null) ?? null,
+          supervisorApprovedAt: (a.supervisor_approved_at as string | null) ?? null,
+          adminProcessedById: (a.admin_processed_by as string | null) ?? null,
+          adminProcessedAt: (a.admin_processed_at as string | null) ?? null,
+          installmentPlan: (a.installment_plan as any[]) ?? [],
+          paidInstallments: (a.paid_installments as any[]) ?? [],
+          walletTransactionIds: (a.wallet_transaction_ids as string[]) ?? [],
         };
       }
     }
 
-    // ── Round 2: enumerator names + approver names in parallel ─────────────────
-    const enumUuids     = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
-    const approverUuids = [...new Set(
-      Object.values(advanceBySite).map(r => r.approvedById).filter(Boolean) as string[]
-    )];
+    // ── Round 2: all profile lookups in parallel ─────────────────────────────
+    const enumUuids        = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
+    const approverUuids    = [...new Set(Object.values(advanceBySite).map(r => r.approvedById).filter(Boolean) as string[])];
+    const requesterUuids   = [...new Set(Object.values(advanceBySite).map(r => r.requestedById).filter(Boolean) as string[])];
+    const adminUuids       = [...new Set(Object.values(advanceBySite).map(r => r.adminProcessedById).filter(Boolean) as string[])];
 
-    const [profileResult, approverResult] = await Promise.all([
+    // Merge all secondary UUIDs into one batch (avoids 4 separate profile queries)
+    const allSecondaryUuids = [...new Set([...approverUuids, ...requesterUuids, ...adminUuids])];
+
+    const [profileResult, secondaryResult] = await Promise.all([
       enumUuids.length
         ? supabase.from('profiles').select('id, full_name').in('id', enumUuids)
         : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
-      approverUuids.length
-        ? supabase.from('profiles').select('id, full_name').in('id', approverUuids)
+      allSecondaryUuids.length
+        ? supabase.from('profiles').select('id, full_name').in('id', allSecondaryUuids)
         : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
     ]);
 
     const nameMap: Record<string, string> = {};
     for (const p of (profileResult.data ?? [])) { if (p.full_name) nameMap[p.id] = p.full_name; }
     const approverNameMap: Record<string, string> = {};
-    for (const p of (approverResult.data ?? [])) { if (p.full_name) approverNameMap[p.id] = p.full_name; }
+    for (const p of (secondaryResult.data ?? [])) { if (p.full_name) approverNameMap[p.id] = p.full_name; }
 
     const exceptionSites: ExceptionSite[] = (siteData as any[])
       .filter((s: any) => s.accepted_by && advanceBySite[s.id])
       .map((s: any) => {
         const adv = advanceBySite[s.id];
         return {
-          siteId:          s.id as string,
-          siteName:        s.site_name as string,
-          state:           s.state as string,
-          locality:        s.locality as string,
-          enumeratorId:    s.accepted_by as string,
-          enumeratorName:  nameMap[s.accepted_by] ?? 'Unknown',
-          advancePaid:     adv.paidAmount,
-          requestedAmount: adv.requestedAmount,
-          advanceStatus:   adv.status,
-          advanceId:       adv.id,
-          approvedByName:  adv.approvedById ? (approverNameMap[adv.approvedById] ?? 'Unknown approver') : undefined,
+          siteId:              s.id as string,
+          siteName:            s.site_name as string,
+          state:               s.state as string,
+          locality:            s.locality as string,
+          enumeratorId:        s.accepted_by as string,
+          enumeratorName:      nameMap[s.accepted_by] ?? 'Unknown',
+          advancePaid:         adv.paidAmount,
+          requestedAmount:     adv.requestedAmount,
+          remainingAmount:     adv.remainingAmount ?? undefined,
+          advanceStatus:       adv.status,
+          advanceId:           adv.id,
+          approvedByName:      adv.approvedById     ? (approverNameMap[adv.approvedById]     ?? 'Unknown approver') : undefined,
+          requestedByName:     adv.requestedById    ? (approverNameMap[adv.requestedById]    ?? undefined)          : undefined,
+          requestedAt:         adv.requestedAt      ?? undefined,
+          paymentType:         adv.paymentType      ?? undefined,
+          supervisorApprovedAt: adv.supervisorApprovedAt ?? undefined,
+          adminProcessedByName: adv.adminProcessedById ? (approverNameMap[adv.adminProcessedById] ?? undefined) : undefined,
+          adminProcessedAt:    adv.adminProcessedAt ?? undefined,
+          installmentPlan:     adv.installmentPlan,
+          paidInstallments:    adv.paidInstallments,
+          walletTransactionIds: adv.walletTransactionIds,
         };
       });
 
@@ -437,6 +480,7 @@ interface SiteCardProps {
 }
 
 function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecision, variant }: SiteCardProps) {
+  const [showPayment, setShowPayment] = useState(false);
   const isPartial = site.advanceStatus === 'partially_paid';
 
   const badgeEl = variant === 'paid' ? (
@@ -488,6 +532,162 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
           {badgeEl}
           {isDone && <CheckCircle2 className="h-4 w-4 text-green-500" />}
         </div>
+      </div>
+
+      {/* ── Payment details panel ──────────────────────────────────────── */}
+      <div className="border rounded-md bg-slate-50/60">
+        <button
+          type="button"
+          onClick={() => setShowPayment(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100/60 rounded-md transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <Receipt className="h-3.5 w-3.5" />
+            Payment Details
+            {site.paymentType && (
+              <span className="ml-1 px-1.5 py-0.5 rounded border text-[10px] bg-slate-100 border-slate-200 text-slate-500">
+                {site.paymentType === 'full_advance' ? 'Full Advance' : 'Installments'}
+              </span>
+            )}
+          </span>
+          {showPayment ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+
+        {showPayment && (
+          <div className="px-3 pb-3 space-y-3 border-t border-slate-200/80 pt-2.5">
+
+            {/* Summary row */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-white border rounded p-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Requested</p>
+                <p className="text-sm font-semibold">SDG {site.requestedAmount.toLocaleString()}</p>
+              </div>
+              <div className={`bg-white border rounded p-2 ${site.advancePaid > 0 ? 'border-green-200' : ''}`}>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Paid Out</p>
+                <p className={`text-sm font-semibold ${site.advancePaid > 0 ? 'text-green-700' : 'text-slate-400'}`}>
+                  {site.advancePaid > 0 ? `SDG ${site.advancePaid.toLocaleString()}` : '—'}
+                </p>
+              </div>
+              <div className={`bg-white border rounded p-2 ${(site.remainingAmount ?? 0) > 0 ? 'border-amber-200' : ''}`}>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Remaining</p>
+                <p className={`text-sm font-semibold ${(site.remainingAmount ?? 0) > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                  {site.remainingAmount != null ? `SDG ${site.remainingAmount.toLocaleString()}` : '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Advance ID */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Hash className="h-3 w-3 flex-shrink-0" />
+              <span className="font-medium text-foreground/70">Advance ID:</span>
+              <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                {site.advanceId}
+              </code>
+            </div>
+
+            {/* Timeline */}
+            <div className="space-y-1.5">
+              {site.requestedAt && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <span className="text-muted-foreground w-32 flex-shrink-0">Requested:</span>
+                  <span>{new Date(site.requestedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</span>
+                  {site.requestedByName && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <User className="h-3 w-3" /> {site.requestedByName}
+                    </span>
+                  )}
+                </div>
+              )}
+              {site.supervisorApprovedAt && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <span className="text-muted-foreground w-32 flex-shrink-0">Supervisor approved:</span>
+                  <span>{new Date(site.supervisorApprovedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</span>
+                  {site.approvedByName && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <User className="h-3 w-3" /> {site.approvedByName}
+                    </span>
+                  )}
+                </div>
+              )}
+              {site.adminProcessedAt && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <span className="text-muted-foreground w-32 flex-shrink-0">Admin processed:</span>
+                  <span>{new Date(site.adminProcessedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</span>
+                  {site.adminProcessedByName && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Building2 className="h-3 w-3" /> {site.adminProcessedByName}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Installment breakdown */}
+            {site.paymentType === 'installments' && (site.installmentPlan?.length ?? 0) > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Installment Plan</p>
+                <div className="rounded border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-100 text-muted-foreground">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium">Stage</th>
+                        <th className="px-2 py-1 text-right font-medium">Amount</th>
+                        <th className="px-2 py-1 text-center font-medium">Status</th>
+                        <th className="px-2 py-1 text-left font-medium">Paid date</th>
+                        <th className="px-2 py-1 text-left font-medium">Ref</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(site.installmentPlan ?? []).map((inst, i) => (
+                        <tr key={i} className={`border-t ${inst.paid ? 'bg-green-50/40' : ''}`}>
+                          <td className="px-2 py-1.5 text-slate-700">
+                            {inst.description || inst.stage || `Installment ${i + 1}`}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono font-medium">
+                            SDG {(inst.amount ?? 0).toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            {inst.paid
+                              ? <span className="inline-flex items-center gap-0.5 text-green-700 text-[10px] font-medium"><CheckCircle2 className="h-3 w-3" /> Paid</span>
+                              : <span className="text-amber-600 text-[10px]">Pending</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-muted-foreground">
+                            {inst.paid_at ? new Date(inst.paid_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                          </td>
+                          <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">
+                            {inst.transaction_id
+                              ? <code className="bg-slate-100 px-1 rounded">{inst.transaction_id.slice(-8)}</code>
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Wallet transaction IDs (full advance) */}
+            {site.paymentType !== 'installments' && (site.walletTransactionIds?.length ?? 0) > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                  <CreditCard className="h-3 w-3" /> Wallet Transactions
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {(site.walletTransactionIds ?? []).map((txId, i) => (
+                    <code key={i} className="text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
+                      {txId}
+                    </code>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
 
       {/* Decision selector */}

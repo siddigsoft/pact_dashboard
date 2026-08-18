@@ -80,6 +80,16 @@ export interface CoverageRow {
   notCovered: number;
 }
 
+export interface InstallmentEntry {
+  amount: number;
+  stage: string;
+  description?: string;
+  paid: boolean;
+  paid_at?: string | null;
+  transaction_id?: string | null;
+  paid_by_name?: string | null;
+}
+
 export interface ExceptionSite {
   siteId: string;
   siteName: string;
@@ -91,12 +101,25 @@ export interface ExceptionSite {
   advancePaid: number;
   /** Original requested/approved amount */
   requestedAmount: number;
+  /** Remaining unpaid amount */
+  remainingAmount?: number;
   /** Payment status from down_payment_requests */
   advanceStatus: 'paid' | 'fully_paid' | 'partially_paid' | 'approved';
   /** down_payment_requests.id for downstream actions */
   advanceId: string;
   /** Name of the supervisor/admin who approved this advance */
   approvedByName?: string;
+
+  // ── Extended payment detail fields ───────────────────────────────────────
+  requestedAt?: string;
+  requestedByName?: string;
+  paymentType?: 'full_advance' | 'installments';
+  supervisorApprovedAt?: string;
+  adminProcessedByName?: string;
+  adminProcessedAt?: string;
+  installmentPlan?: InstallmentEntry[];
+  paidInstallments?: InstallmentEntry[];
+  walletTransactionIds?: string[];
 }
 
 // ── Low-level cell helpers ────────────────────────────────────────────────────
