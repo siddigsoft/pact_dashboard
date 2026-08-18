@@ -236,8 +236,10 @@ export default function CycleCloseWizard({ onClose, isFOM, isAdmin, isSuperAdmin
       return exceptions.every(k => !!wizardState.exceptionDecisions[k].decision);
     }
     if (currentStep === 5) {
-      // Step 5 = Reconciliation (was Step 6)
-      return !Object.values(wizardState.paymentActions).some(a => !a.done);
+      // Step 5 = Reconciliation (read-only financial view).
+      // Payment happens in Field Payments Centre; canAdvance is always true here.
+      // The real payment gate is check #8 in the Final Close step.
+      return true;
     }
     return false;
   }, [currentStep, wizardState]);

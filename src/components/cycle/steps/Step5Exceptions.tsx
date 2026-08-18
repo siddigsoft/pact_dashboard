@@ -49,8 +49,8 @@ const DECISIONS_PAID = [
     labelAr: 'شطب',
     desc: 'Amount is too small or unrecoverable. Justification required.',
     descAr: 'المبلغ صغير جداً أو يتعذر استرداده. مطلوب مبرر.',
-    track: 'Recorded as "writeoff" in mmp_payment_records. Visible in Step 6 and the Final Close workbook Exceptions sheet.',
-    trackAr: 'يُحفظ بنوع "شطب" في سجلات المدفوعات. يظهر في الخطوة ٦ وورقة الاستثناءات.',
+    track: 'Recorded in cycle_exception_actions with decision = "writeoff". Visible in the Final Close workbook Exceptions sheet.',
+    trackAr: 'يُحفظ في جدول استثناءات الدورة بقرار "شطب". يظهر في ورقة الاستثناءات بتقرير الإغلاق.',
   },
   {
     value: 'redirect',

@@ -70,23 +70,31 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         setIncentiveStatus(data.skipped ? 'skipped' : data.status);
       });
 
-    // Check 8: sites where enumerator got an advance but fee is still unpaid
+    // Check 8: distinct enumerators who had an advance disbursed but whose fee is still unpaid.
+    // We count enumerator UUIDs (accepted_by), not site rows, so the message is accurate.
     supabase
       .from('mmp_site_entries')
-      .select('id')
+      .select('id, accepted_by')
       .eq('mmp_file_id', mmpId)
       .not('accepted_by', 'is', null)
       .neq('fee_paid_status', 'paid')
       .then(async ({ data: sites }) => {
         if (!sites?.length) { setUnpaidFeeCount(0); return; }
-        // Only count sites where an advance was actually disbursed
-        const siteIds = sites.map((s: any) => s.id);
-        const { count } = await supabase
+        const siteIds = sites.map((s: any) => s.id as string);
+        // Fetch only site IDs that have an advance (no count — we need the IDs to map back)
+        const { data: advances } = await supabase
           .from('down_payment_requests')
-          .select('id', { count: 'exact', head: true })
+          .select('mmp_site_entry_id')
           .in('mmp_site_entry_id', siteIds)
           .in('status', ['paid', 'partially_paid', 'fully_paid']);
-        setUnpaidFeeCount(count ?? 0);
+        const siteIdsWithAdvance = new Set((advances ?? []).map((a: any) => a.mmp_site_entry_id as string));
+        // Count distinct enumerator UUIDs from those sites
+        const enumsWithUnpaidFees = new Set(
+          (sites as any[])
+            .filter(s => siteIdsWithAdvance.has(s.id))
+            .map(s => s.accepted_by as string)
+        );
+        setUnpaidFeeCount(enumsWithUnpaidFees.size);
       });
 
     // Check 9: exception actions for this MMP not yet executed by Finance
@@ -119,17 +127,15 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
   const allExceptionsDecided = Object.keys(wizardState.exceptionDecisions).every(k => !!wizardState.exceptionDecisions[k]?.decision);
 
-  // Step 6: no payment action may still be pending (all must be marked done, or no actions started = no advances)
-  const anyPendingPayments = Object.values(wizardState.paymentActions).some(a => !a.done);
-  const hasPaymentActions = !anyPendingPayments;
-
   const checks: CheckItem[] = [
     { id: 1, label: 'Clean data uploaded & applied', description: 'WFP file matched and applied', jumpStep: 2, passes: hasFile },
     { id: 2, label: 'All matches resolved', description: 'No "needs review" rows remaining', jumpStep: 2, passes: allMatchesResolved },
     { id: 3, label: 'All sites resolved', description: 'Every site is WFP-confirmed / Not-covered / Overridden — resolve in Upload & Match', jumpStep: 2, passes: allSitesResolved },
     { id: 4, label: 'Not-covered reasons assigned', description: 'Every not-covered site has a reason', jumpStep: 3, passes: allReasonsAssigned },
     { id: 5, label: 'All exceptions decided', description: 'Every advance on not-covered site has a decision', jumpStep: 4, passes: allExceptionsDecided },
-    { id: 6, label: 'All enumerators reconciled', description: 'Every enumerator has a settlement status', jumpStep: 5, passes: hasPaymentActions },
+    // Check 6 removed: "All enumerators reconciled" was keyed off wizardState.paymentActions
+    // which the Reconciliation step (Step 5) no longer writes. Payment is now done in
+    // Field Payments Centre; check 8 below is the real fee-payment gate.
     { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
     // Note: check 7 is not auto-computed (requires a separate DB query the wizard doesn't cache).
     // FOM must verify manually; the override mechanism exists if it's acceptable to close with pending submissions.
