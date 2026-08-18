@@ -146,6 +146,14 @@ export function getCycleCloseRoleFlags(currentUser: any) {
   return { isCoordinator, isSupervisor, isFOM, isAdmin, isSuperAdmin };
 }
 
+export function isCycleCloseStep4ContributorOnly(currentUser: any): boolean {
+  const primary = normalizeRole(String(currentUser?.role ?? ''));
+  if (['coordinator', 'supervisor', 'hubsupervisor'].includes(primary)) return true;
+
+  const flags = getCycleCloseRoleFlags(currentUser);
+  return (flags.isCoordinator || flags.isSupervisor) && !flags.isFOM && !flags.isAdmin && !flags.isSuperAdmin;
+}
+
 export function allUncoveredReasonsConfirmed(wizardState: WizardState): boolean {
   const notCoveredIds = new Set<string>([
     ...wizardState.matchResults
@@ -197,8 +205,8 @@ export default function CycleCloseWizard({
   initialMmpId,
 }: Props) {
   const roleFlags = getCycleCloseRoleFlags(currentUser);
-  const canFinalizeClose = roleFlags.isFOM || roleFlags.isAdmin || roleFlags.isSuperAdmin;
-  const isStep4ContributorOnly = !canFinalizeClose && (roleFlags.isCoordinator || roleFlags.isSupervisor);
+  const isStep4ContributorOnly = isCycleCloseStep4ContributorOnly(currentUser);
+  const canFinalizeClose = !isStep4ContributorOnly && (roleFlags.isFOM || roleFlags.isAdmin || roleFlags.isSuperAdmin);
 
   // Block ALL form submissions on the document for the wizard's lifetime.
   // Without this, any <form> in the layout (search bars, background dialogs,

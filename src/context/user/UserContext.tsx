@@ -10,6 +10,7 @@ import { insertNotificationsToDb } from '@/services/notification-insert';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import i18n from '@/lib/i18n';
 import { queryClient } from '@/lib/queryClient';
+import { normalizeRoleKey, rolesToRemoveOnPrimaryChange } from '@/lib/syncPrimaryUserRole';
 
 interface UserContextType {
   currentUser: User | null;
@@ -1730,36 +1731,48 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Ensure the primary role exists in user_roles.
-      // NOTE: we do NOT delete other user_roles entries here — those are
-      // intentional secondary/additional role assignments (e.g. a FOM who is
-      // also a Hub Supervisor for a specific hub). Managing those is done
-      // through the Additional Roles panel in the Access & Security tab.
-      // EXCEPTION: if the new role is a privileged (non-field-staff) role, remove any
-      // stale 'dataCollector' entry that would override the sidebar/access checks.
+      // Keep user_roles in lockstep with profiles.role.
+      // Insert the new primary, then drop the previous primary unless it is
+      // still listed in additional_roles. Extra Role Management rows (role_id)
+      // are left alone.
+      let syncedUser = updatedUser;
       if (updatedUser.role) {
         await supabase
           .from('user_roles')
           .upsert({ user_id: updatedUser.id, role: updatedUser.role, status: 'offline' }, { onConflict: 'user_id,role', ignoreDuplicates: true });
 
-        const privilegedRoles = ['admin','superAdmin','ict','fom','supervisor','hubsupervisor','dataTeam','financialAdmin','countryDirector'];
-        if (privilegedRoles.includes((updatedUser.role || '').toLowerCase().replace(/[\s_-]/g,'')) ||
-            privilegedRoles.includes(updatedUser.role || '')) {
+        const staleRoles = rolesToRemoveOnPrimaryChange({
+          previousPrimary: existingUser?.role,
+          nextPrimary: updatedUser.role,
+          additionalRoles: Array.isArray((updatedUser as any).additionalRoles)
+            ? (updatedUser as any).additionalRoles
+            : [],
+        });
+        const staleKeys = new Set(staleRoles.map(normalizeRoleKey));
+        for (const staleRole of staleRoles) {
           await supabase
             .from('user_roles')
             .delete()
             .eq('user_id', updatedUser.id)
-            .eq('role', 'dataCollector');
+            .ilike('role', staleRole);
         }
+        const nextRoles = [
+          updatedUser.role,
+          ...((updatedUser.roles || []) as string[]),
+        ].filter((role, index, all) => {
+          if (!role || staleKeys.has(normalizeRoleKey(role))) return false;
+          return all.findIndex(r => normalizeRoleKey(r) === normalizeRoleKey(role)) === index;
+        });
+        syncedUser = { ...updatedUser, roles: nextRoles as AppRole[] };
       }
 
       // Update local caches only after confirmed DB success
-      setAppUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      localStorage.setItem(`user-${updatedUser.id}`, JSON.stringify(updatedUser));
+      setAppUsers(prev => prev.map(u => u.id === syncedUser.id ? syncedUser : u));
+      localStorage.setItem(`user-${syncedUser.id}`, JSON.stringify(syncedUser));
       
-      if (currentUser && updatedUser.id === currentUser.id) {
-        setCurrentUser(updatedUser);
-        localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedUser));
+      if (currentUser && syncedUser.id === currentUser.id) {
+        setCurrentUser(syncedUser);
+        localStorage.setItem('PACTCurrentUser', JSON.stringify(syncedUser));
       }
       
       return true;

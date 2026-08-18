@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   allUncoveredReasonsConfirmed,
   getCycleCloseRoleFlags,
+  isCycleCloseStep4ContributorOnly,
   newPendingDraftSiteIds,
   pendingUnconfirmedReasonSiteIds,
 } from '../CycleCloseWizard';
@@ -23,6 +24,19 @@ describe('getCycleCloseRoleFlags', () => {
     expect(admin.isAdmin).toBe(true);
     expect(admin.isSuperAdmin).toBe(false);
     expect(superAdmin.isSuperAdmin).toBe(true);
+  });
+});
+
+describe('isCycleCloseStep4ContributorOnly', () => {
+  it('sends coordinators and supervisors to Step 4 even if user_roles still lists admin', () => {
+    expect(isCycleCloseStep4ContributorOnly({ role: 'supervisor', roles: ['admin'] })).toBe(true);
+    expect(isCycleCloseStep4ContributorOnly({ role: 'Coordinator' })).toBe(true);
+  });
+
+  it('keeps admin, FOM, and super admin on the full wizard when that is their primary role', () => {
+    expect(isCycleCloseStep4ContributorOnly({ role: 'admin' })).toBe(false);
+    expect(isCycleCloseStep4ContributorOnly({ role: 'fom', roles: ['supervisor'] })).toBe(false);
+    expect(isCycleCloseStep4ContributorOnly({ role: 'super_admin' })).toBe(false);
   });
 });
 
