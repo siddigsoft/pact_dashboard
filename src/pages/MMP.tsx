@@ -527,6 +527,13 @@ const MMP = () => {
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
+  // Reopen Cycle dialog (Super Admin only)
+  const [reopenDialogOpen,  setReopenDialogOpen]  = useState(false);
+  const [reopenMmpId,       setReopenMmpId]        = useState('');
+  const [reopenReason,      setReopenReason]       = useState('');
+  const [reopenConfirmed,   setReopenConfirmed]    = useState(false);
+  const [reopening,         setReopening]          = useState(false);
+
   // Cost acknowledgment dialog state for Smart Assigned sites
   const [costAcknowledgmentOpen, setCostAcknowledgmentOpen] = useState(false);
   const [selectedSiteForAcknowledgment, setSelectedSiteForAcknowledgment] = useState<any>(null);
@@ -4566,6 +4573,17 @@ const MMP = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isSuperAdmin && mmpFiles.some((m: any) => m.cycle_status === 'closed' || m.cycleStatus === 'closed') && (
+              <Button
+                onClick={() => { setReopenMmpId(''); setReopenReason(''); setReopenConfirmed(false); setReopenDialogOpen(true); }}
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white shadow-md flex items-center gap-1.5 text-xs"
+                data-testid="button-reopen-cycle"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reopen Cycle
+              </Button>
+            )}
             {(isFOM || isAdmin || isSuperAdmin) && (
               <Button
                 onClick={() => setShowCycleWizard(true)}
@@ -7708,6 +7726,90 @@ const MMP = () => {
               {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'upload_state_permit' && 'Proceed to Upload Permit'}
               {returnedSiteActionDialog.action === 'redispatch' && 'Re-dispatch'}
               {returnedSiteActionDialog.action === 'report' && 'Submit Report'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reopen Cycle Dialog (Super Admin only) ─────────────────────────── */}
+      <Dialog open={reopenDialogOpen} onOpenChange={open => !reopening && setReopenDialogOpen(open)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-700 flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" /> Reopen a Closed Cycle
+            </DialogTitle>
+            <DialogDescription>
+              Reopening does not roll back existing GL entries. Use correcting journal entries after reopening.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-medium">Select Closed Cycle *</label>
+              <Select value={reopenMmpId} onValueChange={setReopenMmpId}>
+                <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Choose an MMP…" /></SelectTrigger>
+                <SelectContent>
+                  {mmpFiles
+                    .filter((m: any) => m.cycle_status === 'closed' || m.cycleStatus === 'closed')
+                    .map((m: any) => (
+                      <SelectItem key={m.id} value={m.id}>{m.name} — {m.hub}</SelectItem>
+                    ))
+                  }
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Reason for reopening *</label>
+              <Textarea
+                className="mt-1 text-sm"
+                rows={3}
+                placeholder="State the reason for reopening this cycle (min 20 characters)…"
+                value={reopenReason}
+                onChange={e => setReopenReason(e.target.value)}
+              />
+              {reopenReason.length > 0 && reopenReason.length < 20 && (
+                <p className="text-xs text-red-500 mt-0.5">{20 - reopenReason.length} more characters required</p>
+              )}
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <Checkbox
+                id="reopen-confirm"
+                checked={reopenConfirmed}
+                onCheckedChange={v => setReopenConfirmed(!!v)}
+                className="mt-0.5"
+              />
+              <label htmlFor="reopen-confirm" className="text-xs text-red-800 cursor-pointer">
+                I understand this cycle will be unlocked for edits. Existing GL entries will <strong>not</strong> be reversed — corrections must be made via journal entries.
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenDialogOpen(false)} disabled={reopening}>Cancel</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!reopenMmpId || reopenReason.length < 20 || !reopenConfirmed || reopening}
+              onClick={async () => {
+                setReopening(true);
+                try {
+                  const { error } = await supabase.rpc('reopen_cycle', {
+                    p_mmp_id: reopenMmpId,
+                    p_reason: reopenReason.trim(),
+                  });
+                  if (error) throw error;
+                  const mmpName = mmpFiles.find((m: any) => m.id === reopenMmpId)?.name ?? 'cycle';
+                  toast({ title: 'Cycle reopened', description: `${mmpName} is now unlocked for editing.` });
+                  setReopenDialogOpen(false);
+                  setReopenMmpId('');
+                  setReopenReason('');
+                  setReopenConfirmed(false);
+                  refreshMMPFiles();
+                } catch (e: any) {
+                  toast({ title: 'Reopen failed', description: e.message, variant: 'destructive' });
+                } finally {
+                  setReopening(false);
+                }
+              }}
+            >
+              {reopening ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Reopening…</> : 'Confirm Reopen'}
             </Button>
           </DialogFooter>
         </DialogContent>

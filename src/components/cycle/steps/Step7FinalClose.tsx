@@ -23,6 +23,7 @@ interface CheckItem {
   description: string;
   jumpStep: number;
   passes: boolean;
+  fixItUrl?: string; // if set, "Fix it" navigates to this URL instead of jumping to a wizard step
 }
 
 interface Props {
@@ -50,6 +51,12 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const [incentiveStatus, setIncentiveStatus] = useState<string>('loading');
   const [incentiveConfirmText, setIncentiveConfirmText] = useState('');
 
+  // ── Field Payments checks (async) ────────────────────────────────────────
+  // Check 8: enumerators who had an advance but fee is still unpaid
+  // Check 9: exception actions that are decided but not yet executed by Finance
+  const [unpaidFeeCount,  setUnpaidFeeCount]  = useState<number | null>(null); // null = loading
+  const [pendingExcCount, setPendingExcCount]  = useState<number | null>(null);
+
   useEffect(() => {
     const mmpId = wizardState.selectedMmpId;
     if (!mmpId) return;
@@ -62,6 +69,34 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         if (!data) { setIncentiveStatus('missing'); return; }
         setIncentiveStatus(data.skipped ? 'skipped' : data.status);
       });
+
+    // Check 8: sites where enumerator got an advance but fee is still unpaid
+    supabase
+      .from('mmp_site_entries')
+      .select('id')
+      .eq('mmp_file_id', mmpId)
+      .not('accepted_by', 'is', null)
+      .neq('fee_paid_status', 'paid')
+      .then(async ({ data: sites }) => {
+        if (!sites?.length) { setUnpaidFeeCount(0); return; }
+        // Only count sites where an advance was actually disbursed
+        const siteIds = sites.map((s: any) => s.id);
+        const { count } = await supabase
+          .from('down_payment_requests')
+          .select('id', { count: 'exact', head: true })
+          .in('mmp_site_entry_id', siteIds)
+          .in('status', ['paid', 'partially_paid', 'fully_paid']);
+        setUnpaidFeeCount(count ?? 0);
+      });
+
+    // Check 9: exception actions for this MMP not yet executed by Finance
+    supabase
+      .from('cycle_exception_actions')
+      .select('id', { count: 'exact', head: true })
+      .eq('mmp_file_id', mmpId)
+      .eq('executed', false)
+      .in('decision', ['return', 'writeoff', 'redirect'])
+      .then(({ count }) => setPendingExcCount(count ?? 0));
   }, [wizardState.selectedMmpId]);
 
   const matchResults = wizardState.matchResults;
@@ -98,6 +133,30 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     { id: 7, label: 'No pending cost submissions', description: 'Manually verify all operational cost submissions are approved/rejected before closing', jumpStep: 1, passes: true },
     // Note: check 7 is not auto-computed (requires a separate DB query the wizard doesn't cache).
     // FOM must verify manually; the override mechanism exists if it's acceptable to close with pending submissions.
+    {
+      id: 8,
+      label: 'Enumerator fees paid',
+      description: unpaidFeeCount === null
+        ? 'Checking fee payment status…'
+        : unpaidFeeCount === 0
+          ? 'All enumerators with advances have had their fees paid'
+          : `${unpaidFeeCount} enumerator${unpaidFeeCount !== 1 ? 's' : ''} received an advance but fee is still unpaid — pay via Field Payments Centre`,
+      jumpStep: 1,
+      passes: unpaidFeeCount === null ? true : unpaidFeeCount === 0,
+      fixItUrl: '/field-payments?tab=fees',
+    },
+    {
+      id: 9,
+      label: 'Exception actions executed',
+      description: pendingExcCount === null
+        ? 'Checking exception action status…'
+        : pendingExcCount === 0
+          ? 'All Return / Write-Off / Redirect exception decisions have been executed by Finance'
+          : `${pendingExcCount} exception action${pendingExcCount !== 1 ? 's' : ''} still pending execution (Return / Write-Off / Redirect) — complete in Field Payments Centre`,
+      jumpStep: 1,
+      passes: pendingExcCount === null ? true : pendingExcCount === 0,
+      fixItUrl: '/field-payments?tab=exceptions',
+    },
   ];
 
   const allPassed = checks.every(c => c.passes || !!wizardState.overrides[c.id]);
@@ -409,11 +468,11 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             <Button
               type="button"
               className="bg-blue-600 hover:bg-blue-700 text-white mt-1"
-              onClick={() => navigate('/cycle-exceptions/rollover')}
+              onClick={() => navigate('/field-payments?tab=exceptions')}
               data-testid="button-go-to-rollover"
             >
               <ExternalLink className="h-4 w-4 mr-1.5" />
-              Open Exception Rollover Tracker
+              Go to Field Payments Centre → Exception Actions
             </Button>
           </div>
         )}
@@ -440,11 +499,11 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
             <Button
               type="button"
               className="bg-amber-600 hover:bg-amber-700 text-white mt-1"
-              onClick={() => navigate('/cycle-exceptions/resolution')}
+              onClick={() => navigate('/field-payments?tab=exceptions')}
               data-testid="button-go-to-resolution"
             >
               <ExternalLink className="h-4 w-4 mr-1.5" />
-              Open Exception Resolution Centre
+              Go to Field Payments Centre → Exception Actions
             </Button>
           </div>
         )}
@@ -464,7 +523,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">Step 7 — Final Review &amp; Close</h2>
         <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٧ — المراجعة النهائية وإغلاق الدورة</p>
-        <p className="text-muted-foreground text-sm">All 7 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
+        <p className="text-muted-foreground text-sm">All 9 checks must pass before the cycle can be closed. FOM/Admin can override any failed check with justification.</p>
       </div>
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
@@ -505,8 +564,13 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
               </div>
               {status === 'fail' && (
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button type="button" size="sm" variant="outline" className="text-xs h-7 flex items-center gap-1" onClick={() => goToStep?.(check.jumpStep)} data-testid={`button-fixit-${check.id}`}>
-                    Fix it <ArrowRight className="h-3 w-3" />
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="text-xs h-7 flex items-center gap-1"
+                    onClick={() => check.fixItUrl ? navigate(check.fixItUrl) : goToStep?.(check.jumpStep)}
+                    data-testid={`button-fixit-${check.id}`}
+                  >
+                    Fix it {check.fixItUrl ? <ExternalLink className="h-3 w-3" /> : <ArrowRight className="h-3 w-3" />}
                   </Button>
                   {canOverride && (
                     <Button type="button" size="sm" variant="outline" className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setOverrideTargetId(check.id)} data-testid={`button-override-check-${check.id}`}>
