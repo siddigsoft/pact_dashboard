@@ -410,8 +410,8 @@ export default function Step5Exceptions({
 function Header() {
   return (
     <div className="space-y-1">
-      <h2 className="text-xl font-semibold">Step 5 — Resolve Exceptions</h2>
-      <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٥ — الاستثناءات</p>
+      <h2 className="text-xl font-semibold">Step 4 — Resolve Exceptions</h2>
+      <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٤ — الاستثناءات</p>
       <p className="text-muted-foreground text-sm">
         Not-covered sites with advance payments linked to their enumerators. Each requires a decision before the cycle can close.
       </p>

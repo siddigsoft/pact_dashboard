@@ -393,8 +393,8 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Step 4 — Mark Uncovered Sites</h2>
-        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٤ — تحديد المواقع غير المغطاة وأسباب عدم تغطيتها</p>
+        <h2 className="text-xl font-semibold">Step 3 — Mark Uncovered Sites</h2>
+        <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٣ — تحديد المواقع غير المغطاة وأسباب عدم تغطيتها</p>
         <p className="text-muted-foreground text-sm">Assign a reason for every site that was not visited or not confirmed. All sites must have a reason before closing.</p>
       </div>
 
