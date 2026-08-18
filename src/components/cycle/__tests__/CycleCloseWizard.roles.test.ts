@@ -8,6 +8,7 @@ import {
   justBecameFullyConfirmed,
   newPendingDraftSiteIds,
   pendingUnconfirmedReasonSiteIds,
+  uncoveredReasonNeedsDraftPersist,
 } from '../CycleCloseWizard';
 
 describe('getCycleCloseRoleFlags', () => {
@@ -76,6 +77,14 @@ describe('allUncoveredReasonsConfirmed', () => {
     };
 
     expect(allUncoveredReasonsConfirmed(wizardState)).toBe(true);
+  });
+});
+
+describe('uncoveredReasonNeedsDraftPersist', () => {
+  it('skips already-confirmed reasons so Next does not reset supervisor confirmation', () => {
+    expect(uncoveredReasonNeedsDraftPersist({ reason: 'weather', status: 'confirmed' } as any)).toBe(false);
+    expect(uncoveredReasonNeedsDraftPersist({ reason: 'weather', status: 'draft' } as any)).toBe(true);
+    expect(uncoveredReasonNeedsDraftPersist({ reason: '', status: 'draft' } as any)).toBe(false);
   });
 });
 

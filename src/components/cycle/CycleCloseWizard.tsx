@@ -174,9 +174,14 @@ export function pendingUnconfirmedReasonSiteIds(
   uncoveredReasons: Record<string, UncoveredReason>
 ): string[] {
   return Object.entries(uncoveredReasons)
-    .filter(([, reason]) => !!reason?.reason && reason.status !== 'confirmed')
+    .filter(([, reason]) => uncoveredReasonNeedsDraftPersist(reason))
     .map(([id]) => id)
     .sort();
+}
+
+/** set_not_covered_reason resets confirmation to draft — never re-save an already-confirmed reason. */
+export function uncoveredReasonNeedsDraftPersist(reason: UncoveredReason | undefined): boolean {
+  return !!reason?.reason && reason.status !== 'confirmed';
 }
 
 export function newPendingDraftSiteIds(alreadyNotifiedIds: string[], pendingIds: string[]): string[] {

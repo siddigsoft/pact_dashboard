@@ -11,7 +11,8 @@ import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, Chev
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import type { RoleFlags } from '../CycleCloseWizard';
-import { pendingUnconfirmedReasonSiteIds, justBecameFullyConfirmed } from '../CycleCloseWizard';
+import { pendingUnconfirmedReasonSiteIds, justBecameFullyConfirmed, uncoveredReasonNeedsDraftPersist } from '../CycleCloseWizard';
+import { useToast } from '@/hooks/use-toast';
 import { filterByHubAccess, getHubAccessInfo } from '@/utils/hubAccessControl';
 import { exportFormattedNotCovered } from '@/utils/cycleCloseExport';
 import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
@@ -112,6 +113,7 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
   const [unmatchedWfpSearch, setUnmatchedWfpSearch] = useState('');
   const [expandedUnmatchedRows, setExpandedUnmatchedRows] = useState<Set<number>>(new Set());
   const [draftSaving, setDraftSaving] = useState(false);
+  const { toast } = useToast();
 
   const isCoordinator = !!roleFlags?.isCoordinator;
   const isSupervisor = !!roleFlags?.isSupervisor;
@@ -460,23 +462,13 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     if (error) throw error;
   };
 
-  const persistSupervisorConfirmation = async (siteId: string, reasonData: UncoveredReason) => {
-    if (reasonData.status !== 'confirmed') return;
-    const { error } = await (supabase as any).rpc('confirm_not_covered_reason', {
-      p_site_id: siteId,
-      p_confirmation_note: reasonData.confirmationNote ?? '',
-      p_confirm: true,
-    });
-    if (error) throw error;
-  };
-
   const saveDraftReasons = async () => {
     setDraftSaving(true);
     try {
       for (const [siteId, reasonData] of Object.entries(wizardState.uncoveredReasons)) {
-        if (!reasonData.reason) continue;
+        if (!uncoveredReasonNeedsDraftPersist(reasonData)) continue;
+        if (!canEditReasons) continue;
         await persistReasonDraft(siteId, reasonData);
-        await persistSupervisorConfirmation(siteId, reasonData);
       }
       if (canEditReasons && onDraftsSaved) {
         try {
@@ -495,6 +487,12 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     try {
       await saveDraftReasons();
       onNext();
+    } catch (err: any) {
+      toast({
+        title: 'Could not continue to Exceptions',
+        description: err?.message ?? 'Failed to save uncovered reasons.',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
