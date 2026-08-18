@@ -252,21 +252,16 @@ export default function CycleCloseWizard({
     return () => document.removeEventListener('submit', blockSubmit, true);
   }, []);
 
-<<<<<<< HEAD
-  const [currentStep, setCurrentStep] = useState(1);
-  const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([
-    'in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started',
-  ]);
-=======
+  // Contributor-only users land on step 3 (Mark Uncovered). All others start at
+  // initialStep if provided (clamped to 1–6), or step 1 by default.
   const [currentStep, setCurrentStep] = useState(
-    isStep4ContributorOnly ? 4 : (initialStep && initialStep >= 1 && initialStep <= 7 ? initialStep : 1)
+    isStep4ContributorOnly ? 3 : (initialStep && initialStep >= 1 && initialStep <= 6 ? initialStep : 1)
   );
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>(
     isStep4ContributorOnly
-      ? ['done', 'done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']
-      : ['in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started']
+      ? ['done', 'done', 'in_progress', 'blocked', 'blocked', 'blocked']
+      : ['in_progress', 'not_started', 'not_started', 'not_started', 'not_started', 'not_started']
   );
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
   const [wizardState, setWizardState] = useState<WizardState>(initialState);
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
   const [contributorCycleReady, setContributorCycleReady] = useState(!isStep4ContributorOnly);
@@ -462,31 +457,8 @@ export default function CycleCloseWizard({
       return wizardState.matchResults.length > 0 && !hasUnactioned && !hasResubmit;
     }
     if (currentStep === 3) {
-<<<<<<< HEAD
-      // Step 3 = Mark Uncovered (was Step 4).
-      // All three sources of uncovered sites must have a reason before advancing:
-      // (1) WFP-rejected / unmatched rows from Step 2 matching
-      // (2) Sites explicitly resolved as not_covered in Step 2 inline resolution section
-      // (3) MMP sites that had no WFP file row at all ("Not in clean data")
-      const notCoveredIds = new Set<string>([
-        ...wizardState.matchResults
-          .filter(r => r.action === 'reject' || r.status === 'unmatched')
-          .map(r => r.matchedSiteId).filter(Boolean) as string[],
-        ...Object.keys(wizardState.resolvedSites)
-          .filter(k => wizardState.resolvedSites[k] === 'not_covered'),
-        ...(wizardState.unmatchedMmpSiteIds ?? []),
-      ]);
-      return [...notCoveredIds].every(id => !!wizardState.uncoveredReasons[id]?.reason);
-=======
-      // Resubmit-flagged sites mean the cycle cannot close — they must be cleared first
-      const hasResubmit = Object.values(wizardState.resolvedSites).some(v => v === 'resubmit');
-      return !hasResubmit;
-    }
-    if (currentStep === 4) {
-      // Step 4 advances only when every uncovered site has a reason
-      // AND has been supervisor-confirmed.
+      // Step 3 = Mark Uncovered: every not-covered site must have a supervisor-confirmed reason.
       return allUncoveredReasonsConfirmed(wizardState);
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
     }
     if (currentStep === 4) {
       // Step 4 = Exceptions (was Step 5)
@@ -823,24 +795,16 @@ export default function CycleCloseWizard({
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
-<<<<<<< HEAD
-            {currentStep === 3 && <Step3MarkUncovered {...stepProps} />}
-            {currentStep === 4 && <Step5Exceptions {...stepProps} />}
-            {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 6 && <Step7FinalClose {...stepProps} />}
-=======
-            {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
-            {currentStep === 4 && (
-              <Step4MarkUncovered
+            {currentStep === 3 && (
+              <Step3MarkUncovered
                 {...stepProps}
                 onDraftsSaved={notifyStep4SupervisorsOfDrafts}
                 onAllConfirmed={notifyStep4AdminsAllConfirmed}
               />
             )}
-            {currentStep === 5 && <Step5Exceptions {...stepProps} />}
-            {currentStep === 6 && <Step6Reconciliation {...stepProps} />}
-            {currentStep === 7 && <Step7FinalClose {...stepProps} />}
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
+            {currentStep === 4 && <Step5Exceptions {...stepProps} />}
+            {currentStep === 5 && <Step6Reconciliation {...stepProps} />}
+            {currentStep === 6 && <Step7FinalClose {...stepProps} />
           </>
         )}
       </div>

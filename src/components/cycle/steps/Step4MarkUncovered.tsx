@@ -78,15 +78,6 @@ interface Props {
   onBack: () => void;
   canAdvance: boolean;
   canGoBack: boolean;
-<<<<<<< HEAD
-  isSuperAdmin?: boolean;
-  isAdmin?: boolean;
-  isFOM?: boolean;
-  canOverride?: boolean;
-}
-
-export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, isSuperAdmin, isAdmin, isFOM, canOverride }: Props) {
-=======
   currentUser?: any;
   roleFlags?: RoleFlags;
   onDraftsSaved?: (pendingSiteIds: string[]) => Promise<void> | void;
@@ -94,7 +85,6 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 }
 
 export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved, onAllConfirmed }: Props) {
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
   const [sites, setSites] = useState<UncoveredSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -298,12 +288,11 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     }
   };
 
-<<<<<<< HEAD
-  // ── Coverage breakdown + full site details — ONE shared fetch ────────────
-  // Previously these were two separate functions each running an identical
-  // full-table scan on mmp_site_entries.  Merged here to cut that to one query.
+  // ── Wrapper called by useEffect — runs both breakdown and detail fetch ──────
   const loadCoverageAndDetails = async () => {
-=======
+    await Promise.all([loadCoverageBreakdown(), loadSiteStatusDetails()]);
+  };
+
   // ── Coverage breakdown by state ───────────────────────────────────────────
   const loadCoverageBreakdown = async () => {
     const { data: allSites } = await supabase
@@ -313,17 +302,12 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
     if (!allSites?.length) return;
     const scopedSites = scopeRows(allSites ?? []);
-    if (!scopedSites.length) {
-      setCoverageRows([]);
-      return;
-    }
+    if (!scopedSites.length) { setCoverageRows([]); return; }
 
-    // IDs confirmed in Step 2 matching
     const confirmedIds = new Set(
       wizardState.matchResults
         .filter(r => r.action === 'confirm' || r.action === 'extra' || r.status === 'auto')
-        .map(r => r.matchedSiteId)
-        .filter(Boolean) as string[]
+        .map(r => r.matchedSiteId).filter(Boolean) as string[]
     );
     const notCoveredIds = new Set([
       ...(wizardState.unmatchedMmpSiteIds ?? []),
@@ -331,16 +315,14 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
       ...wizardState.matchResults.filter(r => r.action === 'reject').map(r => r.matchedSiteId).filter(Boolean) as string[],
     ]);
 
-    // Group by state
     const byState: Record<string, { total: number; confirmed: number; notCovered: number }> = {};
     for (const s of scopedSites) {
-      const st = s.state ?? 'Unknown';
+      const st = (s as any).state ?? 'Unknown';
       if (!byState[st]) byState[st] = { total: 0, confirmed: 0, notCovered: 0 };
       byState[st].total++;
-      if (confirmedIds.has(s.id)) byState[st].confirmed++;
-      if (notCoveredIds.has(s.id)) byState[st].notCovered++;
+      if (confirmedIds.has((s as any).id)) byState[st].confirmed++;
+      if (notCoveredIds.has((s as any).id)) byState[st].notCovered++;
     }
-
     setCoverageRows(
       Object.entries(byState)
         .sort((a, b) => b[1].total - a[1].total)
@@ -350,7 +332,6 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
 
   // ── Full per-site status table ────────────────────────────────────────────
   const loadSiteStatusDetails = async () => {
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
     if (!wizardState.selectedMmpId) return;
     setSiteDetailsLoading(true);
 
@@ -405,20 +386,13 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
     }
     const primaryWfpCol = wizardState.matchingPairs[0]?.wfpColumn ?? '';
 
-<<<<<<< HEAD
-    const details: SiteDetail[] = allSites.map(s => {
-      const mr           = siteToMatch[s.id] ?? null;
-      const notInWfp     = notInWfpSet.has(s.id);
-      const notCovReason = wizardState.uncoveredReasons[s.id];
-=======
     const details: SiteDetail[] = scopedAllSites.map(s => {
       const mr            = siteToMatch[s.id] ?? null;
       const notInWfp      = notInWfpSet.has(s.id);
       const notCovReason  = wizardState.uncoveredReasons[s.id];
-      const sys = String(s.status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+      const sys = String((s as any).status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
       const dbNotCovered = sys === 'not_covered';
       const dbCovered = sys === 'completed' || sys === 'complete' || sys === 'accepted' || sys === 'verified' || sys === 'covered';
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
 
       let matching_status: SiteDetail['matching_status'];
       let action_taken: string | null = null;
@@ -442,10 +416,6 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         matching_status = 'Unmatched WFP Row';
       }
 
-<<<<<<< HEAD
-      const covered    = matching_status === 'Auto-Confirmed' || matching_status === 'Confirmed' || matching_status === 'Extra';
-      const notCovered = notInWfp || matching_status === 'Rejected' || resolvedNotCov.has(s.id);
-=======
       const covered =
         !dbNotCovered && (
           matching_status === 'Auto-Confirmed' ||
@@ -458,7 +428,6 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         notInWfp ||
         matching_status === 'Rejected' ||
         resolvedNotCov.has(s.id);
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
 
       return {
         id:               s.id,
@@ -657,31 +626,11 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* ── Role-based access banner ── */}
-      {isSuperAdmin || canOverride ? (
-        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-4 flex gap-3">
-          <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-green-800 dark:text-green-200">
-            <p className="font-medium">
-              {isSuperAdmin ? 'Super Admin — full edit access' : 'Admin override — full edit access'}
-            </p>
-            <p>
-              You can enter and update uncovered reasons directly without waiting for Coordinators or Supervisors to complete their workflow steps.
-            </p>
-          </div>
-        </div>
-      ) : (
+      {isAdminLike && (
         <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <AlertCircle className="h-4 w-4 text-amber-700" />
           <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
             <span className="font-medium">Read-only stage:</span> Coordinators must enter uncovered reasons and Supervisors must confirm them before Admin/Super Admin can proceed.
-=======
-      {isAdminLike && (
-        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
-          <AlertCircle className="h-4 w-4 text-amber-700" />
-          <AlertDescription>
-            Read-only stage: Coordinators must enter uncovered reasons and Supervisors must confirm them before Admin/Super Admin can proceed.
->>>>>>> 287fa5314b7dc078e1310fb0cd03ab8df9d45515
           </AlertDescription>
         </Alert>
       )}
