@@ -9,8 +9,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   CheckCircle2, XCircle, AlertTriangle, ArrowRight, Download,
-  Archive, Loader2, Info
+  Archive, Loader2, Info, ExternalLink,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { WizardState } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export default function Step7FinalClose({ wizardState, updateWizardState, onBack, canGoBack, canOverride, currentUser, goToStep }: Props) {
+  const navigate = useNavigate();
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [closingDialog, setClosingDialog] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -103,7 +105,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
   const totalSites = matchResults.length;
   const confirmedSites = matchResults.filter(r => r.status === 'auto' || r.action === 'confirm').length;
-  const notCoveredCount = notCoveredIds.length;
+  const notCoveredCount = allNotCoveredIds.size;
 
   const handleOverride = async () => {
     if (overrideTargetId === null || overrideJustification.length < 20) return;
@@ -117,6 +119,113 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     setSavingOverride(false);
     setOverrideTargetId(null);
     setOverrideJustification('');
+  };
+
+  // ── Execute exception decisions against the DB ─────────────────────────────
+  // Called once after the MMP is atomically closed.
+  // Immediate: cancel → status='cancelled', reduce → update requested_amount,
+  //            reassign → update mmp_site_entry_id
+  // Deferred:  roll / hold → inserted into cycle_exception_actions, executed=false
+  //            (Finance completes via /cycle-exceptions/rollover)
+  // All decisions → inserted into cycle_exception_actions for audit.
+  const executeExceptionDecisions = async () => {
+    const decisions = wizardState.exceptionDecisions;
+    const siteIds = Object.keys(decisions);
+    if (!siteIds.length) return;
+
+    // Re-fetch site data + advances for all exception sites
+    const [{ data: siteRows }, { data: advances }] = await Promise.all([
+      supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, accepted_by')
+        .in('id', siteIds),
+      supabase
+        .from('down_payment_requests')
+        .select('id, mmp_site_entry_id, total_paid_amount, requested_amount, status')
+        .in('mmp_site_entry_id', siteIds)
+        .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']),
+    ]);
+
+    // Build site → advance map (best paid record per site)
+    const advBySite: Record<string, { id: string; paid: number; requested: number; status: string }> = {};
+    for (const a of (advances ?? []) as any[]) {
+      const sid = a.mmp_site_entry_id as string;
+      const paid = (a.total_paid_amount as number) ?? 0;
+      if (!advBySite[sid] || paid > advBySite[sid].paid) {
+        advBySite[sid] = { id: a.id, paid, requested: a.requested_amount ?? 0, status: a.status };
+      }
+    }
+
+    // Fetch enumerator names
+    const enumUuids = [...new Set((siteRows ?? []).map((s: any) => s.accepted_by).filter(Boolean))];
+    const nameMap: Record<string, string> = {};
+    if (enumUuids.length) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, full_name').in('id', enumUuids);
+      for (const p of (profiles ?? [])) { if ((p as any).full_name) nameMap[(p as any).id] = (p as any).full_name; }
+    }
+
+    const siteMap: Record<string, any> = {};
+    for (const s of (siteRows ?? []) as any[]) { siteMap[s.id] = s; }
+
+    // Execute immediate decisions + collect all for audit insert
+    const auditRows: any[] = [];
+    for (const [siteId, dec] of Object.entries(decisions)) {
+      const site = siteMap[siteId];
+      const adv  = advBySite[siteId];
+      const isImmediate = ['cancel', 'reduce', 'reassign'].includes(dec.decision);
+      const isDeferred  = ['roll', 'hold'].includes(dec.decision);
+
+      // ── Immediate DB writes ──
+      if (adv?.id) {
+        if (dec.decision === 'cancel') {
+          await supabase
+            .from('down_payment_requests')
+            .update({ status: 'cancelled' })
+            .eq('id', adv.id);
+        } else if (dec.decision === 'reduce' && (dec.amount ?? 0) > 0) {
+          await supabase
+            .from('down_payment_requests')
+            .update({ requested_amount: dec.amount })
+            .eq('id', adv.id);
+        } else if (dec.decision === 'reassign' && dec.targetSiteId) {
+          await supabase
+            .from('down_payment_requests')
+            .update({ mmp_site_entry_id: dec.targetSiteId })
+            .eq('id', adv.id);
+        }
+      }
+
+      auditRows.push({
+        mmp_file_id:        wizardState.selectedMmpId,
+        mmp_site_entry_id:  siteId,
+        advance_id:         adv?.id ?? null,
+        enumerator_id:      site?.accepted_by ?? null,
+        enumerator_name:    nameMap[site?.accepted_by] ?? null,
+        site_name:          site?.site_name ?? null,
+        advance_amount:     adv ? (adv.paid > 0 ? adv.paid : adv.requested) : 0,
+        advance_status:     adv?.status ?? null,
+        decision:           dec.decision,
+        decision_amount:    dec.amount ?? null,
+        justification:      dec.justification ?? null,
+        target_site_id:     dec.targetSiteId ?? null,
+        executed:           isImmediate, // immediate = done; deferred = false
+        executed_at:        isImmediate ? new Date().toISOString() : null,
+        executed_by_name:   isImmediate ? (currentUser?.full_name ?? null) : null,
+        execution_note:     isImmediate ? `Auto-executed at cycle close` : null,
+        created_by_name:    currentUser?.full_name ?? null,
+      });
+    }
+
+    if (auditRows.length) {
+      const { error: insErr } = await supabase
+        .from('cycle_exception_actions')
+        .insert(auditRows);
+      if (insErr) console.error('cycle_exception_actions insert error:', insErr);
+    }
+
+    // Return count of deferred (roll/hold) actions for UX feedback
+    return auditRows.filter(r => !r.executed).length;
   };
 
   const generateCycleCloseReports = async () => {
@@ -208,9 +317,17 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
 
       const closedAt = result.closed_at ?? new Date().toISOString();
 
+      // Execute exception decisions (cancel/reduce/reassign immediately;
+      // roll/hold inserted into cycle_exception_actions for the rollover page)
+      const pendingRollovers = await executeExceptionDecisions();
+
       // Reports generated after confirmed atomic DB write
       await generateCycleCloseReports();
       updateWizardState({ cycleClosedAt: closedAt });
+
+      if ((pendingRollovers ?? 0) > 0) {
+        console.info(`[CycleClose] ${pendingRollovers} deferred rollover actions pending — visible at /cycle-exceptions/rollover`);
+      }
     } catch (err: any) {
       console.error('Unexpected error closing cycle:', err);
       alert(`An unexpected error occurred: ${err?.message ?? err}\n\nPlease check the cycle status before retrying.`);
@@ -223,6 +340,10 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const isClosed = !!wizardState.cycleClosedAt;
 
   if (isClosed) {
+    // Count deferred rollover actions (roll/hold decisions needing Finance follow-up)
+    const deferredCount = Object.values(wizardState.exceptionDecisions)
+      .filter(d => d.decision === 'roll' || d.decision === 'hold').length;
+
     return (
       <div className="max-w-2xl mx-auto p-6 space-y-6 text-center">
         <div className="flex flex-col items-center gap-4 py-8">
@@ -232,8 +353,35 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           <p className="text-muted-foreground">
             {wizardState.selectedMmp?.name} was closed on {new Date(wizardState.cycleClosedAt!).toLocaleString()}.
           </p>
-          <p className="text-sm text-muted-foreground">The official Cycle Close PDF and Excel workbook have been downloaded automatically.</p>
+          <p className="text-sm text-muted-foreground">
+            The official Cycle Close PDF and Excel workbook have been downloaded automatically.
+          </p>
         </div>
+
+        {deferredCount > 0 && (
+          <div className="border border-blue-300 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 text-sm space-y-2">
+            <p className="font-semibold text-blue-800 dark:text-blue-200">
+              📋 {deferredCount} rollover action{deferredCount > 1 ? 's' : ''} pending Finance follow-up
+            </p>
+            <p className="text-blue-700 dark:text-blue-300">
+              {deferredCount} exception{deferredCount > 1 ? 's were' : ' was'} marked "Roll to Next MMP" or "Hold".
+              Finance must complete the rollover by linking each advance to the enumerator's site in the target cycle.
+            </p>
+            <p dir="rtl" className="text-xs text-blue-700">
+              {deferredCount} استثناء محدد كـ "رحّل للدورة التالية" أو "تعليق". يجب على المالية إتمام الترحيل.
+            </p>
+            <Button
+              type="button"
+              className="bg-blue-600 hover:bg-blue-700 text-white mt-1"
+              onClick={() => navigate('/cycle-exceptions/rollover')}
+              data-testid="button-go-to-rollover"
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              Open Exception Rollover Tracker
+            </Button>
+          </div>
+        )}
+
         <div className="flex flex-col items-center gap-2">
           <Button type="button" onClick={generateCycleCloseReports} variant="outline" data-testid="button-re-download-reports">
             <Download className="h-4 w-4 mr-1.5" />

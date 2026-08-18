@@ -162,6 +162,7 @@ const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
 const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
+const CycleExceptionRollover = lazy(() => import('./pages/CycleExceptionRollover'));
 const IncentiveSettingsPage = lazy(() => import('./pages/IncentiveSettingsPage'));
 const IncentivesOverviewPage = lazy(() => import('./pages/IncentivesOverviewPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
@@ -731,6 +732,7 @@ const AppRoutes = () => {
         {/* WorkspaceHub moved to its own full-screen route (see below) */}
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
+        <Route path="/cycle-exceptions/rollover" element={<PageWrapper><CycleExceptionRollover /></PageWrapper>} />
         <Route path="/mmp/:mmpId/full-report" element={<MMPFullReport />} />
         <Route path="/integrations" element={<IntegrationsSettings />} />
         <Route path="/subscriptions" element={<Navigate to="/finance-hub?tab=subscriptions" replace />} />
