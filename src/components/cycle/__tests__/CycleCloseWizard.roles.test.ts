@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { allUncoveredReasonsConfirmed, getCycleCloseRoleFlags } from '../CycleCloseWizard';
+import {
+  allUncoveredReasonsConfirmed,
+  getCycleCloseRoleFlags,
+  newPendingDraftSiteIds,
+  pendingUnconfirmedReasonSiteIds,
+} from '../CycleCloseWizard';
 
 describe('getCycleCloseRoleFlags', () => {
   it('detects coordinator and supervisor variants', () => {
@@ -38,5 +43,30 @@ describe('allUncoveredReasonsConfirmed', () => {
 
     wizardState.uncoveredReasons['site-2'].status = 'confirmed';
     expect(allUncoveredReasonsConfirmed(wizardState)).toBe(true);
+  });
+});
+
+describe('pendingUnconfirmedReasonSiteIds', () => {
+  it('returns only sites with a reason that are still draft', () => {
+    const ids = pendingUnconfirmedReasonSiteIds({
+      'site-1': { reason: 'weather', note: '', flagged: false, status: 'draft' },
+      'site-2': { reason: 'access_denied', note: '', flagged: true, status: 'confirmed' },
+      'site-3': { reason: '', note: '', flagged: false, status: 'draft' },
+    });
+
+    expect(ids).toEqual(['site-1']);
+  });
+});
+
+describe('newPendingDraftSiteIds', () => {
+  it('notifies only for newly drafted sites, not a repeat save of the same set', () => {
+    const first = newPendingDraftSiteIds([], ['site-1', 'site-2']);
+    expect(first).toEqual(['site-1', 'site-2']);
+
+    const repeat = newPendingDraftSiteIds(['site-1', 'site-2'], ['site-1', 'site-2']);
+    expect(repeat).toEqual([]);
+
+    const added = newPendingDraftSiteIds(['site-1', 'site-2'], ['site-1', 'site-2', 'site-3']);
+    expect(added).toEqual(['site-3']);
   });
 });

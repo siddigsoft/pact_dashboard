@@ -162,6 +162,31 @@ export function allUncoveredReasonsConfirmed(wizardState: WizardState): boolean 
   });
 }
 
+export function pendingUnconfirmedReasonSiteIds(
+  uncoveredReasons: Record<string, UncoveredReason>
+): string[] {
+  return Object.entries(uncoveredReasons)
+    .filter(([, reason]) => !!reason?.reason && reason.status !== 'confirmed')
+    .map(([id]) => id)
+    .sort();
+}
+
+export function newPendingDraftSiteIds(alreadyNotifiedIds: string[], pendingIds: string[]): string[] {
+  const seen = new Set(alreadyNotifiedIds);
+  return pendingIds.filter(id => !seen.has(id));
+}
+
+function isSupervisorProfile(profile: {
+  role?: string | null;
+  additional_roles?: unknown;
+}): boolean {
+  const norm = (value: string | null | undefined) =>
+    (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (['supervisor', 'hubsupervisor'].includes(norm(profile.role))) return true;
+  const extra = Array.isArray(profile.additional_roles) ? profile.additional_roles : [];
+  return extra.some((row: any) => ['supervisor', 'hubsupervisor'].includes(norm(row?.role)));
+}
+
 export default function CycleCloseWizard({
   onClose,
   isFOM,
@@ -203,6 +228,7 @@ export default function CycleCloseWizard({
   const [contributorCycleReady, setContributorCycleReady] = useState(!isStep4ContributorOnly);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const step4NotifiedMmpIdsRef = useRef<Set<string>>(new Set());
+  const step4DraftNotifiedSiteIdsRef = useRef<Set<string>>(new Set());
 
   const updateWizardState = (patch: Partial<WizardState>) => {
     setWizardState(prev => ({ ...prev, ...patch }));
@@ -475,6 +501,79 @@ export default function CycleCloseWizard({
     step4NotifiedMmpIdsRef.current.add(mmpId);
   };
 
+  const notifyStep4SupervisorsOfDrafts = async (pendingSiteIds: string[]) => {
+    const mmpId = wizardState.selectedMmpId;
+    if (!mmpId || !roleFlags.isCoordinator) return;
+
+    const newlyDrafted = newPendingDraftSiteIds(
+      Array.from(step4DraftNotifiedSiteIdsRef.current),
+      pendingSiteIds,
+    );
+    if (newlyDrafted.length === 0) return;
+    newlyDrafted.forEach(id => step4DraftNotifiedSiteIdsRef.current.add(id));
+
+    const { data: rpcRecipients, error: rpcRecipientsError } = await (supabase as any).rpc(
+      'get_cycle_close_step4_recipients',
+      { p_site_ids: newlyDrafted }
+    );
+    if (rpcRecipientsError) {
+      console.warn('[CycleCloseWizard] draft recipient RPC failed:', rpcRecipientsError);
+      newlyDrafted.forEach(id => step4DraftNotifiedSiteIdsRef.current.delete(id));
+      return;
+    }
+
+    const candidateIds = Array.from(new Set(
+      (rpcRecipients ?? [])
+        .map((r: any) => r?.user_id)
+        .filter((id: string | undefined) => id && id !== currentUser?.id)
+    )) as string[];
+    if (candidateIds.length === 0) return;
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, role, additional_roles')
+      .in('id', candidateIds);
+    if (profilesError) {
+      console.warn('[CycleCloseWizard] draft recipient profile lookup failed:', profilesError);
+      newlyDrafted.forEach(id => step4DraftNotifiedSiteIdsRef.current.delete(id));
+      return;
+    }
+
+    const supervisorIds = (profiles ?? [])
+      .filter(isSupervisorProfile)
+      .map(p => p.id);
+    if (supervisorIds.length === 0) return;
+
+    const actionUrl = `/mmp?action=close-cycle&step=4&mmpId=${mmpId}`;
+    const cycleName = wizardState.selectedMmp?.name ?? 'Cycle';
+    const pendingCount = pendingSiteIds.length;
+    const titleEn = `Uncovered reasons ready for confirmation: ${cycleName}`;
+    const titleAr = `أسباب المواقع غير المغطاة جاهزة للتأكيد: ${cycleName}`;
+    const messageEn = `${pendingCount} uncovered site(s) now have draft reasons. Please review and confirm in Step 4.`;
+    const messageAr = `${pendingCount} موقع(اً) غير مغطى أصبح له سبب مسودة. يرجى المراجعة والتأكيد في الخطوة ٤.`;
+
+    await dispatchNotification({
+      event: 'cycle_close_step4_drafts_saved',
+      recipientIds: supervisorIds,
+      titleEn,
+      titleAr,
+      messageEn,
+      messageAr,
+      priority: 'high',
+      entityType: 'mmpFile',
+      entityId: mmpId,
+      actionUrl,
+      sendEmail: true,
+      triggeredBy: currentUser?.id,
+      triggeredByName: currentUser?.full_name ?? currentUser?.name,
+      metadata: {
+        cycle: cycleName,
+        uncovered_count: pendingCount,
+        mmp_code: wizardState.selectedMmp?.mmp_id ?? wizardState.selectedMmp?.code ?? undefined,
+      },
+    });
+  };
+
   const handleNext = async () => {
     if (isStep4ContributorOnly) return;
     if (currentStep === 1 && wizardState.selectedMmpId) {
@@ -603,7 +702,9 @@ export default function CycleCloseWizard({
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}
             {currentStep === 3 && <Step3ResolveUnmatched {...stepProps} />}
-            {currentStep === 4 && <Step4MarkUncovered {...stepProps} />}
+            {currentStep === 4 && (
+              <Step4MarkUncovered {...stepProps} onDraftsSaved={notifyStep4SupervisorsOfDrafts} />
+            )}
             {currentStep === 5 && <Step5Exceptions {...stepProps} />}
             {currentStep === 6 && <Step6Reconciliation {...stepProps} />}
             {currentStep === 7 && <Step7FinalClose {...stepProps} />}

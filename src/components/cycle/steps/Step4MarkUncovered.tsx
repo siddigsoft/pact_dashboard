@@ -11,6 +11,7 @@ import { Info, AlertTriangle, AlertCircle, CheckCircle2, Loader2, Download, Chev
 import { Input } from '@/components/ui/input';
 import type { WizardState, UncoveredReason } from '../CycleCloseWizard';
 import type { RoleFlags } from '../CycleCloseWizard';
+import { pendingUnconfirmedReasonSiteIds } from '../CycleCloseWizard';
 import { filterByHubAccess, getHubAccessInfo } from '@/utils/hubAccessControl';
 import { exportFormattedNotCovered } from '@/utils/cycleCloseExport';
 import { exportNotInWfpReport, type NotInWfpSite } from '@/utils/notInWfpReportExport';
@@ -79,9 +80,10 @@ interface Props {
   canGoBack: boolean;
   currentUser?: any;
   roleFlags?: RoleFlags;
+  onDraftsSaved?: (pendingSiteIds: string[]) => Promise<void> | void;
 }
 
-export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags }: Props) {
+export default function Step4MarkUncovered({ wizardState, updateWizardState, onNext, onBack, canAdvance, canGoBack, currentUser, roleFlags, onDraftsSaved }: Props) {
   const [sites, setSites] = useState<UncoveredSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -488,6 +490,13 @@ export default function Step4MarkUncovered({ wizardState, updateWizardState, onN
         if (!reasonData.reason) continue;
         await persistReasonDraft(siteId, reasonData);
         await persistSupervisorConfirmation(siteId, reasonData);
+      }
+      if (canEditReasons && onDraftsSaved) {
+        try {
+          await onDraftsSaved(pendingUnconfirmedReasonSiteIds(wizardState.uncoveredReasons));
+        } catch (err) {
+          console.warn('[Step4MarkUncovered] supervisor draft notification failed:', err);
+        }
       }
     } finally {
       setDraftSaving(false);
