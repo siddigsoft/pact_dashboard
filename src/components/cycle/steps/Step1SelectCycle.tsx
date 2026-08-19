@@ -50,6 +50,8 @@ const STEP_LABELS: Record<number, string> = {
   6: 'Final Close',
 };
 
+const CYCLE_PAGE_SIZE = 80;
+
 export default function Step1SelectCycle({
   wizardState, updateWizardState, onNext, canAdvance,
   savedSession, onResume, onStartFresh, nextLabel,
@@ -59,20 +61,52 @@ export default function Step1SelectCycle({
   const [error, setError]           = useState<string | null>(null);
   const [siteCount, setSiteCount]   = useState(0);
   const [enumeratorCount, setEnumeratorCount] = useState(0);
+  const [loadingMoreCycles, setLoadingMoreCycles] = useState(false);
+  const [hasMoreCycles, setHasMoreCycles] = useState(false);
 
   useEffect(() => { loadCycles(); }, []);
 
-  const loadCycles = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
+  const loadCycles = async (offset = 0) => {
+    const loadingMore = offset > 0;
+    if (loadingMore) setLoadingMoreCycles(true);
+    else setLoading(true);
+    setError(null);
+
+    // Keep this query bounded. The previous unbounded sort made the wizard wait
+    // for every historical MMP row before it could render the selector.
+    const request = supabase
       .from('mmp_files')
       .select('id, name, status, hub, created_at, month, cycle_status')
       .not('status', 'eq', 'rejected')
       .neq('cycle_status', 'closed')    // exclude already-closed cycles
-      .order('created_at', { ascending: false });
-    if (error) setError(error.message);
-    else setOpenCycles(data ?? []);
-    setLoading(false);
+      .order('created_at', { ascending: false })
+      .range(offset, offset + CYCLE_PAGE_SIZE - 1);
+
+    let timeoutId: number | undefined;
+    try {
+      const { data, error } = await Promise.race([
+        request,
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(
+            () => reject(new Error('Loading cycles took too long. Please try again.')),
+            8_000,
+          );
+        }),
+      ]);
+      if (error) {
+        setError(error.message);
+      } else {
+        const rows = data ?? [];
+        setOpenCycles(previous => loadingMore ? [...previous, ...rows] : rows);
+        setHasMoreCycles(rows.length === CYCLE_PAGE_SIZE);
+      }
+    } catch (err: any) {
+      setError(err?.message ?? 'Unable to load cycles.');
+    } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (loadingMore) setLoadingMoreCycles(false);
+      else setLoading(false);
+    }
   };
 
   const handleSelect = async (mmpId: string) => {
@@ -216,6 +250,21 @@ export default function Step1SelectCycle({
                 ))}
               </SelectContent>
             </Select>
+            {hasMoreCycles && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto px-0 text-xs"
+                disabled={loadingMoreCycles}
+                onClick={() => loadCycles(openCycles.length)}
+                data-testid="button-load-older-cycles"
+              >
+                {loadingMoreCycles
+                  ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Loading older cycles…</>
+                  : 'Load older cycles'}
+              </Button>
+            )}
             {!wizardState.selectedMmpId && (
               <p className="text-xs text-destructive flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" />

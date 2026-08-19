@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Settings2, AlertTriangle, CheckCircle2, RefreshCw, Save, Info } from 'lucide-react';
+import { Loader2, Settings2, AlertTriangle, CheckCircle2, RefreshCw, Save, Info, ExternalLink, RotateCcw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PageLoader } from '@/components/ui/page-loader';
@@ -43,6 +44,17 @@ interface Account {
   account_type: string;
   is_active: boolean;
   is_postable: boolean;
+}
+
+interface FailedPosting {
+  id: string;
+  source_table: string;
+  source_id: string;
+  event_type: string;
+  status: 'error';
+  journal_entry_id: string | null;
+  error_message: string | null;
+  created_at: string;
 }
 
 // pending edit for a single config row
@@ -120,11 +132,14 @@ export default function AccountingGLBridgeSettings() {
   const [edits, setEdits]       = useState<Record<string, RowEdit>>({});
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState<string | null>(null); // source_event being saved
+  const [failedPostings, setFailedPostings] = useState<FailedPosting[]>([]);
+  const [failedPostingsError, setFailedPostingsError] = useState<string | null>(null);
+  const [retryingPosting, setRetryingPosting] = useState<string | null>(null);
 
   // ── Load data ──────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
-    const [cfgRes, acctRes] = await Promise.all([
+    const [cfgRes, acctRes, failedRes] = await Promise.all([
       supabase
         .from('acct_gl_bridge_config')
         .select('id,source_event,event_label,event_description,debit_account_id,credit_account_id,is_active,updated_at')
@@ -134,11 +149,19 @@ export default function AccountingGLBridgeSettings() {
         .select('id,code,name_en,account_type,is_active,is_postable')
         .eq('is_active', true)
         .order('code'),
+      (supabase as any).rpc('get_unresolved_gl_bridge_errors', { p_limit: 100 }),
     ]);
 
     const cfgs = (cfgRes.data ?? []) as BridgeConfig[];
     setConfigs(cfgs);
     setAccounts((acctRes.data ?? []) as Account[]);
+    if (failedRes.error) {
+      setFailedPostings([]);
+      setFailedPostingsError(failedRes.error.message);
+    } else {
+      setFailedPostings((failedRes.data ?? []) as FailedPosting[]);
+      setFailedPostingsError(null);
+    }
     // Initialise edit state from DB values
     const initEdits: Record<string, RowEdit> = {};
     cfgs.forEach(c => {
@@ -217,6 +240,40 @@ export default function AccountingGLBridgeSettings() {
     }
   }
 
+  async function retryPosting(posting: FailedPosting) {
+    setRetryingPosting(posting.id);
+    try {
+      const { data, error } = await (supabase as any).rpc('retry_gl_bridge_posting', {
+        p_log_id: posting.id,
+      });
+      if (error) throw error;
+
+      const result = data as { status?: string; error?: string; message?: string };
+      if (result?.status === 'success') {
+        toast.success('Posting retried successfully.');
+      } else if (result?.status === 'skipped') {
+        toast.info(result.message ?? 'Posting was already complete.');
+      } else {
+        toast.error(result?.error ?? 'Retry failed.');
+      }
+      await load();
+    } catch (err: any) {
+      toast.error(`Retry failed: ${err.message}`);
+    } finally {
+      setRetryingPosting(null);
+    }
+  }
+
+  function sourceLink(posting: FailedPosting): string | null {
+    if (posting.source_table === 'down_payment_requests') {
+      return `/down-payment-approval?open=${encodeURIComponent(posting.source_id)}`;
+    }
+    if (posting.source_table === 'operational_cost_submissions') {
+      return `/cost-submission?open=${encodeURIComponent(posting.source_id)}`;
+    }
+    return null;
+  }
+
   // ── Access guard ───────────────────────────────────────────────────────────
   if (!isAuthenticated || !allowed) {
     return (
@@ -289,6 +346,120 @@ export default function AccountingGLBridgeSettings() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Unresolved bridge failures */}
+      {!loading && (
+        <Card
+          className={cn(
+            'border',
+            failedPostings.length > 0 ? 'border-rose-300 dark:border-rose-800' : 'border-emerald-200',
+          )}
+          data-testid="card-failed-gl-postings"
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  {failedPostings.length > 0
+                    ? <XCircle className="h-4 w-4 text-rose-600" />
+                    : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                  Failed Postings
+                </CardTitle>
+                <CardDescription className="mt-1 text-xs">
+                  Each unresolved bridge posting is shown. A successful retry removes that specific failure from this queue.
+                </CardDescription>
+              </div>
+              <Badge
+                className={cn(
+                  'border',
+                  failedPostings.length > 0
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {failedPostings.length > 0 ? `${failedPostings.length} unresolved` : 'No unresolved failures'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {failedPostingsError ? (
+              <div className="mx-5 mb-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Failed-posting queue is not available yet. Apply the
+                <code className="mx-1 font-mono text-xs">20260819_gl_bridge_failed_postings.sql</code>
+                migration to enable it.
+              </div>
+            ) : failedPostings.length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-muted-foreground">All bridge postings are up to date.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Source</TableHead>
+                      <TableHead className="text-xs">Record</TableHead>
+                      <TableHead className="text-xs">Error</TableHead>
+                      <TableHead className="text-xs">Failed at</TableHead>
+                      <TableHead className="text-right text-xs">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {failedPostings.map(posting => {
+                      const link = sourceLink(posting);
+                      const isRetrying = retryingPosting === posting.id;
+                      const retrySupported = !!link;
+                      return (
+                        <TableRow key={posting.id} data-testid={`failed-posting-row-${posting.id}`}>
+                          <TableCell className="text-xs font-mono whitespace-nowrap">
+                            {posting.source_table}
+                            <span className="block text-muted-foreground font-sans">{posting.event_type}</span>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">
+                            {link ? (
+                              <Link
+                                to={link}
+                                className="inline-flex items-center gap-1 text-blue-700 hover:underline dark:text-blue-300"
+                                data-testid={`link-failed-posting-${posting.id}`}
+                              >
+                                {posting.source_id.slice(0, 8)}…
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            ) : (
+                              <span>{posting.source_id.slice(0, 8)}…</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-[22rem] whitespace-normal text-xs text-rose-700 dark:text-rose-300">
+                            {posting.error_message ?? 'Unknown bridge error'}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {new Date(posting.created_at).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              disabled={!retrySupported || retryingPosting !== null}
+                              title={retrySupported ? 'Retry this record only' : 'No targeted retry is available for this source'}
+                              onClick={() => retryPosting(posting)}
+                              data-testid={`button-retry-failed-posting-${posting.id}`}
+                            >
+                              {isRetrying
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <RotateCcw className="h-3 w-3" />}
+                              Retry
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Required account health */}

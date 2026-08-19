@@ -27,4 +27,5 @@
 - [unified-access-manager](unified-access-manager.md) — 5-tab access manager in RoleManagement; tab overrides stored in page_access_overrides with `hubSlug:tabId` slug; CurrentUserAccessContext filters hub tabs live; Finance/HR hubs not yet wired.
 - [sql-migration-rule](sql-migration-rule.md) — every DB change must produce a file in supabase/migrations/YYYYMMDD_desc.sql; user runs it manually in Supabase Studio; never wait to be asked.
 - [gl-bridge-orphaned-triggers](gl-bridge-orphaned-triggers.md) — acct_trig_down_payment_requests + acct_trig_operational_cost_submissions functions existed but CREATE TRIGGER was never run; fixed in 20260817_gl_bridge_advances_ops.sql.
+- [gl-bridge-targeted-retries](gl-bridge-targeted-retries.md) — Retry one unresolved error-log record under a source-level lock; never route a row action through a bulk bridge backfill.
 - [git-push-preference](git-push-preference.md) — user pushes to GitHub manually; never run git push automatically, only commit locally.
