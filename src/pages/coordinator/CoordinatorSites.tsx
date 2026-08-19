@@ -38,7 +38,7 @@ import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
-  'Khartoum', 'Omdurman', 'Bahri', 'Port Sudan', 'Kassala', 'Gedaref', 
+  'Khartoum', 'Omdurman', 'Bahri', 'Port Sudan', 'Kassala', 'Gedarif', 
   'El Obeid', 'Nyala', 'El Fasher', 'Geneina', 'Zalingei', 'El Daein'
 ];
 
