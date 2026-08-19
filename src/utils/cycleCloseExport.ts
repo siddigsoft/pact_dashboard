@@ -365,7 +365,7 @@ export async function exportFormattedExceptions(
   };
 
   const rows: CellVal[][] = exceptions.map(e => {
-    const d = wizardState.exceptionDecisions[e.siteId];
+    const d = wizardState.exceptionDecisions[e.advanceId];
     return [
       e.siteName, e.state, e.locality, e.enumeratorName,
       STATUS_LABELS[e.advanceStatus] ?? e.advanceStatus,
@@ -543,9 +543,12 @@ export async function exportCycleCloseWorkbook(
 
   // ── Build advance maps ───────────────────────────────────────────────────
   const advanceByEntry: Record<string, number> = {};
+  const advanceById: Record<string, { siteId: string; amount: number }> = {};
   for (const a of (advances ?? [])) {
     const amt = (a as any).total_paid_amount ?? (a as any).requested_amount ?? 0;
-    advanceByEntry[(a as any).mmp_site_entry_id] = (advanceByEntry[(a as any).mmp_site_entry_id] ?? 0) + Number(amt);
+    const siteId = (a as any).mmp_site_entry_id as string;
+    advanceByEntry[siteId] = (advanceByEntry[siteId] ?? 0) + Number(amt);
+    advanceById[(a as any).id] = { siteId, amount: Number(amt) };
   }
   const entryToEnum: Record<string, string> = {};
   for (const e of (entries ?? [])) {
@@ -753,11 +756,14 @@ export async function exportCycleCloseWorkbook(
     const rows: CellVal[][] = Object.entries(wizardState.uncoveredReasons).map(([id, r]) => {
       const s = siteNameOf(id);
       const adv = advanceByEntry[id] ?? 0;
-      const exc = wizardState.exceptionDecisions[id];
+      const decisions = Object.entries(advanceById)
+        .filter(([, advance]) => advance.siteId === id)
+        .map(([advanceId]) => wizardState.exceptionDecisions[advanceId]?.decision)
+        .filter(Boolean);
       return [
         s.name, s.state, s.locality,
         r.reason, r.note, r.flagged ? 'Yes' : 'No',
-        adv || '', exc?.decision ?? (adv > 0 ? 'Pending' : 'No advance'),
+        adv || '', decisions.length > 0 ? decisions.join(', ') : (adv > 0 ? 'Pending' : 'No advance'),
       ];
     });
     buildSheet(wb, 'Not Covered Sites', 'Cycle Close — Not Covered Sites',
@@ -768,24 +774,25 @@ export async function exportCycleCloseWorkbook(
   // ── Sheet 4: Exceptions — Advance Decisions ───────────────────────────────
   if (Object.keys(wizardState.exceptionDecisions).length > 0) {
     const headers = [
-      'Site Name', 'State', 'Locality',
+      'Site Name', 'State', 'Locality', 'Advance ID',
       'Advance Paid (SDG)', 'Decision', 'Amount Redirected / Rolled (SDG)',
       'Justification', 'Approved By',
     ];
-    const rows: CellVal[][] = Object.entries(wizardState.exceptionDecisions).map(([id, d]) => {
-      const s = siteNameOf(id);
-      const adv = advanceByEntry[id] ?? 0;
+    const rows: CellVal[][] = Object.entries(wizardState.exceptionDecisions).map(([advanceId, d]) => {
+      const advance = advanceById[advanceId];
+      const s = siteNameOf(advance?.siteId ?? advanceId);
+      const adv = advance?.amount ?? 0;
       return [
-        s.name, s.state, s.locality, adv,
+        s.name, s.state, s.locality, advanceId, adv,
         d.decision ?? 'Pending', d.amount ?? '',
         d.justification ?? '', d.approvedBy ?? '',
       ];
     });
-    const totalAdv = rows.reduce((s, r) => s + (Number(r[3]) || 0), 0);
+    const totalAdv = rows.reduce((s, r) => s + (Number(r[4]) || 0), 0);
     buildSheet(wb, 'Exceptions — Advances', 'Cycle Close — Advance Exception Decisions',
-      `Cycle: ${cname}`, `Generated: ${now} · ${rows.length} exception sites · Total: SDG ${totalAdv.toLocaleString()}`,
+      `Cycle: ${cname}`, `Generated: ${now} · ${rows.length} exception advances · Total: SDG ${totalAdv.toLocaleString()}`,
       headers, rows,
-      { totalsRow: ['TOTAL', '', '', totalAdv, '', '', '', ''] });
+      { totalsRow: ['TOTAL', '', '', '', totalAdv, '', '', '', ''] });
   }
 
   // ── Sheet 5: Enumerator Reconciliation ───────────────────────────────────

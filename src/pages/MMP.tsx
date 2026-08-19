@@ -2187,10 +2187,18 @@ const MMP = () => {
     });
   };
 
-  const isSuperAdmin = hasRole(['super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin']);
-  const isAdmin = hasRole(['Admin', 'admin', 'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin']);
+  const isSuperAdmin = hasRole([
+    'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin',
+    'super_administrator', 'Super Administrator', 'superadministrator',
+  ]);
+  const isAdmin = hasRole([
+    'Admin', 'admin',
+    'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin',
+    'super_administrator', 'Super Administrator', 'superadministrator',
+  ]);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
+  const isFinance = hasRole(['Finance', 'Finance Admin', 'Financial Admin', 'Accountant']);
   const isSupervisor = hasRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
@@ -2202,7 +2210,7 @@ const MMP = () => {
   const [showCycleWizard, setShowCycleWizard] = useState(false);
   const [cycleWizardInit, setCycleWizardInit] = useState<{ initialStep?: number; initialMmpId?: string | null }>({});
 
-  const canAccessCycleWizard = isFOM || isAdmin || isSuperAdmin || isSupervisor || isCoordinator;
+  const canAccessCycleWizard = isFOM || isFinance || isAdmin || isSuperAdmin || isSupervisor || isCoordinator;
 
   // Auto-open the Close Cycle wizard when navigated to via ?action=close-cycle
   useEffect(() => {

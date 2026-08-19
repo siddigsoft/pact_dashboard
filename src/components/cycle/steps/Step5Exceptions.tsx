@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,7 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
   Calendar, CreditCard, User, Hash, Receipt, Building2 } from 'lucide-react';
-import type { WizardState, ExceptionDecision } from '../CycleCloseWizard';
+import type { WizardState, ExceptionDecision, RoleFlags } from '../CycleCloseWizard';
+import {
+  canExecuteExceptionDecision,
+  getAvailableExceptionDecisionValues,
+  getExceptionDecisionKey,
+  isExceptionDecisionDraftValid,
+} from '../exceptionExecution';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
 interface Props {
@@ -19,7 +25,23 @@ interface Props {
   onBack: () => void;
   canGoBack: boolean;
   canOverride: boolean;
+  roleFlags?: RoleFlags;
   currentUser: any;
+}
+
+interface OpenMmp {
+  id: string;
+  name: string;
+  status: string | null;
+  start_date: string | null;
+}
+
+interface TargetSite {
+  id: string;
+  site_name: string;
+  state: string | null;
+  locality: string | null;
+  status: string | null;
 }
 
 // ── Decision sets ─────────────────────────────────────────────────────────────
@@ -31,8 +53,8 @@ const DECISIONS_PAID = [
     labelAr: 'رحّل إلى الدورة التالية',
     desc: 'Treat as pre-payment for the next cycle.',
     descAr: 'تُعامَل كدفعة مقدمة للدورة القادمة.',
-    track: 'Flagged as a rollover advance. Finance uses the Exception Tracker to link it to the enumerator\'s site in the next MMP.',
-    trackAr: 'تُعلَّم كسلفة منقولة. تربطها المالية بموقع المعدد في الدورة القادمة عبر صفحة متابعة الاستثناءات.',
+    track: 'Select the target cycle and covered site here. The advance is re-linked before Final Close.',
+    trackAr: 'اختر الدورة والموقع المغطى هنا. تُنقل السلفة قبل الإغلاق النهائي.',
   },
   {
     value: 'return',
@@ -40,8 +62,8 @@ const DECISIONS_PAID = [
     labelAr: 'استرداد مطلوب',
     desc: 'Enumerator must return the cash.',
     descAr: 'يجب على المعدد إعادة المبلغ نقداً.',
-    track: 'Finance processes the cash return via Field Payments Centre (Recovery tab). A receipt record is created there.',
-    trackAr: 'تُعالج المالية استرداد النقد عبر مركز المدفوعات الميدانية (تبويب الاسترداد). يُنشأ سجل الاستلام هناك.',
+    track: 'Record the actual collection date, method, and receipt reference here. The recovery posts to GL immediately.',
+    trackAr: 'سجّل تاريخ وطريقة الاستلام ومرجع الإيصال هنا. يُرحّل الاسترداد محاسبياً فوراً.',
   },
   {
     value: 'writeoff',
@@ -49,8 +71,8 @@ const DECISIONS_PAID = [
     labelAr: 'شطب',
     desc: 'Amount is too small or unrecoverable. Justification required.',
     descAr: 'المبلغ صغير جداً أو يتعذر استرداده. مطلوب مبرر.',
-    track: 'Recorded in cycle_exception_actions with decision = "writeoff". Visible in the Final Close workbook Exceptions sheet.',
-    trackAr: 'يُحفظ في جدول استثناءات الدورة بقرار "شطب". يظهر في ورقة الاستثناءات بتقرير الإغلاق.',
+    track: 'Authorized staff record the justification and post the write-off to GL before Final Close.',
+    trackAr: 'يسجّل الموظف المخوّل المبرر ويُرحّل الشطب محاسبياً قبل الإغلاق النهائي.',
   },
   {
     value: 'redirect',
@@ -79,8 +101,8 @@ const DECISIONS_APPROVED = [
     labelAr: 'تعليق ونقل للدورة التالية',
     desc: 'Keep approved but defer payment to the next cycle.',
     descAr: 'يبقى الطلب موافقاً عليه مع تأجيل الصرف للدورة القادمة.',
-    track: 'Marked "on hold". Finance uses the Exception Tracker to link it to the next MMP and release payment.',
-    trackAr: 'يُعلَّم معلقاً. تربطه المالية بالدورة القادمة عبر صفحة متابعة الاستثناءات وتُصرف الدفعة.',
+    track: 'Select the target cycle and covered site here. The approved advance is moved before Final Close.',
+    trackAr: 'اختر الدورة والموقع المغطى هنا. يُنقل طلب السلفة المعتمد قبل الإغلاق النهائي.',
   },
   {
     value: 'reassign',
@@ -107,17 +129,35 @@ type ApprovedDecision = typeof DECISIONS_APPROVED[number]['value'];
 
 const isPaidSite    = (s: ExceptionSite) => s.advanceStatus !== 'approved';
 const isApprovedSite = (s: ExceptionSite) => s.advanceStatus === 'approved';
+const exceptionKey = (s: ExceptionSite) => getExceptionDecisionKey(s);
+const paidDecisionsFor = (s: ExceptionSite) =>
+  DECISIONS_PAID.filter(d => getAvailableExceptionDecisionValues(s).includes(d.value));
+const approvedDecisionsFor = (s: ExceptionSite) =>
+  DECISIONS_APPROVED.filter(d => getAvailableExceptionDecisionValues(s).includes(d.value));
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Step5Exceptions({
   wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride,
+  roleFlags,
 }: Props) {
   const [exceptions, setExceptions]           = useState<ExceptionSite[]>([]);
   const [loading, setLoading]                 = useState(true);
   const [showPaidGuide, setShowPaidGuide]     = useState(false);
   const [showApprGuide, setShowApprGuide]     = useState(false);
+  const [openMmps, setOpenMmps]               = useState<OpenMmp[]>([]);
+  const [targetSites, setTargetSites]          = useState<Record<string, TargetSite[]>>({});
+  const [loadingTargetSites, setLoadingTargetSites] = useState<Record<string, boolean>>({});
+  const [executing, setExecuting]              = useState<Record<string, boolean>>({});
+  const decisionsRef = useRef(wizardState.exceptionDecisions);
 
+  useEffect(() => {
+    decisionsRef.current = wizardState.exceptionDecisions;
+  }, [wizardState.exceptionDecisions]);
+
+  const canExecute = !!(
+    roleFlags?.isFinance || roleFlags?.isFOM || roleFlags?.isAdmin || roleFlags?.isSuperAdmin
+  );
   useEffect(() => {
     if (wizardState.selectedMmpId) loadExceptions();
   }, [wizardState.selectedMmpId, wizardState.uncoveredReasons]);
@@ -130,7 +170,7 @@ export default function Step5Exceptions({
     if (!notCoveredIds.length) { setLoading(false); return; }
 
     // ── Round 1: site details + advances in parallel ──────────────────────────
-    const [siteResult, advancesResult] = await Promise.all([
+    const [siteResult, advancesResult, actionsResult, mmpResult] = await Promise.all([
       supabase
         .from('mmp_site_entries')
         .select('id, site_name, state, locality, accepted_by')
@@ -147,14 +187,29 @@ export default function Step5Exceptions({
         ].join(', '))
         .in('mmp_site_entry_id', notCoveredIds)
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']),
+      supabase
+        .from('cycle_exception_actions')
+        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error')
+        .eq('mmp_file_id', wizardState.selectedMmpId!)
+        .eq('executed', true),
+      supabase
+        .from('mmp_files')
+        .select('id, name, status, start_date')
+        .neq('id', wizardState.selectedMmpId!)
+        .neq('status', 'closed')
+        .order('start_date', { ascending: false }),
     ]);
+    setOpenMmps((mmpResult.data ?? []) as OpenMmp[]);
 
     const siteData = siteResult.data;
     if (!siteData?.length) { setLoading(false); return; }
 
-    // Build per-site advance map (highest paid amount wins)
+    // Build one exception record per active advance. The server close gate is
+    // also advance-scoped, so collapsing these by site can strand a second
+    // advance with no executable card.
     interface AdvanceRec {
       id: string;
+      siteId: string;
       paidAmount: number;
       requestedAmount: number;
       remainingAmount: number | null;
@@ -170,38 +225,30 @@ export default function Step5Exceptions({
       paidInstallments: any[];
       walletTransactionIds: string[];
     }
-    const advanceBySite: Record<string, AdvanceRec> = {};
-    for (const a of (advancesResult.data ?? []) as any[]) {
-      const siteId = a.mmp_site_entry_id as string;
-      const paid   = (a.total_paid_amount as number) ?? 0;
-      const req    = (a.requested_amount as number) ?? 0;
-      const existing = advanceBySite[siteId];
-      if (!existing || paid > existing.paidAmount) {
-        advanceBySite[siteId] = {
-          id: a.id as string,
-          paidAmount: paid,
-          requestedAmount: req,
-          remainingAmount: a.remaining_amount ?? null,
-          status: a.status as AdvanceRec['status'],
-          approvedById: (a.supervisor_approved_by as string | null) ?? null,
-          requestedById: (a.requested_by as string | null) ?? null,
-          requestedAt: (a.requested_at as string | null) ?? null,
-          paymentType: (a.payment_type as 'full_advance' | 'installments' | null) ?? null,
-          supervisorApprovedAt: (a.supervisor_approved_at as string | null) ?? null,
-          adminProcessedById: (a.admin_processed_by as string | null) ?? null,
-          adminProcessedAt: (a.admin_processed_at as string | null) ?? null,
-          installmentPlan: (a.installment_plan as any[]) ?? [],
-          paidInstallments: (a.paid_installments as any[]) ?? [],
-          walletTransactionIds: (a.wallet_transaction_ids as string[]) ?? [],
-        };
-      }
-    }
+    const advances: AdvanceRec[] = ((advancesResult.data ?? []) as any[]).map(a => ({
+      id: a.id as string,
+      siteId: a.mmp_site_entry_id as string,
+      paidAmount: (a.total_paid_amount as number) ?? 0,
+      requestedAmount: (a.requested_amount as number) ?? 0,
+      remainingAmount: a.remaining_amount ?? null,
+      status: a.status as AdvanceRec['status'],
+      approvedById: (a.supervisor_approved_by as string | null) ?? null,
+      requestedById: (a.requested_by as string | null) ?? null,
+      requestedAt: (a.requested_at as string | null) ?? null,
+      paymentType: (a.payment_type as 'full_advance' | 'installments' | null) ?? null,
+      supervisorApprovedAt: (a.supervisor_approved_at as string | null) ?? null,
+      adminProcessedById: (a.admin_processed_by as string | null) ?? null,
+      adminProcessedAt: (a.admin_processed_at as string | null) ?? null,
+      installmentPlan: (a.installment_plan as any[]) ?? [],
+      paidInstallments: (a.paid_installments as any[]) ?? [],
+      walletTransactionIds: (a.wallet_transaction_ids as string[]) ?? [],
+    }));
 
     // ── Round 2: all profile lookups in parallel ─────────────────────────────
     const enumUuids        = [...new Set((siteData as any[]).map((s: any) => s.accepted_by).filter(Boolean))];
-    const approverUuids    = [...new Set(Object.values(advanceBySite).map(r => r.approvedById).filter(Boolean) as string[])];
-    const requesterUuids   = [...new Set(Object.values(advanceBySite).map(r => r.requestedById).filter(Boolean) as string[])];
-    const adminUuids       = [...new Set(Object.values(advanceBySite).map(r => r.adminProcessedById).filter(Boolean) as string[])];
+    const approverUuids    = [...new Set(advances.map(r => r.approvedById).filter(Boolean) as string[])];
+    const requesterUuids   = [...new Set(advances.map(r => r.requestedById).filter(Boolean) as string[])];
+    const adminUuids       = [...new Set(advances.map(r => r.adminProcessedById).filter(Boolean) as string[])];
 
     // Merge all secondary UUIDs into one batch (avoids 4 separate profile queries)
     const allSecondaryUuids = [...new Set([...approverUuids, ...requesterUuids, ...adminUuids])];
@@ -220,17 +267,18 @@ export default function Step5Exceptions({
     const approverNameMap: Record<string, string> = {};
     for (const p of (secondaryResult.data ?? [])) { if (p.full_name) approverNameMap[p.id] = p.full_name; }
 
-    const exceptionSites: ExceptionSite[] = (siteData as any[])
-      .filter((s: any) => s.accepted_by && advanceBySite[s.id])
-      .map((s: any) => {
-        const adv = advanceBySite[s.id];
+    const siteById = Object.fromEntries((siteData as any[]).map((s: any) => [s.id, s]));
+    const exceptionSites: ExceptionSite[] = advances
+      .filter(adv => !!siteById[adv.siteId])
+      .map(adv => {
+        const s = siteById[adv.siteId];
         return {
           siteId:              s.id as string,
           siteName:            s.site_name as string,
           state:               s.state as string,
           locality:            s.locality as string,
-          enumeratorId:        s.accepted_by as string,
-          enumeratorName:      nameMap[s.accepted_by] ?? 'Unknown',
+          enumeratorId:        (s.accepted_by as string | null) ?? undefined,
+          enumeratorName:      s.accepted_by ? (nameMap[s.accepted_by] ?? 'Unknown') : 'Unassigned',
           advancePaid:         adv.paidAmount,
           requestedAmount:     adv.requestedAmount,
           remainingAmount:     adv.remainingAmount ?? undefined,
@@ -250,26 +298,157 @@ export default function Step5Exceptions({
       });
 
     setExceptions(exceptionSites);
+
+    const executedFromServer: Record<string, ExceptionDecision> = {};
+    for (const row of (actionsResult.data ?? []) as any[]) {
+      if (!row.advance_id) continue;
+      executedFromServer[row.advance_id] = {
+        decision: row.decision,
+        amount: row.decision_amount ?? undefined,
+        justification: row.justification ?? undefined,
+        targetMmpId: row.rollover_mmp_id ?? undefined,
+        targetSiteId: row.rollover_site_id ?? row.target_site_id ?? undefined,
+        targetSiteName: row.rollover_site_name ?? undefined,
+        receiptReference: row.receipt_reference ?? undefined,
+        returnMethod: row.return_method ?? undefined,
+        recoveryDate: row.recovery_date ?? undefined,
+        executed: true,
+        actionId: row.id,
+        executedAt: row.executed_at ?? undefined,
+        executedByName: row.executed_by_name ?? undefined,
+        journalEntryId: row.gl_journal_entry_id ?? undefined,
+        executionError: row.execution_error ?? undefined,
+      };
+    }
+    // Normalize client state to the current advance IDs. Migrate an old
+    // site-keyed draft only where the site has exactly one active advance.
+    const advancesPerSite = advances.reduce<Record<string, number>>((counts, adv) => {
+      counts[adv.siteId] = (counts[adv.siteId] ?? 0) + 1;
+      return counts;
+    }, {});
+    const normalizedDecisions: Record<string, ExceptionDecision> = {};
+    for (const site of exceptionSites) {
+      const existing = wizardState.exceptionDecisions[site.advanceId]
+        ?? (advancesPerSite[site.siteId] === 1
+          ? wizardState.exceptionDecisions[site.siteId]
+          : undefined);
+      if (existing) normalizedDecisions[site.advanceId] = existing;
+    }
+    const nextDecisions = {
+      ...normalizedDecisions,
+      ...executedFromServer,
+    };
+    decisionsRef.current = nextDecisions;
+    updateWizardState({ exceptionDecisions: nextDecisions });
     setLoading(false);
   };
 
   // ── State helpers ───────────────────────────────────────────────────────────
 
-  const setDecision = (siteId: string, patch: Partial<ExceptionDecision>) => {
-    const current = wizardState.exceptionDecisions[siteId] ?? {} as ExceptionDecision;
-    updateWizardState({
-      exceptionDecisions: { ...wizardState.exceptionDecisions, [siteId]: { ...current, ...patch } },
-    });
+  const setDecision = (advanceId: string, patch: Partial<ExceptionDecision>) => {
+    const current = decisionsRef.current[advanceId] ?? {} as ExceptionDecision;
+    const nextDecisions = {
+      ...decisionsRef.current,
+      [advanceId]: { ...current, ...patch },
+    };
+    decisionsRef.current = nextDecisions;
+    updateWizardState({ exceptionDecisions: nextDecisions });
   };
 
-  const isSiteComplete = (site: ExceptionSite): boolean => {
-    const d = wizardState.exceptionDecisions[site.siteId];
-    if (!d?.decision) return false;
-    if (d.decision === 'redirect')  return !!d.justification && (d.amount ?? 0) > 0 && (d.amount ?? 0) <= site.advancePaid;
-    if (d.decision === 'writeoff')  return !!d.justification;
-    if (d.decision === 'reduce')    return (d.amount ?? 0) > 0 && (d.amount ?? 0) < site.requestedAmount;
-    if (d.decision === 'reassign')  return !!d.targetSiteId;
-    return true;
+  const isDraftValid = (site: ExceptionSite): boolean => {
+    return isExceptionDecisionDraftValid(
+      site,
+      wizardState.exceptionDecisions[exceptionKey(site)],
+    );
+  };
+
+  const isSiteComplete = (site: ExceptionSite): boolean =>
+    wizardState.exceptionDecisions[exceptionKey(site)]?.executed === true;
+
+  const loadTargetSites = async (site: ExceptionSite, mmpId: string) => {
+    const key = exceptionKey(site);
+    if (!site.enumeratorId) {
+      setDecision(key, { executionError: 'Assign an enumerator before selecting a transfer target.' });
+      return;
+    }
+    setLoadingTargetSites(prev => ({ ...prev, [key]: true }));
+    setTargetSites(prev => ({ ...prev, [key]: [] }));
+    const { data, error } = await supabase
+      .from('mmp_site_entries')
+      .select('id, site_name, state, locality, status')
+      .eq('mmp_file_id', mmpId)
+      .eq('accepted_by', site.enumeratorId)
+      .neq('status', 'not_covered')
+      .neq('id', site.siteId)
+      .order('site_name');
+    setLoadingTargetSites(prev => ({ ...prev, [key]: false }));
+    if (error) {
+      setDecision(key, { executionError: `Could not load target sites: ${error.message}` });
+      return;
+    }
+    setTargetSites(prev => ({ ...prev, [key]: (data ?? []) as TargetSite[] }));
+  };
+
+  const selectTargetMmp = (site: ExceptionSite, mmpId: string) => {
+    setDecision(exceptionKey(site), {
+      targetMmpId: mmpId,
+      targetSiteId: undefined,
+      targetSiteName: undefined,
+      executionError: undefined,
+    });
+    void loadTargetSites(site, mmpId);
+  };
+
+  const executeDecision = async (site: ExceptionSite) => {
+    const key = exceptionKey(site);
+    const d = wizardState.exceptionDecisions[key];
+    if (!canExecute || !d || !isDraftValid(site) || d.executed) return;
+
+    setExecuting(prev => ({ ...prev, [key]: true }));
+    setDecision(key, { executionError: undefined });
+    try {
+      const { data, error } = await (supabase as any).rpc('execute_cycle_close_exception', {
+        p_mmp_id: wizardState.selectedMmpId,
+        p_site_id: site.siteId,
+        p_advance_id: site.advanceId,
+        p_decision: d.decision,
+        p_amount: d.amount ?? null,
+        p_justification: d.justification?.trim() || null,
+        p_target_mmp_id: d.targetMmpId ?? null,
+        p_target_site_id: d.targetSiteId ?? null,
+        p_receipt_reference: d.receiptReference?.trim() || null,
+        p_return_method: d.returnMethod ?? null,
+        p_recovery_date: d.recoveryDate ?? null,
+      });
+
+      if (error) throw new Error(error.message);
+      const result = data as {
+        ok?: boolean;
+        error?: string;
+        action_id?: string;
+        executed_at?: string;
+        journal_entry_id?: string | null;
+        message?: string;
+      } | null;
+      if (!result?.ok) throw new Error(result?.error || 'The server did not execute this action.');
+
+      const selectedTarget = (targetSites[key] ?? []).find(s => s.id === d.targetSiteId);
+      setDecision(key, {
+        executed: true,
+        actionId: result.action_id,
+        executedAt: result.executed_at,
+        journalEntryId: result.journal_entry_id ?? undefined,
+        targetSiteName: selectedTarget?.site_name ?? d.targetSiteName,
+        executionError: undefined,
+      });
+    } catch (error: any) {
+      setDecision(key, {
+        executed: false,
+        executionError: error?.message ?? 'The action failed. Nothing was changed.',
+      });
+    } finally {
+      setExecuting(prev => ({ ...prev, [key]: false }));
+    }
   };
 
   const exportExceptions = () => void exportFormattedExceptions(exceptions, wizardState);
@@ -284,7 +463,7 @@ export default function Step5Exceptions({
 
   const paidSites     = exceptions.filter(isPaidSite);
   const approvedSites = exceptions.filter(isApprovedSite);
-  const allDecided    = exceptions.every(isSiteComplete);
+  const allExecuted   = exceptions.every(isSiteComplete);
 
   if (exceptions.length === 0) {
     return (
@@ -355,13 +534,25 @@ export default function Step5Exceptions({
 
           {paidSites.map(site => (
             <SiteCard
-              key={site.siteId}
+              key={exceptionKey(site)}
               site={site}
-              decision={wizardState.exceptionDecisions[site.siteId]}
-              decisions={DECISIONS_PAID as any}
+              decision={wizardState.exceptionDecisions[exceptionKey(site)]}
+              decisions={paidDecisionsFor(site) as any}
               isDone={isSiteComplete(site)}
               canOverride={canOverride}
+              canExecute={canExecuteExceptionDecision(
+                roleFlags ?? {},
+                wizardState.exceptionDecisions[exceptionKey(site)]?.decision,
+              )}
               setDecision={setDecision}
+              openMmps={openMmps}
+              targetSites={targetSites[exceptionKey(site)] ?? []}
+              loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
+              executing={!!executing[exceptionKey(site)]}
+              isDraftValid={isDraftValid(site)}
+              onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
+              onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
+              onExecute={() => executeDecision(site)}
               variant="paid"
             />
           ))}
@@ -408,24 +599,46 @@ export default function Step5Exceptions({
 
           {approvedSites.map(site => (
             <SiteCard
-              key={site.siteId}
+              key={exceptionKey(site)}
               site={site}
-              decision={wizardState.exceptionDecisions[site.siteId]}
-              decisions={DECISIONS_APPROVED as any}
+              decision={wizardState.exceptionDecisions[exceptionKey(site)]}
+              decisions={approvedDecisionsFor(site) as any}
               isDone={isSiteComplete(site)}
               canOverride={canOverride}
+              canExecute={canExecuteExceptionDecision(
+                roleFlags ?? {},
+                wizardState.exceptionDecisions[exceptionKey(site)]?.decision,
+              )}
               setDecision={setDecision}
+              openMmps={openMmps}
+              targetSites={targetSites[exceptionKey(site)] ?? []}
+              loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
+              executing={!!executing[exceptionKey(site)]}
+              isDraftValid={isDraftValid(site)}
+              onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
+              onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
+              onExecute={() => executeDecision(site)}
               variant="approved"
             />
           ))}
         </section>
       )}
 
-      {!allDecided && (
+      {!allExecuted && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            All exceptions must have a decision before advancing. — يجب اتخاذ قرار لجميع الاستثناءات قبل المتابعة.
+            Every action must execute successfully before advancing. Selecting a decision is not enough.
+            {' '}— يجب تنفيذ كل إجراء بنجاح قبل المتابعة.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!canExecute && !allExecuted && (
+        <Alert className="border-amber-300 bg-amber-50">
+          <AlertCircle className="h-4 w-4 text-amber-700" />
+          <AlertDescription className="text-amber-900">
+            Read-only exception stage. Finance, FOM, Admin, or Super Admin must execute these actions.
           </AlertDescription>
         </Alert>
       )}
@@ -440,7 +653,7 @@ export default function Step5Exceptions({
             Export Exceptions Report
           </Button>
         </div>
-        <Button type="button" onClick={onNext} disabled={!allDecided} data-testid="button-next-step5">
+        <Button type="button" onClick={onNext} disabled={!allExecuted} data-testid="button-next-step5">
           Next: Financial Reconciliation →
         </Button>
       </div>
@@ -456,7 +669,7 @@ function Header() {
       <h2 className="text-xl font-semibold">Step 4 — Resolve Exceptions</h2>
       <p className="text-sm text-muted-foreground" dir="rtl">الخطوة ٤ — الاستثناءات</p>
       <p className="text-muted-foreground text-sm">
-        Not-covered sites with advance payments linked to their enumerators. Each requires a decision before the cycle can close.
+        Complete each financial or operational action here. Final Close remains blocked until every card shows Executed.
       </p>
       <p className="text-sm text-muted-foreground" dir="rtl">
         مواقع غير مغطاة مرتبطة بسلف مدفوعة للمعددين — يجب اتخاذ قرار بشأن كل منها قبل إغلاق الدورة.
@@ -475,11 +688,24 @@ interface SiteCardProps {
   }>;
   isDone: boolean;
   canOverride: boolean;
-  setDecision: (siteId: string, patch: Partial<ExceptionDecision>) => void;
+  canExecute: boolean;
+  setDecision: (advanceId: string, patch: Partial<ExceptionDecision>) => void;
+  openMmps: OpenMmp[];
+  targetSites: TargetSite[];
+  loadingTargetSites: boolean;
+  executing: boolean;
+  isDraftValid: boolean;
+  onTargetMmpChange: (mmpId: string) => void;
+  onLoadSameMmpSites: () => void;
+  onExecute: () => void;
   variant: 'paid' | 'approved';
 }
 
-function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecision, variant }: SiteCardProps) {
+function SiteCard({
+  site, decision: d, decisions, isDone, canOverride, canExecute, setDecision, variant,
+  openMmps, targetSites, loadingTargetSites, executing, isDraftValid,
+  onTargetMmpChange, onLoadSameMmpSites, onExecute,
+}: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
   const isPartial = site.advanceStatus === 'partially_paid';
 
@@ -511,8 +737,10 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
       {isDone && chosen && (
         <div className="bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2 text-green-700 text-xs font-semibold">
           <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-          Decision recorded — {chosen.label}
-          <span className="ml-auto text-green-500 text-[10px] font-normal">Ready to advance ✓</span>
+          Action executed — {chosen.label}
+          <span className="ml-auto text-green-500 text-[10px] font-normal">
+            {d?.journalEntryId ? `GL journal ${d.journalEntryId.slice(0, 8)}…` : 'Ready to advance ✓'}
+          </span>
         </div>
       )}
       <div className="p-4 space-y-3">
@@ -521,6 +749,9 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
         <div className="space-y-0.5">
           <p className="font-semibold text-sm">{site.siteName}</p>
           <p className="text-xs text-muted-foreground">{site.state} / {site.locality} — {site.enumeratorName}</p>
+          <p className="text-[10px] font-mono text-muted-foreground">
+            Advance {site.advanceId.slice(0, 8)}…
+          </p>
           {site.approvedByName ? (
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
               <span className="font-medium text-foreground/70">Approved by:</span>
@@ -702,9 +933,29 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
       {/* Decision selector */}
       <Select
         value={d?.decision ?? ''}
-        onValueChange={v => setDecision(site.siteId, { decision: v as ExceptionDecision['decision'] })}
+        disabled={isDone || executing}
+        onValueChange={v => {
+          const decision = v as ExceptionDecision['decision'];
+          const requiresPaidAmount = ['return', 'writeoff', 'redirect'].includes(decision);
+          setDecision(site.advanceId, {
+            decision,
+            amount: requiresPaidAmount ? site.advancePaid : undefined,
+            recoveryDate: decision === 'return' ? new Date().toISOString().slice(0, 10) : undefined,
+            targetMmpId: undefined,
+            targetSiteId: undefined,
+            targetSiteName: undefined,
+            receiptReference: undefined,
+            returnMethod: undefined,
+            executed: false,
+            actionId: undefined,
+            executedAt: undefined,
+            journalEntryId: undefined,
+            executionError: undefined,
+          });
+          if (decision === 'reassign') onLoadSameMmpSites();
+        }}
       >
-        <SelectTrigger className="w-full" data-testid={`select-decision-${site.siteId}`}>
+        <SelectTrigger className="w-full" data-testid={`select-decision-${site.advanceId}`}>
           {/* Show only the compact label in the trigger — full description is in the dropdown and tracking note */}
           <SelectValue placeholder="Select recovery action… — اختر إجراء الاسترداد">
             {chosen
@@ -728,47 +979,146 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
 
       {/* ── Extra inputs per decision ── */}
 
-      {d?.decision === 'redirect' && (
+      {d?.decision && ['return', 'writeoff', 'redirect'].includes(d.decision) && (
         <div className="space-y-2 pl-3 border-l-2 border-green-400">
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="text-xs font-medium w-32">Amount to redirect</label>
+            <label className="text-xs font-medium w-32">Resolution amount</label>
             <Input
-              type="number" min={0} max={site.advancePaid}
+              type="number"
               value={d?.amount ?? ''}
-              onChange={e => setDecision(site.siteId, { amount: Number(e.target.value) })}
               className="w-36 h-8 text-sm"
-              placeholder={`Max: ${site.advancePaid}`}
-              data-testid={`input-redirect-amount-${site.siteId}`}
+              disabled
+              data-testid={`input-resolution-amount-${site.advanceId}`}
             />
-            <span className="text-xs text-muted-foreground">SDG (max: {site.advancePaid.toLocaleString()})</span>
+            <span className="text-xs text-muted-foreground">
+              SDG — full paid amount required to resolve the exception
+            </span>
           </div>
-          {(d?.amount ?? 0) > site.advancePaid && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              Amount cannot exceed paid amount (SDG {site.advancePaid.toLocaleString()})
-            </p>
+          {d.decision === 'return' && (
+            <div className="grid sm:grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Recovery date</label>
+                <Input
+                  type="date"
+                  value={d.recoveryDate ?? ''}
+                  onChange={e => setDecision(site.advanceId, { recoveryDate: e.target.value })}
+                  disabled={isDone || executing}
+                  className="h-8 text-sm"
+                  data-testid={`input-return-date-${site.advanceId}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Return method</label>
+                <Select
+                  value={d.returnMethod ?? ''}
+                  onValueChange={value => setDecision(site.advanceId, { returnMethod: value as 'cash' | 'bank_transfer' })}
+                  disabled={isDone || executing}
+                >
+                  <SelectTrigger className="h-8 text-sm" data-testid={`select-return-method-${site.advanceId}`}>
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash received</SelectItem>
+                    <SelectItem value="bank_transfer">Bank transfer received</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Receipt / transfer reference</label>
+                <Input
+                  value={d.receiptReference ?? ''}
+                  onChange={e => setDecision(site.advanceId, { receiptReference: e.target.value })}
+                  disabled={isDone || executing}
+                  className="h-8 text-sm"
+                  placeholder="Receipt number or bank reference"
+                  data-testid={`input-return-receipt-${site.advanceId}`}
+                />
+              </div>
+            </div>
           )}
           <Textarea
-            placeholder="Justification (required) — why is this advance being redirected to enumerator fees?"
+            placeholder={
+              d.decision === 'return'
+                ? 'Recovery note (required) — who received and verified the funds?'
+                : d.decision === 'writeoff'
+                  ? 'Write-off justification (required) — why is this unrecoverable?'
+                  : 'Redirect justification (required) — what related work supports the fee reclassification?'
+            }
             value={d?.justification ?? ''}
-            onChange={e => setDecision(site.siteId, { justification: e.target.value })}
-            rows={2} className="text-sm"
-            data-testid={`input-redirect-justification-${site.siteId}`}
+            onChange={e => setDecision(site.advanceId, { justification: e.target.value })}
+            disabled={isDone || executing}
+            rows={2}
+            className="text-sm"
+            data-testid={`input-${d.decision}-justification-${site.advanceId}`}
           />
-          {!canOverride && (
-            <p className="text-xs text-amber-600">⚠️ Redirect decisions must be approved by FOM or Admin</p>
+          {d.decision === 'writeoff' && !canOverride && (
+            <p className="text-xs text-amber-600">Write-Off execution requires FOM, Admin, or Super Admin authorization.</p>
           )}
-          <p className="text-xs text-muted-foreground">GL: Debit Enumerator Fees / Credit Transport Advance</p>
+          <p className="text-xs text-muted-foreground">
+            {d.decision === 'return' && 'GL: Debit Cash / Bank · Credit Transport Advance'}
+            {d.decision === 'writeoff' && 'GL: Debit Write-Off Expense · Credit Transport Advance'}
+            {d.decision === 'redirect' && 'GL: Debit Enumerator Fees · Credit Transport Advance'}
+          </p>
         </div>
       )}
 
-      {d?.decision === 'writeoff' && (
+      {d?.decision && ['roll', 'hold'].includes(d.decision) && (
+        <div className="space-y-2 pl-3 border-l-2 border-blue-400">
+          <div className="grid sm:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Target cycle</label>
+              <Select
+                value={d.targetMmpId ?? ''}
+                onValueChange={onTargetMmpChange}
+                disabled={isDone || executing}
+              >
+                <SelectTrigger className="h-8 text-sm" data-testid={`select-target-mmp-${site.advanceId}`}>
+                  <SelectValue placeholder="Select an open cycle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {openMmps.map(mmp => (
+                    <SelectItem key={mmp.id} value={mmp.id}>
+                      {mmp.name} {mmp.start_date ? `· ${new Date(mmp.start_date).toLocaleDateString()}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Enumerator's covered target site</label>
+              <TargetSiteSelect
+                siteId={site.advanceId}
+                value={d.targetSiteId}
+                sites={targetSites}
+                loading={loadingTargetSites}
+                disabled={!d.targetMmpId || isDone || executing}
+                onChange={(targetSiteId, targetSiteName) =>
+                  setDecision(site.advanceId, { targetSiteId, targetSiteName })
+                }
+              />
+            </div>
+          </div>
+          <Textarea
+            placeholder={`${d.decision === 'roll' ? 'Rollover' : 'Hold'} justification (required)…`}
+            value={d.justification ?? ''}
+            onChange={e => setDecision(site.advanceId, { justification: e.target.value })}
+            disabled={isDone || executing}
+            rows={2}
+            className="text-sm"
+            data-testid={`input-${d.decision}-justification-${site.advanceId}`}
+          />
+        </div>
+      )}
+
+      {d?.decision === 'cancel' && (
         <Textarea
-          placeholder="Write-off justification (required) — المبرر مطلوب…"
-          value={d?.justification ?? ''}
-          onChange={e => setDecision(site.siteId, { justification: e.target.value })}
-          rows={2} className="text-sm"
-          data-testid={`input-writeoff-justification-${site.siteId}`}
+          placeholder="Cancellation justification (required)…"
+          value={d.justification ?? ''}
+          onChange={e => setDecision(site.advanceId, { justification: e.target.value })}
+          disabled={isDone || executing}
+          rows={2}
+          className="text-sm"
+          data-testid={`input-cancel-justification-${site.advanceId}`}
         />
       )}
 
@@ -779,10 +1129,11 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
             <Input
               type="number" min={1} max={site.requestedAmount - 1}
               value={d?.amount ?? ''}
-              onChange={e => setDecision(site.siteId, { amount: Number(e.target.value) })}
+              onChange={e => setDecision(site.advanceId, { amount: Number(e.target.value) })}
+              disabled={isDone || executing}
               className="w-36 h-8 text-sm"
               placeholder={`< ${site.requestedAmount}`}
-              data-testid={`input-reduce-amount-${site.siteId}`}
+              data-testid={`input-reduce-amount-${site.advanceId}`}
             />
             <span className="text-xs text-muted-foreground">SDG (requested: {site.requestedAmount.toLocaleString()})</span>
           </div>
@@ -798,17 +1149,17 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
       {d?.decision === 'reassign' && (
         <div className="space-y-1 pl-3 border-l-2 border-green-400">
           <p className="text-xs text-muted-foreground">
-            Target site ID (covered site in this MMP for this enumerator). This will be fully supported via the Exception Tracker page after cycle close.
+            Choose a covered site assigned to this enumerator in the current cycle.
           </p>
-          <p dir="rtl" className="text-xs text-muted-foreground">
-            سيتم دعم عملية إعادة التعيين بالكامل عبر صفحة متابعة الاستثناءات بعد إغلاق الدورة.
-          </p>
-          <Input
-            placeholder="Target site ID…"
-            value={d?.targetSiteId ?? ''}
-            onChange={e => setDecision(site.siteId, { targetSiteId: e.target.value })}
-            className="h-8 text-sm font-mono"
-            data-testid={`input-reassign-site-${site.siteId}`}
+          <TargetSiteSelect
+            siteId={site.advanceId}
+            value={d.targetSiteId}
+            sites={targetSites}
+            loading={loadingTargetSites}
+            disabled={isDone || executing}
+            onChange={(targetSiteId, targetSiteName) =>
+              setDecision(site.advanceId, { targetSiteId, targetSiteName })
+            }
           />
         </div>
       )}
@@ -826,6 +1177,35 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
         </div>
       )}
 
+      {d?.executionError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Action not executed.</strong> {d.executionError}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {chosen && !isDone && (
+        <div className="flex items-center justify-between gap-3 border-t pt-3">
+          <p className="text-xs text-muted-foreground">
+            {isDraftValid
+              ? 'Details complete. Execute now to apply and audit this action.'
+              : 'Complete all required details before executing.'}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            onClick={onExecute}
+            disabled={!canExecute || !isDraftValid || executing}
+            data-testid={`button-execute-exception-${site.advanceId}`}
+          >
+            {executing && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            {executing ? 'Executing…' : 'Execute Action'}
+          </Button>
+        </div>
+      )}
+
       {/* ── Not-decided warning ── */}
       {!d?.decision && (
         <p className="text-xs text-destructive flex items-center gap-1">
@@ -835,5 +1215,44 @@ function SiteCard({ site, decision: d, decisions, isDone, canOverride, setDecisi
       )}
       </div>
     </div>
+  );
+}
+
+function TargetSiteSelect({
+  siteId,
+  value,
+  sites,
+  loading,
+  disabled,
+  onChange,
+}: {
+  siteId: string;
+  value?: string;
+  sites: TargetSite[];
+  loading: boolean;
+  disabled: boolean;
+  onChange: (siteId: string, siteName: string) => void;
+}) {
+  return (
+    <Select
+      value={value ?? ''}
+      disabled={disabled || loading}
+      onValueChange={selectedId => {
+        const selected = sites.find(site => site.id === selectedId);
+        onChange(selectedId, selected?.site_name ?? selectedId);
+      }}
+    >
+      <SelectTrigger className="h-8 text-sm" data-testid={`select-target-site-${siteId}`}>
+        <SelectValue placeholder={loading ? 'Loading sites…' : 'Select covered site'} />
+      </SelectTrigger>
+      <SelectContent>
+        {sites.map(site => (
+          <SelectItem key={site.id} value={site.id}>
+            {site.site_name}
+            {(site.state || site.locality) ? ` · ${[site.state, site.locality].filter(Boolean).join(' / ')}` : ''}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

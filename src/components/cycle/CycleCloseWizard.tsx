@@ -8,6 +8,7 @@ import Step3MarkUncovered from './steps/Step4MarkUncovered';
 import Step5Exceptions from './steps/Step5Exceptions';
 import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
+import { allExceptionActionsExecuted } from './exceptionExecution';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
@@ -33,8 +34,20 @@ export interface ExceptionDecision {
   amount?: number;
   justification?: string;
   approvedBy?: string;
-  /** For 'reassign': the covered mmp_site_entry_id to move this advance to */
+  /** Covered destination site for reassign / roll / hold. */
   targetSiteId?: string;
+  targetMmpId?: string;
+  targetSiteName?: string;
+  receiptReference?: string;
+  returnMethod?: 'cash' | 'bank_transfer';
+  recoveryDate?: string;
+  /** Server execution state. Final Close requires this to be true for every exception. */
+  executed?: boolean;
+  actionId?: string;
+  executedAt?: string;
+  executedByName?: string;
+  journalEntryId?: string;
+  executionError?: string;
 }
 
 export interface UncoveredReason {
@@ -66,6 +79,7 @@ export interface WizardState {
   unmatchedMmpSiteIds: string[];
   resolvedSites: Record<string, 'not_covered' | 'override_confirmed' | 'resubmit'>;
   uncoveredReasons: Record<string, UncoveredReason>;
+  /** Exception drafts/execution results keyed by down_payment_requests.id. */
   exceptionDecisions: Record<string, ExceptionDecision>;
   paymentActions: Record<string, { action: 'pay' | 'recover' | 'writeoff' | 'redirect'; done: boolean }>;
   overrides: Record<number, { justification: string; by: string; at: string }>;
@@ -116,6 +130,7 @@ export interface RoleFlags {
   isCoordinator: boolean;
   isSupervisor: boolean;
   isFOM: boolean;
+  isFinance: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
 }
@@ -138,10 +153,11 @@ export function getCycleCloseRoleFlags(currentUser: any) {
   const isCoordinator = hasAny(['coordinator']);
   const isSupervisor = hasAny(['supervisor', 'hubsupervisor']);
   const isFOM = hasAny(['fom', 'fieldoperationmanager']);
+  const isFinance = hasAny(['finance', 'financeadmin', 'financialadmin', 'accountant']);
   const isAdmin = hasAny(['admin']);
-  const isSuperAdmin = hasAny(['superadmin']);
+  const isSuperAdmin = hasAny(['superadmin', 'superadministrator']);
 
-  return { isCoordinator, isSupervisor, isFOM, isAdmin, isSuperAdmin };
+  return { isCoordinator, isSupervisor, isFOM, isFinance, isAdmin, isSuperAdmin };
 }
 
 export function isCycleCloseStep4ContributorOnly(currentUser: any): boolean {
@@ -469,8 +485,7 @@ export default function CycleCloseWizard({
     }
     if (currentStep === 4) {
       // Step 4 = Exceptions (was Step 5)
-      const exceptions = Object.keys(wizardState.exceptionDecisions);
-      return exceptions.every(k => !!wizardState.exceptionDecisions[k].decision);
+      return allExceptionActionsExecuted(wizardState.exceptionDecisions);
     }
     if (currentStep === 5) {
       // Step 5 = Reconciliation (read-only financial view).

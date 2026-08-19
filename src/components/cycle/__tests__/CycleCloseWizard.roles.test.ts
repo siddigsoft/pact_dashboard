@@ -24,10 +24,17 @@ describe('getCycleCloseRoleFlags', () => {
   it('detects admin and super admin variants', () => {
     const admin = getCycleCloseRoleFlags({ roles: ['Admin'] });
     const superAdmin = getCycleCloseRoleFlags({ role: 'super_admin' });
+    const superAdministrator = getCycleCloseRoleFlags({ role: 'Super Administrator' });
 
     expect(admin.isAdmin).toBe(true);
     expect(admin.isSuperAdmin).toBe(false);
     expect(superAdmin.isSuperAdmin).toBe(true);
+    expect(superAdministrator.isSuperAdmin).toBe(true);
+  });
+
+  it('detects Finance executor variants', () => {
+    expect(getCycleCloseRoleFlags({ role: 'Finance Admin' }).isFinance).toBe(true);
+    expect(getCycleCloseRoleFlags({ roles: ['Accountant'] }).isFinance).toBe(true);
   });
 });
 

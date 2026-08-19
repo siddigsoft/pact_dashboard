@@ -29,3 +29,4 @@
 - [gl-bridge-orphaned-triggers](gl-bridge-orphaned-triggers.md) — acct_trig_down_payment_requests + acct_trig_operational_cost_submissions functions existed but CREATE TRIGGER was never run; fixed in 20260817_gl_bridge_advances_ops.sql.
 - [gl-bridge-targeted-retries](gl-bridge-targeted-retries.md) — Retry one unresolved error-log record under a source-level lock; never route a row action through a bulk bridge backfill.
 - [git-push-preference](git-push-preference.md) — user pushes to GitHub manually; never run git push automatically, only commit locally.
+- [database-trigger-integration-tests](database-trigger-integration-tests.md) — RPC tests must install real dependent triggers; stub only terminal services or trigger interactions can be missed.
