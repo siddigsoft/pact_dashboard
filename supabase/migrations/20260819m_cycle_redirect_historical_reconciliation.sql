@@ -748,13 +748,17 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE VIEW public.cycle_redirect_correction_history AS
+-- Keep the public column names introduced by the original correction-history
+-- view. PostgreSQL cannot rename view columns through CREATE OR REPLACE VIEW.
+CREATE OR REPLACE VIEW public.cycle_redirect_correction_history
+WITH (security_invoker = true)
+AS
 SELECT
   action.id AS action_id,
   action.mmp_file_id,
-  action.mmp_site_entry_id,
+  action.mmp_site_entry_id AS source_site_id,
   action.advance_id,
-  action.site_name,
+  action.site_name AS source_site_name,
   action.enumerator_id,
   action.enumerator_name,
   action.advance_amount,
