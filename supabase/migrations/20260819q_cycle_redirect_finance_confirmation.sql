@@ -21,8 +21,21 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_actor_id uuid := auth.uid();
   v_derived_gross_fee numeric;
 BEGIN
+  -- This wrapper is SECURITY DEFINER because it derives the amount from
+  -- protected records. Authenticate and authorize before reading any row.
+  IF v_actor_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Authentication is required.');
+  END IF;
+  IF NOT public.is_cycle_redirect_correction_authorizer(v_actor_id) THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error', 'Only Super Admin, Finance, or Accountant users may review a Redirect snapshot.'
+    );
+  END IF;
+
   SELECT round(
     coalesce(site.enumerator_fee, 0) + coalesce(site.transport_fee, 0),
     2
@@ -53,6 +66,18 @@ BEGIN
 END;
 $$;
 
+-- PostgreSQL grants EXECUTE to PUBLIC by default. Both overloads must be
+-- callable only through the authenticated application role; the functions
+-- themselves enforce the narrower Finance/Accountant/Super Admin rule.
+REVOKE EXECUTE ON FUNCTION public.review_legacy_redirect_fee_snapshot(
+  uuid, numeric, numeric, numeric, numeric, text, boolean, text
+) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.review_legacy_redirect_fee_snapshot(
+  uuid, text, boolean, text
+) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.review_legacy_redirect_fee_snapshot(
+  uuid, numeric, numeric, numeric, numeric, text, boolean, text
+) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.review_legacy_redirect_fee_snapshot(
   uuid, text, boolean, text
 ) TO authenticated;

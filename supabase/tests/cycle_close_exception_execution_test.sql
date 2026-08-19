@@ -3320,6 +3320,26 @@ BEGIN
       redirect_fee_status = NULL
   WHERE id = v_action_id;
 
+  -- The confirmation-only SECURITY DEFINER wrapper must fail before reading
+  -- any fee data for both anonymous and non-Finance callers.
+  PERFORM set_config('request.jwt.claims', '{}'::jsonb::text, true);
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 'Anonymous wrapper probe', true, 'ce54-finance-review-anonymous'
+  );
+  PERFORM pg_temp.assert_err('confirmation-only Finance review rejects anonymous caller',
+    v_result, 'Authentication is required');
+  PERFORM pg_temp.assert_true('anonymous wrapper does not disclose the fee amount',
+    NOT (v_result ? 'gross_fee'));
+
+  PERFORM pg_temp.as_user(ENU);
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 'Non-Finance wrapper probe', true, 'ce54-finance-review-wrapper-unauthorized'
+  );
+  PERFORM pg_temp.assert_err('confirmation-only Finance review rejects non-Finance caller',
+    v_result, 'Only Super Admin');
+  PERFORM pg_temp.assert_true('non-Finance wrapper does not disclose the fee amount',
+    NOT (v_result ? 'gross_fee'));
+
   PERFORM pg_temp.as_user(ENU);
   v_result := public.review_legacy_redirect_fee_snapshot(
     v_action_id, 1000, 0, 1000, 0, 'Unauthorized snapshot review attempt', true,
