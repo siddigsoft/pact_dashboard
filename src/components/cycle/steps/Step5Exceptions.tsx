@@ -111,6 +111,38 @@ const createCorrectionIdempotencyKey = (actionId: string): string => {
   return `${actionId}:${browserUuid || fallbackNonce}`;
 };
 
+const correctionErrorWithArabic = (message: string): string => {
+  const translations: Array<[string, string]> = [
+    [
+      'The immutable Redirect fee snapshot is incomplete',
+      'لقطة رسوم إعادة التوجيه غير المكتملة وغير القابلة للتغيير. يجب على قسم المالية مراجعتها يدوياً.',
+    ],
+    [
+      'The immutable Redirect fee snapshot is not an exact full legacy settlement',
+      'لقطة رسوم إعادة التوجيه لا تمثل تسوية قديمة كاملة ودقيقة. يجب على قسم المالية مراجعتها يدوياً.',
+    ],
+    [
+      'The legacy source fee no longer matches the exact Redirect snapshot',
+      'لم تعد رسوم المصدر القديمة مطابقة تماماً للقطة إعادة التوجيه. يجب على قسم المالية مراجعتها يدوياً قبل العكس.',
+    ],
+    [
+      'Later fee-settlement activity exists',
+      'يوجد نشاط لاحق لتسوية الرسوم. يجب على قسم المالية مراجعته يدوياً قبل عكس إعادة التوجيه.',
+    ],
+    [
+      'Apply the latest Redirect correction migration in Supabase',
+      'يرجى تطبيق أحدث ترحيل لتصحيح إعادة التوجيه في Supabase ثم إعادة تحميل هذه الصفحة.',
+    ],
+    [
+      'advance changed after this redirect',
+      'تغيّرت السلفة بعد إعادة التوجيه هذه. يرجى اختيار مسار المحاسبة التاريخية أو عكس الدفعة المعاد تشغيلها.',
+    ],
+  ];
+  const translation = translations.find(([english]) => message.includes(english))?.[1]
+    ?? 'يجب على قسم المالية مراجعة هذه الحالة يدوياً قبل المتابعة.';
+  return `${message}\n${translation}`;
+};
+
 const toSettlementTarget = (target: TargetSite): RedirectSettlementTarget => ({
   id: target.id,
   siteName: target.site_name,
@@ -699,19 +731,28 @@ export default function Step5Exceptions({
     if (!correctionDialog?.decision.actionId) return;
     if (correctionDialog.reason.trim().length < 10) {
       setCorrectionDialog(current => current
-        ? { ...current, error: 'Enter a correction reason of at least 10 characters.' }
+        ? {
+          ...current,
+          error: 'Enter a correction reason of at least 10 characters.\nأدخل سبباً للتصحيح مكوّناً من 10 أحرف على الأقل.',
+        }
         : current);
       return;
     }
     if (!correctionDialog.periodId) {
       setCorrectionDialog(current => current
-        ? { ...current, error: 'Select an open fiscal period for the reversal.' }
+        ? {
+          ...current,
+          error: 'Select an open fiscal period for the reversal.\nاختر فترة مالية مفتوحة للعكس.',
+        }
         : current);
       return;
     }
     if (correctionDialog.mode === 'reverse_reprocessed_payment' && !correctionDialog.confirmReverseLaterPayment) {
       setCorrectionDialog(current => current
-        ? { ...current, error: 'Confirm the high-risk acknowledgement before reversing the reprocessed payment.' }
+        ? {
+          ...current,
+          error: 'Confirm the high-risk acknowledgement before reversing the reprocessed payment.\nأكد إقرار العملية عالية الخطورة قبل عكس الدفعة المعاد تشغيلها.',
+        }
         : current);
       return;
     }
@@ -774,10 +815,10 @@ export default function Step5Exceptions({
           historicalModeAvailable: current.historicalModeAvailable || reprocessedAdvance,
           reprocessedModeAvailable: current.reprocessedModeAvailable || reprocessedAdvance,
           error: migrationMissing
-            ? 'Apply the latest Redirect correction migration in Supabase, then reload this wizard.'
+            ? correctionErrorWithArabic('Apply the latest Redirect correction migration in Supabase, then reload this wizard.')
             : reprocessedAdvance
-              ? `${message} Choose the accounting-only path to preserve the later advance and payment, or reverse the reprocessed payment to restore the original advance for a new resolution.`
-              : message,
+              ? correctionErrorWithArabic(`${message} Choose the accounting-only path to preserve the later advance and payment, or reverse the reprocessed payment to restore the original advance for a new resolution.`)
+              : correctionErrorWithArabic(message),
         }
         : current);
     }
@@ -2173,30 +2214,41 @@ function RedirectCorrectionPanel({
       <div className="flex items-start gap-2">
         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
         <div>
-          <p className="font-semibold text-amber-950">Correct this payment exception</p>
-          <p className="text-amber-900">
+          <p className="font-semibold text-amber-950">
+            Correct this payment exception · تصحيح استثناء الدفع
+          </p>
+          <p className="text-amber-900 space-y-0.5">
             {historicalOnly
-              ? 'This reverses only the original Redirect accounting and fee settlement. The current reprocessed advance, its site, and its later payment remain unchanged.'
+              ? <>
+                <span className="block">This reverses only the original Redirect accounting and fee settlement. The current reprocessed advance, its site, and its later payment remain unchanged.</span>
+                <span dir="rtl" className="block">يعكس هذا محاسبة إعادة التوجيه الأصلية وتسوية الرسوم فقط. تبقى السلفة المعاد تشغيلها وموقعها ودفعتها اللاحقة دون تغيير.</span>
+              </>
               : reverseReprocessed
-                ? 'This reverses all GL and wallet effects of the later reprocessed payment, preserves every record for audit, and restores the original advance so it can be resolved again.'
-                : 'This posts a reversing journal, restores the paid advance, and leaves the original Redirect and payment audit trail intact.'}
+                ? <>
+                  <span className="block">This reverses all GL and wallet effects of the later reprocessed payment, preserves every record for audit, and restores the original advance so it can be resolved again.</span>
+                  <span dir="rtl" className="block">يعكس هذا جميع آثار دفتر الأستاذ والمحفظة للدفع اللاحق المعاد تشغيله، ويحافظ على جميع السجلات للتدقيق، ويعيد السلفة الأصلية حتى يمكن تسويتها مرة أخرى.</span>
+                </>
+                : <>
+                  <span className="block">This posts a reversing journal, restores the paid advance, and leaves the original Redirect and payment audit trail intact.</span>
+                  <span dir="rtl" className="block">ينشئ هذا قيداً عكسياً، ويعيد السلفة المدفوعة، ويحافظ على سجل التدقيق الأصلي لإعادة التوجيه والدفع.</span>
+                </>}
           </p>
         </div>
       </div>
 
       <div className="rounded border border-amber-200 bg-white/70 p-2 grid gap-x-3 sm:grid-cols-2">
-        <DetailRow label="Site" value={correction.site.siteName} />
-        <DetailRow label="Advance" value={correction.site.advanceId} mono />
+        <DetailRow label="Site · الموقع" value={correction.site.siteName} />
+        <DetailRow label="Advance · السلفة" value={correction.site.advanceId} mono />
         <DetailRow
-          label="Original journal"
-          value={correction.decision.journalEntryId ?? 'Missing — correction will be rejected'}
+          label="Original journal · القيد الأصلي"
+          value={correction.decision.journalEntryId ?? 'Missing — correction will be rejected · مفقود — سيتم رفض التصحيح'}
           mono
         />
       </div>
 
       {showModeSelector && (
         <div className="space-y-1.5">
-          <Label>Correction path</Label>
+          <Label>Correction path · مسار التصحيح</Label>
           <Select
             value={correction.mode}
             onValueChange={mode => onChange({
@@ -2212,36 +2264,35 @@ function RedirectCorrectionPanel({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="reopen_advance">
-                Restore the original advance for a new resolution
+                Restore the original advance for a new resolution · إعادة السلفة الأصلية لتسوية جديدة
               </SelectItem>
               {correction.historicalModeAvailable && (
                 <SelectItem value="historical_accounting_only">
-                  Keep the reprocessed advance; reverse historical Redirect only
+                  Keep the reprocessed advance; reverse historical Redirect only · الإبقاء على السلفة المعاد تشغيلها وعكس إعادة التوجيه التاريخية فقط
                 </SelectItem>
               )}
               {correction.reprocessedModeAvailable && (
                 <SelectItem value="reverse_reprocessed_payment">
-                  Reverse the reprocessed payment and restore the original advance
+                  Reverse the reprocessed payment and restore the original advance · عكس الدفعة المعاد تشغيلها وإعادة السلفة الأصلية
                 </SelectItem>
               )}
             </SelectContent>
           </Select>
           {historicalOnly && (
-            <p className="text-[11px] text-amber-800">
-              Use this only when the advance was intentionally restored and paid again after the
-              original Redirect. The server rejects incomplete or conflicting history.
+            <p className="text-[11px] text-amber-800 space-y-0.5">
+              <span className="block">Use this only when the advance was intentionally restored and paid again after the original Redirect. The server rejects incomplete or conflicting history.</span>
+              <span dir="rtl" className="block">استخدم هذا فقط عندما تتم إعادة السلفة ودفعها مرة أخرى عمداً بعد إعادة التوجيه الأصلية. يرفض النظام السجلات الناقصة أو المتعارضة.</span>
             </p>
           )}
           {reverseReprocessed && (
-            <p className="text-[11px] text-amber-800">
-              High-risk. Use this only when the later reprocessed payment must be undone entirely.
-              All of its GL and wallet effects are reversed, every record is preserved for audit, and
-              the original advance is restored so the exception can be resolved again.
+            <p className="text-[11px] text-amber-800 space-y-0.5">
+              <span className="block">High-risk. Use this only when the later reprocessed payment must be undone entirely. All of its GL and wallet effects are reversed, every record is preserved for audit, and the original advance is restored so the exception can be resolved again.</span>
+              <span dir="rtl" className="block">عملية عالية الخطورة. استخدمها فقط عندما يجب إلغاء الدفعة المعاد تشغيلها بالكامل. تُعكس جميع آثارها في دفتر الأستاذ والمحفظة، وتُحفظ كل السجلات للتدقيق، وتُعاد السلفة الأصلية لتسوية الاستثناء مرة أخرى.</span>
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground">
-            The selected path is checked against the complete payment and GL history when submitted.
-            Unsupported, incomplete, or ambiguous histories fail closed without changing records.
+          <p className="text-[11px] text-muted-foreground space-y-0.5">
+            <span className="block">The selected path is checked against the complete payment and GL history when submitted. Unsupported, incomplete, or ambiguous histories fail closed without changing records.</span>
+            <span dir="rtl" className="block">يتم التحقق من المسار المختار مقابل سجل الدفع ودفتر الأستاذ الكامل عند الإرسال. تُرفض السجلات غير المدعومة أو الناقصة أو غير الواضحة دون تغيير أي سجلات.</span>
           </p>
         </div>
       )}
@@ -2262,38 +2313,39 @@ function RedirectCorrectionPanel({
             data-testid="checkbox-confirm-reverse-later-payment"
           />
           <span className="text-[11px] text-red-900">
-            I understand this will reverse all later-payment GL and wallet effects. All records are
-            preserved for audit, and the original advance is restored for a new resolution.
-            <span className="font-semibold"> Required to proceed.</span>
+            <span className="block">I understand this will reverse all later-payment GL and wallet effects. All records are preserved for audit, and the original advance is restored for a new resolution.</span>
+            <span dir="rtl" className="block">أفهم أن هذا سيعكس جميع آثار دفتر الأستاذ والمحفظة للدفعات اللاحقة. ستُحفظ جميع السجلات للتدقيق، وستُعاد السلفة الأصلية لتسوية جديدة.</span>
+            <span className="font-semibold block">Required to proceed · مطلوب للمتابعة</span>
           </span>
         </label>
       )}
 
       <div className="space-y-1.5">
         <Label htmlFor={`redirect-correction-reason-${correction.decision.actionId}`}>
-          Why must this Redirect be corrected?
+          Why must this Redirect be corrected? · لماذا يجب تصحيح إعادة التوجيه هذه؟
         </Label>
         <Textarea
           id={`redirect-correction-reason-${correction.decision.actionId}`}
           value={correction.reason}
           onChange={event => onChange({ reason: event.target.value, error: undefined })}
-          placeholder="Explain why the original Redirect was incorrect and must be reopened…"
+          placeholder="Explain why the original Redirect was incorrect and must be reopened… · اشرح سبب خطأ إعادة التوجيه الأصلية وضرورة إعادة فتحها…"
           rows={3}
           disabled={correction.submitting}
           data-testid="textarea-redirect-correction-reason"
         />
-        <p className="text-[11px] text-amber-800">Required · minimum 10 characters</p>
+        <p className="text-[11px] text-amber-800">Required · minimum 10 characters · مطلوب · 10 أحرف على الأقل</p>
       </div>
 
       <div className="space-y-1.5">
-        <Label>Reversal fiscal period</Label>
+        <Label>Reversal fiscal period · الفترة المالية للعكس</Label>
         {correction.loadingPeriods ? (
           <div className="flex items-center gap-2 text-xs text-amber-800 py-1">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading open periods…
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading open periods… · جارٍ تحميل الفترات المفتوحة…
           </div>
         ) : correction.periods.length === 0 ? (
-          <p className="text-xs text-destructive">
-            No open or soft-closed fiscal period contains today. Finance must open a valid period first.
+          <p className="text-xs text-destructive space-y-0.5">
+            <span className="block">No open or soft-closed fiscal period contains today. Finance must open a valid period first.</span>
+            <span dir="rtl" className="block">لا توجد فترة مالية مفتوحة أو مغلقة جزئياً تشمل تاريخ اليوم. يجب على قسم المالية فتح فترة صالحة أولاً.</span>
           </p>
         ) : (
           <Select
@@ -2318,7 +2370,7 @@ function RedirectCorrectionPanel({
       {correction.error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{correction.error}</AlertDescription>
+          <AlertDescription className="whitespace-pre-line">{correction.error}</AlertDescription>
         </Alert>
       )}
 
@@ -2330,7 +2382,7 @@ function RedirectCorrectionPanel({
           onClick={onCancel}
           disabled={correction.submitting}
         >
-          Cancel
+          Cancel · إلغاء
         </Button>
         <Button
           type="button"
@@ -2344,10 +2396,10 @@ function RedirectCorrectionPanel({
             ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
           {historicalOnly
-            ? 'Reverse historical Redirect only'
+            ? 'Reverse historical Redirect only · عكس إعادة التوجيه التاريخية فقط'
             : reverseReprocessed
-              ? 'Reverse reprocessed payment and restore advance'
-              : 'Reverse journal and reopen'}
+              ? 'Reverse reprocessed payment and restore advance · عكس الدفعة المعاد تشغيلها وإعادة السلفة'
+              : 'Reverse journal and reopen · عكس القيد وإعادة الفتح'}
         </Button>
       </div>
     </div>
