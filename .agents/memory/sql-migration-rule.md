@@ -7,10 +7,10 @@ description: Whenever a task requires a DB change, save the SQL as a migration f
 
 **Rule:** Any task that requires a database change must produce a SQL migration file saved to `supabase/migrations/`.
 
-**Why:** The project uses Supabase (not Replit managed PostgreSQL). There is no direct DB access from the agent. The user runs migrations manually in Supabase Studio → SQL Editor. Missing this step means DB changes never get applied.
+**Why:** The project uses Supabase (not Replit managed PostgreSQL). The user runs migrations manually in Supabase Studio → SQL Editor. Missing this step means DB changes never get applied.
 
 **How to apply:**
-- Correct folder: `supabase_migrations/` (NOT `supabase/migrations/` — that path does not exist)
+- Correct folder: `supabase/migrations/`
 - File naming: `YYYYMMDD_short_description.sql` (e.g. `20260815_retainer_payout_currency.sql`)
 - Always include a header comment: what it does, date, "safe to re-run" note
 - Always use `IF NOT EXISTS`, `CREATE OR REPLACE`, etc. so re-running is safe
