@@ -44,13 +44,26 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_acct_cycle_exception_journal_id
-  ON public.acct_journal_lines;
-
-CREATE TRIGGER trg_acct_cycle_exception_journal_id
-  BEFORE INSERT ON public.acct_journal_lines
-  FOR EACH ROW
-  EXECUTE FUNCTION public.acct_append_cycle_exception_journal_id();
+-- Do not DROP/CREATE this trigger on every rerun.  DROP TRIGGER takes an
+-- AccessExclusiveLock and can deadlock with a long-running accounting read or
+-- another migration.  The trigger definition is stable; CREATE it only when
+-- the first application does not already have it.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'trg_acct_cycle_exception_journal_id'
+      AND tgrelid = 'public.acct_journal_lines'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_acct_cycle_exception_journal_id
+      BEFORE INSERT ON public.acct_journal_lines
+      FOR EACH ROW
+      EXECUTE FUNCTION public.acct_append_cycle_exception_journal_id();
+  END IF;
+END;
+$$;
 
 COMMENT ON FUNCTION public.acct_append_cycle_exception_journal_id() IS
   'Adds the immutable parent journal UUID to every new Cycle Close GL line after its draft header exists.';
