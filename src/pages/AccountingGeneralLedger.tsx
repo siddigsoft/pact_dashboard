@@ -11,6 +11,10 @@ import { Loader2, BookOpen, Download, RefreshCw, Search, FileDown, ChevronLeft, 
 import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
 import { formatNumber, ACCT_FUNCTIONAL_CCY, downloadCsv } from '@/lib/accountingFormat';
+import {
+  calculateAccountRunningBalances,
+  normalBalanceFromLedgerNet,
+} from '@/lib/accountingBalances';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import {
@@ -91,18 +95,28 @@ export default function AccountingGeneralLedger() {
 
   // Running balance computation
   const linesWithBalance = useMemo(() => {
-    let running = openingBalance;
-    return lines.map(l => {
-      if (l.debit_credit === 'DR') running += l.functional_amount;
-      else running -= l.functional_amount;
-      return { ...l, runningBalance: running };
-    });
-  }, [lines, openingBalance]);
+    const normalOpeningBalance = normalBalanceFromLedgerNet(
+      openingBalance,
+      selectedAccount?.account_type
+    );
+    return calculateAccountRunningBalances(
+      lines,
+      selectedAccount?.account_type,
+      normalOpeningBalance
+    );
+  }, [lines, openingBalance, selectedAccount?.account_type]);
+
+  const displayedOpeningBalance = normalBalanceFromLedgerNet(
+    openingBalance,
+    selectedAccount?.account_type
+  );
 
   const paged = useMemo(() => linesWithBalance.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [linesWithBalance, page]);
   const totalPages = Math.ceil(linesWithBalance.length / PAGE_SIZE);
 
-  const closingBalance = linesWithBalance.length > 0 ? linesWithBalance[linesWithBalance.length - 1].runningBalance : openingBalance;
+  const closingBalance = linesWithBalance.length > 0
+    ? linesWithBalance[linesWithBalance.length - 1].runningBalance
+    : displayedOpeningBalance;
   const totalDR = lines.reduce((s, l) => s + (l.debit_credit === 'DR' ? l.functional_amount : 0), 0);
   const totalCR = lines.reduce((s, l) => s + (l.debit_credit === 'CR' ? l.functional_amount : 0), 0);
 
@@ -132,7 +146,7 @@ export default function AccountingGeneralLedger() {
       'Description': 'Opening Balance',
       'Debit': 0,
       'Credit': 0,
-      'Balance': openingBalance,
+      'Balance': displayedOpeningBalance,
       'Currency': selectedCurrency,
     });
 
@@ -153,7 +167,7 @@ export default function AccountingGeneralLedger() {
   const exportCsv = () => {
     if (!selectedAccount || !selectedPeriod) return;
     const header = ['Date', 'Entry#', 'Description', 'DR', 'CR', 'Balance', 'Currency'];
-    const opening = [selectedPeriod.start_date, '', 'Opening Balance', '', '', formatNumber(openingBalance), selectedCurrency];
+    const opening = [selectedPeriod.start_date, '', 'Opening Balance', '', '', formatNumber(displayedOpeningBalance), selectedCurrency];
     const body = linesWithBalance.map(l => [
       l.posting_date,
       String(l.entry_no),
@@ -262,7 +276,7 @@ export default function AccountingGeneralLedger() {
       {(lines.length > 0 || loading) && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { label: 'Opening Balance', labelAr: 'الرصيد الافتتاحي', value: openingBalance, color: 'text-slate-700' },
+            { label: 'Opening Balance', labelAr: 'الرصيد الافتتاحي', value: displayedOpeningBalance, color: 'text-slate-700' },
             { label: 'Total Debits', labelAr: 'إجمالي المدين', value: totalDR, color: 'text-rose-700' },
             { label: 'Total Credits', labelAr: 'إجمالي الدائن', value: totalCR, color: 'text-emerald-700' },
             { label: 'Closing Balance', labelAr: 'الرصيد الختامي', value: closingBalance, color: Math.abs(closingBalance) < 0.005 ? 'text-slate-500' : closingBalance >= 0 ? 'text-indigo-700' : 'text-rose-700' },
@@ -322,7 +336,7 @@ export default function AccountingGeneralLedger() {
                       <td className="px-4 py-1.5 italic text-muted-foreground">Opening Balance · الرصيد الافتتاحي</td>
                       {isColVisible('debit') && <td className="px-4 py-1.5 text-right" />}
                       {isColVisible('credit') && <td className="px-4 py-1.5 text-right" />}
-                      {isColVisible('balance') && <td className="px-4 py-1.5 text-right font-medium">{formatNumber(openingBalance)}</td>}
+                      {isColVisible('balance') && <td className="px-4 py-1.5 text-right font-medium">{formatNumber(displayedOpeningBalance)}</td>}
                     </tr>
                   )}
                   {paged.map((l, i) => (

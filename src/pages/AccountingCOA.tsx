@@ -28,6 +28,13 @@ import {
   TrendingUp, TrendingDown, Minus, ExternalLink,
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import {
+  calculateAccountRunningBalances,
+  isDebitNormalAccount,
+  normalBalanceDelta,
+  normalBalanceFromLedgerNet,
+  sortAccountTransactionsChronologically,
+} from '@/lib/accountingBalances';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 
@@ -142,7 +149,7 @@ export default function AccountingCOA() {
   const [detailTab, setDetailTab] = useState<'info' | 'transactions'>('info');
   const [acctTxns, setAcctTxns] = useState<{
     id: string; entry_date: string; reference: string; description: string;
-    debit_credit: string; functional_amount: number; functional_currency: string;
+    debit_credit: 'DR' | 'CR'; functional_amount: number; functional_currency: string;
     entry_id: string;
   }[]>([]);
   const [acctTxnTotal, setAcctTxnTotal] = useState(0);
@@ -207,7 +214,7 @@ export default function AccountingCOA() {
         entry_date: l.acct_journal_entries.entry_date,
         reference: l.acct_journal_entries.reference ?? '',
         description: l.description || l.acct_journal_entries.description || '',
-        debit_credit: l.debit_credit,
+        debit_credit: l.debit_credit as 'DR' | 'CR',
         functional_amount: Number(l.functional_amount ?? 0),
         functional_currency: l.functional_currency ?? '',
       }));
@@ -223,32 +230,24 @@ export default function AccountingCOA() {
   const detailAccountType = detailAccount?.account_type;
 
   const acctTxnsWithBalance = useMemo(() => {
-    const isDebitNormal = !detailAccountType
-      || detailAccountType === 'asset'
-      || detailAccountType === 'expense';
-    const shownMovement = acctTxns.reduce((total, tx) => {
-      const increasesBalance = isDebitNormal
-        ? tx.debit_credit === 'DR'
-        : tx.debit_credit === 'CR';
-      return total + (increasesBalance ? tx.functional_amount : -tx.functional_amount);
-    }, 0);
+    const chronologicalTransactions = sortAccountTransactionsChronologically(acctTxns);
+    const shownMovement = chronologicalTransactions.reduce(
+      (total, tx) => total + normalBalanceDelta(
+        detailAccountType,
+        tx.debit_credit,
+        tx.functional_amount
+      ),
+      0
+    );
     const accountNet = detailAccountId ? balances.get(detailAccountId)?.net : undefined;
     const openingBalance = accountNet === undefined
       ? (acctTxnTotal <= acctTxns.length ? 0 : null)
-      : (isDebitNormal ? accountNet : -accountNet) - shownMovement;
-    let runningBalance = openingBalance;
-
-    const lines = acctTxns.map(tx => {
-      const increasesBalance = isDebitNormal
-        ? tx.debit_credit === 'DR'
-        : tx.debit_credit === 'CR';
-      if (runningBalance !== null) {
-        runningBalance += increasesBalance
-          ? tx.functional_amount
-          : -tx.functional_amount;
-      }
-      return { ...tx, runningBalance };
-    });
+      : normalBalanceFromLedgerNet(accountNet, detailAccountType) - shownMovement;
+    const lines = calculateAccountRunningBalances(
+      chronologicalTransactions,
+      detailAccountType,
+      openingBalance
+    );
 
     return { lines, openingBalance };
   }, [acctTxns, acctTxnTotal, balances, detailAccountId, detailAccountType]);
@@ -652,8 +651,6 @@ export default function AccountingCOA() {
 
   // ── row renderer ──────────────────────────────────────────
   // Debit-normal account types: positive net = normal state
-  const DEBIT_NORMAL = new Set<Account['account_type']>(['asset', 'expense']);
-
   const renderRow = (acct: Account, depth: number): React.ReactNode => {
     const kids   = childrenOf.get(acct.id) ?? [];
     const isOpen = expanded.has(acct.id);
@@ -661,7 +658,7 @@ export default function AccountingCOA() {
     const bal    = balances.get(acct.id);
     const net    = bal?.net ?? 0;
     const hasActivity = !!bal;
-    const isDebitNormal = DEBIT_NORMAL.has(acct.account_type);
+    const isDebitNormal = isDebitNormalAccount(acct.account_type);
     // "Normal" means the balance is on the expected side for the account type
     const isNormalBalance = isDebitNormal ? net >= 0 : net <= 0;
     const balColor = !hasActivity
@@ -1362,7 +1359,7 @@ export default function AccountingCOA() {
             const bal   = balances.get(acct.id);
             const net   = bal?.net ?? 0;
             const hasActivity = !!bal;
-            const isDebitNormal = new Set(['asset','expense']).has(acct.account_type);
+            const isDebitNormal = isDebitNormalAccount(acct.account_type);
             const isNormal = isDebitNormal ? net >= 0 : net <= 0;
             const parentAcct = acct.parent_id ? rows.find(r => r.id === acct.parent_id) : null;
 
