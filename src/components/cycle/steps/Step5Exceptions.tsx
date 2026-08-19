@@ -446,17 +446,20 @@ export default function Step5Exceptions({
       });
     } catch (error: any) {
       const rawMessage = error?.message ?? 'The action failed. Nothing was changed.';
-      if (
+      const migrationMissing = (
         rawMessage.includes('execute_cycle_close_exception') &&
         rawMessage.toLowerCase().includes('schema cache')
-      ) {
+      ) || (
+        rawMessage.includes('v_mmp') &&
+        rawMessage.includes('country_id')
+      );
+      if (migrationMissing) {
         setMigrationRequired(true);
       }
       setDecision(key, {
         executed: false,
-        executionError: rawMessage.includes('execute_cycle_close_exception') &&
-          rawMessage.toLowerCase().includes('schema cache')
-          ? 'The Cycle Close database migration is not applied in Supabase yet. Apply supabase/migrations/20260819_cycle_close_inline_exception_execution.sql, then reload this page. No action was changed.'
+        executionError: migrationMissing
+          ? 'The Cycle Close database migration is incomplete in Supabase. Apply the ordered migrations shown above, including 20260819c_cycle_close_mmp_country_scope.sql, then reload this page. No action was changed.'
           : rawMessage,
       });
     } finally {
@@ -509,7 +512,8 @@ export default function Step5Exceptions({
             {' '}<code className="text-xs">20260818d_enumerator_fee_gl_bridge.sql</code>,
             {' '}<code className="text-xs">20260818_close_mmp_and_lock_incentives.sql</code>,
             {' '}<code className="text-xs">20260819_cycle_close_inline_exception_execution.sql</code>, then
-            {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>.
+            {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>, then
+            {' '}<code className="text-xs">20260819c_cycle_close_mmp_country_scope.sql</code>.
             {' '}Reload this wizard after they are applied.
           </AlertDescription>
         </Alert>

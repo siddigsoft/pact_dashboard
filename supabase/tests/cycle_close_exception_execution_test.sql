@@ -3,8 +3,10 @@
 --                                + mmp_files hard-close gate
 --
 -- Migration under test: 20260819_cycle_close_inline_exception_execution.sql
---   (depends on 20260818_cycle_exception_actions.sql and
---    20260818b_field_payments_columns.sql)
+--   (depends on 20260818_cycle_exception_actions.sql,
+--    20260818b_field_payments_columns.sql,
+--    20260819b_cycle_close_finalizer_role_variants.sql, and
+--    20260819c_cycle_close_mmp_country_scope.sql)
 --
 -- Task #548 — Cycle Close: Inline Exception Execution
 --
@@ -171,6 +173,12 @@ BEGIN
       || '  - function close_mmp_and_lock_incentives(uuid,text) is missing' || E'\n';
   END IF;
 
+  -- Country-scope trigger function (20260819c_cycle_close_mmp_country_scope).
+  IF to_regprocedure('public.stamp_mmp_file_country_from_project()') IS NULL THEN
+    v_missing := v_missing
+      || '  - function stamp_mmp_file_country_from_project() is missing' || E'\n';
+  END IF;
+
   IF to_regclass('public.trg_mmp_files_exception_close_gate') IS NULL
      AND NOT EXISTS (
        SELECT 1 FROM pg_trigger
@@ -185,7 +193,8 @@ BEGIN
     RAISE EXCEPTION
       'PREFLIGHT FAILED — required schema not present. Apply migrations '
       '20260818_close_mmp_and_lock_incentives, 20260819_cycle_close_inline_exception_execution '
-      '(and their 20260818* deps), and 20260819b_cycle_close_finalizer_role_variants first.%s%s',
+      '(and their 20260818* deps), 20260819b_cycle_close_finalizer_role_variants, and '
+      '20260819c_cycle_close_mmp_country_scope first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -1416,12 +1425,133 @@ BEGIN
     v_res->>'decision';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- 7. Regression: mmp_files.country_id column existence + execute_cycle_close_exception
+--    does not crash when v_mmp.country_id is read
+--    (20260819c_cycle_close_mmp_country_scope corrective migration)
+--
+--    The live production failure was:
+--      ERROR: record "v_mmp" has no field "country_id"
+--    because older mmp_files rows were created before the column was added.
+--    20260819c adds the column with ADD COLUMN IF NOT EXISTS and installs the
+--    stamp_mmp_file_country_from_project() trigger function.
+--
+--    This section:
+--      (7a) Asserts mmp_files.country_id exists in information_schema (structural).
+--      (7b) Asserts stamp_mmp_file_country_from_project() trigger function exists.
+--      (7c) Seeds an MMP with country_id explicitly set to the CE54 fixture
+--           country and executes a manager-only cancel decision — the exact path
+--           that crashed with "record v_mmp has no field country_id" on pre-20260819c
+--           databases.  Must return ok=true.
+--      (7d) Seeds an MMP with country_id NULL (simulating an older unfilled row)
+--           and verifies the same decision returns ok=true — the column existing
+--           but being NULL must not cause a crash.
+-- ---------------------------------------------------------------------------
+
+-- (7a) structural: mmp_files.country_id must be present
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'mmp_files'
+      AND column_name  = 'country_id'
+  ) THEN
+    RAISE EXCEPTION
+      'FAIL [mmp_files.country_id exists]: column missing — 20260819c structural DDL not applied';
+  END IF;
+  RAISE NOTICE 'PASS [mmp_files.country_id exists]: column present on mmp_files';
+END $$;
+
+-- (7b) stamp trigger function must be present.
+DO $$
+BEGIN
+  IF to_regprocedure('public.stamp_mmp_file_country_from_project()') IS NULL THEN
+    RAISE EXCEPTION
+      'FAIL [stamp_mmp_file_country_from_project exists]: migration 20260819c not fully applied';
+  END IF;
+  RAISE NOTICE 'PASS [stamp_mmp_file_country_from_project exists]: function present';
+END $$;
+
+-- (7c) Non-NULL country_id: the path that originally crashed.
+DO $$
+DECLARE
+  v_actor uuid := 'ce540000-0000-4000-8000-0000000000f5';
+  v_mmp   uuid := 'ce540000-0000-4000-8000-000000009907';
+  v_site  uuid := 'ce540000-0000-4000-8000-000000009917';
+  v_adv   uuid := 'ce540000-0000-4000-8000-000000009927';
+  v_res   jsonb;
+BEGIN
+  -- Actor: use the already-seeded FOM manager fixture so no extra auth.users
+  -- row is needed; just reuse the main MGR profile identity.
+  -- We set the JWT sub to the main MGR (ce540000-…-001) who is already a FOM.
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-000000000001')::text, true);
+
+  -- MMP with country_id explicitly set to CE54 test country.
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, updated_at)
+  VALUES
+    (v_mmp, 'open', 'active',
+     'ce540000-c001-4000-8000-000000000c01'::uuid,   -- CE54 fixture country
+     now())
+  ON CONFLICT (id) DO NOTHING;
+
+  -- Approved advance on a not-covered site of that MMP.
+  PERFORM pg_temp.mk_case(v_mmp, v_site, v_adv, 'approved', 500, 0);
+
+  v_res := public.execute_cycle_close_exception(
+    v_mmp, v_site, v_adv,
+    'cancel', NULL, 'country_id regression: non-null country');
+
+  IF NOT (v_res->>'ok')::boolean THEN
+    RAISE EXCEPTION
+      'FAIL [country_id non-null: cancel succeeds]: RPC returned error: %',
+      v_res->>'error';
+  END IF;
+  RAISE NOTICE
+    'PASS [country_id non-null: cancel succeeds]: ok=true (v_mmp.country_id read without crash)';
+END $$;
+
+-- (7d) NULL country_id: older unfilled MMP rows must not crash either.
+DO $$
+DECLARE
+  v_mmp  uuid := 'ce540000-0000-4000-8000-000000009908';
+  v_site uuid := 'ce540000-0000-4000-8000-000000009918';
+  v_adv  uuid := 'ce540000-0000-4000-8000-000000009928';
+  v_res  jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-000000000001')::text, true);
+
+  -- MMP with country_id NULL (legacy / unfilled row).
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, updated_at)
+  VALUES
+    (v_mmp, 'open', 'active', NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM pg_temp.mk_case(v_mmp, v_site, v_adv, 'approved', 500, 0);
+
+  v_res := public.execute_cycle_close_exception(
+    v_mmp, v_site, v_adv,
+    'cancel', NULL, 'country_id regression: null country');
+
+  IF NOT (v_res->>'ok')::boolean THEN
+    RAISE EXCEPTION
+      'FAIL [country_id null: cancel succeeds]: RPC returned error: %',
+      v_res->>'error';
+  END IF;
+  RAISE NOTICE
+    'PASS [country_id null: cancel succeeds]: ok=true (NULL country_id handled cleanly)';
+END $$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 7. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 8. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;
