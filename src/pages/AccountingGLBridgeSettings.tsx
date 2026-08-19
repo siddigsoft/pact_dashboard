@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Settings2, AlertTriangle, CheckCircle2, RefreshCw, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ interface Account {
   name_en: string;
   account_type: string;
   is_active: boolean;
+  is_postable: boolean;
 }
 
 // pending edit for a single config row
@@ -50,6 +52,13 @@ type RowEdit = { debitId: string | null; creditId: string | null; dirty: boolean
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const NONE = '__none__';
+
+const BRIDGE_REQUIRED_ACCOUNTS = [
+  { code: '120000', name: 'Cash at Bank', purpose: 'Credit for cash disbursements' },
+  { code: '151000', name: 'Travel Advances', purpose: 'Debit for field advance disbursements' },
+  { code: '505000', name: 'General Operating Expenses', purpose: 'Fallback debit for operating costs' },
+  { code: '507000', name: 'Field Operations Expenses', purpose: 'Field operations expense postings' },
+] as const;
 
 function accountLabel(a: Account) {
   return `${a.code} — ${a.name_en}`;
@@ -122,7 +131,7 @@ export default function AccountingGLBridgeSettings() {
         .order('source_event'),
       supabase
         .from('acct_accounts')
-        .select('id,code,name_en,account_type,is_active')
+        .select('id,code,name_en,account_type,is_active,is_postable')
         .eq('is_active', true)
         .order('code'),
     ]);
@@ -226,6 +235,11 @@ export default function AccountingGLBridgeSettings() {
 
   const accountMap: Record<string, Account> = {};
   accounts.forEach(a => { accountMap[a.id] = a; });
+  const requiredAccountHealth = BRIDGE_REQUIRED_ACCOUNTS.map(required => ({
+    ...required,
+    account: accounts.find(account => account.code === required.code && account.is_postable),
+  }));
+  const missingRequiredAccounts = requiredAccountHealth.filter(({ account }) => !account);
 
   return (
     <div className="space-y-6 p-6">
@@ -275,6 +289,77 @@ export default function AccountingGLBridgeSettings() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Required account health */}
+      {!loading && (
+        <Card
+          className={cn(
+            'border',
+            missingRequiredAccounts.length > 0 ? 'border-rose-200' : 'border-emerald-200',
+          )}
+          data-testid="card-required-gl-accounts-health"
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Required GL Bridge Accounts</CardTitle>
+                <CardDescription className="mt-1 text-xs">
+                  These active, postable account codes are used directly by bridge posting rules.
+                </CardDescription>
+              </div>
+              <Badge
+                className={cn(
+                  'border',
+                  missingRequiredAccounts.length > 0
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {missingRequiredAccounts.length > 0
+                  ? `${missingRequiredAccounts.length} need attention`
+                  : 'All required accounts ready'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="hidden md:table-cell">Used for</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requiredAccountHealth.map(({ code, name, purpose, account }) => (
+                  <TableRow key={code}>
+                    <TableCell className="font-mono font-semibold">{code}</TableCell>
+                    <TableCell>{account?.name_en ?? name}</TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">{purpose}</TableCell>
+                    <TableCell className="text-right">
+                      {account ? (
+                        <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Ready
+                        </Badge>
+                      ) : (
+                        <Badge className="border border-rose-200 bg-rose-50 text-rose-700">
+                          <AlertTriangle className="mr-1 h-3.5 w-3.5" /> Missing or not postable
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {missingRequiredAccounts.length > 0 && (
+              <p className="mt-3 text-sm text-rose-700">
+                Add or reactivate the missing accounts in Chart of Accounts before processing bridge transactions.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Info banner */}

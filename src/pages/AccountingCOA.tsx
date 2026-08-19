@@ -83,6 +83,15 @@ const TYPE_TONE: Record<Account['account_type'], string> = {
 
 const CURRENCIES = ['USD','SDG','EUR','GBP','SAR','AED','EGP','ETB','KES','UGX','TZS','NGN','XAF'];
 
+// These accounts are hard dependencies of the automatic GL bridge. A bridge
+// posting cannot complete when a required code has no active, postable account.
+const BRIDGE_REQUIRED_ACCOUNTS = [
+  { code: '120000', name: 'Cash at Bank' },
+  { code: '151000', name: 'Travel Advances' },
+  { code: '505000', name: 'General Operating Expenses' },
+  { code: '507000', name: 'Field Operations Expenses' },
+] as const;
+
 const BLANK_FORM = {
   code: '',
   name_en: '',
@@ -128,6 +137,7 @@ export default function AccountingCOA() {
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
   const [balances, setBalances]       = useState<Map<string, { dr: number; cr: number; net: number }>>(new Map());
   const [balanceMigrationNeeded, setBalanceMigrationNeeded] = useState(false);
+  const [bridgeWarningDismissed, setBridgeWarningDismissed] = useState(false);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
   const [detailTab, setDetailTab] = useState<'info' | 'transactions'>('info');
   const [acctTxns, setAcctTxns] = useState<{
@@ -327,6 +337,17 @@ export default function AccountingCOA() {
     }
     return t;
   }, [rows]);
+
+  const missingBridgeAccounts = useMemo(
+    () => BRIDGE_REQUIRED_ACCOUNTS.filter(required =>
+      !rows.some(account =>
+        account.code === required.code &&
+        account.is_active &&
+        account.is_postable,
+      ),
+    ),
+    [rows],
+  );
 
   // ── export ────────────────────────────────────────────────
   const exportCsv = () => {
@@ -733,6 +754,42 @@ export default function AccountingCOA() {
           </Button>
         </div>
       </div>
+
+      {/* ── GL bridge account health ── */}
+      {!loading && !bridgeWarningDismissed && missingBridgeAccounts.length > 0 && (
+        <div
+          className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950"
+          role="alert"
+          data-testid="alert-missing-gl-bridge-accounts"
+        >
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">GL bridge needs required accounts</p>
+            <p className="mt-1 text-sm">
+              Automated postings will fail until these active, postable accounts are available:{' '}
+              <span className="font-mono font-semibold">
+                {missingBridgeAccounts.map(account => account.code).join(', ')}
+              </span>
+              {' '}({missingBridgeAccounts.map(account => account.name).join(', ')}).
+            </p>
+            {canManage && (
+              <p className="mt-1 text-sm">
+                Add or reactivate the accounts below, then refresh this page. You can review bridge mappings in GL Bridge Settings.
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-amber-800 hover:bg-amber-100 hover:text-amber-950"
+            onClick={() => setBridgeWarningDismissed(true)}
+            data-testid="button-dismiss-gl-bridge-account-warning"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {/* ── KPI strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
