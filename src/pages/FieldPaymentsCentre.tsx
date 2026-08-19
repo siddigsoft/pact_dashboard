@@ -178,6 +178,26 @@ function ageBadge(days: number) {
   if (days <= 60) return <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">{days}d</Badge>;
   return <Badge className="bg-red-100 text-red-700 border-red-300 text-xs">⚠ {days}d</Badge>;
 }
+
+/**
+ * Supabase applies a 1,000-row response limit unless the query is paged.
+ * Fetch successive ranges so payment tabs show the complete dataset.
+ */
+async function fetchAllRows<T>(
+  queryPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  pageSize = 1000,
+): Promise<{ data: T[]; error: any }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryPage(from, from + pageSize - 1);
+    if (error) return { data: rows, error };
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
 function decisionBadge(d: string) {
   const map: Record<string, string> = {
     roll:     'bg-blue-100 text-blue-700 border-blue-300',
@@ -226,8 +246,9 @@ export default function FieldPaymentsCentre() {
 
   // Load MMP list once on mount (lightweight — id/name/hub only)
   useEffect(() => {
-    supabase.from('mmp_files').select('id, name, hub').order('created_at', { ascending: false }).limit(300)
-      .then(({ data }) => setMmps(data ?? []));
+    fetchAllRows<{ id: string; name: string; hub: string }>((from, to) =>
+      supabase.from('mmp_files').select('id, name, hub').order('created_at', { ascending: false }).range(from, to)
+    ).then(({ data }) => setMmps(data));
   }, []);
 
   // ── Tab 1: Fees state ──────────────────────────────────────────────────────
@@ -280,18 +301,21 @@ export default function FieldPaymentsCentre() {
   const loadFees = useCallback(async () => {
     setFeesLoading(true);
     try {
-      const { data: sites, error } = await supabase
-        .from('mmp_site_entries')
-        .select(`
+      const { data: sites, error } = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from('mmp_site_entries')
+          .select(`
           id, site_name, site_code, state, locality, status,
           accepted_by, enumerator_fee, transport_fee,
           fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes,
           fee_receipt_url,
           mmp_file_id,
           mmp_files!mmp_file_id(id, name, hub, cycle_status)
-        `)
-        .not('accepted_by', 'is', null)
-        .order('state');
+          `)
+          .not('accepted_by', 'is', null)
+          .order('state')
+          .range(from, to)
+      );
 
       if (error) throw error;
 
@@ -366,12 +390,14 @@ export default function FieldPaymentsCentre() {
     setAdvancesLoading(true);
     try {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
-      const { data, error } = await supabase
-        .from('down_payment_requests')
-        .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id')
-        .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
-        .order('updated_at', { ascending: false })
-        .limit(500);
+      const { data, error } = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from('down_payment_requests')
+          .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id')
+          .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
+          .order('updated_at', { ascending: false })
+          .range(from, to)
+      );
       if (error) throw error;
 
       // Step 2: resolve mmp_site_entries → mmp_files in two separate queries
@@ -454,10 +480,13 @@ export default function FieldPaymentsCentre() {
   const loadExceptions = useCallback(async () => {
     setExcLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('cycle_exception_actions')
-        .select('*, mmp_files!mmp_file_id(name)')
-        .order('created_at', { ascending: false });
+      const { data, error } = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from('cycle_exception_actions')
+          .select('*, mmp_files!mmp_file_id(name)')
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
 
       if (error) throw error;
 
@@ -509,11 +538,14 @@ export default function FieldPaymentsCentre() {
     setRecoveryLoading(true);
     try {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
-      const { data, error } = await supabase
-        .from('down_payment_requests')
-        .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id')
-        .in('status', ['paid', 'partially_paid', 'fully_paid'])
-        .order('updated_at');
+      const { data, error } = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from('down_payment_requests')
+          .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id')
+          .in('status', ['paid', 'partially_paid', 'fully_paid'])
+          .order('updated_at')
+          .range(from, to)
+      );
       if (error) throw error;
 
       // Step 2: resolve mmp_site_entries → mmp_files
