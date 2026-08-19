@@ -6,7 +6,8 @@
 --   (depends on 20260818_cycle_exception_actions.sql,
 --    20260818b_field_payments_columns.sql,
 --    20260819b_cycle_close_finalizer_role_variants.sql, and
---    20260819c_cycle_close_mmp_country_scope.sql)
+--    20260819c_cycle_close_mmp_country_scope.sql,
+--    20260819h_cycle_exception_journal_line_ids.sql)
 --
 -- Task #548 — Cycle Close: Inline Exception Execution
 --
@@ -203,6 +204,23 @@ BEGIN
   ) IS NULL THEN
     v_missing := v_missing
       || '  - function execute_cycle_close_redirect_allocations(uuid,uuid,uuid,jsonb,text) is missing'
+      || E'\n';
+  END IF;
+
+  IF to_regprocedure('public.acct_append_cycle_exception_journal_id()') IS NULL THEN
+    v_missing := v_missing
+      || '  - function acct_append_cycle_exception_journal_id() is missing'
+      || E'\n';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'trg_acct_cycle_exception_journal_id'
+      AND tgrelid = 'public.acct_journal_lines'::regclass
+  ) THEN
+    v_missing := v_missing
+      || '  - trigger trg_acct_cycle_exception_journal_id on acct_journal_lines is missing'
       || E'\n';
   END IF;
 
@@ -1615,6 +1633,9 @@ DECLARE
   v_cr numeric;
   v_status text;
   v_amount numeric;
+  v_line_journal uuid;
+  v_fee_account uuid;
+  v_line_description text;
 BEGIN
   -- SDG 80,000 advance: Site A receives 70,000 (full), Site B receives
   -- 10,000 (partial). Site B uses a different enumerator and therefore also
@@ -1687,6 +1708,44 @@ BEGIN
     v_lines::text LIKE '%CE Covered Site A%' AND v_lines::text LIKE '%status fully paid%');
   PERFORM pg_temp.assert_true('multi-site journal identifies target B and partial status',
     v_lines::text LIKE '%CE Covered Site B%' AND v_lines::text LIKE '%status partially paid%');
+
+  -- The UUID is unknown while the Redirect builds its line text.  The database
+  -- trigger must append the final draft-header UUID before the immutable line is
+  -- stored, rather than attempting an unsafe UPDATE after posting.
+  SELECT id INTO v_fee_account
+  FROM public.acct_accounts
+  WHERE code = '5200'
+  LIMIT 1;
+  INSERT INTO public.acct_journal_entries (
+    period_id, posting_date, description_en, source_type, source_id, status,
+    idempotency_key, created_by
+  ) VALUES (
+    'ce540000-feed-4000-8000-0000000000f1'::uuid,
+    current_date,
+    'Cycle Close Redirect line-description trace test',
+    'cycle_exception_actions',
+    v_action,
+    'draft',
+    'cycle-line-id-test::' || v_action::text,
+    MGR
+  )
+  RETURNING id INTO v_line_journal;
+  INSERT INTO public.acct_journal_lines (
+    entry_id, line_no, account_id, debit_credit,
+    functional_amount, original_amount, original_currency,
+    functional_currency, fx_rate, description
+  ) VALUES (
+    v_line_journal, 1, v_fee_account, 'DR',
+    1, 1, 'SDG', 'SDG', 1,
+    'Redirect allocation trace'
+  );
+  SELECT description INTO v_line_description
+  FROM public.acct_journal_lines
+  WHERE entry_id = v_line_journal AND line_no = 1;
+  PERFORM pg_temp.assert_true(
+    'Cycle Close GL line includes its final journal UUID',
+    v_line_description = 'Redirect allocation trace; GL journal ID ' || v_line_journal::text
+  );
 
   -- An exact retry returns the original action/journal and does not post again.
   v_retry := public.execute_cycle_close_redirect_allocations(
