@@ -225,7 +225,7 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
 
 const STATE_LABELS: Record<string, string> = {
   SD01: 'Khartoum', SD09: 'White Nile', SD16: 'River Nile', SD17: 'Northern',
-  SD15: 'Aj Jazirah', SD08: 'Blue Nile', SD06: 'Central Darfur',
+  SD15: 'Al Gezira', SD08: 'Blue Nile', SD06: 'Central Darfur',
   SD05: 'East Darfur', SD12: 'Gedaref', SD11: 'Kassala',
   SD02: 'North Darfur', SD13: 'North Kordofan', SD10: 'Red Sea',
   SD14: 'Sennar', SD03: 'South Darfur', SD07: 'South Kordofan',
@@ -1435,7 +1435,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     'west darfur': 'SD04', 'east darfur': 'SD05', 'central darfur': 'SD06',
     'south kordofan': 'SD07', 'blue nile': 'SD08', 'white nile': 'SD09',
     'red sea': 'SD10', 'kassala': 'SD11', 'gedaref': 'SD12',
-    'north kordofan': 'SD13', 'sennar': 'SD14', 'aj jazirah': 'SD15',
+    'north kordofan': 'SD13', 'sennar': 'SD14', 'al gezira': 'SD15', 'aj jazirah': 'SD15',
     'river nile': 'SD16', 'northern': 'SD17', 'west kordofan': 'SD18',
     // Arabic
     'الخرطوم': 'SD01', 'شمال دارفور': 'SD02', 'جنوب دارفور': 'SD03',
