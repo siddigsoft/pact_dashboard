@@ -25,6 +25,11 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { exportFieldPaymentsExcel } from '@/utils/fieldPaymentsExcel';
+import {
+  getFieldPaymentEnumeratorReference,
+  isProfileUuid,
+  resolveFieldPaymentEnumeratorName,
+} from '@/utils/fieldPaymentsEnumerator';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -491,7 +496,7 @@ export default function FieldPaymentsCentre() {
       const { data, error } = await fetchAllRows<any>((from, to) =>
         supabase
           .from('down_payment_requests')
-          .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id')
+          .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id, requested_by')
           .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
           .order('updated_at', { ascending: false })
           .range(from, to)
@@ -500,15 +505,25 @@ export default function FieldPaymentsCentre() {
 
       // Step 2: resolve mmp_site_entries → mmp_files in two separate queries
       const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
-      const entryMap: Record<string, { accepted_by: string | null; mmp_file_id: string | null; state: string | null }> = {};
+      const entryMap: Record<string, {
+        accepted_by: string | null;
+        claimed_by: string | null;
+        visit_started_by: string | null;
+        additional_data: Record<string, unknown> | null;
+        mmp_file_id: string | null;
+        state: string | null;
+      }> = {};
       if (siteEntryIds.length) {
         const { data: entries } = await supabase
           .from('mmp_site_entries')
-          .select('id, accepted_by, mmp_file_id, state')
+          .select('id, accepted_by, claimed_by, visit_started_by, additional_data, mmp_file_id, state')
           .in('id', siteEntryIds);
         for (const e of entries ?? []) {
           entryMap[e.id] = {
             accepted_by: e.accepted_by,
+            claimed_by: e.claimed_by,
+            visit_started_by: e.visit_started_by,
+            additional_data: e.additional_data ?? null,
             mmp_file_id: e.mmp_file_id,
             state: e.state ?? null,
           };
@@ -526,7 +541,9 @@ export default function FieldPaymentsCentre() {
       }
 
       // Step 3: resolve enumerator names + GL bridge in parallel
-      const enumIds = [...new Set(Object.values(entryMap).map(e => e.accepted_by).filter(Boolean))] as string[];
+      const enumIds = [...new Set((data ?? [])
+        .map((r: any) => getFieldPaymentEnumeratorReference(entryMap[r.mmp_site_entry_id], r.requested_by))
+        .filter(isProfileUuid))];
       const advIds  = (data ?? []).map((r: any) => r.id as string);
       const nameMap: Record<string, string> = {};
       const glMap:   Record<string, 'posted' | 'error' | 'pending'> = {};
@@ -549,7 +566,7 @@ export default function FieldPaymentsCentre() {
         const mmp    = mmpMap[mmpFid] ?? {};
         return {
           id: r.id,
-          enumeratorName: entry.accepted_by ? (nameMap[entry.accepted_by] ?? '—') : '—',
+          enumeratorName: resolveFieldPaymentEnumeratorName(entry, r.requested_by, nameMap),
           siteName: r.site_name ?? '—',
           state: entry.state ?? '—',
           hub: r.hub_name ?? '—',
@@ -656,7 +673,7 @@ export default function FieldPaymentsCentre() {
       const { data, error } = await fetchAllRows<any>((from, to) =>
         supabase
           .from('down_payment_requests')
-          .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id')
+          .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id, requested_by')
           .in('status', ['paid', 'partially_paid', 'fully_paid'])
           .order('updated_at')
           .range(from, to)
@@ -665,16 +682,27 @@ export default function FieldPaymentsCentre() {
 
       // Step 2: resolve mmp_site_entries → mmp_files
       const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
-      const entryMap: Record<string, { id: string; accepted_by: string | null; mmp_file_id: string | null; state: string | null }> = {};
+      const entryMap: Record<string, {
+        id: string;
+        accepted_by: string | null;
+        claimed_by: string | null;
+        visit_started_by: string | null;
+        additional_data: Record<string, unknown> | null;
+        mmp_file_id: string | null;
+        state: string | null;
+      }> = {};
       if (siteEntryIds.length) {
         const { data: entries } = await supabase
           .from('mmp_site_entries')
-          .select('id, accepted_by, mmp_file_id, state')
+          .select('id, accepted_by, claimed_by, visit_started_by, additional_data, mmp_file_id, state')
           .in('id', siteEntryIds);
         for (const e of entries ?? []) {
           entryMap[e.id] = {
             id: e.id,
             accepted_by: e.accepted_by,
+            claimed_by: e.claimed_by,
+            visit_started_by: e.visit_started_by,
+            additional_data: e.additional_data ?? null,
             mmp_file_id: e.mmp_file_id,
             state: e.state ?? null,
           };
@@ -689,7 +717,9 @@ export default function FieldPaymentsCentre() {
       }
 
       // Step 3: enumerator names + fee-offset check in parallel
-      const enumIds    = [...new Set(Object.values(entryMap).map(e => e.accepted_by).filter(Boolean))] as string[];
+      const enumIds = [...new Set((data ?? [])
+        .map((r: any) => getFieldPaymentEnumeratorReference(entryMap[r.mmp_site_entry_id], r.requested_by))
+        .filter(isProfileUuid))];
       const siteIdList = Object.values(entryMap).map(e => e.id).filter(Boolean);
       const nameMap:  Record<string, string>  = {};
       const offsetMap: Record<string, number> = {};
@@ -723,7 +753,7 @@ export default function FieldPaymentsCentre() {
           return {
             id: r.id,
             advanceId: r.id,
-            enumeratorName: (entry as any).accepted_by ? (nameMap[(entry as any).accepted_by] ?? '—') : '—',
+            enumeratorName: resolveFieldPaymentEnumeratorName(entry, r.requested_by, nameMap),
             siteName: r.site_name ?? '—',
             state: (entry as any).state ?? '—',
             hub: r.hub_name ?? '—',
