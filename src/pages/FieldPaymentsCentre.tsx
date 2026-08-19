@@ -17,13 +17,14 @@
  *  • Super Admin sees all; Finance roles see their hub scope
  */
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import { exportFieldPaymentsExcel } from '@/utils/fieldPaymentsExcel';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -96,6 +97,7 @@ interface ExceptionActionRow {
   id: string;
   mmpFileId: string;
   mmpName: string;
+  hub: string;
   mmpSiteEntryId: string | null;
   advanceId: string | null;
   enumeratorName: string | null;
@@ -173,6 +175,12 @@ function fmtDate(iso?: string | null) {
   if (!iso) return '—';
   try { return format(parseISO(iso), 'd MMM yyyy'); } catch { return iso; }
 }
+function titleCaseLabel(value?: string | null) {
+  if (!value) return '—';
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
 function ageBadge(days: number) {
   if (days <= 30) return <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">{days}d</Badge>;
   if (days <= 60) return <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">{days}d</Badge>;
@@ -221,6 +229,20 @@ function decisionBadge(d: string) {
   );
 }
 
+function DataLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Alert className="border-red-200 bg-red-50 dark:bg-red-950/20">
+      <AlertTriangle className="h-4 w-4 text-red-600" />
+      <AlertDescription className="flex items-center justify-between gap-3 text-red-800 dark:text-red-200">
+        <span>Unable to load this report: {message}</span>
+        <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={onRetry}>
+          <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,23 +259,34 @@ export default function FieldPaymentsCentre() {
 
   const userRole = currentUser?.role?.toLowerCase() ?? '';
   const isFinance = isSuperAdmin || ['admin', 'financialadmin', 'superadmin', 'accountant'].includes(userRole);
+  const financeScopeIdentity = JSON.stringify({
+    role: currentUser?.role ?? '',
+    roles: [...(currentUser?.roles ?? [])].sort(),
+    additionalRoles: (currentUser?.additionalRoles ?? [])
+      .map(role => `${role.role}:${role.hub_id ?? ''}`)
+      .sort(),
+    hubId: currentUser?.hubId ?? '',
+    secondaryHubId: currentUser?.secondaryHubId ?? '',
+    stateId: currentUser?.stateId ?? '',
+    localityId: currentUser?.localityId ?? '',
+    countryId: currentUser?.countryId ?? '',
+    classificationScope: currentUser?.classification?.roleScope ?? '',
+  });
 
   // ── Shared cross-tab filters ────────────────────────────────────────────────
   const [filterHub, setFilterHub]   = useState('');
   const [filterState, setFilterState] = useState('');
   const [filterMmp, setFilterMmp]   = useState(mmpFilter); // pre-seed from URL ?mmp=
+  const [filterEnumerator, setFilterEnumerator] = useState('');
   const [mmps, setMmps] = useState<{ id: string; name: string; hub: string }[]>([]);
-
-  // Load MMP list once on mount (lightweight — id/name/hub only)
-  useEffect(() => {
-    fetchAllRows<{ id: string; name: string; hub: string }>((from, to) =>
-      supabase.from('mmp_files').select('id, name, hub').order('created_at', { ascending: false }).range(from, to)
-    ).then(({ data }) => setMmps(data));
-  }, []);
+  const [exportingTab, setExportingTab] = useState<string | null>(null);
+  const dataLoadGeneration = useRef(0);
 
   // ── Tab 1: Fees state ──────────────────────────────────────────────────────
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [feesLoading, setFeesLoading] = useState(false);
+  const [feesLoaded, setFeesLoaded] = useState(false);
+  const [feesLoadError, setFeesLoadError] = useState<string | null>(null);
   const [feeSearch, setFeeSearch] = useState('');
   const [feeStatusFilter, setFeeStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
   const [feeSelected, setFeeSelected] = useState<Set<string>>(new Set());
@@ -267,12 +300,16 @@ export default function FieldPaymentsCentre() {
   // ── Tab 2: Advances state ──────────────────────────────────────────────────
   const [advances, setAdvances] = useState<AdvanceSummaryRow[]>([]);
   const [advancesLoading, setAdvancesLoading] = useState(false);
+  const [advancesLoaded, setAdvancesLoaded] = useState(false);
+  const [advancesLoadError, setAdvancesLoadError] = useState<string | null>(null);
   const [advSearch, setAdvSearch] = useState('');
   const [advStatusFilter, setAdvStatusFilter] = useState('all');
 
   // ── Tab 3: Exceptions state ────────────────────────────────────────────────
   const [exceptions, setExceptions] = useState<ExceptionActionRow[]>([]);
   const [excLoading, setExcLoading] = useState(false);
+  const [exceptionsLoaded, setExceptionsLoaded] = useState(false);
+  const [exceptionsLoadError, setExceptionsLoadError] = useState<string | null>(null);
   const [excSearch, setExcSearch] = useState('');
   const [excDecisionFilter, setExcDecisionFilter] = useState('all');
   const [excStatusFilter, setExcStatusFilter] = useState<'pending' | 'done' | 'all'>('pending');
@@ -285,21 +322,74 @@ export default function FieldPaymentsCentre() {
   // ── Tab 4: Recovery state ──────────────────────────────────────────────────
   const [recovery, setRecovery] = useState<RecoveryRow[]>([]);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryLoaded, setRecoveryLoaded] = useState(false);
+  const [recoveryLoadError, setRecoveryLoadError] = useState<string | null>(null);
   const [recSearch, setRecSearch] = useState('');
 
-  // ── Load on tab change ─────────────────────────────────────────────────────
+  // Load all datasets once so shared summaries and filters never show false
+  // zeroes simply because a tab has not been visited yet.
   useEffect(() => {
-    if (tab === 'fees')      loadFees();
-    if (tab === 'advances')  loadAdvances();
-    if (tab === 'exceptions') loadExceptions();
-    if (tab === 'recovery')  loadRecovery();
-  }, [tab]);
+    const requestGeneration = ++dataLoadGeneration.current;
+
+    setMmps([]);
+    setFees([]);
+    setAdvances([]);
+    setExceptions([]);
+    setRecovery([]);
+    setFeesLoading(false);
+    setAdvancesLoading(false);
+    setExcLoading(false);
+    setRecoveryLoading(false);
+    setFeesLoaded(false);
+    setAdvancesLoaded(false);
+    setExceptionsLoaded(false);
+    setRecoveryLoaded(false);
+    setFeesLoadError(null);
+    setAdvancesLoadError(null);
+    setExceptionsLoadError(null);
+    setRecoveryLoadError(null);
+
+    if (!currentUser?.id || !isFinance) {
+      return;
+    }
+
+    void fetchAllRows<{ id: string; name: string; hub: string }>((from, to) =>
+      supabase
+        .from('mmp_files')
+        .select('id, name, hub')
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    ).then(({ data, error }) => {
+      if (requestGeneration !== dataLoadGeneration.current) return;
+      if (error) {
+        toast({ title: 'Error loading MMP filters', description: error.message, variant: 'destructive' });
+        return;
+      }
+      setMmps(data);
+    });
+
+    void Promise.all([
+      loadFees(),
+      loadAdvances(),
+      loadExceptions(),
+      loadRecovery(),
+    ]);
+
+    return () => {
+      if (requestGeneration === dataLoadGeneration.current) {
+        dataLoadGeneration.current += 1;
+      }
+    };
+  }, [currentUser?.id, isFinance, financeScopeIdentity]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Tab 1: Load enumerator fees
   // ─────────────────────────────────────────────────────────────────────────
   const loadFees = useCallback(async () => {
+    const requestGeneration = dataLoadGeneration.current;
     setFeesLoading(true);
+    setFeesLoaded(false);
+    setFeesLoadError(null);
     try {
       const { data: sites, error } = await fetchAllRows<any>((from, to) =>
         supabase
@@ -375,11 +465,16 @@ export default function FieldPaymentsCentre() {
         };
       }).filter(r => r.totalFee > 0);
 
+      if (requestGeneration !== dataLoadGeneration.current) return;
       setFees(rows);
+      setFeesLoaded(true);
     } catch (e: any) {
+      if (requestGeneration !== dataLoadGeneration.current) return;
+      setFees([]);
+      setFeesLoadError(e.message ?? 'Unknown error');
       toast({ title: 'Error loading fees', description: e.message, variant: 'destructive' });
     } finally {
-      setFeesLoading(false);
+      if (requestGeneration === dataLoadGeneration.current) setFeesLoading(false);
     }
   }, []);
 
@@ -387,7 +482,10 @@ export default function FieldPaymentsCentre() {
   // Tab 2: Load advance summaries
   // ─────────────────────────────────────────────────────────────────────────
   const loadAdvances = useCallback(async () => {
+    const requestGeneration = dataLoadGeneration.current;
     setAdvancesLoading(true);
+    setAdvancesLoaded(false);
+    setAdvancesLoadError(null);
     try {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await fetchAllRows<any>((from, to) =>
@@ -466,11 +564,16 @@ export default function FieldPaymentsCentre() {
         };
       });
 
+      if (requestGeneration !== dataLoadGeneration.current) return;
       setAdvances(rows);
+      setAdvancesLoaded(true);
     } catch (e: any) {
+      if (requestGeneration !== dataLoadGeneration.current) return;
+      setAdvances([]);
+      setAdvancesLoadError(e.message ?? 'Unknown error');
       toast({ title: 'Error loading advances', description: e.message, variant: 'destructive' });
     } finally {
-      setAdvancesLoading(false);
+      if (requestGeneration === dataLoadGeneration.current) setAdvancesLoading(false);
     }
   }, []);
 
@@ -478,12 +581,15 @@ export default function FieldPaymentsCentre() {
   // Tab 3: Load exception actions
   // ─────────────────────────────────────────────────────────────────────────
   const loadExceptions = useCallback(async () => {
+    const requestGeneration = dataLoadGeneration.current;
     setExcLoading(true);
+    setExceptionsLoaded(false);
+    setExceptionsLoadError(null);
     try {
       const { data, error } = await fetchAllRows<any>((from, to) =>
         supabase
           .from('cycle_exception_actions')
-          .select('*, mmp_files!mmp_file_id(name)')
+          .select('*, mmp_files!mmp_file_id(name, hub)')
           .order('created_at', { ascending: false })
           .range(from, to)
       );
@@ -504,6 +610,7 @@ export default function FieldPaymentsCentre() {
         id: r.id,
         mmpFileId: r.mmp_file_id,
         mmpName: r.mmp_files?.name ?? '—',
+        hub: r.mmp_files?.hub ?? '—',
         mmpSiteEntryId: r.mmp_site_entry_id,
         advanceId: r.advance_id,
         enumeratorName: r.enumerator_name ?? '—',
@@ -523,11 +630,16 @@ export default function FieldPaymentsCentre() {
         approvedByName: nameMap[r.executed_by] ?? null,
       }));
 
+      if (requestGeneration !== dataLoadGeneration.current) return;
       setExceptions(rows);
+      setExceptionsLoaded(true);
     } catch (e: any) {
+      if (requestGeneration !== dataLoadGeneration.current) return;
+      setExceptions([]);
+      setExceptionsLoadError(e.message ?? 'Unknown error');
       toast({ title: 'Error loading exceptions', description: e.message, variant: 'destructive' });
     } finally {
-      setExcLoading(false);
+      if (requestGeneration === dataLoadGeneration.current) setExcLoading(false);
     }
   }, []);
 
@@ -535,7 +647,10 @@ export default function FieldPaymentsCentre() {
   // Tab 4: Load recovery / outstanding
   // ─────────────────────────────────────────────────────────────────────────
   const loadRecovery = useCallback(async () => {
+    const requestGeneration = dataLoadGeneration.current;
     setRecoveryLoading(true);
+    setRecoveryLoaded(false);
+    setRecoveryLoadError(null);
     try {
       // Step 1: fetch advances (no join — FK to mmp_site_entries is not declared)
       const { data, error } = await fetchAllRows<any>((from, to) =>
@@ -624,11 +739,16 @@ export default function FieldPaymentsCentre() {
         })
         .filter(r => r.outstandingAmount > 0);
 
+      if (requestGeneration !== dataLoadGeneration.current) return;
       setRecovery(rows);
+      setRecoveryLoaded(true);
     } catch (e: any) {
+      if (requestGeneration !== dataLoadGeneration.current) return;
+      setRecovery([]);
+      setRecoveryLoadError(e.message ?? 'Unknown error');
       toast({ title: 'Error loading recovery data', description: e.message, variant: 'destructive' });
     } finally {
-      setRecoveryLoading(false);
+      if (requestGeneration === dataLoadGeneration.current) setRecoveryLoading(false);
     }
   }, []);
 
@@ -826,23 +946,46 @@ export default function FieldPaymentsCentre() {
     return [...states].sort();
   }, [fees, advances, exceptions, recovery]);
 
+  const uniqueEnumerators = useMemo(() => {
+    const names = new Set<string>();
+    const addName = (name: string | null | undefined) => {
+      if (name && name !== '—' && name !== 'Unknown') names.add(name);
+    };
+    fees.forEach(r => addName(r.enumeratorName));
+    advances.forEach(r => addName(r.enumeratorName));
+    exceptions.forEach(r => addName(r.enumeratorName));
+    recovery.forEach(r => addName(r.enumeratorName));
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [fees, advances, exceptions, recovery]);
+
   // MMP options cascade by hub
   const uniqueMmpOptions = useMemo(() =>
     filterHub ? mmps.filter(m => m.hub === filterHub) : mmps,
   [mmps, filterHub]);
 
-  const activeFilterCount = [filterHub, filterState, filterMmp].filter(Boolean).length;
+  const activeFilterCount = [filterHub, filterState, filterMmp, filterEnumerator].filter(Boolean).length;
 
-  const clearFilters = () => { setFilterHub(''); setFilterState(''); setFilterMmp(''); };
+  const clearFilters = () => {
+    setFilterHub('');
+    setFilterState('');
+    setFilterMmp('');
+    setFilterEnumerator('');
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // Filtered data
   // ─────────────────────────────────────────────────────────────────────────
-  const filteredFees = useMemo(() => {
+  const sharedFilteredFees = useMemo(() => {
     let rows = fees;
     if (filterHub)    rows = rows.filter(r => r.mmpHub === filterHub);
     if (filterState)  rows = rows.filter(r => r.state === filterState);
     if (filterMmp)    rows = rows.filter(r => r.mmpId === filterMmp);
+    if (filterEnumerator) rows = rows.filter(r => r.enumeratorName === filterEnumerator);
+    return rows;
+  }, [fees, filterHub, filterState, filterMmp, filterEnumerator]);
+
+  const filteredFees = useMemo(() => {
+    let rows = sharedFilteredFees;
     if (feeStatusFilter !== 'all') rows = rows.filter(r => r.feePaidStatus === feeStatusFilter);
     if (feeSearch) {
       const q = feeSearch.toLowerCase();
@@ -853,13 +996,19 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [fees, filterHub, filterState, filterMmp, feeStatusFilter, feeSearch]);
+  }, [sharedFilteredFees, feeStatusFilter, feeSearch]);
 
-  const filteredAdvances = useMemo(() => {
+  const sharedFilteredAdvances = useMemo(() => {
     let rows = advances;
     if (filterHub)   rows = rows.filter(r => r.hub === filterHub);
     if (filterState) rows = rows.filter(r => r.state === filterState);
     if (filterMmp)   rows = rows.filter(r => r.mmpId === filterMmp);
+    if (filterEnumerator) rows = rows.filter(r => r.enumeratorName === filterEnumerator);
+    return rows;
+  }, [advances, filterHub, filterState, filterMmp, filterEnumerator]);
+
+  const filteredAdvances = useMemo(() => {
+    let rows = sharedFilteredAdvances;
     if (advStatusFilter !== 'all') rows = rows.filter(r => r.status === advStatusFilter);
     if (advSearch) {
       const q = advSearch.toLowerCase();
@@ -870,12 +1019,19 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [advances, filterHub, filterState, filterMmp, advStatusFilter, advSearch]);
+  }, [sharedFilteredAdvances, advStatusFilter, advSearch]);
 
-  const filteredExceptions = useMemo(() => {
+  const sharedFilteredExceptions = useMemo(() => {
     let rows = exceptions;
+    if (filterHub) rows = rows.filter(r => r.hub === filterHub);
     if (filterState) rows = rows.filter(r => r.state === filterState);
     if (filterMmp)   rows = rows.filter(r => r.mmpFileId === filterMmp);
+    if (filterEnumerator) rows = rows.filter(r => r.enumeratorName === filterEnumerator);
+    return rows;
+  }, [exceptions, filterHub, filterState, filterMmp, filterEnumerator]);
+
+  const filteredExceptions = useMemo(() => {
+    let rows = sharedFilteredExceptions;
     if (excDecisionFilter !== 'all') rows = rows.filter(r => r.decision === excDecisionFilter);
     if (excStatusFilter === 'pending') rows = rows.filter(r => !r.executed);
     if (excStatusFilter === 'done')    rows = rows.filter(r => r.executed);
@@ -888,13 +1044,19 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [exceptions, filterState, filterMmp, excDecisionFilter, excStatusFilter, excSearch]);
+  }, [sharedFilteredExceptions, excDecisionFilter, excStatusFilter, excSearch]);
 
-  const filteredRecovery = useMemo(() => {
+  const sharedFilteredRecovery = useMemo(() => {
     let rows = recovery;
     if (filterHub)   rows = rows.filter(r => r.hub === filterHub);
     if (filterState) rows = rows.filter(r => r.state === filterState);
     if (filterMmp)   rows = rows.filter(r => r.mmpId === filterMmp);
+    if (filterEnumerator) rows = rows.filter(r => r.enumeratorName === filterEnumerator);
+    return rows;
+  }, [recovery, filterHub, filterState, filterMmp, filterEnumerator]);
+
+  const filteredRecovery = useMemo(() => {
+    let rows = sharedFilteredRecovery;
     if (recSearch) {
       const q = recSearch.toLowerCase();
       rows = rows.filter(r =>
@@ -904,33 +1066,304 @@ export default function FieldPaymentsCentre() {
       );
     }
     return rows;
-  }, [recovery, filterHub, filterState, filterMmp, recSearch]);
+  }, [sharedFilteredRecovery, recSearch]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Summary cards
   // ─────────────────────────────────────────────────────────────────────────
   const feeStats = useMemo(() => {
-    const unpaid = fees.filter(r => r.feePaidStatus !== 'paid');
-    const paid   = fees.filter(r => r.feePaidStatus === 'paid');
+    const unpaid = sharedFilteredFees.filter(r => r.feePaidStatus !== 'paid');
+    const paid   = sharedFilteredFees.filter(r => r.feePaidStatus === 'paid');
     return {
       totalUnpaid: unpaid.length,
       totalUnpaidAmt: unpaid.reduce((s, r) => s + r.netPayable, 0),
       totalPaid: paid.length,
       totalPaidAmt: paid.reduce((s, r) => s + (r.feePaidAmount ?? r.netPayable), 0),
     };
-  }, [fees]);
+  }, [sharedFilteredFees]);
 
   const excStats = useMemo(() => ({
-    pending: exceptions.filter(r => !r.executed).length,
-    done:    exceptions.filter(r => r.executed).length,
-    noGl:    exceptions.filter(r => r.executed && !r.glPosted && ['return','writeoff','redirect'].includes(r.decision)).length,
-  }), [exceptions]);
+    pending: sharedFilteredExceptions.filter(r => !r.executed).length,
+    done:    sharedFilteredExceptions.filter(r => r.executed).length,
+    noGl:    sharedFilteredExceptions.filter(r => r.executed && !r.glPosted && ['return','writeoff','redirect'].includes(r.decision)).length,
+  }), [sharedFilteredExceptions]);
 
   const recStats = useMemo(() => ({
-    total: recovery.length,
-    totalAmt: recovery.reduce((s, r) => s + r.outstandingAmount, 0),
-    overdue: recovery.filter(r => r.daysOutstanding > 30).length,
-  }), [recovery]);
+    total: sharedFilteredRecovery.length,
+    totalAmt: sharedFilteredRecovery.reduce((s, r) => s + r.outstandingAmount, 0),
+    overdue: sharedFilteredRecovery.filter(r => r.daysOutstanding > 30).length,
+  }), [sharedFilteredRecovery]);
+
+  const handleExcelExport = async (reportTab: 'fees' | 'advances' | 'exceptions' | 'recovery') => {
+    const readyByTab = {
+      fees: feesLoaded && !feesLoading,
+      advances: advancesLoaded && !advancesLoading,
+      exceptions: exceptionsLoaded && !excLoading,
+      recovery: recoveryLoaded && !recoveryLoading,
+    };
+    if (!readyByTab[reportTab]) {
+      toast({
+        title: 'Report is still loading',
+        description: 'Wait for the current dataset to finish loading, then export again.',
+      });
+      return;
+    }
+
+    const selectedMmpName = mmps.find(mmp => mmp.id === filterMmp)?.name;
+    const sharedFilters = [
+      filterHub ? `Hub: ${filterHub}` : '',
+      filterState ? `State: ${filterState}` : '',
+      filterMmp ? `MMP: ${selectedMmpName ?? filterMmp}` : '',
+      filterEnumerator ? `Enumerator: ${filterEnumerator}` : '',
+    ].filter(Boolean);
+
+    setExportingTab(reportTab);
+    try {
+      if (reportTab === 'fees') {
+        const totalFees = filteredFees.reduce((sum, row) => sum + row.totalFee, 0);
+        const totalAdvances = filteredFees.reduce((sum, row) => sum + row.advancePaid, 0);
+        const totalNet = filteredFees.reduce((sum, row) => sum + row.netPayable, 0);
+
+        await exportFieldPaymentsExcel({
+          title: 'Enumerator Fees Report',
+          sheetName: 'Enumerator Fees',
+          filenamePrefix: 'field-payments-enumerator-fees',
+          filters: [
+            ...sharedFilters,
+            feeStatusFilter !== 'all' ? `Payment status: ${titleCaseLabel(feeStatusFilter)}` : '',
+            feeSearch ? `Search: ${feeSearch}` : '',
+          ].filter(Boolean),
+          summary: [
+            { label: 'Records', value: filteredFees.length },
+            { label: 'Total fees', value: `SDG ${fmt(totalFees)}` },
+            { label: 'Advance deductions', value: `SDG ${fmt(totalAdvances)}` },
+            { label: 'Net payable', value: `SDG ${fmt(totalNet)}` },
+          ],
+          columns: [
+            { key: 'number', header: '#', width: 7, format: 'integer' },
+            { key: 'siteName', header: 'Site', width: 25 },
+            { key: 'siteCode', header: 'Site Code', width: 15 },
+            { key: 'state', header: 'State', width: 18 },
+            { key: 'locality', header: 'Locality', width: 20 },
+            { key: 'enumerator', header: 'Enumerator', width: 28 },
+            { key: 'mmp', header: 'MMP', width: 24 },
+            { key: 'hub', header: 'Hub', width: 18 },
+            { key: 'enumeratorFee', header: 'Enumerator Fee', width: 18, format: 'currency', total: true },
+            { key: 'transportFee', header: 'Transport Fee', width: 18, format: 'currency', total: true },
+            { key: 'totalFee', header: 'Total Fee', width: 18, format: 'currency', total: true },
+            { key: 'advance', header: 'Advance Deduction', width: 20, format: 'currency', total: true },
+            { key: 'netPayable', header: 'Net Payable', width: 18, format: 'currency', total: true },
+            { key: 'paymentStatus', header: 'Payment Status', width: 16, format: 'status' },
+            { key: 'paidAmount', header: 'Paid Amount', width: 18, format: 'currency', total: true },
+            { key: 'paidDate', header: 'Paid Date', width: 16, format: 'date' },
+            { key: 'paymentMethod', header: 'Payment Method', width: 18 },
+            { key: 'cycleStatus', header: 'Cycle Status', width: 15, format: 'status' },
+          ],
+          rows: filteredFees.map((row, index) => ({
+            number: index + 1,
+            siteName: row.siteName,
+            siteCode: row.siteCode,
+            state: row.state,
+            locality: row.locality,
+            enumerator: row.enumeratorName,
+            mmp: row.mmpName,
+            hub: row.mmpHub,
+            enumeratorFee: row.enumeratorFee,
+            transportFee: row.transportFee,
+            totalFee: row.totalFee,
+            advance: row.advancePaid,
+            netPayable: row.netPayable,
+            paymentStatus: titleCaseLabel(row.feePaidStatus),
+            paidAmount: row.feePaidAmount,
+            paidDate: row.feePaidAt,
+            paymentMethod: row.feePaymentMethod,
+            cycleStatus: titleCaseLabel(row.cycleStatus),
+          })),
+        });
+      }
+
+      if (reportTab === 'advances') {
+        const requested = filteredAdvances.reduce((sum, row) => sum + row.requestedAmount, 0);
+        const paid = filteredAdvances.reduce((sum, row) => sum + row.paidAmount, 0);
+
+        await exportFieldPaymentsExcel({
+          title: 'Transport Advances Report',
+          sheetName: 'Transport Advances',
+          filenamePrefix: 'field-payments-transport-advances',
+          filters: [
+            ...sharedFilters,
+            advStatusFilter !== 'all' ? `Advance status: ${titleCaseLabel(advStatusFilter)}` : '',
+            advSearch ? `Search: ${advSearch}` : '',
+          ].filter(Boolean),
+          summary: [
+            { label: 'Records', value: filteredAdvances.length },
+            { label: 'Requested', value: `SDG ${fmt(requested)}` },
+            { label: 'Paid', value: `SDG ${fmt(paid)}` },
+            { label: 'Outstanding', value: `SDG ${fmt(Math.max(requested - paid, 0))}` },
+          ],
+          columns: [
+            { key: 'number', header: '#', width: 7, format: 'integer' },
+            { key: 'enumerator', header: 'Enumerator', width: 28 },
+            { key: 'siteName', header: 'Site', width: 25 },
+            { key: 'state', header: 'State', width: 18 },
+            { key: 'hub', header: 'Hub', width: 18 },
+            { key: 'mmp', header: 'MMP', width: 24 },
+            { key: 'requested', header: 'Requested Amount', width: 20, format: 'currency', total: true },
+            { key: 'paid', header: 'Paid Amount', width: 18, format: 'currency', total: true },
+            { key: 'outstanding', header: 'Outstanding', width: 18, format: 'currency', total: true },
+            { key: 'status', header: 'Advance Status', width: 18, format: 'status' },
+            { key: 'glStatus', header: 'GL Status', width: 16, format: 'status' },
+            { key: 'updatedDate', header: 'Paid / Updated Date', width: 20, format: 'date' },
+            { key: 'cycleStatus', header: 'Cycle Status', width: 15, format: 'status' },
+          ],
+          rows: filteredAdvances.map((row, index) => ({
+            number: index + 1,
+            enumerator: row.enumeratorName,
+            siteName: row.siteName,
+            state: row.state,
+            hub: row.hub,
+            mmp: row.mmpName,
+            requested: row.requestedAmount,
+            paid: row.paidAmount,
+            outstanding: Math.max(row.requestedAmount - row.paidAmount, 0),
+            status: titleCaseLabel(row.status),
+            glStatus: titleCaseLabel(row.glBridgeStatus),
+            updatedDate: row.paidAt,
+            cycleStatus: titleCaseLabel(row.cycleStatus),
+          })),
+        });
+      }
+
+      if (reportTab === 'exceptions') {
+        const advanceTotal = filteredExceptions.reduce((sum, row) => sum + row.advanceAmount, 0);
+        const recoveredTotal = filteredExceptions.reduce((sum, row) => sum + (row.recoveryAmount ?? 0), 0);
+
+        await exportFieldPaymentsExcel({
+          title: 'Cycle Exception Actions Report',
+          sheetName: 'Exception Actions',
+          filenamePrefix: 'field-payments-exception-actions',
+          filters: [
+            ...sharedFilters,
+            excDecisionFilter !== 'all' ? `Decision: ${titleCaseLabel(excDecisionFilter)}` : '',
+            `Execution: ${titleCaseLabel(excStatusFilter)}`,
+            excSearch ? `Search: ${excSearch}` : '',
+          ].filter(Boolean),
+          summary: [
+            { label: 'Records', value: filteredExceptions.length },
+            { label: 'Advance amount', value: `SDG ${fmt(advanceTotal)}` },
+            { label: 'Recovered amount', value: `SDG ${fmt(recoveredTotal)}` },
+            { label: 'Executed', value: filteredExceptions.filter(row => row.executed).length },
+          ],
+          columns: [
+            { key: 'number', header: '#', width: 7, format: 'integer' },
+            { key: 'siteName', header: 'Site', width: 25 },
+            { key: 'state', header: 'State', width: 18 },
+            { key: 'hub', header: 'Hub', width: 18 },
+            { key: 'enumerator', header: 'Enumerator', width: 28 },
+            { key: 'mmp', header: 'MMP', width: 24 },
+            { key: 'advanceAmount', header: 'Advance Amount', width: 19, format: 'currency', total: true },
+            { key: 'decision', header: 'Decision', width: 20, format: 'status' },
+            { key: 'executionStatus', header: 'Execution Status', width: 18, format: 'status' },
+            { key: 'glStatus', header: 'GL Status', width: 16, format: 'status' },
+            { key: 'recoveryAmount', header: 'Recovery Amount', width: 19, format: 'currency', total: true },
+            { key: 'recoveryDate', header: 'Recovery Date', width: 17, format: 'date' },
+            { key: 'executedDate', header: 'Executed Date', width: 17, format: 'date' },
+            { key: 'approvedBy', header: 'Executed By', width: 25 },
+            { key: 'justification', header: 'Justification', width: 42, format: 'text' },
+          ],
+          rows: filteredExceptions.map((row, index) => ({
+            number: index + 1,
+            siteName: row.siteName,
+            state: row.state,
+            hub: row.hub,
+            enumerator: row.enumeratorName,
+            mmp: row.mmpName,
+            advanceAmount: row.advanceAmount,
+            decision: titleCaseLabel(row.decision),
+            executionStatus: row.executed ? 'Executed' : 'Pending',
+            glStatus: row.glPosted ? 'Posted' : row.executed ? 'Pending' : 'Not posted',
+            recoveryAmount: row.recoveryAmount,
+            recoveryDate: row.recoveryDate,
+            executedDate: row.executedAt,
+            approvedBy: row.approvedByName,
+            justification: row.justification,
+          })),
+        });
+      }
+
+      if (reportTab === 'recovery') {
+        const disbursed = filteredRecovery.reduce((sum, row) => sum + row.disbursedAmount, 0);
+        const recovered = filteredRecovery.reduce((sum, row) => sum + row.recoveredAmount, 0);
+        const outstanding = filteredRecovery.reduce((sum, row) => sum + row.outstandingAmount, 0);
+
+        await exportFieldPaymentsExcel({
+          title: 'Advance Recovery and Outstanding Report',
+          sheetName: 'Recovery',
+          filenamePrefix: 'field-payments-recovery',
+          filters: [
+            ...sharedFilters,
+            recSearch ? `Search: ${recSearch}` : '',
+          ].filter(Boolean),
+          summary: [
+            { label: 'Records', value: filteredRecovery.length },
+            { label: 'Disbursed', value: `SDG ${fmt(disbursed)}` },
+            { label: 'Recovered', value: `SDG ${fmt(recovered)}` },
+            { label: 'Outstanding', value: `SDG ${fmt(outstanding)}` },
+            { label: 'Overdue >30 days', value: filteredRecovery.filter(row => row.daysOutstanding > 30).length },
+          ],
+          columns: [
+            { key: 'number', header: '#', width: 7, format: 'integer' },
+            { key: 'enumerator', header: 'Enumerator', width: 28 },
+            { key: 'siteName', header: 'Site', width: 25 },
+            { key: 'state', header: 'State', width: 18 },
+            { key: 'hub', header: 'Hub', width: 18 },
+            { key: 'mmp', header: 'MMP', width: 24 },
+            { key: 'disbursed', header: 'Disbursed Amount', width: 20, format: 'currency', total: true },
+            { key: 'recovered', header: 'Recovered Amount', width: 20, format: 'currency', total: true },
+            { key: 'outstanding', header: 'Outstanding Amount', width: 20, format: 'currency', total: true },
+            { key: 'age', header: 'Age (Days)', width: 13, format: 'integer' },
+            { key: 'agingStatus', header: 'Aging Status', width: 16, format: 'status' },
+            { key: 'advanceStatus', header: 'Advance Status', width: 17, format: 'status' },
+            { key: 'disbursedDate', header: 'Disbursed / Updated Date', width: 22, format: 'date' },
+          ],
+          rows: filteredRecovery.map((row, index) => ({
+            number: index + 1,
+            enumerator: row.enumeratorName,
+            siteName: row.siteName,
+            state: row.state,
+            hub: row.hub,
+            mmp: row.mmpName,
+            disbursed: row.disbursedAmount,
+            recovered: row.recoveredAmount,
+            outstanding: row.outstandingAmount,
+            age: row.daysOutstanding,
+            agingStatus: row.daysOutstanding > 30 ? 'Overdue' : 'Current',
+            advanceStatus: titleCaseLabel(row.status),
+            disbursedDate: row.disbursedAt,
+          })),
+        });
+      }
+
+      const rowCounts = {
+        fees: filteredFees.length,
+        advances: filteredAdvances.length,
+        exceptions: filteredExceptions.length,
+        recovery: filteredRecovery.length,
+      };
+      toast({
+        title: 'Excel report exported',
+        description: `${rowCounts[reportTab]} filtered record${rowCounts[reportTab] === 1 ? '' : 's'} exported.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Excel export failed',
+        description: error?.message ?? 'Unable to generate the report.',
+        variant: 'destructive',
+      });
+    } finally {
+      setExportingTab(null);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -976,23 +1409,37 @@ export default function FieldPaymentsCentre() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Fees Unpaid</p>
-          <p className="text-xl font-bold text-amber-600">{feeStats.totalUnpaid}</p>
-          <p className="text-xs text-muted-foreground">SDG {fmt(feeStats.totalUnpaidAmt)}</p>
+          <p className="text-xl font-bold text-amber-600">{feesLoadError ? '!' : feesLoaded ? feeStats.totalUnpaid : '…'}</p>
+          <p className={`text-xs ${feesLoadError ? 'text-red-500' : 'text-muted-foreground'}`}>
+            {feesLoadError ? 'Unavailable — retry below' : feesLoaded ? `SDG ${fmt(feeStats.totalUnpaidAmt)}` : 'Loading…'}
+          </p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Fees Paid</p>
-          <p className="text-xl font-bold text-green-600">{feeStats.totalPaid}</p>
-          <p className="text-xs text-muted-foreground">SDG {fmt(feeStats.totalPaidAmt)}</p>
+          <p className="text-xl font-bold text-green-600">{feesLoadError ? '!' : feesLoaded ? feeStats.totalPaid : '…'}</p>
+          <p className={`text-xs ${feesLoadError ? 'text-red-500' : 'text-muted-foreground'}`}>
+            {feesLoadError ? 'Unavailable — retry below' : feesLoaded ? `SDG ${fmt(feeStats.totalPaidAmt)}` : 'Loading…'}
+          </p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Exceptions Pending</p>
-          <p className={`text-xl font-bold ${excStats.pending > 0 ? 'text-red-600' : 'text-green-600'}`}>{excStats.pending}</p>
-          {excStats.noGl > 0 && <p className="text-xs text-red-500">{excStats.noGl} GL not posted</p>}
+          <p className={`text-xl font-bold ${exceptionsLoaded && excStats.pending > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            {exceptionsLoadError ? '!' : exceptionsLoaded ? excStats.pending : '…'}
+          </p>
+          {exceptionsLoadError
+            ? <p className="text-xs text-red-500">Unavailable — retry below</p>
+            : !exceptionsLoaded && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {exceptionsLoaded && excStats.noGl > 0 && <p className="text-xs text-red-500">{excStats.noGl} GL not posted</p>}
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Outstanding Advances</p>
-          <p className={`text-xl font-bold ${recStats.total > 0 ? 'text-amber-600' : 'text-green-600'}`}>{recStats.total}</p>
-          {recStats.overdue > 0 && <p className="text-xs text-red-500">{recStats.overdue} overdue &gt;30d</p>}
+          <p className={`text-xl font-bold ${recoveryLoaded && recStats.total > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+            {recoveryLoadError ? '!' : recoveryLoaded ? recStats.total : '…'}
+          </p>
+          {recoveryLoadError
+            ? <p className="text-xs text-red-500">Unavailable — retry below</p>
+            : !recoveryLoaded && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {recoveryLoaded && recStats.overdue > 0 && <p className="text-xs text-red-500">{recStats.overdue} overdue &gt;30d</p>}
         </Card>
       </div>
 
@@ -1006,6 +1453,7 @@ export default function FieldPaymentsCentre() {
           setFilterHub(v === '__all__' ? '' : v);
           setFilterState('');
           setFilterMmp('');
+          setFilterEnumerator('');
         }}>
           <SelectTrigger className="h-8 text-xs w-36">
             <SelectValue placeholder="All Hubs" />
@@ -1035,6 +1483,17 @@ export default function FieldPaymentsCentre() {
           <SelectContent>
             <SelectItem value="__all__">All MMPs</SelectItem>
             {uniqueMmpOptions.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* Enumerator */}
+        <Select value={filterEnumerator || '__all__'} onValueChange={v => setFilterEnumerator(v === '__all__' ? '' : v)}>
+          <SelectTrigger className="h-8 text-xs w-52">
+            <SelectValue placeholder="All Enumerators" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Enumerators</SelectItem>
+            {uniqueEnumerators.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
           </SelectContent>
         </Select>
 
@@ -1110,6 +1569,16 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadFees}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => handleExcelExport('fees')}
+              disabled={exportingTab === 'fees' || feesLoading || !feesLoaded}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              {exportingTab === 'fees' ? 'Exporting…' : 'Export Excel'}
+            </Button>
             {feeSelected.size > 0 && (
               <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => openPayDialog(filteredFees.filter(r => feeSelected.has(r.id)))}>
                 <Banknote className="h-3 w-3 mr-1" /> Pay {feeSelected.size} selected
@@ -1117,7 +1586,9 @@ export default function FieldPaymentsCentre() {
             )}
           </div>
 
-          {feesLoading ? (
+          {feesLoadError ? (
+            <DataLoadError message={feesLoadError} onRetry={loadFees} />
+          ) : feesLoading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground"><RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
@@ -1237,9 +1708,21 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadAdvances}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => handleExcelExport('advances')}
+              disabled={exportingTab === 'advances' || advancesLoading || !advancesLoaded}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              {exportingTab === 'advances' ? 'Exporting…' : 'Export Excel'}
+            </Button>
           </div>
 
-          {advancesLoading ? (
+          {advancesLoadError ? (
+            <DataLoadError message={advancesLoadError} onRetry={loadAdvances} />
+          ) : advancesLoading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground"><RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
@@ -1349,9 +1832,21 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadExceptions}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => handleExcelExport('exceptions')}
+              disabled={exportingTab === 'exceptions' || excLoading || !exceptionsLoaded}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              {exportingTab === 'exceptions' ? 'Exporting…' : 'Export Excel'}
+            </Button>
           </div>
 
-          {excLoading ? (
+          {exceptionsLoadError ? (
+            <DataLoadError message={exceptionsLoadError} onRetry={loadExceptions} />
+          ) : excLoading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground"><RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
           ) : (
             <div className="space-y-3">
@@ -1458,9 +1953,21 @@ export default function FieldPaymentsCentre() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadRecovery}>
               <RefreshCw className="h-3 w-3 mr-1" /> Refresh
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => handleExcelExport('recovery')}
+              disabled={exportingTab === 'recovery' || recoveryLoading || !recoveryLoaded}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              {exportingTab === 'recovery' ? 'Exporting…' : 'Export Excel'}
+            </Button>
           </div>
 
-          {recoveryLoading ? (
+          {recoveryLoadError ? (
+            <DataLoadError message={recoveryLoadError} onRetry={loadRecovery} />
+          ) : recoveryLoading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground"><RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
