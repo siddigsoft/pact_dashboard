@@ -170,26 +170,10 @@ export default function Step5Exceptions({
   const loadExceptions = async () => {
     setLoading(true);
     const notCoveredIds = Object.keys(wizardState.uncoveredReasons);
-    if (!notCoveredIds.length) { setLoading(false); return; }
 
-    // ── Round 1: site details + advances in parallel ──────────────────────────
-    const [siteResult, advancesResult, actionsResult, mmpResult] = await Promise.all([
-      supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, state, locality, accepted_by')
-        .in('id', notCoveredIds),
-      supabase
-        .from('down_payment_requests')
-        .select([
-          'id', 'mmp_site_entry_id', 'status',
-          'total_paid_amount', 'requested_amount', 'remaining_amount',
-          'payment_type', 'installment_plan', 'paid_installments', 'wallet_transaction_ids',
-          'requested_by', 'requested_at',
-          'supervisor_approved_by', 'supervisor_approved_at',
-          'admin_processed_by', 'admin_processed_at',
-        ].join(', '))
-        .in('mmp_site_entry_id', notCoveredIds)
-        .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid']),
+    // Load persisted successful actions first. They remain reviewable after the
+    // wizard is reopened, even when the transient uncovered-reason state is gone.
+    const [actionsResult, mmpResult] = await Promise.all([
       supabase
         .from('cycle_exception_actions')
         .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error')
@@ -201,6 +185,15 @@ export default function Step5Exceptions({
         .neq('id', wizardState.selectedMmpId!)
         .order('created_at', { ascending: false }),
     ]);
+    const actionRows = (actionsResult.data ?? []) as any[];
+    const actionSiteIds = actionRows
+      .map(row => row.mmp_site_entry_id as string | null)
+      .filter((id): id is string => !!id);
+    const actionAdvanceIds = actionRows
+      .map(row => row.advance_id as string | null)
+      .filter((id): id is string => !!id);
+    const sourceSiteIds = [...new Set([...notCoveredIds, ...actionSiteIds])];
+
     if (mmpResult.error) {
       console.error('[CycleClose] Could not load target cycles:', mmpResult.error);
       setOpenMmps([]);
@@ -212,8 +205,45 @@ export default function Step5Exceptions({
       ));
     }
 
+    if (!sourceSiteIds.length) {
+      setExceptions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Load by both source site and action advance ID. Roll/cancel actions can
+    // move or change the advance, so source-site filtering alone loses history.
+    const advanceSelect = [
+      'id', 'mmp_site_entry_id', 'status',
+      'total_paid_amount', 'requested_amount', 'remaining_amount',
+      'payment_type', 'installment_plan', 'paid_installments', 'wallet_transaction_ids',
+      'requested_by', 'requested_at',
+      'supervisor_approved_by', 'supervisor_approved_at',
+      'admin_processed_by', 'admin_processed_at',
+    ].join(', ');
+    const [siteResult, siteAdvancesResult, actionAdvancesResult] = await Promise.all([
+      supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, state, locality, accepted_by')
+        .in('id', sourceSiteIds),
+      supabase
+        .from('down_payment_requests')
+        .select(advanceSelect)
+        .in('mmp_site_entry_id', sourceSiteIds),
+      actionAdvanceIds.length
+        ? supabase
+          .from('down_payment_requests')
+          .select(advanceSelect)
+          .in('id', actionAdvanceIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
     const siteData = siteResult.data;
-    if (!siteData?.length) { setLoading(false); return; }
+    if (!siteData?.length) {
+      setExceptions([]);
+      setLoading(false);
+      return;
+    }
 
     // Build one exception record per active advance. The server close gate is
     // also advance-scoped, so collapsing these by site can strand a second
@@ -236,13 +266,26 @@ export default function Step5Exceptions({
       paidInstallments: any[];
       walletTransactionIds: string[];
     }
-    const advances: AdvanceRec[] = ((advancesResult.data ?? []) as any[]).map(a => ({
+    const activeAdvanceStatuses = new Set(['approved', 'paid', 'partially_paid', 'fully_paid']);
+    const executedAdvanceIdSet = new Set(actionAdvanceIds);
+    const advancesById = new Map<string, any>();
+    for (const advance of [
+      ...((siteAdvancesResult.data ?? []) as any[]),
+      ...((actionAdvancesResult.data ?? []) as any[]),
+    ]) {
+      advancesById.set(advance.id, advance);
+    }
+    const advances: AdvanceRec[] = [...advancesById.values()]
+      .filter(a => activeAdvanceStatuses.has(a.status) || executedAdvanceIdSet.has(a.id))
+      .map(a => ({
       id: a.id as string,
       siteId: a.mmp_site_entry_id as string,
       paidAmount: (a.total_paid_amount as number) ?? 0,
       requestedAmount: (a.requested_amount as number) ?? 0,
       remainingAmount: a.remaining_amount ?? null,
-      status: a.status as AdvanceRec['status'],
+      status: activeAdvanceStatuses.has(a.status)
+        ? a.status as AdvanceRec['status']
+        : ((a.total_paid_amount ?? 0) > 0 ? 'paid' : 'approved'),
       approvedById: (a.supervisor_approved_by as string | null) ?? null,
       requestedById: (a.requested_by as string | null) ?? null,
       requestedAt: (a.requested_at as string | null) ?? null,
@@ -279,12 +322,18 @@ export default function Step5Exceptions({
     for (const p of (secondaryResult.data ?? [])) { if (p.full_name) approverNameMap[p.id] = p.full_name; }
 
     const siteById = Object.fromEntries((siteData as any[]).map((s: any) => [s.id, s]));
+    const actionSourceSiteByAdvance = Object.fromEntries(
+      actionRows
+        .filter(row => row.advance_id && row.mmp_site_entry_id)
+        .map(row => [row.advance_id, row.mmp_site_entry_id]),
+    );
     const exceptionSites: ExceptionSite[] = advances
-      .filter(adv => !!siteById[adv.siteId])
+      .filter(adv => !!siteById[actionSourceSiteByAdvance[adv.id] ?? adv.siteId])
       .map(adv => {
-        const s = siteById[adv.siteId];
+        const sourceSiteId = actionSourceSiteByAdvance[adv.id] ?? adv.siteId;
+        const s = siteById[sourceSiteId];
         return {
-          siteId:              s.id as string,
+          siteId:              sourceSiteId,
           siteName:            s.site_name as string,
           state:               s.state as string,
           locality:            s.locality as string,
@@ -311,7 +360,7 @@ export default function Step5Exceptions({
     setExceptions(exceptionSites);
 
     const executedFromServer: Record<string, ExceptionDecision> = {};
-    for (const row of (actionsResult.data ?? []) as any[]) {
+    for (const row of actionRows) {
       if (!row.advance_id) continue;
       executedFromServer[row.advance_id] = {
         decision: row.decision,
@@ -323,7 +372,6 @@ export default function Step5Exceptions({
         receiptReference: row.receipt_reference ?? undefined,
         returnMethod: row.return_method ?? undefined,
         recoveryDate: row.recovery_date ?? undefined,
-        executedByName: row.executed_by_name ?? undefined,
         executed: true,
         actionId: row.id,
         executedAt: row.executed_at ?? undefined,
