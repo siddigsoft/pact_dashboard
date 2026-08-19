@@ -122,7 +122,22 @@ const STATUS_COLORS: Record<string, string> = {
 
 const FILTER_STATUSES = ['all', 'pending', 'dispatched', 'assigned', 'claimed', 'completed'] as const;
 
-const ADHOC_BUCKET_VALUE = '__adhoc_bucket__';
+const CREATE_PROJECT_MMP_VALUE = '__create_project_mmp__';
+
+interface MmpLifecycleRecord {
+  status?: string | null;
+  cycle_status?: string | null;
+}
+
+const normalizeMmpLifecycleStatus = (value?: string | null) =>
+  (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+const isOpenProjectMmp = (mmp: MmpLifecycleRecord): boolean => {
+  const status = normalizeMmpLifecycleStatus(mmp.status);
+  const cycleStatus = normalizeMmpLifecycleStatus(mmp.cycle_status);
+  return !['archived', 'cancelled', 'closed', 'deleted', 'rejected'].includes(status)
+    && !['archived', 'closed', 'final_closed', 'soft_closed'].includes(cycleStatus);
+};
 
 const emptyRow = (): AdhocRow => ({
   siteName: '', siteCode: '', state: '', locality: '',
@@ -155,7 +170,7 @@ const normalizePhoneNumbers = (raw: string): string[] => {
     .filter((part) => part.length >= 7);
 };
 
-// ── Adhoc MMP bucket (fallback when no real MMP selected) ────────────────────
+// ── Project MMP fallback (used only when a project has no open MMP) ───────────
 
 const getOrCreateAdhocMMPFile = async (
   projectId: string,
@@ -164,16 +179,20 @@ const getOrCreateAdhocMMPFile = async (
   const now = new Date();
   const monthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const mmpId = `adhoc-tasks-${projectId}-${monthKey}`;
-  const mmpName = `Ad-hoc Tasks — ${projectName} — ${monthYear}`;
+  const baseMmpId = `adhoc-tasks-${projectId}-${monthKey}`;
 
   const { data: existing } = await supabase
     .from('mmp_files')
-    .select('id')
-    .eq('mmp_id', mmpId)
+    .select('id, status, cycle_status')
+    .eq('mmp_id', baseMmpId)
     .single();
 
-  if (existing) return existing.id;
+  if (existing && isOpenProjectMmp(existing)) return existing.id;
+
+  const mmpId = existing
+    ? `${baseMmpId}-${Date.now().toString(36)}`
+    : baseMmpId;
+  const mmpName = `Ad-hoc Tasks — ${projectName} — ${monthYear}`;
 
   const { data: newMMP, error } = await supabase
     .from('mmp_files')
@@ -194,6 +213,48 @@ const getOrCreateAdhocMMPFile = async (
 
   if (error || !newMMP) throw error || new Error('Failed to create adhoc MMP file');
   return newMMP.id;
+};
+
+const loadOpenProjectMmps = async (projectId: string): Promise<ProjectMmp[]> => {
+  const { data, error } = await supabase
+    .from('mmp_files')
+    .select('id, name, month, mmp_id, status, cycle_status, created_at')
+    .eq('project_id', projectId)
+    .order('month', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  const openMmps = ((data || []) as Array<MmpLifecycleRecord & {
+    id: string;
+    name: string | null;
+    month: string | null;
+    mmp_id: string | null;
+    created_at: string | null;
+  }>).filter(isOpenProjectMmp);
+  const ids = openMmps.map(mmp => mmp.id);
+  const { data: counts, error: countsError } = ids.length
+    ? await supabase
+        .from('mmp_site_entries')
+        .select('mmp_file_id')
+        .in('mmp_file_id', ids)
+    : { data: [], error: null };
+
+  if (countsError) throw countsError;
+
+  const countMap: Record<string, number> = {};
+  (counts || []).forEach((row: { mmp_file_id: string | null }) => {
+    if (!row.mmp_file_id) return;
+    countMap[row.mmp_file_id] = (countMap[row.mmp_file_id] || 0) + 1;
+  });
+
+  return openMmps.map(mmp => ({
+    id: mmp.id,
+    name: mmp.name || mmp.mmp_id || mmp.id,
+    month: mmp.month || '',
+    mmp_id: mmp.mmp_id || mmp.id,
+    site_count: countMap[mmp.id] || 0,
+  }));
 };
 
 // ── Column-mapping ────────────────────────────────────────────────────────────
@@ -273,7 +334,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   // MMP & Activity pickers
   const [projectMmps, setProjectMmps] = useState<ProjectMmp[]>([]);
-  const [selectedMmpId, setSelectedMmpId] = useState<string>(ADHOC_BUCKET_VALUE);
+  const [selectedMmpId, setSelectedMmpId] = useState<string>('');
   const [loadingMmps, setLoadingMmps] = useState(false);
   const [projectActivities, setProjectActivities] = useState<ProjectActivity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -305,8 +366,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  // Real MMP IDs that have had ad-hoc entries added this session
-  const [usedRealMmpIds, setUsedRealMmpIds] = useState<string[]>([]);
 
   // Edit / Recall
   const [editEntry, setEditEntry] = useState<ExistingEntry | null>(null);
@@ -354,44 +413,39 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     if (!selectedProjectId) {
       setProjectMmps([]);
       setProjectActivities([]);
-      setSelectedMmpId(ADHOC_BUCKET_VALUE);
+      setSelectedMmpId('');
+      setLoadingMmps(false);
+      setLoadingActivities(false);
       return;
     }
+
+    let isCurrentProject = true;
 
     // Load MMPs for this project
     setLoadingMmps(true);
     (async () => {
-      const { data } = await supabase
-        .from('mmp_files')
-        .select('id, name, month, mmp_id')
-        .eq('project_id', selectedProjectId)
-        .not('mmp_id', 'ilike', 'adhoc-tasks-%')
-        .order('month', { ascending: false });
-
-      if (data) {
-        // Get site counts
-        const ids = data.map((m: any) => m.id);
-        const { data: counts } = ids.length
-          ? await supabase
-              .from('mmp_site_entries')
-              .select('mmp_file_id')
-              .in('mmp_file_id', ids)
-          : { data: [] };
-
-        const countMap: Record<string, number> = {};
-        (counts || []).forEach((r: any) => {
-          countMap[r.mmp_file_id] = (countMap[r.mmp_file_id] || 0) + 1;
+      try {
+        const openMmps = await loadOpenProjectMmps(selectedProjectId);
+        if (!isCurrentProject) return;
+        setProjectMmps(openMmps);
+        setSelectedMmpId(current =>
+          openMmps.some(mmp => mmp.id === current)
+            ? current
+            : (openMmps[0]?.id ?? CREATE_PROJECT_MMP_VALUE),
+        );
+      } catch (error) {
+        if (!isCurrentProject) return;
+        console.error('Failed to load open MMPs for ad-hoc sites:', error);
+        setProjectMmps([]);
+        setSelectedMmpId(CREATE_PROJECT_MMP_VALUE);
+        toast({
+          title: 'Could not load project MMPs',
+          description: 'No site visits can be created until the available MMPs can be checked.',
+          variant: 'destructive',
         });
-
-        setProjectMmps(data.map((m: any) => ({
-          id: m.id,
-          name: m.name || m.mmp_id,
-          month: m.month || '',
-          mmp_id: m.mmp_id,
-          site_count: countMap[m.id] || 0,
-        })));
+      } finally {
+        if (isCurrentProject) setLoadingMmps(false);
       }
-      setLoadingMmps(false);
     })();
 
     // Load activities for this project
@@ -402,54 +456,78 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         .select('id, title, activity_type, custom_type_label')
         .eq('project_id', selectedProjectId)
         .order('title', { ascending: true });
-      setProjectActivities((data || []) as ProjectActivity[]);
-      setLoadingActivities(false);
+      if (isCurrentProject) {
+        setProjectActivities((data || []) as ProjectActivity[]);
+        setLoadingActivities(false);
+      }
     })();
-  }, [selectedProjectId]);
+
+    return () => {
+      isCurrentProject = false;
+    };
+  }, [selectedProjectId, toast]);
 
   // ── Load existing ad-hoc entries ─────────────────────────────────────────
-  // Fast strategy: query only adhoc-tasks-* bucket MMP files (indexed by mmp_id)
-  // + any real MMP IDs that had adhoc entries added this session (usedRealMmpIds).
-  // We deliberately avoid full-table jsonb scans on mmp_site_entries.
+  // New entries carry additional_data.source='adhoc', so they remain visible
+  // even after a page reload when they are inside a real project MMP. Retain
+  // the generated-bucket lookup to include older entries created before that
+  // marker was consistently available.
 
-  const loadExisting = useCallback(async (extraMmpIds: string[] = []) => {
+  const loadExisting = useCallback(async () => {
     setLoadingExisting(true);
     try {
-      // Step 1: Get adhoc-bucket MMP file IDs — parallel with anything else we can do now
-      const { data: adhocFiles } = await supabase
-        .from('mmp_files')
-        .select('id, name')
-        .ilike('mmp_id', 'adhoc-tasks-%');
+      const entrySelect = 'id, mmp_file_id, site_name, site_code, state, locality, status, accepted_by, additional_data, transport_fee, enumerator_fee, visit_date, created_at, dispatched_at';
+      const [adhocFilesResult, markedEntriesResult] = await Promise.all([
+        supabase
+          .from('mmp_files')
+          .select('id, name')
+          .ilike('mmp_id', 'adhoc-tasks-%'),
+        supabase
+          .from('mmp_site_entries')
+          .select(entrySelect)
+          .contains('additional_data', { source: 'adhoc' })
+          .order('created_at', { ascending: false })
+          .limit(500),
+      ]);
 
+      const adhocFiles = adhocFilesResult.data ?? [];
       const adhocFileIds = (adhocFiles || []).map((f: any) => f.id as string);
       const mmpNameMap: Record<string, string> = {};
       (adhocFiles || []).forEach((f: any) => { mmpNameMap[f.id] = f.name; });
 
-      // Include real MMP IDs used this session
-      const allMmpIds = [...new Set([...adhocFileIds, ...extraMmpIds])];
+      const bucketEntriesResult = adhocFileIds.length
+        ? await supabase
+            .from('mmp_site_entries')
+            .select(entrySelect)
+            .in('mmp_file_id', adhocFileIds)
+            .order('created_at', { ascending: false })
+            .limit(500)
+        : { data: [], error: null };
 
-      if (allMmpIds.length === 0) {
-        setExistingEntries([]);
-        setLoadingExisting(false);
-        return;
+      if (markedEntriesResult.error) {
+        console.error('Failed to load ad-hoc entries from project MMPs:', markedEntriesResult.error);
+      }
+      if (bucketEntriesResult.error) {
+        console.error('Failed to load generated ad-hoc MMP entries:', bucketEntriesResult.error);
       }
 
-      // Step 2: Fetch extra MMP names (for real MMPs) and entries — in parallel
-      const [entriesRes, extraMmpsRes] = await Promise.all([
-        supabase
-          .from('mmp_site_entries')
-          .select('id, mmp_file_id, site_name, site_code, state, locality, status, accepted_by, additional_data, transport_fee, enumerator_fee, visit_date, created_at, dispatched_at')
-          .in('mmp_file_id', allMmpIds)
-          .order('created_at', { ascending: false })
-          .limit(500),
-        extraMmpIds.length > 0
-          ? supabase.from('mmp_files').select('id, name').in('id', extraMmpIds)
-          : Promise.resolve({ data: [] }),
-      ]);
+      const entriesById = new Map<string, any>();
+      [...(markedEntriesResult.data || []), ...(bucketEntriesResult.data || [])]
+        .forEach((entry: any) => entriesById.set(entry.id, entry));
+      const allEntries = [...entriesById.values()]
+        .sort((left, right) => String(right.created_at || '').localeCompare(String(left.created_at || '')));
 
-      ((extraMmpsRes as any).data || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
-
-      const allEntries = entriesRes.data || [];
+      const mmpIds = [...new Set(allEntries.map(entry => entry.mmp_file_id).filter(Boolean))] as string[];
+      if (mmpIds.length > 0) {
+        const { data: mmpNames, error: mmpNamesError } = await supabase
+          .from('mmp_files')
+          .select('id, name')
+          .in('id', mmpIds);
+        if (mmpNamesError) {
+          console.error('Failed to resolve MMP names for ad-hoc entries:', mmpNamesError);
+        }
+        (mmpNames || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
+      }
 
       // Step 3: Resolve assignee names
       const assignedIds = [...new Set(allEntries.flatMap((e: any) => {
@@ -472,7 +550,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         return {
           id: e.id,
           mmp_file_id: e.mmp_file_id,
-          mmp_name: mmpNameMap[e.mmp_file_id] || 'Ad-hoc bucket',
+          mmp_name: mmpNameMap[e.mmp_file_id] || 'Containing MMP unavailable',
           site_name: e.site_name || '',
           site_code: e.site_code,
           state: e.state,
@@ -508,7 +586,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     }
   }, []);
 
-  useEffect(() => { loadExisting(usedRealMmpIds); }, [loadExisting, refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadExisting(); }, [loadExisting, refreshTrigger]);
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
@@ -543,10 +621,12 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   };
 
   const selectedMmpLabel = useMemo(() => {
-    if (!selectedMmpId || selectedMmpId === ADHOC_BUCKET_VALUE) return 'Ad-hoc bucket (no MMP)';
+    if (!selectedProjectId) return 'Select a project first';
+    if (loadingMmps) return 'Checking open MMPs…';
+    if (projectMmps.length === 0) return 'New project MMP';
     const m = projectMmps.find(m => m.id === selectedMmpId);
-    return m ? `${m.name} (${m.site_count} sites)` : selectedMmpId;
-  }, [selectedMmpId, projectMmps]);
+    return m ? `${m.name} (${m.site_count} sites)` : 'Select an open MMP';
+  }, [selectedMmpId, projectMmps, selectedProjectId, loadingMmps]);
 
   // ── File upload helpers ──────────────────────────────────────────────────
 
@@ -710,14 +790,44 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       toast({ title: 'Project required', description: 'Please select the project for these ad-hoc sites.', variant: 'destructive' });
       return;
     }
+    if (loadingMmps) {
+      toast({ title: 'Checking project MMPs', description: 'Please wait until the available MMPs have loaded.' });
+      return;
+    }
+    const selectedProjectMmp = projectMmps.find(mmp => mmp.id === selectedMmpId);
+    if (projectMmps.length > 0 && !selectedProjectMmp) {
+      toast({
+        title: 'Select an open MMP',
+        description: 'This project already has open MMPs, so ad-hoc visits must be added to one of them.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       let mmpFileId: string;
-      if (selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE) {
-        mmpFileId = selectedMmpId;
+      let destinationMmp = selectedProjectMmp;
+      if (selectedProjectMmp) {
+        const { data: currentMmp, error: currentMmpError } = await supabase
+          .from('mmp_files')
+          .select('id, status, cycle_status')
+          .eq('id', selectedProjectMmp.id)
+          .single();
+        if (currentMmpError || !currentMmp || !isOpenProjectMmp(currentMmp)) {
+          throw new Error('The selected MMP is no longer open. Choose another open MMP before creating site visits.');
+        }
+        mmpFileId = currentMmp.id;
       } else {
-        const selectedProject = projects.find((p) => p.id === selectedProjectId);
-        mmpFileId = await getOrCreateAdhocMMPFile(selectedProjectId, selectedProject?.name || 'Project');
+        // Check once more before creating a project MMP, so a concurrently
+        // created open MMP is used instead of producing a parallel one.
+        const newlyAvailableMmp = (await loadOpenProjectMmps(selectedProjectId))[0];
+        if (newlyAvailableMmp) {
+          destinationMmp = newlyAvailableMmp;
+          mmpFileId = newlyAvailableMmp.id;
+        } else {
+          const selectedProject = projects.find((p) => p.id === selectedProjectId);
+          mmpFileId = await getOrCreateAdhocMMPFile(selectedProjectId, selectedProject?.name || 'Project');
+        }
       }
 
       let assigned = 0, open = 0;
@@ -777,9 +887,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           .eq('id', mmpFileId);
       }
 
-      const destLabel = selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE
-        ? `into ${selectedMmpLabel}`
-        : 'into ad-hoc bucket';
+      const destLabel = destinationMmp
+        ? `into ${destinationMmp.name} (${destinationMmp.site_count} sites)`
+        : 'into a new project MMP';
       toast({
         title: `${validRows.length} site visit${validRows.length !== 1 ? 's' : ''} created`,
         description: `${destLabel} · ${assigned} pre-assigned · ${open} open for claim`,
@@ -787,28 +897,23 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       setLastResult({ assigned, open });
       if (createMode === 'upload') { setUploadedRows([]); setUploadedFileName(''); }
       else setManualRows([]);
-      // Track real MMP IDs used so loadExisting includes them without a full-table scan
-      if (selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE) {
-        setUsedRealMmpIds(prev => prev.includes(mmpFileId) ? prev : [...prev, mmpFileId]);
-      }
       setRefreshTrigger(t => t + 1);
       // Refresh MMP site counts
       if (selectedProjectId) {
         setLoadingMmps(true);
-        const { data } = await supabase
-          .from('mmp_files')
-          .select('id, name, month, mmp_id')
-          .eq('project_id', selectedProjectId)
-          .not('mmp_id', 'ilike', 'adhoc-tasks-%')
-          .order('month', { ascending: false });
-        if (data) {
-          const ids = data.map((m: any) => m.id);
-          const { data: counts } = ids.length ? await supabase.from('mmp_site_entries').select('mmp_file_id').in('mmp_file_id', ids) : { data: [] };
-          const countMap: Record<string, number> = {};
-          (counts || []).forEach((r: any) => { countMap[r.mmp_file_id] = (countMap[r.mmp_file_id] || 0) + 1; });
-          setProjectMmps(data.map((m: any) => ({ id: m.id, name: m.name || m.mmp_id, month: m.month || '', mmp_id: m.mmp_id, site_count: countMap[m.id] || 0 })));
+        try {
+          const openMmps = await loadOpenProjectMmps(selectedProjectId);
+          setProjectMmps(openMmps);
+          setSelectedMmpId(current =>
+            openMmps.some(mmp => mmp.id === current)
+              ? current
+              : (openMmps[0]?.id ?? CREATE_PROJECT_MMP_VALUE),
+          );
+        } catch (error) {
+          console.error('Failed to refresh open MMPs for ad-hoc sites:', error);
+        } finally {
+          setLoadingMmps(false);
         }
-        setLoadingMmps(false);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -932,6 +1037,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   const activeRows = createMode === 'upload' ? uploadedRows : manualRows;
   const validCount = activeRows.filter(r => !r._errors?.length).length;
+  const hasSelectedOpenMmp = projectMmps.some(mmp => mmp.id === selectedMmpId);
 
   const activityLabel = (a: ProjectActivity) => {
     const typeLabel = a.custom_type_label || a.activity_type?.replace(/_/g, ' ').toUpperCase() || '';
@@ -963,7 +1069,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <div className="space-y-1">
                   <Label className="text-xs">Project *</Label>
-                  <Select value={selectedProjectId} onValueChange={v => { setSelectedProjectId(v); setSelectedMmpId(ADHOC_BUCKET_VALUE); }}>
+                  <Select value={selectedProjectId} onValueChange={v => { setSelectedProjectId(v); setSelectedMmpId(''); }}>
                     <SelectTrigger className="h-8 text-xs" data-testid="select-adhoc-project">
                       <SelectValue placeholder="Select project" />
                     </SelectTrigger>
@@ -980,21 +1086,22 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       <FolderOpen className="h-3 w-3 text-teal-500" />
-                      Add to MMP (optional)
+                      Open MMP
                     </Label>
                     {loadingMmps ? (
                       <div className="h-8 flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" /> Loading MMPs…
                       </div>
+                    ) : projectMmps.length === 0 ? (
+                      <div className="min-h-8 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                        No open MMP exists for this project. A new project MMP will be created for these visits.
+                      </div>
                     ) : (
                       <Select value={selectedMmpId} onValueChange={setSelectedMmpId}>
                         <SelectTrigger className="h-8 text-xs" data-testid="select-target-mmp">
-                          <SelectValue placeholder="Ad-hoc bucket (no MMP)" />
+                          <SelectValue placeholder="Select an open MMP" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={ADHOC_BUCKET_VALUE}>
-                            <span className="text-muted-foreground italic">Ad-hoc bucket (no MMP)</span>
-                          </SelectItem>
                           {projectMmps.map(m => (
                             <SelectItem key={m.id} value={m.id}>
                               <span className="font-medium">{m.name}</span>
@@ -1003,15 +1110,12 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                               </span>
                             </SelectItem>
                           ))}
-                          {projectMmps.length === 0 && (
-                            <div className="px-2 py-1.5 text-xs text-muted-foreground">No MMPs found for this project</div>
-                          )}
                         </SelectContent>
                       </Select>
                     )}
-                    {selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE && (
+                    {hasSelectedOpenMmp && (
                       <p className="text-[10px] text-teal-600 dark:text-teal-400">
-                        ✓ Sites will be added to this MMP and counted in its total
+                        ✓ Sites will be added to this MMP, included in its Cycle Close, and counted in its total
                       </p>
                     )}
                   </div>
@@ -1362,9 +1466,11 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             {activeRows.length > 0 && (
               <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800 mt-4">
                 <div className="flex-1 text-xs text-muted-foreground">
-                  {selectedMmpId && selectedMmpId !== ADHOC_BUCKET_VALUE
+                  {loadingMmps
+                    ? <span>→ Checking open MMPs for this project…</span>
+                    : hasSelectedOpenMmp
                     ? <span className="text-teal-600 dark:text-teal-400 font-medium">→ Will be added to: {selectedMmpLabel}</span>
-                    : <span>→ Ad-hoc bucket (no MMP selected)</span>
+                    : <span>→ A new project MMP will be created because no open MMP is available</span>
                   }
                 </div>
                 {lastResult && (
@@ -1375,7 +1481,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                 )}
                 <Button
                   onClick={() => submitRows(activeRows)}
-                  disabled={submitting || validCount === 0 || !selectedProjectId}
+                  disabled={submitting || loadingMmps || validCount === 0 || !selectedProjectId || (projectMmps.length > 0 && !hasSelectedOpenMmp)}
                   className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
                 >
                   {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
