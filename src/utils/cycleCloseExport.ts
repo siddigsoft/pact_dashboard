@@ -361,7 +361,7 @@ export async function exportFormattedExceptions(
   const headers = [
     'Site Name', 'State', 'Locality', 'Enumerator',
     'Advance Status', 'Disbursed (SDG)', 'Requested (SDG)',
-    'Decision (EN · AR)', 'Amount (SDG)', 'Justification', 'Target Site', 'Approved By',
+    'Decision (EN · AR)', 'Amount (SDG)', 'Justification', 'Target Allocation(s)', 'Approved By',
   ];
 
   // Split paid vs. approved for colour coding
@@ -384,7 +384,13 @@ export async function exportFormattedExceptions(
       d?.decision ? (DECISION_LABELS[d.decision] ?? d.decision) : 'Pending',
       d?.amount ?? d?.targetSiteId ?? '',
       d?.justification ?? '',
-      d?.targetSiteId ?? '',
+      d?.allocations?.length
+        ? d.allocations.map(allocation => [
+          allocation.targetSiteName ?? allocation.targetSiteId,
+          `SDG ${allocation.amount.toLocaleString()}`,
+          allocation.feeSettlementStatus === 'paid' ? 'Fully paid' : 'Partially paid',
+        ].join(' · ')).join('; ')
+        : d?.targetSiteName ?? d?.targetSiteId ?? '',
       d?.approvedBy ?? '',
     ];
   });

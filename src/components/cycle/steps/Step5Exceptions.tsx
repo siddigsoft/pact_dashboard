@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
-  Calendar, CreditCard, User, Hash, Receipt, Building2 } from 'lucide-react';
+  Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles } from 'lucide-react';
 import type { WizardState, ExceptionDecision, RoleFlags } from '../CycleCloseWizard';
 import {
   canExecuteExceptionDecision,
@@ -16,7 +16,14 @@ import {
   getExceptionDecisionKey,
   isExceptionDecisionDraftValid,
 } from '../exceptionExecution';
-import { isCoveredRedirectTarget } from '../redirectSettlement';
+import {
+  buildAutomaticRedirectAllocations,
+  getRedirectTargetCapacity,
+  isEligibleRedirectAllocationTarget,
+  summarizeRedirectAllocations,
+  type RedirectAllocationDraft,
+  type RedirectSettlementTarget,
+} from '../redirectSettlement';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
 interface Props {
@@ -44,6 +51,7 @@ interface TargetSite {
   state: string | null;
   locality: string | null;
   status: string | null;
+  not_covered_flag?: boolean | null;
   enumerator_fee: number | null;
   transport_fee: number | null;
   fee_paid_amount: number | null;
@@ -52,6 +60,17 @@ interface TargetSite {
   accepted_by?: string | null;
   sameEnumerator?: boolean;
 }
+
+const toSettlementTarget = (target: TargetSite): RedirectSettlementTarget => ({
+  id: target.id,
+  siteName: target.site_name,
+  status: target.not_covered_flag ? 'not_covered' : target.status,
+  enumeratorFee: target.enumerator_fee,
+  transportFee: target.transport_fee,
+  settledFeeAmount: target.fee_paid_amount,
+  enumeratorId: target.accepted_by,
+  sameEnumerator: target.sameEnumerator,
+});
 
 // ── Decision sets ─────────────────────────────────────────────────────────────
 
@@ -98,8 +117,8 @@ const DECISIONS_PAID = [
     labelAr: 'تحويل إلى أتعاب المعددين',
     desc: 'Use the paid transport advance to settle an eligible covered site’s outstanding fee.',
     descAr: 'استخدم سلفة النقل المصروفة لتسوية الأتعاب المتبقية لموقع مغطى مؤهل.',
-    track: 'Choose a covered target with enough fee remaining. GL: Debit Enumerator Fees / Credit Transport Advance; no second payment is created.',
-    trackAr: 'اختر موقعاً مغطى بأتعاب متبقية كافية. القيد: مدين أتعاب المعددين / دائن سلفة النقل دون دفعة ثانية.',
+    track: 'Allocate across one or more covered sites. Each target may be fully or partially settled. GL: Debit Enumerator Fees / Credit Transport Advance; no second payment is created.',
+    trackAr: 'وزّع السلفة على موقع مغطى واحد أو أكثر، كلياً أو جزئياً. القيد: مدين أتعاب المعددين / دائن سلفة النقل دون دفعة ثانية.',
   },
 ] as const;
 
@@ -203,6 +222,27 @@ export default function Step5Exceptions({
         .order('created_at', { ascending: false }),
     ]);
     const actionRows = (actionsResult.data ?? []) as any[];
+    const actionIds = actionRows.map(row => row.id as string).filter(Boolean);
+    let allocationRows: any[] = [];
+    if (actionIds.length) {
+      const allocationResult = await (supabase as any)
+        .from('cycle_exception_action_allocations')
+        .select('id, action_id, target_site_id, target_site_name, target_enumerator_id, cross_enumerator, amount, fee_gross_amount, fee_prior_settled_amount, fee_remaining_amount, fee_status, gl_journal_entry_id')
+        .in('action_id', actionIds)
+        .order('allocation_order');
+      if (allocationResult.error) {
+        const message = String(allocationResult.error.message ?? '').toLowerCase();
+        if (!message.includes('does not exist') && !message.includes('schema cache')) {
+          console.error('[CycleClose] Could not load redirect allocations:', allocationResult.error);
+        }
+      } else {
+        allocationRows = allocationResult.data ?? [];
+      }
+    }
+    const allocationsByAction = allocationRows.reduce<Record<string, any[]>>((rows, allocation) => {
+      (rows[allocation.action_id] ??= []).push(allocation);
+      return rows;
+    }, {});
     const actionSiteIds = actionRows
       .map(row => row.mmp_site_entry_id as string | null)
       .filter((id): id is string => !!id);
@@ -406,6 +446,18 @@ export default function Step5Exceptions({
         executedByName: row.executed_by_name ?? undefined,
         journalEntryId: row.gl_journal_entry_id ?? undefined,
         executionError: row.execution_error ?? undefined,
+          allocations: (allocationsByAction[row.id] ?? []).map(allocation => ({
+            targetSiteId: allocation.target_site_id,
+            targetSiteName: allocation.target_site_name,
+            targetEnumeratorId: allocation.target_enumerator_id,
+            sameEnumerator: allocation.cross_enumerator === false,
+            amount: Number(allocation.amount ?? 0),
+            feeGrossAmount: Number(allocation.fee_gross_amount ?? 0),
+            feePriorSettledAmount: Number(allocation.fee_prior_settled_amount ?? 0),
+            feeRemainingAmount: Number(allocation.fee_remaining_amount ?? 0),
+            feeSettlementStatus: allocation.fee_status,
+            journalEntryId: allocation.gl_journal_entry_id ?? undefined,
+          })),
           feeGrossAmount: row.redirect_fee_gross_amount ?? undefined,
           feePriorSettledAmount: row.redirect_fee_prior_settled_amount ?? undefined,
           feeSettledAmount: row.redirect_fee_settled_amount ?? undefined,
@@ -415,6 +467,14 @@ export default function Step5Exceptions({
             ? row.source_payment_references.flat().filter(Boolean)
             : undefined,
       };
+      if (executedFromServer[row.advance_id].allocations?.length) {
+        const totalAllocated = executedFromServer[row.advance_id].allocations!
+          .reduce((sum, allocation) => sum + allocation.amount, 0);
+        executedFromServer[row.advance_id].unallocatedAmount = Math.max(
+          Number(row.decision_amount ?? row.advance_amount ?? 0) - totalAllocated,
+          0,
+        );
+      }
     }
     // Normalize client state to the current advance IDs. Migrate an old
     // site-keyed draft only where the site has exactly one active advance.
@@ -452,9 +512,11 @@ export default function Step5Exceptions({
   };
 
   const isDraftValid = (site: ExceptionSite): boolean => {
+    const targets = (targetSites[exceptionKey(site)] ?? []).map(toSettlementTarget);
     return isExceptionDecisionDraftValid(
       site,
       wizardState.exceptionDecisions[exceptionKey(site)],
+      targets,
     );
   };
 
@@ -471,9 +533,8 @@ export default function Step5Exceptions({
     setTargetSites(prev => ({ ...prev, [key]: [] }));
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, status, accepted_by, enumerator_fee, transport_fee, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount')
+      .select('id, site_name, state, locality, status, not_covered_flag, accepted_by, enumerator_fee, transport_fee, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount')
       .eq('mmp_file_id', mmpId)
-      .neq('status', 'not_covered')
       .neq('id', site.siteId)
       .order('site_name');
     setLoadingTargetSites(prev => ({ ...prev, [key]: false }));
@@ -484,13 +545,9 @@ export default function Step5Exceptions({
     const decision = decisionsRef.current[key]?.decision;
     const candidates = ((data ?? []) as TargetSite[])
       .map(target => ({ ...target, sameEnumerator: target.accepted_by === site.enumeratorId }))
-      .filter(target => decision !== 'redirect' || isCoveredRedirectTarget(site.siteId, {
-        id: target.id,
-        status: target.status,
-        enumeratorFee: target.enumerator_fee,
-        transportFee: target.transport_fee,
-        settledFeeAmount: target.fee_paid_amount,
-      }, site.advancePaid))
+      .filter(target => !target.not_covered_flag && target.status?.toLowerCase() !== 'not_covered')
+      .filter(target => decision !== 'redirect'
+        || isEligibleRedirectAllocationTarget(site.siteId, toSettlementTarget(target)))
       .sort((left, right) => Number(!!right.sameEnumerator) - Number(!!left.sameEnumerator)
         || left.site_name.localeCompare(right.site_name));
     setTargetSites(prev => ({ ...prev, [key]: candidates }));
@@ -514,19 +571,34 @@ export default function Step5Exceptions({
     setExecuting(prev => ({ ...prev, [key]: true }));
     setDecision(key, { executionError: undefined });
     try {
-      const { data, error } = await (supabase as any).rpc('execute_cycle_close_exception', {
-        p_mmp_id: wizardState.selectedMmpId,
-        p_site_id: site.siteId,
-        p_advance_id: site.advanceId,
-        p_decision: d.decision,
-        p_amount: d.amount ?? null,
-        p_justification: d.justification?.trim() || null,
-        p_target_mmp_id: d.targetMmpId ?? null,
-        p_target_site_id: d.targetSiteId ?? null,
-        p_receipt_reference: d.receiptReference?.trim() || null,
-        p_return_method: d.returnMethod ?? null,
-        p_recovery_date: d.recoveryDate ?? null,
-      });
+      const rpcName = d.decision === 'redirect'
+        ? 'execute_cycle_close_redirect_allocations'
+        : 'execute_cycle_close_exception';
+      const rpcParams = d.decision === 'redirect'
+        ? {
+          p_mmp_id: wizardState.selectedMmpId,
+          p_source_site_id: site.siteId,
+          p_advance_id: site.advanceId,
+          p_allocations: (d.allocations ?? []).map(allocation => ({
+            target_site_id: allocation.targetSiteId,
+            amount: allocation.amount,
+          })),
+          p_justification: d.justification?.trim() || null,
+        }
+        : {
+          p_mmp_id: wizardState.selectedMmpId,
+          p_site_id: site.siteId,
+          p_advance_id: site.advanceId,
+          p_decision: d.decision,
+          p_amount: d.amount ?? null,
+          p_justification: d.justification?.trim() || null,
+          p_target_mmp_id: d.targetMmpId ?? null,
+          p_target_site_id: d.targetSiteId ?? null,
+          p_receipt_reference: d.receiptReference?.trim() || null,
+          p_return_method: d.returnMethod ?? null,
+          p_recovery_date: d.recoveryDate ?? null,
+        };
+      const { data, error } = await (supabase as any).rpc(rpcName, rpcParams);
 
       if (error) throw new Error(error.message);
       const result = data as {
@@ -539,10 +611,35 @@ export default function Step5Exceptions({
         fee_settled_amount?: number;
         fee_remaining_amount?: number;
         fee_status?: 'partially_paid' | 'paid';
+        unallocated_amount?: number;
+        allocations?: Array<{
+          target_site_id: string;
+          target_site_name?: string;
+          target_enumerator_id?: string | null;
+          same_enumerator?: boolean;
+          amount: number;
+          fee_gross_amount: number;
+          fee_prior_settled_amount: number;
+          fee_remaining_amount: number;
+          fee_status: 'partially_paid' | 'paid';
+          journal_entry_id?: string | null;
+        }>;
         message?: string;
       } | null;
       if (!result?.ok) throw new Error(result?.error || 'The server did not execute this action.');
 
+      const returnedAllocations = result.allocations?.map(allocation => ({
+        targetSiteId: allocation.target_site_id,
+        targetSiteName: allocation.target_site_name,
+        targetEnumeratorId: allocation.target_enumerator_id,
+        sameEnumerator: allocation.same_enumerator,
+        amount: Number(allocation.amount),
+        feeGrossAmount: Number(allocation.fee_gross_amount),
+        feePriorSettledAmount: Number(allocation.fee_prior_settled_amount),
+        feeRemainingAmount: Number(allocation.fee_remaining_amount),
+        feeSettlementStatus: allocation.fee_status,
+        journalEntryId: allocation.journal_entry_id ?? undefined,
+      })) ?? d.allocations;
       const selectedTarget = (targetSites[key] ?? []).find(s => s.id === d.targetSiteId);
       setDecision(key, {
         executed: true,
@@ -551,6 +648,8 @@ export default function Step5Exceptions({
         executedByName: currentUser?.fullName ?? currentUser?.full_name ?? currentUser?.email ?? undefined,
         journalEntryId: result.journal_entry_id ?? undefined,
         targetSiteName: selectedTarget?.site_name ?? d.targetSiteName,
+        allocations: returnedAllocations,
+        unallocatedAmount: result.unallocated_amount ?? 0,
         feeGrossAmount: result.fee_gross_amount,
         feeSettledAmount: result.fee_settled_amount,
         feeRemainingAmount: result.fee_remaining_amount,
@@ -560,7 +659,8 @@ export default function Step5Exceptions({
     } catch (error: any) {
       const rawMessage = error?.message ?? 'The action failed. Nothing was changed.';
       const migrationMissing = (
-        rawMessage.includes('execute_cycle_close_exception') &&
+        (rawMessage.includes('execute_cycle_close_exception')
+          || rawMessage.includes('execute_cycle_close_redirect_allocations')) &&
         rawMessage.toLowerCase().includes('schema cache')
       ) || (
         rawMessage.includes('v_mmp') &&
@@ -572,7 +672,7 @@ export default function Step5Exceptions({
       setDecision(key, {
         executed: false,
         executionError: migrationMissing
-          ? 'The Cycle Close database migration is incomplete in Supabase. Apply the ordered migrations shown above, including 20260819c_cycle_close_mmp_country_scope.sql, then reload this page. No action was changed.'
+          ? 'The Cycle Close database migration is incomplete in Supabase. Apply the ordered migrations shown above, including the multi-site allocation migration, then reload this page. No action was changed.'
           : rawMessage,
       });
     } finally {
@@ -627,7 +727,8 @@ export default function Step5Exceptions({
             {' '}<code className="text-xs">20260819_cycle_close_inline_exception_execution.sql</code>, then
             {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>, then
              {' '}<code className="text-xs">20260819c_cycle_close_mmp_country_scope.sql</code>, then
-             {' '}<code className="text-xs">20260819e_cycle_redirect_fee_settlement_safety.sql</code>.
+             {' '}<code className="text-xs">20260819e_cycle_redirect_fee_settlement_safety.sql</code>, then
+             {' '}<code className="text-xs">20260819f_cycle_redirect_multi_site_allocations.sql</code>.
             {' '}Reload this wizard after they are applied.
           </AlertDescription>
         </Alert>
@@ -860,6 +961,16 @@ function SiteCard({
   const [showPayment, setShowPayment] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
   const isPartial = site.advanceStatus === 'partially_paid';
+  const redirectSummary = d?.decision === 'redirect'
+    ? summarizeRedirectAllocations(
+      site.siteId,
+      targetSites.map(toSettlementTarget),
+      d.allocations,
+      site.advancePaid,
+    )
+    : null;
+  const crossEnumeratorNeedsApproval = !!redirectSummary?.hasCrossEnumerator && !canOverride;
+  const executionAuthorized = canExecute && !crossEnumeratorNeedsApproval;
 
   const badgeEl = variant === 'paid' ? (
     <Badge className={`text-xs ${isPartial
@@ -1115,6 +1226,8 @@ function SiteCard({
             targetMmpId: undefined,
             targetSiteId: undefined,
             targetSiteName: undefined,
+             allocations: undefined,
+             unallocatedAmount: undefined,
             receiptReference: undefined,
             returnMethod: undefined,
             executed: false,
@@ -1233,21 +1346,31 @@ function SiteCard({
           {d.decision === 'redirect' && (
             <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs">
               <p className="font-medium text-blue-900">
-                Select the covered site whose outstanding fee will receive this advance offset.
+                Allocate the full advance across one or more covered sites.
               </p>
-              <TargetSiteSelect
-                siteId={site.advanceId}
-                value={d.targetSiteId}
+              <RedirectAllocationEditor
+                sourceSiteId={site.siteId}
+                advanceAmount={site.advancePaid}
+                allocations={d.allocations ?? []}
                 sites={targetSites}
                 loading={loadingTargetSites}
                 disabled={isDone || executing}
-                onChange={(targetSiteId, targetSiteName) =>
-                  setDecision(site.advanceId, { targetSiteId, targetSiteName })
+                canOverride={canOverride}
+                onChange={allocations =>
+                  setDecision(site.advanceId, {
+                    allocations,
+                    targetSiteId: allocations.length === 1 ? allocations[0].targetSiteId : undefined,
+                    targetSiteName: allocations.length === 1 ? allocations[0].targetSiteName : 'Multiple covered sites',
+                    unallocatedAmount: Math.max(
+                      site.advancePaid - allocations.reduce((sum, allocation) => sum + allocation.amount, 0),
+                      0,
+                    ),
+                  })
                 }
               />
               <p className="text-blue-800">
-                The target must have at least SDG {site.advancePaid.toLocaleString()} remaining.
-                A smaller advance creates a partial fee settlement; no second cash payment is created.
+                Each target is capped at its outstanding fee. A target may be fully or partially paid;
+                the action cannot execute until the entire SDG {site.advancePaid.toLocaleString()} advance is allocated.
               </p>
             </div>
           )}
@@ -1393,14 +1516,16 @@ function SiteCard({
         <div className="flex items-center justify-between gap-3 border-t pt-3">
           <p className="text-xs text-muted-foreground">
             {isDraftValid
-              ? 'Details complete. Execute now to apply and audit this action.'
+              ? crossEnumeratorNeedsApproval
+                ? 'A cross-enumerator allocation requires FOM, Admin, or Super Admin authorization.'
+                : 'Details complete. Execute now to apply and audit this action.'
               : 'Complete all required details before executing.'}
           </p>
           <Button
             type="button"
             size="sm"
             onClick={onExecute}
-            disabled={!canExecute || !isDraftValid || executing}
+            disabled={!executionAuthorized || !isDraftValid || executing}
             data-testid={`button-execute-exception-${site.advanceId}`}
           >
             {executing && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
@@ -1498,17 +1623,61 @@ function ExecutionDetails({
           ) : (
             <DetailRow label="Original payment reference(s)" value="No wallet transaction reference recorded" />
           )}
-          <DetailRow label="Target fee gross" value={decision.feeGrossAmount != null
-            ? `SDG ${decision.feeGrossAmount.toLocaleString()}`
-            : 'Recorded on the target site'} />
-          <DetailRow label="Fee settled by this advance" value={`SDG ${(decision.feeSettledAmount ?? decision.amount ?? 0).toLocaleString()}`} />
-          {decision.feeRemainingAmount != null && (
-            <DetailRow label="Fee remaining after settlement" value={`SDG ${decision.feeRemainingAmount.toLocaleString()}`} />
+          {(decision.allocations?.length ?? 0) > 0 ? (
+            <div className="space-y-1.5 pt-1">
+              <p className="font-medium text-green-800">
+                Target allocations ({decision.allocations!.length})
+              </p>
+              {decision.allocations!.map((allocation, index) => (
+                <div key={allocation.targetSiteId} className="rounded border border-green-100 bg-green-50/60 p-2">
+                  <p className="font-semibold text-slate-800">
+                    {index + 1}. {allocation.targetSiteName ?? allocation.targetSiteId}
+                  </p>
+                  <div className="grid gap-x-3 sm:grid-cols-2">
+                    <DetailRow label="Allocated" value={`SDG ${allocation.amount.toLocaleString()}`} />
+                    <DetailRow
+                      label="Result"
+                      value={allocation.feeSettlementStatus === 'paid' ? 'Fully paid' : 'Partially paid'}
+                    />
+                    {allocation.feeGrossAmount != null && (
+                      <DetailRow label="Fee gross" value={`SDG ${allocation.feeGrossAmount.toLocaleString()}`} />
+                    )}
+                    {allocation.feePriorSettledAmount != null && (
+                      <DetailRow label="Previously settled" value={`SDG ${allocation.feePriorSettledAmount.toLocaleString()}`} />
+                    )}
+                    {allocation.feeRemainingAmount != null && (
+                      <DetailRow label="Fee remaining" value={`SDG ${allocation.feeRemainingAmount.toLocaleString()}`} />
+                    )}
+                    {allocation.journalEntryId && (
+                      <DetailRow label="Allocation journal" value={allocation.journalEntryId} mono />
+                    )}
+                  </div>
+                </div>
+              ))}
+              <DetailRow
+                label="Total allocated"
+                value={`SDG ${decision.allocations!.reduce((sum, allocation) => sum + allocation.amount, 0).toLocaleString()}`}
+              />
+              <DetailRow
+                label="Unallocated"
+                value={`SDG ${(decision.unallocatedAmount ?? 0).toLocaleString()}`}
+              />
+            </div>
+          ) : (
+            <>
+              <DetailRow label="Target fee gross" value={decision.feeGrossAmount != null
+                ? `SDG ${decision.feeGrossAmount.toLocaleString()}`
+                : 'Recorded on the target site'} />
+              <DetailRow label="Fee settled by this advance" value={`SDG ${(decision.feeSettledAmount ?? decision.amount ?? 0).toLocaleString()}`} />
+              {decision.feeRemainingAmount != null && (
+                <DetailRow label="Fee remaining after settlement" value={`SDG ${decision.feeRemainingAmount.toLocaleString()}`} />
+              )}
+              <DetailRow
+                label="Fee settlement status"
+                value={decision.feeSettlementStatus === 'paid' ? 'Fully paid' : 'Partially paid'}
+              />
+            </>
           )}
-          <DetailRow
-            label="Fee settlement status"
-            value={decision.feeSettlementStatus === 'paid' ? 'Fully paid' : 'Partially paid'}
-          />
           {decision.sourcePaymentReferences?.length ? (
             <DetailRow label="Saved payment references" value={decision.sourcePaymentReferences.join(', ')} mono />
           ) : null}
@@ -1516,10 +1685,11 @@ function ExecutionDetails({
             GL posting: Debit Enumerator Fees · Credit Transport Advance
           </p>
           <p className="text-muted-foreground">
-            Verify the original payment in <strong>Down Payment Approval</strong> or
-            <strong> Field Payments Centre → Advances</strong>; verify the fee result in
-            <strong> Field Payments Centre → Fees</strong>; and search the GL journal ID in
-            <strong> Accounting → GL Bridge Audit / Ledger</strong>.
+            Verify the original payment in{' '}
+            <a className="font-semibold underline" href="/field-payments?tab=advances">Field Payments Centre → Advances</a>;
+            verify every target result in{' '}
+            <a className="font-semibold underline" href="/field-payments?tab=fees">Field Payments Centre → Fees</a>;
+            and search the GL journal ID in <strong>Accounting → GL Bridge Audit / Ledger</strong>.
           </p>
         </div>
       )}
@@ -1543,6 +1713,199 @@ function DetailRow({
     <div className="min-w-0">
       <span className="text-muted-foreground">{label}: </span>
       <span className={mono ? 'font-mono break-all' : 'font-medium text-slate-700'}>{value}</span>
+    </div>
+  );
+}
+
+function RedirectAllocationEditor({
+  sourceSiteId,
+  advanceAmount,
+  allocations,
+  sites,
+  loading,
+  disabled,
+  canOverride,
+  onChange,
+}: {
+  sourceSiteId: string;
+  advanceAmount: number;
+  allocations: RedirectAllocationDraft[];
+  sites: TargetSite[];
+  loading: boolean;
+  disabled: boolean;
+  canOverride: boolean;
+  onChange: (allocations: RedirectAllocationDraft[]) => void;
+}) {
+  const settlementTargets = sites.map(toSettlementTarget);
+  const summary = summarizeRedirectAllocations(
+    sourceSiteId,
+    settlementTargets,
+    allocations,
+    advanceAmount,
+  );
+  const selectedIds = new Set(allocations.map(allocation => allocation.targetSiteId));
+  const availableSites = sites.filter(site => !selectedIds.has(site.id));
+
+  const addTarget = (targetSiteId: string) => {
+    if (targetSiteId === '__add_target__') return;
+    const target = sites.find(site => site.id === targetSiteId);
+    if (!target) return;
+    const amount = Math.min(summary.unallocatedAmount, getRedirectTargetCapacity(toSettlementTarget(target)));
+    onChange([
+      ...allocations,
+      {
+        targetSiteId: target.id,
+        targetSiteName: target.site_name,
+        targetEnumeratorId: target.accepted_by,
+        sameEnumerator: target.sameEnumerator,
+        amount,
+      },
+    ]);
+  };
+
+  const updateAmount = (index: number, amount: number) => {
+    onChange(allocations.map((allocation, allocationIndex) =>
+      allocationIndex === index ? { ...allocation, amount } : allocation
+    ));
+  };
+
+  const removeTarget = (index: number) => {
+    onChange(allocations.filter((_, allocationIndex) => allocationIndex !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 border-blue-300 text-blue-800"
+          disabled={disabled || loading || sites.length === 0}
+          onClick={() => onChange(buildAutomaticRedirectAllocations(
+            sourceSiteId,
+            settlementTargets,
+            advanceAmount,
+          ))}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Auto-allocate
+        </Button>
+        <div className="min-w-64 flex-1">
+          <Select
+            value="__add_target__"
+            disabled={disabled || loading || availableSites.length === 0 || summary.unallocatedAmount <= 0}
+            onValueChange={addTarget}
+          >
+            <SelectTrigger className="h-8 bg-white text-sm" data-testid={`select-add-allocation-${sourceSiteId}`}>
+              <SelectValue placeholder={loading ? 'Loading sites…' : 'Add covered target site'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__add_target__" disabled>
+                <span className="flex items-center gap-1"><Plus className="h-3 w-3" /> Add covered target site</span>
+              </SelectItem>
+              {availableSites.map(site => (
+                <SelectItem key={site.id} value={site.id}>
+                  {site.site_name}
+                  {` · remaining SDG ${getRedirectTargetCapacity(toSettlementTarget(site)).toLocaleString()}`}
+                  {site.sameEnumerator === false ? ' · different enumerator' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {allocations.length === 0 ? (
+        <div className="rounded border border-dashed border-blue-300 bg-white/60 p-3 text-center text-blue-800">
+          Select targets manually or use Auto-allocate. Same-enumerator sites are filled first.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {allocations.map((allocation, index) => {
+            const target = sites.find(site => site.id === allocation.targetSiteId);
+            const capacity = target ? getRedirectTargetCapacity(toSettlementTarget(target)) : 0;
+            const applied = Math.min(Math.max(allocation.amount || 0, 0), capacity);
+            const remainingAfter = Math.max(capacity - applied, 0);
+            return (
+              <div
+                key={allocation.targetSiteId}
+                className="grid gap-2 rounded border border-blue-200 bg-white p-2 sm:grid-cols-[1fr_150px_32px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-800">
+                    {allocation.targetSiteName ?? target?.site_name ?? allocation.targetSiteId}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Fee remaining before allocation: SDG {capacity.toLocaleString()}
+                    {' · '}after: SDG {remainingAfter.toLocaleString()}
+                    {' · '}{remainingAfter === 0 ? 'Fully paid' : 'Partially paid'}
+                  </p>
+                  {(allocation.sameEnumerator ?? target?.sameEnumerator) === false && (
+                    <p className={canOverride ? 'text-amber-700' : 'text-red-700'}>
+                      Different enumerator — FOM/Admin/Super Admin authorization required.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="sr-only">Allocation amount</label>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    max={capacity}
+                    step="0.01"
+                    value={allocation.amount || ''}
+                    disabled={disabled}
+                    onChange={event => updateAmount(index, Number(event.target.value))}
+                    className="h-8 text-sm"
+                    data-testid={`input-allocation-${allocation.targetSiteId}`}
+                  />
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">SDG allocated</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-red-600"
+                  disabled={disabled}
+                  onClick={() => removeTarget(index)}
+                  aria-label={`Remove ${allocation.targetSiteName ?? target?.site_name ?? 'target'}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 rounded border border-blue-200 bg-blue-100/70 p-2 text-center">
+        <div>
+          <p className="text-[10px] uppercase text-blue-700">Advance</p>
+          <p className="font-semibold text-blue-950">SDG {advanceAmount.toLocaleString()}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase text-blue-700">Allocated</p>
+          <p className="font-semibold text-blue-950">SDG {summary.totalAllocated.toLocaleString()}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase text-blue-700">Unallocated</p>
+          <p className={`font-semibold ${summary.unallocatedAmount > 0 ? 'text-red-700' : 'text-green-700'}`}>
+            SDG {summary.unallocatedAmount.toLocaleString()}
+          </p>
+        </div>
+      </div>
+      {summary.errors.map(error => (
+        <p key={error} className="flex items-start gap-1 text-red-700">
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {error}
+        </p>
+      ))}
+      {!summary.isComplete && summary.errors.length === 0 && allocations.length > 0 && (
+        <p className="flex items-start gap-1 text-amber-700">
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+          Allocate the remaining SDG {summary.unallocatedAmount.toLocaleString()}, or choose another resolution for the entire advance.
+        </p>
+      )}
     </div>
   );
 }

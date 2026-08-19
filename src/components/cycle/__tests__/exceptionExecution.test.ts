@@ -10,8 +10,15 @@ import {
 
 const site = { advancePaid: 1_000, requestedAmount: 1_200 };
 
+const redirectTargets = [{
+  id: 'covered-site',
+  status: 'covered',
+  enumeratorFee: 70_000,
+  settledFeeAmount: 0,
+}];
+
 const valid = (decision: ExceptionDecision) =>
-  isExceptionDecisionDraftValid(site, decision);
+  isExceptionDecisionDraftValid(site, decision, redirectTargets);
 
 describe('isExceptionDecisionDraftValid', () => {
   it('requires actual recovery evidence for Return', () => {
@@ -40,6 +47,7 @@ describe('isExceptionDecisionDraftValid', () => {
       decision: 'redirect',
       amount: 1_000,
       targetSiteId: 'covered-site',
+      allocations: [{ targetSiteId: 'covered-site', amount: 1_000 }],
       justification: 'Confirmed work on the covered site.',
     })).toBe(true);
     expect(valid({
@@ -51,6 +59,7 @@ describe('isExceptionDecisionDraftValid', () => {
       decision: 'redirect',
       amount: 500,
       targetSiteId: 'covered-site',
+      allocations: [{ targetSiteId: 'covered-site', amount: 500 }],
       justification: 'Partial advance is not fully resolved.',
     })).toBe(false);
   });

@@ -9,6 +9,7 @@ import Step5Exceptions from './steps/Step5Exceptions';
 import Step6Reconciliation from './steps/Step6Reconciliation';
 import Step7FinalClose from './steps/Step7FinalClose';
 import { allExceptionActionsExecuted } from './exceptionExecution';
+import type { RedirectAllocationDraft } from './redirectSettlement';
 import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
@@ -49,6 +50,8 @@ export interface ExceptionDecision {
   journalEntryId?: string;
   executionError?: string;
   /** Redirect fee-settlement trace returned by the server. */
+  allocations?: RedirectAllocationDraft[];
+  unallocatedAmount?: number;
   feeGrossAmount?: number;
   feePriorSettledAmount?: number;
   feeSettledAmount?: number;

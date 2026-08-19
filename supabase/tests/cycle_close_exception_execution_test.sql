@@ -189,12 +189,32 @@ BEGIN
       || E'\n';
   END IF;
 
+  -- Multi-site Redirect allocation ledger and atomic executor.
+  IF to_regclass('public.cycle_exception_action_allocations') IS NULL THEN
+    v_missing := v_missing
+      || '  - table cycle_exception_action_allocations is missing' || E'\n';
+  END IF;
+
+  IF to_regprocedure(
+    'public.execute_cycle_close_redirect_allocations(uuid,uuid,uuid,jsonb,text)'
+  ) IS NULL THEN
+    v_missing := v_missing
+      || '  - function execute_cycle_close_redirect_allocations(uuid,uuid,uuid,jsonb,text) is missing'
+      || E'\n';
+  END IF;
+
+  IF to_regclass('public.cycle_legacy_redirect_review') IS NULL THEN
+    v_missing := v_missing
+      || '  - view cycle_legacy_redirect_review is missing' || E'\n';
+  END IF;
+
   IF v_missing <> '' THEN
     RAISE EXCEPTION
       'PREFLIGHT FAILED — required schema not present. Apply migrations '
       '20260818_close_mmp_and_lock_incentives, 20260819_cycle_close_inline_exception_execution '
       '(and their 20260818* deps), 20260819b_cycle_close_finalizer_role_variants, and '
-      '20260819c_cycle_close_mmp_country_scope first.%s%s',
+      '20260819c_cycle_close_mmp_country_scope, 20260819e_cycle_redirect_fee_settlement_safety, '
+      'and 20260819f_cycle_redirect_multi_site_allocations first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -1546,12 +1566,240 @@ BEGIN
     'PASS [country_id null: cancel succeeds]: ok=true (NULL country_id handled cleanly)';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- 8. Multi-site Redirect allocation ledger + accounting regression
+--    (20260819f_cycle_redirect_multi_site_allocations)
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+  MGR constant uuid := 'ce540000-0000-4000-8000-000000000001';
+  FIN constant uuid := 'ce540000-0000-4000-8000-000000000002';
+  ENU constant uuid := 'ce540000-0000-4000-8000-000000000003';
+  mmp1 uuid := 'ce550000-0000-4000-8000-000000009901';
+  src1 uuid := 'ce550000-0000-4000-8000-000000009911';
+  adv1 uuid := 'ce550000-0000-4000-8000-000000009921';
+  tgt1 uuid := 'ce550000-0000-4000-8000-000000009931';
+  tgt2 uuid := 'ce550000-0000-4000-8000-000000009932';
+  mmp2 uuid := 'ce550000-0000-4000-8000-000000009902';
+  src2 uuid := 'ce550000-0000-4000-8000-000000009912';
+  adv2 uuid := 'ce550000-0000-4000-8000-000000009922';
+  tgt3 uuid := 'ce550000-0000-4000-8000-000000009933';
+  mmp3 uuid := 'ce550000-0000-4000-8000-000000009903';
+  src3 uuid := 'ce550000-0000-4000-8000-000000009913';
+  adv3 uuid := 'ce550000-0000-4000-8000-000000009923';
+  tgt4 uuid := 'ce550000-0000-4000-8000-000000009934';
+  v_res jsonb;
+  v_retry jsonb;
+  v_action uuid;
+  v_journal uuid;
+  v_count bigint;
+  v_lines jsonb;
+  v_dr numeric;
+  v_cr numeric;
+  v_status text;
+  v_amount numeric;
+BEGIN
+  -- SDG 80,000 advance: Site A receives 70,000 (full), Site B receives
+  -- 10,000 (partial). Site B uses a different enumerator and therefore also
+  -- proves manager-authorized cross-enumerator execution.
+  PERFORM pg_temp.mk_case(mmp1, src1, adv1, 'paid', 80000, 80000, MGR::text);
+  UPDATE public.down_payment_requests
+  SET wallet_transaction_ids = '["wallet-ce55-original"]'::jsonb
+  WHERE id = adv1;
+  PERFORM pg_temp.mk_covered_site(tgt1, mmp1, MGR::text);
+  PERFORM pg_temp.mk_covered_site(tgt2, mmp1, ENU::text);
+  UPDATE public.mmp_site_entries
+  SET site_name = 'CE Covered Site A', enumerator_fee = 70000, transport_fee = 0,
+      fee_paid_amount = 0, fee_cash_paid_amount = 0, fee_advance_offset_amount = 0
+  WHERE id = tgt1;
+  UPDATE public.mmp_site_entries
+  SET site_name = 'CE Covered Site B', enumerator_fee = 50000, transport_fee = 0,
+      fee_paid_amount = 0, fee_cash_paid_amount = 0, fee_advance_offset_amount = 0
+  WHERE id = tgt2;
+
+  PERFORM pg_temp.as_user(MGR);
+  v_res := public.execute_cycle_close_redirect_allocations(
+    mmp1, src1, adv1,
+    jsonb_build_array(
+      jsonb_build_object('target_site_id', tgt1, 'amount', 70000),
+      jsonb_build_object('target_site_id', tgt2, 'amount', 10000)
+    ),
+    'Allocate the complete unused transport advance across covered-site fees'
+  );
+  PERFORM pg_temp.assert_ok('multi-site redirect executes atomically', v_res);
+  v_action := (v_res->>'action_id')::uuid;
+  v_journal := (v_res->>'journal_entry_id')::uuid;
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_action_allocations
+  WHERE action_id = v_action;
+  PERFORM pg_temp.assert_eq('multi-site redirect persists two target rows', v_count, 2);
+
+  SELECT fee_paid_status, fee_paid_amount INTO v_status, v_amount
+  FROM public.mmp_site_entries WHERE id = tgt1;
+  PERFORM pg_temp.assert_txt('multi-site target A fully paid', v_status, 'paid');
+  PERFORM pg_temp.assert_true('multi-site target A settled exactly 70000', v_amount = 70000);
+
+  SELECT fee_paid_status, fee_paid_amount INTO v_status, v_amount
+  FROM public.mmp_site_entries WHERE id = tgt2;
+  PERFORM pg_temp.assert_txt('multi-site target B partially paid', v_status, 'partially_paid');
+  PERFORM pg_temp.assert_true('multi-site target B settled exactly 10000', v_amount = 10000);
+
+  SELECT status INTO v_status FROM public.down_payment_requests WHERE id = adv1;
+  PERFORM pg_temp.assert_txt('multi-site source advance resolved once', v_status, 'cancelled');
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_action_allocations
+  WHERE action_id = v_action
+    AND source_payment_references @> '["wallet-ce55-original"]'::jsonb;
+  PERFORM pg_temp.assert_eq('multi-site original wallet reference preserved on every target', v_count, 2);
+
+  SELECT lines INTO v_lines
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'cycle_exception_actions' AND source_id = v_action;
+  PERFORM pg_temp.assert_true('multi-site journal has exact DR/CR pair per target',
+    jsonb_array_length(v_lines) = 4);
+  SELECT
+    sum((line->>'amount')::numeric) FILTER (WHERE line->>'debit_credit' = 'DR'),
+    sum((line->>'amount')::numeric) FILTER (WHERE line->>'debit_credit' = 'CR')
+  INTO v_dr, v_cr
+  FROM jsonb_array_elements(v_lines) line;
+  PERFORM pg_temp.assert_true('multi-site journal balances at full advance',
+    v_dr = 80000 AND v_cr = 80000);
+  PERFORM pg_temp.assert_true('multi-site journal identifies target A and paid status',
+    v_lines::text LIKE '%CE Covered Site A%' AND v_lines::text LIKE '%status fully paid%');
+  PERFORM pg_temp.assert_true('multi-site journal identifies target B and partial status',
+    v_lines::text LIKE '%CE Covered Site B%' AND v_lines::text LIKE '%status partially paid%');
+
+  -- An exact retry returns the original action/journal and does not post again.
+  v_retry := public.execute_cycle_close_redirect_allocations(
+    mmp1, src1, adv1,
+    jsonb_build_array(
+      jsonb_build_object('target_site_id', tgt1, 'amount', 70000),
+      jsonb_build_object('target_site_id', tgt2, 'amount', 10000)
+    ),
+    'Allocate the complete unused transport advance across covered-site fees'
+  );
+  PERFORM pg_temp.assert_ok('multi-site retry is idempotent', v_retry);
+  PERFORM pg_temp.assert_true('multi-site retry returns same action and journal',
+    (v_retry->>'action_id')::uuid = v_action
+    AND (v_retry->>'journal_entry_id')::uuid = v_journal);
+  SELECT count(*) INTO v_count
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'cycle_exception_actions' AND source_id = v_action;
+  PERFORM pg_temp.assert_eq('multi-site retry creates no second journal', v_count, 1);
+
+  -- A residual blocks execution and leaves no parent/child audit rows.
+  PERFORM pg_temp.mk_case(mmp2, src2, adv2, 'paid', 80000, 80000, MGR::text);
+  PERFORM pg_temp.mk_covered_site(tgt3, mmp2, MGR::text);
+  UPDATE public.mmp_site_entries
+  SET site_name = 'CE Residual Target', enumerator_fee = 90000, transport_fee = 0,
+      fee_paid_amount = 0, fee_cash_paid_amount = 0, fee_advance_offset_amount = 0
+  WHERE id = tgt3;
+  v_res := public.execute_cycle_close_redirect_allocations(
+    mmp2, src2, adv2,
+    jsonb_build_array(jsonb_build_object('target_site_id', tgt3, 'amount', 79999)),
+    'This must fail because one SDG remains'
+  );
+  PERFORM pg_temp.assert_err('multi-site residual rejected', v_res, 'full paid advance');
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions WHERE advance_id = adv2;
+  PERFORM pg_temp.assert_eq('multi-site residual leaves no parent action', v_count, 0);
+
+  -- Finance may execute same-enumerator Redirects, but may not authorize a
+  -- cross-enumerator transfer.
+  PERFORM pg_temp.mk_case(mmp3, src3, adv3, 'paid', 1000, 1000, MGR::text);
+  PERFORM pg_temp.mk_covered_site(tgt4, mmp3, ENU::text);
+  UPDATE public.mmp_site_entries
+  SET site_name = 'CE Cross Enumerator Target', enumerator_fee = 1000, transport_fee = 0,
+      fee_paid_amount = 0, fee_cash_paid_amount = 0, fee_advance_offset_amount = 0
+  WHERE id = tgt4;
+  PERFORM pg_temp.as_user(FIN);
+  v_res := public.execute_cycle_close_redirect_allocations(
+    mmp3, src3, adv3,
+    jsonb_build_array(jsonb_build_object('target_site_id', tgt4, 'amount', 1000)),
+    'Finance cannot authorize a cross-enumerator transfer'
+  );
+  PERFORM pg_temp.assert_err('Finance cross-enumerator allocation rejected', v_res, 'authorization');
+
+  -- Completing Site B by bank transfer posts only the SDG 40,000 payment
+  -- component to Bank (1020). The original SDG 10,000 advance offset must never
+  -- appear in this second journal.
+  PERFORM pg_temp.as_user(MGR);
+  BEGIN
+    UPDATE public.mmp_site_entries
+    SET fee_paid_status = 'paid',
+        fee_paid_amount = 50000,
+        fee_cash_paid_amount = 1,
+        fee_advance_offset_amount = 10000,
+        fee_paid_at = now(),
+        fee_paid_by = MGR,
+        fee_payment_method = 'Bank Transfer'
+    WHERE id = tgt2;
+    RAISE EXCEPTION 'MULTI_REDIRECT_UNDERPAYMENT_NOT_REJECTED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'MULTI_REDIRECT_UNDERPAYMENT_NOT_REJECTED' THEN
+      RAISE EXCEPTION
+        'FAIL [redirect cash underpayment rejected]: paid status accepted an SDG 1 completion';
+    END IF;
+    IF SQLERRM NOT ILIKE '%components must equal the gross fee%' THEN
+      RAISE EXCEPTION
+        'FAIL [redirect cash underpayment rejected]: unexpected error: %', SQLERRM;
+    END IF;
+  END;
+  SELECT fee_paid_status INTO v_status FROM public.mmp_site_entries WHERE id = tgt2;
+  PERFORM pg_temp.assert_txt('redirect cash underpayment leaves partial status', v_status, 'partially_paid');
+  SELECT count(*) INTO v_count
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'mmp_site_entries' AND source_id = tgt2;
+  PERFORM pg_temp.assert_eq('redirect cash underpayment posts no journal', v_count, 0);
+
+  UPDATE public.mmp_site_entries
+  SET fee_paid_status = 'paid',
+      fee_paid_amount = 50000,
+      fee_cash_paid_amount = 40000,
+      fee_advance_offset_amount = 10000,
+      fee_paid_at = now(),
+      fee_paid_by = MGR,
+      fee_payment_method = 'Bank Transfer'
+  WHERE id = tgt2;
+
+  SELECT count(*) INTO v_count
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'mmp_site_entries' AND source_id = tgt2;
+  PERFORM pg_temp.assert_eq('bank completion posts one later journal', v_count, 1);
+  SELECT lines INTO v_lines
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'mmp_site_entries' AND source_id = tgt2
+  LIMIT 1;
+  PERFORM pg_temp.assert_true('bank completion has only DR fee and CR bank',
+    jsonb_array_length(v_lines) = 2
+    AND v_lines::text NOT LIKE '%"account_code": "1510"%'
+    AND v_lines::text LIKE '%"account_code": "1020"%');
+  SELECT
+    sum((line->>'amount')::numeric) FILTER (WHERE line->>'debit_credit' = 'DR'),
+    sum((line->>'amount')::numeric) FILTER (WHERE line->>'debit_credit' = 'CR')
+  INTO v_dr, v_cr
+  FROM jsonb_array_elements(v_lines) line;
+  PERFORM pg_temp.assert_true('bank completion posts exactly remaining 40000',
+    v_dr = 40000 AND v_cr = 40000);
+
+  -- The old single-target Redirect fixture remains visible for review and is
+  -- not silently converted into allocation children.
+  SELECT count(*) INTO v_count
+  FROM public.cycle_legacy_redirect_review review
+  WHERE review.advance_id = 'ce54c008-0000-4000-8000-0000000000b8'::uuid;
+  PERFORM pg_temp.assert_eq('legacy Redirect remains in Finance review queue', v_count, 1);
+
+  RAISE NOTICE 'PASS [multi-site Redirect allocation ledger and accounting regression].';
+END $$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 8. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 9. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;

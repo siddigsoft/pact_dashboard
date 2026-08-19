@@ -1,6 +1,8 @@
 import type { ExceptionDecision } from './CycleCloseWizard';
+import { summarizeRedirectAllocations, type RedirectSettlementTarget } from './redirectSettlement';
 
 export interface ExceptionAmounts {
+  siteId?: string;
   advancePaid: number;
   requestedAmount: number;
 }
@@ -38,6 +40,7 @@ export function getAvailableExceptionDecisionValues(
 export function isExceptionDecisionDraftValid(
   site: ExceptionAmounts,
   decision: ExceptionDecision | undefined,
+  redirectTargets: RedirectSettlementTarget[] = [],
 ): boolean {
   if (!decision?.decision) return false;
 
@@ -52,11 +55,13 @@ export function isExceptionDecisionDraftValid(
       return decision.amount === site.advancePaid
         && !!decision.justification?.trim();
     case 'redirect':
-      // A redirect settles the complete disbursed advance against a different
-      // covered site's outstanding enumerator fee. The server caps the fee
-      // settlement and rejects a target with insufficient outstanding fee.
       return decision.amount === site.advancePaid
-        && !!decision.targetSiteId
+        && summarizeRedirectAllocations(
+          site.siteId ?? '__source__',
+          redirectTargets,
+          decision.allocations,
+          site.advancePaid,
+        ).isComplete
         && !!decision.justification?.trim();
     case 'roll':
     case 'hold':

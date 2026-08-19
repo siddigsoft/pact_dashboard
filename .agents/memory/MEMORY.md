@@ -31,3 +31,4 @@
 - [git-push-preference](git-push-preference.md) — user pushes to GitHub manually; never run git push automatically, only commit locally.
 - [database-trigger-integration-tests](database-trigger-integration-tests.md) — RPC tests must install real dependent triggers; stub only terminal services or trigger interactions can be missed.
 - [local-sql-regression-harness](local-sql-regression-harness.md) — Disposable PostgreSQL validation runs as the workspace user; initdb already creates its default postgres database.
+- [cycle-redirect-allocation-ledger](cycle-redirect-allocation-ledger.md) — Redirect fee offsets come from a per-target ledger; later payments must reconcile exactly and never repost the advance.

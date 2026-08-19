@@ -30,6 +30,7 @@ import {
   isProfileUuid,
   resolveFieldPaymentEnumeratorName,
 } from '@/utils/fieldPaymentsEnumerator';
+import { resolveFeeAdvanceDeduction } from '@/components/cycle/redirectSettlement';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -57,6 +58,26 @@ import {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface FeeAllocationTrace {
+  id: string;
+  actionId: string;
+  sourceAdvanceId: string;
+  sourceSiteId: string;
+  targetSiteId: string;
+  targetSiteName: string;
+  amount: number;
+  feeGrossAmount: number;
+  feePriorSettledAmount: number;
+  feeRemainingAmount: number;
+  feeStatus: 'partially_paid' | 'paid';
+  sourceEnumeratorId: string | null;
+  targetEnumeratorId: string | null;
+  crossEnumerator: boolean;
+  journalEntryId: string | null;
+  sourcePaymentReferences: string[];
+  justification: string;
+}
+
 interface FeeRow {
   id: string;
   siteName: string;
@@ -72,10 +93,14 @@ interface FeeRow {
   netPayable: number;
   feePaidStatus: 'unpaid' | 'partially_paid' | 'paid';
   feePaidAmount: number | null;
+  feeCashPaidAmount: number;
   feeAdvanceOffsetAmount: number;
+  feeUnallocatedAmount: number;
   feePaidAt: string | null;
   feePaymentMethod: string | null;
+  feePaymentNotes: string | null;
   feeReceiptUrl: string | null;
+  redirectAllocations: FeeAllocationTrace[];
   mmpId: string;
   mmpName: string;
   mmpHub: string;
@@ -187,6 +212,15 @@ function titleCaseLabel(value?: string | null) {
     .replace(/_/g, ' ')
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
+
+function getFeeAdvanceDeduction(row: FeeRow) {
+  return resolveFeeAdvanceDeduction({
+    grossFee: row.totalFee,
+    activeTargetAdvance: row.advancePaid,
+    recordedAdvanceOffset: row.feeAdvanceOffsetAmount,
+    hasRedirectAllocation: row.redirectAllocations.length > 0,
+  });
+}
 function ageBadge(days: number) {
   if (days <= 30) return <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">{days}d</Badge>;
   if (days <= 60) return <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">{days}d</Badge>;
@@ -294,8 +328,9 @@ export default function FieldPaymentsCentre() {
   const [feesLoaded, setFeesLoaded] = useState(false);
   const [feesLoadError, setFeesLoadError] = useState<string | null>(null);
   const [feeSearch, setFeeSearch] = useState('');
-  const [feeStatusFilter, setFeeStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
+  const [feeStatusFilter, setFeeStatusFilter] = useState<'all' | 'unpaid' | 'partially_paid' | 'paid'>('all');
   const [feeSelected, setFeeSelected] = useState<Set<string>>(new Set());
+  const [feeTraceRow, setFeeTraceRow] = useState<FeeRow | null>(null);
   const [payDialog, setPayDialog] = useState<PayDialog>({
     open: false, rows: [], amount: 0, method: 'Cash',
     date: new Date().toISOString().slice(0, 10),
@@ -403,7 +438,8 @@ export default function FieldPaymentsCentre() {
           .select(`
           id, site_name, site_code, state, locality, status,
           accepted_by, enumerator_fee, transport_fee,
-          fee_paid_status, fee_paid_amount, fee_advance_offset_amount, fee_paid_at, fee_payment_method, fee_payment_notes,
+          fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, fee_unallocated_amount,
+          fee_paid_at, fee_payment_method, fee_payment_notes,
           fee_receipt_url,
           mmp_file_id,
           mmp_files!mmp_file_id(id, name, hub, cycle_status)
@@ -439,14 +475,73 @@ export default function FieldPaymentsCentre() {
         }
       }
 
+      // Load normalized Cycle Close redirect allocations separately. A target
+      // can receive more than one historical allocation, and every row carries
+      // the original source advance/payment references needed by Finance.
+      const allocationMap: Record<string, FeeAllocationTrace[]> = {};
+      const allocationResult = await fetchAllRows<any>((from, to) =>
+        (supabase as any)
+          .from('cycle_exception_action_allocations')
+          .select(`
+            id, action_id, source_advance_id, source_site_id, target_site_id,
+            target_site_name, amount, fee_gross_amount,
+            fee_prior_settled_amount, fee_remaining_amount, fee_status,
+            source_enumerator_id, target_enumerator_id, cross_enumerator,
+            gl_journal_entry_id, source_payment_references, justification
+          `)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
+      if (allocationResult.error) {
+        const missingLedger = allocationResult.error.code === '42P01'
+          || allocationResult.error.code === 'PGRST205'
+          || allocationResult.error.message?.includes('cycle_exception_action_allocations');
+        if (!missingLedger) throw allocationResult.error;
+      } else {
+        const visibleSiteIds = new Set(siteIds);
+        for (const allocation of allocationResult.data ?? []) {
+          if (!visibleSiteIds.has(allocation.target_site_id)) continue;
+          const sourcePaymentReferences = Array.isArray(allocation.source_payment_references)
+            ? allocation.source_payment_references.flat().filter(Boolean).map(String)
+            : [];
+          const trace: FeeAllocationTrace = {
+            id: allocation.id,
+            actionId: allocation.action_id,
+            sourceAdvanceId: allocation.source_advance_id,
+            sourceSiteId: allocation.source_site_id,
+            targetSiteId: allocation.target_site_id,
+            targetSiteName: allocation.target_site_name,
+            amount: Number(allocation.amount ?? 0),
+            feeGrossAmount: Number(allocation.fee_gross_amount ?? 0),
+            feePriorSettledAmount: Number(allocation.fee_prior_settled_amount ?? 0),
+            feeRemainingAmount: Number(allocation.fee_remaining_amount ?? 0),
+            feeStatus: allocation.fee_status,
+            sourceEnumeratorId: allocation.source_enumerator_id,
+            targetEnumeratorId: allocation.target_enumerator_id,
+            crossEnumerator: allocation.cross_enumerator ?? false,
+            journalEntryId: allocation.gl_journal_entry_id,
+            sourcePaymentReferences,
+            justification: allocation.justification ?? '',
+          };
+          allocationMap[trace.targetSiteId] = [
+            ...(allocationMap[trace.targetSiteId] ?? []),
+            trace,
+          ];
+        }
+      }
+
       const rows: FeeRow[] = (sites ?? []).map((s: any) => {
         const mmp = s.mmp_files ?? {};
         const ef = s.enumerator_fee ?? 0;
         const tf = s.transport_fee ?? 0;
         const total = ef + tf;
         const adv = advMap[s.id] ?? 0;
+        const redirectAllocations = allocationMap[s.id] ?? [];
         const recordedSettlement = s.fee_paid_amount ?? 0;
         const activeAdvanceOffset = Math.min(adv, total);
+        const effectiveAdvanceOffset = redirectAllocations.length > 0
+          ? Math.min(s.fee_advance_offset_amount ?? 0, total)
+          : Math.max(s.fee_advance_offset_amount ?? 0, activeAdvanceOffset);
         return {
           id: s.id,
           siteName: s.site_name ?? '—',
@@ -459,13 +554,17 @@ export default function FieldPaymentsCentre() {
           transportFee: tf,
           totalFee: total,
           advancePaid: adv,
-          netPayable: Math.max(total - Math.max(recordedSettlement, activeAdvanceOffset), 0),
+          netPayable: Math.max(total - Math.max(recordedSettlement, effectiveAdvanceOffset), 0),
           feePaidStatus: (s.fee_paid_status ?? 'unpaid') as FeeRow['feePaidStatus'],
           feePaidAmount: s.fee_paid_amount,
+          feeCashPaidAmount: s.fee_cash_paid_amount ?? 0,
           feeAdvanceOffsetAmount: s.fee_advance_offset_amount ?? 0,
+          feeUnallocatedAmount: s.fee_unallocated_amount ?? 0,
           feePaidAt: s.fee_paid_at,
           feePaymentMethod: s.fee_payment_method,
+          feePaymentNotes: s.fee_payment_notes ?? null,
           feeReceiptUrl: s.fee_receipt_url ?? null,
+          redirectAllocations,
           mmpId: mmp.id ?? s.mmp_file_id,
           mmpName: mmp.name ?? '—',
           mmpHub: mmp.hub ?? '—',
@@ -830,20 +929,23 @@ export default function FieldPaymentsCentre() {
     try {
       const now = new Date().toISOString();
       const updates = payDialog.rows.map(row => {
-        const advanceOffset = Math.max(
-          row.feeAdvanceOffsetAmount,
-          Math.min(row.advancePaid, row.totalFee),
-        );
+        const advanceOffset = getFeeAdvanceDeduction(row);
+        const paymentNotes = [
+          row.feePaymentNotes,
+          payDialog.notes.trim() || null,
+        ].filter(Boolean).join('; ');
         return supabase.from('mmp_site_entries').update({
           fee_paid_status:           'paid',
           fee_paid_amount:           row.totalFee,
           fee_cash_paid_amount:      Math.max(row.totalFee - advanceOffset, 0),
           fee_advance_offset_amount: advanceOffset,
-          fee_unallocated_amount:    Math.max(row.advancePaid - row.totalFee, 0),
+          fee_unallocated_amount:    row.redirectAllocations.length > 0
+            ? 0
+            : Math.max(row.advancePaid - row.totalFee, 0),
           fee_paid_at:               payDialog.date ? new Date(payDialog.date).toISOString() : now,
           fee_paid_by:               currentUser?.id,
           fee_payment_method:        payDialog.method,
-          fee_payment_notes:         payDialog.notes || null,
+          fee_payment_notes:         paymentNotes || null,
           fee_receipt_url:           payDialog.receiptUrl,
           fee_receipt_uploaded_at:   now,
           fee_receipt_uploaded_by:   currentUser?.id,
@@ -1604,6 +1706,7 @@ export default function FieldPaymentsCentre() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="unpaid">Unpaid</SelectItem>
+                 <SelectItem value="partially_paid">Partially Paid</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
               </SelectContent>
             </Select>
@@ -1649,7 +1752,7 @@ export default function FieldPaymentsCentre() {
                     <TableHead className="text-xs">Enumerator</TableHead>
                     <TableHead className="text-xs">MMP</TableHead>
                     <TableHead className="text-xs text-right">Fee</TableHead>
-                    <TableHead className="text-xs text-right">Advance</TableHead>
+                    <TableHead className="text-xs text-right">Advance Offset</TableHead>
                     <TableHead className="text-xs text-right font-semibold">Net Payable</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                     <TableHead className="text-xs">Receipt</TableHead>
@@ -1683,13 +1786,32 @@ export default function FieldPaymentsCentre() {
                         {row.cycleStatus === 'closed' && <Badge className="bg-slate-100 text-slate-600 text-[10px] mt-0.5">Closed</Badge>}
                       </TableCell>
                       <TableCell className="text-xs text-right">SDG {fmt(row.totalFee)}</TableCell>
-                      <TableCell className="text-xs text-right text-amber-600">{row.advancePaid > 0 ? `− SDG ${fmt(row.advancePaid)}` : '—'}</TableCell>
+                      <TableCell className="text-xs text-right">
+                        <span className="text-amber-600">
+                          {getFeeAdvanceDeduction(row) > 0
+                            ? `− SDG ${fmt(getFeeAdvanceDeduction(row))}`
+                            : '—'}
+                        </span>
+                        {row.redirectAllocations.length > 0 && (
+                          <button
+                            type="button"
+                            className="mt-1 ml-auto flex items-center gap-1 text-[10px] text-purple-700 hover:underline"
+                            onClick={() => setFeeTraceRow(row)}
+                          >
+                            <ArrowRightLeft className="h-3 w-3" />
+                            {row.redirectAllocations.length} redirect trace{row.redirectAllocations.length === 1 ? '' : 's'}
+                          </button>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-right font-semibold">{row.netPayable > 0 ? `SDG ${fmt(row.netPayable)}` : <span className="text-green-600 text-[10px]">Covered by advance</span>}</TableCell>
                       <TableCell>
-                        {row.feePaidStatus === 'paid'
-                          ? <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">✓ Paid</Badge>
-                          : <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Unpaid</Badge>
-                        }
+                        {row.feePaidStatus === 'paid' ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">✓ Paid</Badge>
+                        ) : row.feePaidStatus === 'partially_paid' ? (
+                          <Badge className="bg-purple-100 text-purple-700 border-purple-300 text-[10px]">Partially Paid</Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Unpaid</Badge>
+                        )}
                         {row.feePaidAt && <p className="text-[10px] text-muted-foreground mt-0.5">{fmtDate(row.feePaidAt)}</p>}
                       </TableCell>
                       <TableCell>
@@ -2064,6 +2186,134 @@ export default function FieldPaymentsCentre() {
       </Tabs>
 
       {/* ══════════════════════════════════════════════════════════════════════
+          DIALOG: Redirect allocation trace
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={feeTraceRow !== null} onOpenChange={open => !open && setFeeTraceRow(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-purple-600" />
+              Advance Offset Trace
+            </DialogTitle>
+            <DialogDescription>
+              {feeTraceRow?.siteName} — persisted Cycle Close allocations and source payment references
+            </DialogDescription>
+          </DialogHeader>
+
+          {feeTraceRow && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  ['Gross Fee', feeTraceRow.totalFee],
+                  ['Cash Paid', feeTraceRow.feeCashPaidAmount],
+                  ['Advance Offset', feeTraceRow.feeAdvanceOffsetAmount],
+                  ['Total Settled', feeTraceRow.feePaidAmount ?? 0],
+                  ['Remaining Fee', Math.max(feeTraceRow.totalFee - (feeTraceRow.feePaidAmount ?? 0), 0)],
+                  ['Unallocated', feeTraceRow.feeUnallocatedAmount],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-lg border bg-muted/30 p-2.5">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                    <p className="text-sm font-semibold">SDG {fmt(Number(value))}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                {feeTraceRow.redirectAllocations.map((allocation, index) => (
+                  <div key={allocation.id} className="rounded-lg border border-purple-200 bg-purple-50/30 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold">
+                          Allocation {index + 1}: SDG {fmt(allocation.amount)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Target: {allocation.targetSiteName}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge className={`text-[10px] ${
+                          allocation.feeStatus === 'paid'
+                            ? 'bg-green-100 text-green-700 border-green-300'
+                            : 'bg-purple-100 text-purple-700 border-purple-300'
+                        }`}>
+                          {allocation.feeStatus === 'paid' ? 'Fully Paid' : 'Partially Paid'}
+                        </Badge>
+                        {allocation.crossEnumerator && (
+                          <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">
+                            Manager-authorized cross-enumerator
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                      <div>
+                        <p className="text-muted-foreground">Fee Gross</p>
+                        <p className="font-medium">SDG {fmt(allocation.feeGrossAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Previously Settled</p>
+                        <p className="font-medium">SDG {fmt(allocation.feePriorSettledAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Advance Allocation</p>
+                        <p className="font-medium">SDG {fmt(allocation.amount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Remaining After</p>
+                        <p className="font-medium">SDG {fmt(allocation.feeRemainingAmount)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-[10px]">
+                      <p>
+                        <span className="text-muted-foreground">Source advance: </span>
+                        <span className="font-mono break-all">{allocation.sourceAdvanceId}</span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Source site: </span>
+                        <span className="font-mono break-all">{allocation.sourceSiteId}</span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Enumerators: </span>
+                        <span className="font-mono break-all">
+                          {allocation.sourceEnumeratorId ?? '—'} → {allocation.targetEnumeratorId ?? '—'}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">GL journal: </span>
+                        <span className="font-mono break-all">{allocation.journalEntryId ?? '—'}</span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Action: </span>
+                        <span className="font-mono break-all">{allocation.actionId}</span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Original payment references: </span>
+                        <span className="font-mono break-all">
+                          {allocation.sourcePaymentReferences.length
+                            ? allocation.sourcePaymentReferences.join(', ')
+                            : 'None recorded'}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Justification: </span>
+                        {allocation.justification || '—'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeeTraceRow(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════════════════
           DIALOG: Mark Fee Paid
       ══════════════════════════════════════════════════════════════════════ */}
       <Dialog open={payDialog.open} onOpenChange={open => !payDialog.saving && setPayDialog(d => ({ ...d, open }))}>
@@ -2086,7 +2336,9 @@ export default function FieldPaymentsCentre() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Advance Deductions</span>
-                <span className="text-amber-600">− SDG {fmt(payDialog.rows.reduce((s, r) => s + r.advancePaid, 0))}</span>
+                <span className="text-amber-600">
+                  − SDG {fmt(payDialog.rows.reduce((sum, row) => sum + getFeeAdvanceDeduction(row), 0))}
+                </span>
               </div>
               <Separator className="my-1" />
               <div className="flex justify-between font-semibold">
@@ -2145,6 +2397,9 @@ export default function FieldPaymentsCentre() {
               <Info className="h-3.5 w-3.5 text-blue-600" />
               <AlertDescription className="text-blue-700 text-xs">
                 A GL entry (DR 5200 / CR {payDialog.method === 'Bank Transfer' ? '1020 Bank' : '1010 Cash'}) will post automatically on save.
+                {payDialog.rows.some(row => row.redirectAllocations.length > 0)
+                  ? ' Existing advance offsets were already posted and will not be posted again.'
+                  : ''}
               </AlertDescription>
             </Alert>
           </div>
