@@ -242,6 +242,28 @@ BEGIN
       || E'\n';
   END IF;
 
+  IF to_regprocedure(
+    'public.reconcile_reprocessed_cycle_redirect(uuid,text,uuid,text)'
+  ) IS NULL THEN
+    v_missing := v_missing
+      || '  - function reconcile_reprocessed_cycle_redirect(uuid,text,uuid,text) is missing'
+      || E'\n';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    WHERE procedure.oid = to_regprocedure('public.acct_post_reversal(uuid,jsonb,text)')
+      AND strpos(
+        procedure.prosrc,
+        'is_cycle_redirect_correction_authorizer(v_user_id)'
+      ) > 0
+  ) THEN
+    v_missing := v_missing
+      || '  - acct_post_reversal is not aligned with case-safe Cycle Close financial roles'
+      || E'\n';
+  END IF;
+
   IF v_missing <> '' THEN
     RAISE EXCEPTION
       'PREFLIGHT FAILED — required schema not present. Apply migrations '
@@ -249,7 +271,8 @@ BEGIN
       '(and their 20260818* deps), 20260819b_cycle_close_finalizer_role_variants, and '
       '20260819c_cycle_close_mmp_country_scope, 20260819e_cycle_redirect_fee_settlement_safety, '
       '20260819f_cycle_redirect_multi_site_allocations, and '
-      '20260819g_cycle_redirect_correction first.%s%s',
+      '20260819g_cycle_redirect_correction through '
+      '20260819m_cycle_redirect_historical_reconciliation first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -2188,12 +2211,349 @@ BEGIN
 END;
 $correction_test$;
 
+-- ---------------------------------------------------------------------------
+-- 10. Historical reconciliation regression. A separate legacy Redirect is
+--     intentionally restored and paid again, then only the old accounting is
+--     reversed. The current advance row must remain byte-for-byte unchanged.
+-- ---------------------------------------------------------------------------
+DO $historical_reconciliation_test$
+DECLARE
+  FIN constant uuid := 'ce540000-0000-4000-8000-000000000002';
+  H_MMP constant uuid := 'ce54c00b-0000-4000-8000-00000000000b';
+  H_SOURCE constant uuid := 'ce54c00b-0000-4000-8000-0000000000ab';
+  H_CURRENT constant uuid := 'ce54c00b-0000-4000-8000-0000000000cb';
+  H_ADVANCE constant uuid := 'ce54c00b-0000-4000-8000-0000000000bb';
+  PERIOD constant uuid := 'ce540000-feed-4000-8000-0000000000f1';
+  v_action_id uuid;
+  v_original_journal_id uuid;
+  v_other_journal_id uuid;
+  v_temp_reversal_id uuid;
+  v_reversal_id uuid;
+  v_result jsonb;
+  v_count bigint;
+  v_before_status text;
+  v_before_site_id uuid;
+  v_before_metadata jsonb;
+  v_after_status text;
+  v_after_site_id uuid;
+  v_after_metadata jsonb;
+  v_lines jsonb;
+  v_dr numeric;
+  v_cr numeric;
+BEGIN
+  PERFORM pg_temp.as_user(FIN);
+  UPDATE public.profiles SET role = 'superAdmin' WHERE id = FIN;
+  PERFORM pg_temp.mk_case(H_MMP, H_SOURCE, H_ADVANCE, 'paid', 1000, 1000);
+  PERFORM pg_temp.mk_covered_site(H_CURRENT, H_MMP, FIN::text);
+
+  v_result := public.execute_cycle_close_exception(
+    H_MMP, H_SOURCE, H_ADVANCE, 'redirect', 1000, 'historical redirect fixture'
+  );
+  PERFORM pg_temp.assert_ok('historical fixture Redirect executes', v_result);
+
+  SELECT id, gl_journal_entry_id
+  INTO v_action_id, v_original_journal_id
+  FROM public.cycle_exception_actions
+  WHERE advance_id = H_ADVANCE
+    AND decision = 'redirect'
+    AND executed = true
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  PERFORM pg_temp.assert_true(
+    'historical fixture has an executed Redirect journal',
+    v_action_id IS NOT NULL AND v_original_journal_id IS NOT NULL
+  );
+
+  UPDATE public.cycle_exception_actions
+  SET redirect_fee_gross_amount = 1000,
+      redirect_fee_prior_settled_amount = 0,
+      redirect_fee_settled_amount = 1000,
+      redirect_fee_remaining_amount = 0,
+      redirect_fee_status = 'paid'
+  WHERE id = v_action_id;
+
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1000,
+      transport_fee = 0,
+      fee_paid_status = 'paid',
+      fee_paid_amount = 1000,
+      fee_cash_paid_amount = 1000,
+      fee_advance_offset_amount = 0,
+      fee_unallocated_amount = 0,
+      fee_payment_method = NULL,
+      fee_payment_notes = NULL,
+      fee_receipt_url = NULL
+  WHERE id = H_SOURCE;
+
+  ALTER TABLE public.acct_journal_lines DISABLE TRIGGER USER;
+  INSERT INTO public.acct_journal_lines (
+    entry_id, line_no, account_id, fund_id, function,
+    original_amount, original_currency,
+    functional_amount, functional_currency, fx_rate,
+    debit_credit, description
+  )
+  SELECT
+    v_original_journal_id,
+    line_no,
+    account_id,
+    (SELECT id FROM public.acct_funds WHERE code = 'CE54-CORRECTION'),
+    function_name,
+    1000,
+    'SDG',
+    1000,
+    'SDG',
+    1,
+    debit_credit,
+    description
+  FROM (
+    VALUES
+      (1, 'ce540000-acc0-4000-8000-000000005200'::uuid, 'program', 'DR', 'Historical enumerator fee reclassification'),
+      (2, 'ce540000-acc0-4000-8000-000000001510'::uuid, 'none', 'CR', 'Historical transport advance reclassification')
+  ) AS lines(line_no, account_id, function_name, debit_credit, description)
+  ON CONFLICT (entry_id, line_no) DO NOTHING;
+  ALTER TABLE public.acct_journal_lines ENABLE TRIGGER USER;
+
+  -- Simulate the later intentional reprocessing, first without the required
+  -- restoration audit so the function must fail closed.
+  UPDATE public.down_payment_requests
+  SET status = 'fully_paid',
+      mmp_site_entry_id = H_CURRENT,
+      metadata = coalesce(metadata, '{}'::jsonb) - 'audit_log'
+  WHERE id = H_ADVANCE;
+
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-no-restore-audit'
+  );
+  PERFORM pg_temp.assert_err(
+    'historical reconciliation rejects missing restore snapshot',
+    v_result,
+    'no proven post-Redirect'
+  );
+
+  UPDATE public.down_payment_requests
+  SET metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+    'audit_log',
+    jsonb_build_array(
+      jsonb_build_object(
+        'action', 'restored',
+        'previousValue', 'cancelled',
+        'newValue', 'pending_admin',
+        'timestamp', clock_timestamp() + interval '1 minute'
+      )
+    )
+  )
+  WHERE id = H_ADVANCE;
+
+  -- Mutable fee configuration and components cannot replace the immutable
+  -- snapshot stored with the Redirect action.
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1200,
+      fee_paid_amount = 1200,
+      fee_cash_paid_amount = 1200
+  WHERE id = H_SOURCE;
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-mutated-fee'
+  );
+  PERFORM pg_temp.assert_err(
+    'historical reconciliation rejects mutable fee drift',
+    v_result,
+    'exact Redirect snapshot'
+  );
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1000,
+      fee_paid_amount = 1000,
+      fee_cash_paid_amount = 1000
+  WHERE id = H_SOURCE;
+
+  -- A separately posted reversal blocks the historical path too.
+  v_temp_reversal_id := public.acct_post_reversal(
+    v_original_journal_id,
+    jsonb_build_object('period_id', PERIOD, 'posting_date', current_date),
+    'ce54-historical-pre-reversed'
+  );
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-already-reversed'
+  );
+  PERFORM pg_temp.assert_err(
+    'historical reconciliation rejects already-reversed journal',
+    v_result,
+    'unreversed posted'
+  );
+  UPDATE public.acct_journal_entries
+  SET status = 'posted', reversed_by_entry_id = NULL
+  WHERE id = v_original_journal_id;
+  DELETE FROM public.acct_journal_entries WHERE id = v_temp_reversal_id;
+
+  -- Later fee activity on the legacy target must fail closed.
+  SELECT gl_journal_entry_id
+  INTO v_other_journal_id
+  FROM public.cycle_exception_actions
+  WHERE decision = 'return'
+    AND gl_journal_entry_id IS NOT NULL
+  LIMIT 1;
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, created_at
+  )
+  SELECT
+    'mmp_site_entries', H_SOURCE, 'enumerator_fee_paid', 'success',
+    v_other_journal_id, action.executed_at + interval '2 minutes'
+  FROM public.cycle_exception_actions action
+  WHERE action.id = v_action_id;
+
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-later-fee'
+  );
+  PERFORM pg_temp.assert_err(
+    'historical reconciliation rejects later fee activity',
+    v_result,
+    'Later fee-settlement'
+  );
+  DELETE FROM public.acct_gl_bridge_log
+  WHERE source_table = 'mmp_site_entries'
+    AND source_id = H_SOURCE
+    AND event_type = 'enumerator_fee_paid'
+    AND journal_entry_id = v_other_journal_id;
+
+  SELECT status, mmp_site_entry_id, metadata
+  INTO v_before_status, v_before_site_id, v_before_metadata
+  FROM public.down_payment_requests
+  WHERE id = H_ADVANCE;
+
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-success'
+  );
+  PERFORM pg_temp.assert_ok('historical reconciliation succeeds', v_result);
+  v_reversal_id := (v_result->>'reversal_journal_entry_id')::uuid;
+
+  SELECT status, mmp_site_entry_id, metadata
+  INTO v_after_status, v_after_site_id, v_after_metadata
+  FROM public.down_payment_requests
+  WHERE id = H_ADVANCE;
+
+  PERFORM pg_temp.assert_true(
+    'historical reconciliation preserves the current advance exactly',
+    v_before_status IS NOT DISTINCT FROM v_after_status
+    AND v_before_site_id IS NOT DISTINCT FROM v_after_site_id
+    AND v_before_metadata IS NOT DISTINCT FROM v_after_metadata
+  );
+  PERFORM pg_temp.assert_true(
+    'historical result reports the preserved reprocessed advance',
+    coalesce((v_result->>'preserved_advance')::boolean, false)
+    AND v_result->>'preserved_advance_status' = 'fully_paid'
+    AND (v_result->>'preserved_advance_site_id')::uuid = H_CURRENT
+    AND v_result->>'replacement_action_id' IS NULL
+  );
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE id = v_action_id
+    AND executed = true
+    AND correction_status = 'historically_reconciled'
+    AND correction_reversal_journal_id = v_reversal_id
+    AND correction_replacement_action_id IS NULL;
+  PERFORM pg_temp.assert_eq('historical action has separate reconciliation audit', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE advance_id = H_ADVANCE;
+  PERFORM pg_temp.assert_eq('historical reconciliation creates no replacement action', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.mmp_site_entries
+  WHERE id = H_SOURCE
+    AND fee_paid_status = 'unpaid'
+    AND fee_paid_amount = 0
+    AND fee_cash_paid_amount = 0
+    AND fee_advance_offset_amount = 0;
+  PERFORM pg_temp.assert_eq('historical source fee is reset after reversal', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.acct_gl_bridge_log
+  WHERE source_table = 'mmp_site_entries'
+    AND source_id = H_SOURCE
+    AND journal_entry_id = v_original_journal_id
+    AND status = 'success';
+  PERFORM pg_temp.assert_eq('historical bridge success row remains intact', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.acct_gl_bridge_reversal_links
+  WHERE correction_action_id = v_action_id
+    AND original_journal_entry_id = v_original_journal_id
+    AND reversal_journal_entry_id = v_reversal_id;
+  PERFORM pg_temp.assert_eq('historical reversal link is auditable', v_count, 1);
+
+  -- Once the legacy Redirect is historically reconciled, a later ordinary fee
+  -- payment must post the full cash amount rather than reusing the reversed
+  -- advance offset.
+  UPDATE public.mmp_site_entries
+  SET fee_paid_status = 'paid',
+      fee_paid_amount = 1000,
+      fee_cash_paid_amount = 1000,
+      fee_advance_offset_amount = 0,
+      fee_unallocated_amount = 0,
+      fee_paid_at = clock_timestamp(),
+      fee_paid_by = FIN,
+      fee_payment_method = 'cash'
+  WHERE id = H_SOURCE;
+
+  SELECT count(*), (array_agg(lines ORDER BY id DESC))[1]
+  INTO v_count, v_lines
+  FROM pg_temp.gl_double_calls
+  WHERE source_table = 'mmp_site_entries'
+    AND source_id = H_SOURCE
+    AND event_type = 'enumerator_fee_paid';
+  PERFORM pg_temp.assert_eq('post-reconciliation fee payment posts once', v_count, 1);
+
+  SELECT
+    coalesce(sum(CASE WHEN line->>'debit_credit' = 'DR' THEN (line->>'amount')::numeric ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN line->>'debit_credit' = 'CR' THEN (line->>'amount')::numeric ELSE 0 END), 0)
+  INTO v_dr, v_cr
+  FROM jsonb_array_elements(v_lines) line;
+  PERFORM pg_temp.assert_true(
+    'post-reconciliation fee payment posts full cash without old offset',
+    v_dr = 1000 AND v_cr = 1000
+  );
+
+  v_result := public.reconcile_reprocessed_cycle_redirect(
+    v_action_id,
+    'Reverse only the old Redirect after intentional repayment',
+    PERIOD,
+    'ce54-historical-success'
+  );
+  PERFORM pg_temp.assert_ok('historical retry is idempotent', v_result);
+  PERFORM pg_temp.assert_true(
+    'historical retry returns the same reversal without a replacement',
+    coalesce((v_result->>'already_corrected')::boolean, false)
+    AND (v_result->>'reversal_journal_entry_id')::uuid = v_reversal_id
+    AND v_result->>'replacement_action_id' IS NULL
+  );
+
+  RAISE NOTICE 'PASS [historical Redirect reconciliation preserves later payment].';
+END;
+$historical_reconciliation_test$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 10. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 11. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;

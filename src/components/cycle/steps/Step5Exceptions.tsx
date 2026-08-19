@@ -65,6 +65,7 @@ interface TargetSite {
 
 interface CorrectedRedirectHistory {
   actionId: string;
+  correctionStatus: 'reopened_for_correction' | 'historically_reconciled';
   correctedAt?: string;
   correctedByName?: string;
   correctionReason?: string;
@@ -87,6 +88,8 @@ interface RedirectCorrectionDialog {
   reason: string;
   periodId: string;
   idempotencyKey: string;
+  mode: 'reopen_advance' | 'historical_accounting_only';
+  historicalModeAvailable: boolean;
   periods: FiscalPeriod[];
   loadingPeriods: boolean;
   submitting: boolean;
@@ -315,9 +318,13 @@ export default function Step5Exceptions({
         .map(row => row.id as string),
     );
     const correctedByAdvance = actionRows.reduce<Record<string, CorrectedRedirectHistory[]>>((history, row) => {
-      if (!row.advance_id || row.correction_status !== 'reopened_for_correction') return history;
+      if (
+        !row.advance_id
+        || !['reopened_for_correction', 'historically_reconciled'].includes(row.correction_status)
+      ) return history;
       (history[row.advance_id] ??= []).push({
         actionId: row.id,
+        correctionStatus: row.correction_status,
         correctedAt: row.corrected_at ?? undefined,
         correctedByName: row.corrected_by_name ?? undefined,
         correctionReason: row.correction_reason ?? undefined,
@@ -541,26 +548,27 @@ export default function Step5Exceptions({
         executedByName: row.executed_by_name ?? undefined,
         journalEntryId: row.gl_journal_entry_id ?? undefined,
         executionError: row.execution_error ?? undefined,
-          allocations: (allocationsByAction[row.id] ?? []).map(allocation => ({
-            targetSiteId: allocation.target_site_id,
-            targetSiteName: allocation.target_site_name,
-            targetEnumeratorId: allocation.target_enumerator_id,
-            sameEnumerator: allocation.cross_enumerator === false,
-            amount: Number(allocation.amount ?? 0),
-            feeGrossAmount: Number(allocation.fee_gross_amount ?? 0),
-            feePriorSettledAmount: Number(allocation.fee_prior_settled_amount ?? 0),
-            feeRemainingAmount: Number(allocation.fee_remaining_amount ?? 0),
-            feeSettlementStatus: allocation.fee_status,
-            journalEntryId: allocation.gl_journal_entry_id ?? undefined,
-          })),
-          feeGrossAmount: row.redirect_fee_gross_amount ?? undefined,
-          feePriorSettledAmount: row.redirect_fee_prior_settled_amount ?? undefined,
-          feeSettledAmount: row.redirect_fee_settled_amount ?? undefined,
-          feeRemainingAmount: row.redirect_fee_remaining_amount ?? undefined,
-          feeSettlementStatus: row.redirect_fee_status ?? undefined,
-          sourcePaymentReferences: Array.isArray(row.source_payment_references)
-            ? row.source_payment_references.flat().filter(Boolean)
-            : undefined,
+        correctionStatus: row.correction_status ?? undefined,
+        allocations: (allocationsByAction[row.id] ?? []).map(allocation => ({
+          targetSiteId: allocation.target_site_id,
+          targetSiteName: allocation.target_site_name,
+          targetEnumeratorId: allocation.target_enumerator_id,
+          sameEnumerator: allocation.cross_enumerator === false,
+          amount: Number(allocation.amount ?? 0),
+          feeGrossAmount: Number(allocation.fee_gross_amount ?? 0),
+          feePriorSettledAmount: Number(allocation.fee_prior_settled_amount ?? 0),
+          feeRemainingAmount: Number(allocation.fee_remaining_amount ?? 0),
+          feeSettlementStatus: allocation.fee_status,
+          journalEntryId: allocation.gl_journal_entry_id ?? undefined,
+        })),
+        feeGrossAmount: row.redirect_fee_gross_amount ?? undefined,
+        feePriorSettledAmount: row.redirect_fee_prior_settled_amount ?? undefined,
+        feeSettledAmount: row.redirect_fee_settled_amount ?? undefined,
+        feeRemainingAmount: row.redirect_fee_remaining_amount ?? undefined,
+        feeSettlementStatus: row.redirect_fee_status ?? undefined,
+        sourcePaymentReferences: Array.isArray(row.source_payment_references)
+          ? row.source_payment_references.flat().filter(Boolean)
+          : undefined,
       };
       if (executedFromServer[row.advance_id].allocations?.length) {
         const totalAllocated = executedFromServer[row.advance_id].allocations!
@@ -617,6 +625,8 @@ export default function Step5Exceptions({
       reason: '',
       periodId: '',
       idempotencyKey,
+      mode: 'reopen_advance',
+      historicalModeAvailable: false,
       periods: [],
       loadingPeriods: true,
       submitting: false,
@@ -679,8 +689,11 @@ export default function Step5Exceptions({
       : current);
     const key = exceptionKey(correctionDialog.site);
     try {
+      const rpcName = correctionDialog.mode === 'historical_accounting_only'
+        ? 'reconcile_reprocessed_cycle_redirect'
+        : 'reopen_cycle_redirect_for_correction';
       const { data, error } = await (supabase as any).rpc(
-        'reopen_cycle_redirect_for_correction',
+        rpcName,
         {
           p_action_id: correctionDialog.decision.actionId,
           p_reason: correctionDialog.reason.trim(),
@@ -690,7 +703,13 @@ export default function Step5Exceptions({
       );
       if (error) throw new Error(error.message);
       const result = data as { ok?: boolean; error?: string } | null;
-      if (!result?.ok) throw new Error(result?.error || 'The server did not reopen this Redirect.');
+      if (!result?.ok) {
+        throw new Error(result?.error || (
+          correctionDialog.mode === 'historical_accounting_only'
+            ? 'The server did not reconcile this historical Redirect.'
+            : 'The server did not reopen this Redirect.'
+        ));
+      }
 
       const nextDecisions = { ...decisionsRef.current };
       delete nextDecisions[key];
@@ -701,16 +720,24 @@ export default function Step5Exceptions({
       await loadExceptions();
     } catch (error: any) {
       const message = error?.message ?? 'The correction failed. Nothing was changed.';
-      const migrationMissing = message.includes('reopen_cycle_redirect_for_correction')
+      const expectedRpc = correctionDialog?.mode === 'historical_accounting_only'
+        ? 'reconcile_reprocessed_cycle_redirect'
+        : 'reopen_cycle_redirect_for_correction';
+      const migrationMissing = message.includes(expectedRpc)
         && message.toLowerCase().includes('schema cache');
+      const reprocessedAdvance = correctionDialog.mode === 'reopen_advance'
+        && message.toLowerCase().includes('advance changed after this redirect');
       if (migrationMissing) setMigrationRequired(true);
       setCorrectionDialog(current => current
         ? {
           ...current,
           submitting: false,
+          historicalModeAvailable: current.historicalModeAvailable || reprocessedAdvance,
           error: migrationMissing
-            ? 'Apply the Redirect correction migration in Supabase, then reload this wizard.'
-            : message,
+            ? 'Apply the latest Redirect correction migration in Supabase, then reload this wizard.'
+            : reprocessedAdvance
+              ? `${message} Choose the historical accounting-only path below to preserve the later advance and payment.`
+              : message,
         }
         : current);
     }
@@ -1247,12 +1274,16 @@ function SiteCard({
         >
           <div className="flex items-center gap-2 text-amber-900 font-semibold">
             <RotateCcw className="h-3.5 w-3.5" />
-            Previous Redirect reversed and reopened for correction
+            {history.correctionStatus === 'historically_reconciled'
+              ? 'Historical Redirect accounting reversed; later advance preserved'
+              : 'Previous Redirect reversed and reopened for correction'}
           </div>
           <p className="text-amber-800">
             Corrected {history.correctedAt ? new Date(history.correctedAt).toLocaleString('en-GB') : 'at an unrecorded time'}
             {history.correctedByName ? ` by ${history.correctedByName}` : ''}.
-            The original action is retained below for audit history.
+            {history.correctionStatus === 'historically_reconciled'
+              ? ' The original action and payment history remain intact; the current advance, site, and later payment were not changed.'
+              : ' The original action is retained below for audit history.'}
           </p>
           {history.correctionReason && (
             <p className="rounded border border-amber-200 bg-white/70 px-2 py-1">
@@ -1302,6 +1333,7 @@ function SiteCard({
                 canCorrectRedirect
                 && d?.decision === 'redirect'
                 && !!d.actionId
+                && !d.correctionStatus
                 && (d.allocations?.length ?? 0) === 0
               }
               onCorrectRedirect={onCorrectRedirect}
@@ -2056,6 +2088,7 @@ function RedirectCorrectionPanel({
     && !correction.loadingPeriods
     && !!correction.periodId
     && correction.reason.trim().length >= 10;
+  const historicalOnly = correction.mode === 'historical_accounting_only';
 
   return (
     <div
@@ -2067,8 +2100,9 @@ function RedirectCorrectionPanel({
         <div>
           <p className="font-semibold text-amber-950">Correct this payment exception</p>
           <p className="text-amber-900">
-            This posts a reversing journal, restores the paid advance, and leaves the original
-            Redirect and payment audit trail intact.
+            {historicalOnly
+              ? 'This reverses only the original Redirect accounting and fee settlement. The current reprocessed advance, its site, and its later payment remain unchanged.'
+              : 'This posts a reversing journal, restores the paid advance, and leaves the original Redirect and payment audit trail intact.'}
           </p>
         </div>
       </div>
@@ -2082,6 +2116,38 @@ function RedirectCorrectionPanel({
           mono
         />
       </div>
+
+      {correction.historicalModeAvailable && (
+        <div className="space-y-1.5">
+          <Label>Correction path</Label>
+          <Select
+            value={correction.mode}
+            onValueChange={mode => onChange({
+              mode: mode as RedirectCorrectionDialog['mode'],
+              error: undefined,
+            })}
+            disabled={correction.submitting}
+          >
+            <SelectTrigger data-testid="select-redirect-correction-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="reopen_advance">
+                Restore the original advance for a new resolution
+              </SelectItem>
+              <SelectItem value="historical_accounting_only">
+                Keep the reprocessed advance; reverse historical Redirect only
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {historicalOnly && (
+            <p className="text-[11px] text-amber-800">
+              Use this only when the advance was intentionally restored and paid again after the
+              original Redirect. The server rejects incomplete or conflicting history.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor={`redirect-correction-reason-${correction.decision.actionId}`}>
@@ -2157,7 +2223,7 @@ function RedirectCorrectionPanel({
           {correction.submitting
             ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
-          Reverse journal and reopen
+          {historicalOnly ? 'Reverse historical Redirect only' : 'Reverse journal and reopen'}
         </Button>
       </div>
     </div>
