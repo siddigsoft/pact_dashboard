@@ -34,7 +34,7 @@ interface OpenMmp {
   name: string;
   status: string | null;
   cycle_status: string | null;
-  start_date: string | null;
+  created_at: string | null;
 }
 
 interface TargetSite {
@@ -147,6 +147,7 @@ export default function Step5Exceptions({
   const [showPaidGuide, setShowPaidGuide]     = useState(false);
   const [showApprGuide, setShowApprGuide]     = useState(false);
   const [openMmps, setOpenMmps]               = useState<OpenMmp[]>([]);
+  const [targetCycleLoadError, setTargetCycleLoadError] = useState<string | null>(null);
   const [targetSites, setTargetSites]          = useState<Record<string, TargetSite[]>>({});
   const [loadingTargetSites, setLoadingTargetSites] = useState<Record<string, boolean>>({});
   const [executing, setExecuting]              = useState<Record<string, boolean>>({});
@@ -196,13 +197,20 @@ export default function Step5Exceptions({
         .eq('executed', true),
       supabase
         .from('mmp_files')
-        .select('id, name, status, cycle_status, start_date')
+        .select('id, name, status, cycle_status, created_at')
         .neq('id', wizardState.selectedMmpId!)
-        .order('start_date', { ascending: false }),
+        .order('created_at', { ascending: false }),
     ]);
-    setOpenMmps(((mmpResult.data ?? []) as OpenMmp[]).filter(mmp =>
-      mmp.status !== 'closed' && mmp.cycle_status !== 'closed'
-    ));
+    if (mmpResult.error) {
+      console.error('[CycleClose] Could not load target cycles:', mmpResult.error);
+      setOpenMmps([]);
+      setTargetCycleLoadError(`Could not load target cycles: ${mmpResult.error.message}`);
+    } else {
+      setTargetCycleLoadError(null);
+      setOpenMmps(((mmpResult.data ?? []) as OpenMmp[]).filter(mmp =>
+        mmp.status !== 'closed' && mmp.cycle_status !== 'closed'
+      ));
+    }
 
     const siteData = siteResult.data;
     if (!siteData?.length) { setLoading(false); return; }
@@ -580,6 +588,7 @@ export default function Step5Exceptions({
               )}
               setDecision={setDecision}
               openMmps={openMmps}
+              targetCycleLoadError={targetCycleLoadError}
               targetSites={targetSites[exceptionKey(site)] ?? []}
               loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
               executing={!!executing[exceptionKey(site)]}
@@ -645,6 +654,7 @@ export default function Step5Exceptions({
               )}
               setDecision={setDecision}
               openMmps={openMmps}
+              targetCycleLoadError={targetCycleLoadError}
               targetSites={targetSites[exceptionKey(site)] ?? []}
               loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
               executing={!!executing[exceptionKey(site)]}
@@ -725,6 +735,7 @@ interface SiteCardProps {
   canExecute: boolean;
   setDecision: (advanceId: string, patch: Partial<ExceptionDecision>) => void;
   openMmps: OpenMmp[];
+  targetCycleLoadError: string | null;
   targetSites: TargetSite[];
   loadingTargetSites: boolean;
   executing: boolean;
@@ -737,7 +748,7 @@ interface SiteCardProps {
 
 function SiteCard({
   site, decision: d, decisions, isDone, canOverride, canExecute, setDecision, variant,
-  openMmps, targetSites, loadingTargetSites, executing, isDraftValid,
+  openMmps, targetCycleLoadError, targetSites, loadingTargetSites, executing, isDraftValid,
   onTargetMmpChange, onLoadSameMmpSites, onExecute,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
@@ -1110,13 +1121,24 @@ function SiteCard({
                   <SelectValue placeholder="Select an open cycle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {openMmps.map(mmp => (
+                  {openMmps.length > 0 ? openMmps.map(mmp => (
                     <SelectItem key={mmp.id} value={mmp.id}>
-                      {mmp.name} {mmp.start_date ? `· ${new Date(mmp.start_date).toLocaleDateString()}` : ''}
+                      {mmp.name} {mmp.created_at ? `· ${new Date(mmp.created_at).toLocaleDateString()}` : ''}
                     </SelectItem>
-                  ))}
+                  )) : (
+                    <SelectItem value="__no_open_cycles__" disabled>
+                      No other open cycles are available
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
+              {targetCycleLoadError ? (
+                <p className="text-xs text-destructive">{targetCycleLoadError}</p>
+              ) : openMmps.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Create or reopen another MMP cycle to use Roll or Hold.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium">Enumerator's covered target site</label>
