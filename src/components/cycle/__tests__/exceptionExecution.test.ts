@@ -29,7 +29,33 @@ describe('isExceptionDecisionDraftValid', () => {
     expect(valid({ ...decision, amount: 999 })).toBe(false);
   });
 
-  it.each(['redirect', 'writeoff'] as const)(
+  it('requires a full amount and justification for write-off', () => {
+    expect(valid({ decision: 'writeoff', amount: 1_000, justification: 'Approved resolution.' })).toBe(true);
+    expect(valid({ decision: 'writeoff', amount: 500, justification: 'Partial.' })).toBe(false);
+    expect(valid({ decision: 'writeoff', amount: 1_000, justification: ' ' })).toBe(false);
+  });
+
+  it('requires an eligible target as well as the full advance for a redirect', () => {
+    expect(valid({
+      decision: 'redirect',
+      amount: 1_000,
+      targetSiteId: 'covered-site',
+      justification: 'Confirmed work on the covered site.',
+    })).toBe(true);
+    expect(valid({
+      decision: 'redirect',
+      amount: 1_000,
+      justification: 'No target.',
+    })).toBe(false);
+    expect(valid({
+      decision: 'redirect',
+      amount: 500,
+      targetSiteId: 'covered-site',
+      justification: 'Partial advance is not fully resolved.',
+    })).toBe(false);
+  });
+
+  it.each(['writeoff'] as const)(
     'requires a full amount and justification for %s',
     decision => {
       expect(valid({ decision, amount: 1_000, justification: 'Approved resolution.' })).toBe(true);
@@ -118,7 +144,14 @@ describe('advance-scoped exception identity and choices', () => {
     expect(getAvailableExceptionDecisionValues({
       advanceStatus: 'paid',
       enumeratorId: undefined,
-    })).toEqual(['return', 'writeoff', 'redirect']);
+    })).toEqual(['return', 'writeoff']);
+  });
+
+  it('offers paid reassignment and redirect only when an enumerator can be verified', () => {
+    expect(getAvailableExceptionDecisionValues({
+      advanceStatus: 'paid',
+      enumeratorId: 'enumerator-id',
+    })).toEqual(['reassign', 'roll', 'return', 'writeoff', 'redirect']);
   });
 
   it('keeps unassigned approved advances resolvable through cancel or reduce only', () => {

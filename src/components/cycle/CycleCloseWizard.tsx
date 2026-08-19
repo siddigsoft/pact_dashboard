@@ -27,7 +27,7 @@ export interface SavedSession {
 }
 
 export interface ExceptionDecision {
-  /** Paid-advance options: roll / return / writeoff / redirect
+  /** Paid-advance options: reassign / roll / return / writeoff / redirect
    *  Approved (unpaid) options: cancel / hold / reassign / reduce */
   decision: 'roll' | 'return' | 'writeoff' | 'redirect' | 'cancel' | 'hold' | 'reassign' | 'reduce';
   /** Amount to redirect (redirect) or reduced approved amount (reduce) */
@@ -48,6 +48,13 @@ export interface ExceptionDecision {
   executedByName?: string;
   journalEntryId?: string;
   executionError?: string;
+  /** Redirect fee-settlement trace returned by the server. */
+  feeGrossAmount?: number;
+  feePriorSettledAmount?: number;
+  feeSettledAmount?: number;
+  feeRemainingAmount?: number;
+  feeSettlementStatus?: 'partially_paid' | 'paid';
+  sourcePaymentReferences?: string[];
 }
 
 export interface UncoveredReason {

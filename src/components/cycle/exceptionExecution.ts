@@ -31,8 +31,8 @@ export function getAvailableExceptionDecisionValues(
       : ['cancel', 'reduce'];
   }
   return exception.enumeratorId
-    ? ['roll', 'return', 'writeoff', 'redirect']
-    : ['return', 'writeoff', 'redirect'];
+    ? ['reassign', 'roll', 'return', 'writeoff', 'redirect']
+    : ['return', 'writeoff'];
 }
 
 export function isExceptionDecisionDraftValid(
@@ -48,9 +48,15 @@ export function isExceptionDecisionDraftValid(
         && !!decision.receiptReference?.trim()
         && !!decision.returnMethod
         && !!decision.recoveryDate;
-    case 'redirect':
     case 'writeoff':
       return decision.amount === site.advancePaid
+        && !!decision.justification?.trim();
+    case 'redirect':
+      // A redirect settles the complete disbursed advance against a different
+      // covered site's outstanding enumerator fee. The server caps the fee
+      // settlement and rejects a target with insufficient outstanding fee.
+      return decision.amount === site.advancePaid
+        && !!decision.targetSiteId
         && !!decision.justification?.trim();
     case 'roll':
     case 'hold':

@@ -16,6 +16,7 @@ import {
   getExceptionDecisionKey,
   isExceptionDecisionDraftValid,
 } from '../exceptionExecution';
+import { isCoveredRedirectTarget } from '../redirectSettlement';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 
 interface Props {
@@ -43,11 +44,27 @@ interface TargetSite {
   state: string | null;
   locality: string | null;
   status: string | null;
+  enumerator_fee: number | null;
+  transport_fee: number | null;
+  fee_paid_amount: number | null;
+  fee_cash_paid_amount?: number | null;
+  fee_advance_offset_amount?: number | null;
+  accepted_by?: string | null;
+  sameEnumerator?: boolean;
 }
 
 // ── Decision sets ─────────────────────────────────────────────────────────────
 
 const DECISIONS_PAID = [
+  {
+    value: 'reassign',
+    label: 'Reassign to Covered Site',
+    labelAr: 'إعادة تعيين لموقع مغطى',
+    desc: 'Move the already-paid advance to another covered site in this cycle.',
+    descAr: 'نقل السلفة المصروفة إلى موقع مغطى آخر في هذه الدورة.',
+    track: 'Select another covered site. The original payment stays intact and the advance is re-linked without a second payment.',
+    trackAr: 'اختر موقعاً مغطى آخر. تبقى الدفعة الأصلية كما هي وتُعاد ربط السلفة دون دفعة ثانية.',
+  },
   {
     value: 'roll',
     label: 'Roll to Next MMP',
@@ -79,10 +96,10 @@ const DECISIONS_PAID = [
     value: 'redirect',
     label: 'Redirect to Enumerator Fees',
     labelAr: 'تحويل إلى أتعاب المعددين',
-    desc: 'Enumerator did related work — reclassify to the fee line.',
-    descAr: 'قام المعدد بعمل ذي صلة — يُحوَّل إلى بند الأتعاب.',
-    track: 'GL journal entry: Debit Enumerator Fees / Credit Transport Advance. Visible in GL ledger and Exceptions sheet.',
-    trackAr: 'قيد محاسبي: مدين أتعاب المعددين / دائن سلفة النقل. يظهر في دفتر الأستاذ العام.',
+    desc: 'Use the paid transport advance to settle an eligible covered site’s outstanding fee.',
+    descAr: 'استخدم سلفة النقل المصروفة لتسوية الأتعاب المتبقية لموقع مغطى مؤهل.',
+    track: 'Choose a covered target with enough fee remaining. GL: Debit Enumerator Fees / Credit Transport Advance; no second payment is created.',
+    trackAr: 'اختر موقعاً مغطى بأتعاب متبقية كافية. القيد: مدين أتعاب المعددين / دائن سلفة النقل دون دفعة ثانية.',
   },
 ] as const;
 
@@ -176,7 +193,7 @@ export default function Step5Exceptions({
     const [actionsResult, mmpResult] = await Promise.all([
       supabase
         .from('cycle_exception_actions')
-        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error')
+        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('executed', true),
       supabase
@@ -224,7 +241,7 @@ export default function Step5Exceptions({
     const [siteResult, siteAdvancesResult, actionAdvancesResult] = await Promise.all([
       supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, accepted_by, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
+        .select('id, site_name, state, locality, accepted_by, enumerator_fee, transport_fee, fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
         .in('id', sourceSiteIds),
       supabase
         .from('down_payment_requests')
@@ -354,8 +371,14 @@ export default function Step5Exceptions({
           installmentPlan:     adv.installmentPlan,
           paidInstallments:    adv.paidInstallments,
           walletTransactionIds: adv.walletTransactionIds,
-          feePaidStatus:       (s.fee_paid_status as 'unpaid' | 'paid' | null) ?? undefined,
+          feePaidStatus:       (s.fee_paid_status as 'unpaid' | 'partially_paid' | 'paid' | null) ?? undefined,
           feePaidAmount:       s.fee_paid_amount ?? undefined,
+          feeCashPaidAmount:   s.fee_cash_paid_amount ?? undefined,
+          feeAdvanceOffsetAmount: s.fee_advance_offset_amount ?? undefined,
+          feeRemainingAmount:  Math.max(
+            ((s.enumerator_fee ?? 0) + (s.transport_fee ?? 0)) - (s.fee_paid_amount ?? 0),
+            0,
+          ),
           feePaidAt:           s.fee_paid_at ?? undefined,
           feePaymentMethod:    s.fee_payment_method ?? undefined,
           feePaymentNotes:     s.fee_payment_notes ?? undefined,
@@ -383,6 +406,14 @@ export default function Step5Exceptions({
         executedByName: row.executed_by_name ?? undefined,
         journalEntryId: row.gl_journal_entry_id ?? undefined,
         executionError: row.execution_error ?? undefined,
+          feeGrossAmount: row.redirect_fee_gross_amount ?? undefined,
+          feePriorSettledAmount: row.redirect_fee_prior_settled_amount ?? undefined,
+          feeSettledAmount: row.redirect_fee_settled_amount ?? undefined,
+          feeRemainingAmount: row.redirect_fee_remaining_amount ?? undefined,
+          feeSettlementStatus: row.redirect_fee_status ?? undefined,
+          sourcePaymentReferences: Array.isArray(row.source_payment_references)
+            ? row.source_payment_references.flat().filter(Boolean)
+            : undefined,
       };
     }
     // Normalize client state to the current advance IDs. Migrate an old
@@ -440,9 +471,8 @@ export default function Step5Exceptions({
     setTargetSites(prev => ({ ...prev, [key]: [] }));
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, state, locality, status')
+      .select('id, site_name, state, locality, status, accepted_by, enumerator_fee, transport_fee, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount')
       .eq('mmp_file_id', mmpId)
-      .eq('accepted_by', site.enumeratorId)
       .neq('status', 'not_covered')
       .neq('id', site.siteId)
       .order('site_name');
@@ -451,7 +481,19 @@ export default function Step5Exceptions({
       setDecision(key, { executionError: `Could not load target sites: ${error.message}` });
       return;
     }
-    setTargetSites(prev => ({ ...prev, [key]: (data ?? []) as TargetSite[] }));
+    const decision = decisionsRef.current[key]?.decision;
+    const candidates = ((data ?? []) as TargetSite[])
+      .map(target => ({ ...target, sameEnumerator: target.accepted_by === site.enumeratorId }))
+      .filter(target => decision !== 'redirect' || isCoveredRedirectTarget(site.siteId, {
+        id: target.id,
+        status: target.status,
+        enumeratorFee: target.enumerator_fee,
+        transportFee: target.transport_fee,
+        settledFeeAmount: target.fee_paid_amount,
+      }, site.advancePaid))
+      .sort((left, right) => Number(!!right.sameEnumerator) - Number(!!left.sameEnumerator)
+        || left.site_name.localeCompare(right.site_name));
+    setTargetSites(prev => ({ ...prev, [key]: candidates }));
   };
 
   const selectTargetMmp = (site: ExceptionSite, mmpId: string) => {
@@ -493,6 +535,10 @@ export default function Step5Exceptions({
         action_id?: string;
         executed_at?: string;
         journal_entry_id?: string | null;
+        fee_gross_amount?: number;
+        fee_settled_amount?: number;
+        fee_remaining_amount?: number;
+        fee_status?: 'partially_paid' | 'paid';
         message?: string;
       } | null;
       if (!result?.ok) throw new Error(result?.error || 'The server did not execute this action.');
@@ -505,6 +551,10 @@ export default function Step5Exceptions({
         executedByName: currentUser?.fullName ?? currentUser?.full_name ?? currentUser?.email ?? undefined,
         journalEntryId: result.journal_entry_id ?? undefined,
         targetSiteName: selectedTarget?.site_name ?? d.targetSiteName,
+        feeGrossAmount: result.fee_gross_amount,
+        feeSettledAmount: result.fee_settled_amount,
+        feeRemainingAmount: result.fee_remaining_amount,
+        feeSettlementStatus: result.fee_status,
         executionError: undefined,
       });
     } catch (error: any) {
@@ -576,7 +626,8 @@ export default function Step5Exceptions({
             {' '}<code className="text-xs">20260818_close_mmp_and_lock_incentives.sql</code>,
             {' '}<code className="text-xs">20260819_cycle_close_inline_exception_execution.sql</code>, then
             {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>, then
-            {' '}<code className="text-xs">20260819c_cycle_close_mmp_country_scope.sql</code>.
+             {' '}<code className="text-xs">20260819c_cycle_close_mmp_country_scope.sql</code>, then
+             {' '}<code className="text-xs">20260819e_cycle_redirect_fee_settlement_safety.sql</code>.
             {' '}Reload this wizard after they are applied.
           </AlertDescription>
         </Alert>
@@ -1072,7 +1123,7 @@ function SiteCard({
             journalEntryId: undefined,
             executionError: undefined,
           });
-          if (decision === 'reassign') onLoadSameMmpSites();
+          if (decision === 'reassign' || decision === 'redirect') onLoadSameMmpSites();
         }}
       >
         <SelectTrigger className="w-full" data-testid={`select-decision-${site.advanceId}`}>
@@ -1111,7 +1162,7 @@ function SiteCard({
               data-testid={`input-resolution-amount-${site.advanceId}`}
             />
             <span className="text-xs text-muted-foreground">
-              SDG — full paid amount required to resolve the exception
+              SDG — the full disbursed advance is resolved by this action
             </span>
           </div>
           {d.decision === 'return' && (
@@ -1179,6 +1230,27 @@ function SiteCard({
             {d.decision === 'writeoff' && 'GL: Debit Write-Off Expense · Credit Transport Advance'}
             {d.decision === 'redirect' && 'GL: Debit Enumerator Fees · Credit Transport Advance'}
           </p>
+          {d.decision === 'redirect' && (
+            <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs">
+              <p className="font-medium text-blue-900">
+                Select the covered site whose outstanding fee will receive this advance offset.
+              </p>
+              <TargetSiteSelect
+                siteId={site.advanceId}
+                value={d.targetSiteId}
+                sites={targetSites}
+                loading={loadingTargetSites}
+                disabled={isDone || executing}
+                onChange={(targetSiteId, targetSiteName) =>
+                  setDecision(site.advanceId, { targetSiteId, targetSiteName })
+                }
+              />
+              <p className="text-blue-800">
+                The target must have at least SDG {site.advancePaid.toLocaleString()} remaining.
+                A smaller advance creates a partial fee settlement; no second cash payment is created.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -1280,7 +1352,7 @@ function SiteCard({
       {d?.decision === 'reassign' && (
         <div className="space-y-1 pl-3 border-l-2 border-green-400">
           <p className="text-xs text-muted-foreground">
-            Choose a covered site assigned to this enumerator in the current cycle.
+            Choose a covered site in this cycle. The same enumerator is preferred; a cross-enumerator move requires FOM, Admin, or Super Admin authorization.
           </p>
           <TargetSiteSelect
             siteId={site.advanceId}
@@ -1426,14 +1498,20 @@ function ExecutionDetails({
           ) : (
             <DetailRow label="Original payment reference(s)" value="No wallet transaction reference recorded" />
           )}
+          <DetailRow label="Target fee gross" value={decision.feeGrossAmount != null
+            ? `SDG ${decision.feeGrossAmount.toLocaleString()}`
+            : 'Recorded on the target site'} />
+          <DetailRow label="Fee settled by this advance" value={`SDG ${(decision.feeSettledAmount ?? decision.amount ?? 0).toLocaleString()}`} />
+          {decision.feeRemainingAmount != null && (
+            <DetailRow label="Fee remaining after settlement" value={`SDG ${decision.feeRemainingAmount.toLocaleString()}`} />
+          )}
           <DetailRow
-            label="Fee settlement"
-            value={site.feePaymentMethod === 'advance_offset'
-              ? 'Advance offset (transport advance reclassified to fees)'
-              : 'Marked paid by this Redirect action'}
+            label="Fee settlement status"
+            value={decision.feeSettlementStatus === 'paid' ? 'Fully paid' : 'Partially paid'}
           />
-          {site.feePaidAt && <DetailRow label="Fee marked paid at" value={formatDateTime(site.feePaidAt)} />}
-          {site.feePaymentNotes && <DetailRow label="Fee ledger note" value={site.feePaymentNotes} />}
+          {decision.sourcePaymentReferences?.length ? (
+            <DetailRow label="Saved payment references" value={decision.sourcePaymentReferences.join(', ')} mono />
+          ) : null}
           <p className="pt-1 text-green-700">
             GL posting: Debit Enumerator Fees · Credit Transport Advance
           </p>
@@ -1501,6 +1579,13 @@ function TargetSiteSelect({
           <SelectItem key={site.id} value={site.id}>
             {site.site_name}
             {(site.state || site.locality) ? ` · ${[site.state, site.locality].filter(Boolean).join(' / ')}` : ''}
+            {site.enumerator_fee != null || site.transport_fee != null
+              ? ` · fee remaining SDG ${Math.max(
+                (site.enumerator_fee ?? 0) + (site.transport_fee ?? 0) - (site.fee_paid_amount ?? 0),
+                0,
+              ).toLocaleString()}`
+              : ''}
+            {site.sameEnumerator === false ? ' · different enumerator (approval required)' : ''}
           </SelectItem>
         ))}
       </SelectContent>

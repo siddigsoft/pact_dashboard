@@ -70,8 +70,9 @@ interface FeeRow {
   totalFee: number;
   advancePaid: number;
   netPayable: number;
-  feePaidStatus: 'unpaid' | 'paid' | 'partial';
+  feePaidStatus: 'unpaid' | 'partially_paid' | 'paid';
   feePaidAmount: number | null;
+  feeAdvanceOffsetAmount: number;
   feePaidAt: string | null;
   feePaymentMethod: string | null;
   feeReceiptUrl: string | null;
@@ -402,7 +403,7 @@ export default function FieldPaymentsCentre() {
           .select(`
           id, site_name, site_code, state, locality, status,
           accepted_by, enumerator_fee, transport_fee,
-          fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes,
+          fee_paid_status, fee_paid_amount, fee_advance_offset_amount, fee_paid_at, fee_payment_method, fee_payment_notes,
           fee_receipt_url,
           mmp_file_id,
           mmp_files!mmp_file_id(id, name, hub, cycle_status)
@@ -444,6 +445,8 @@ export default function FieldPaymentsCentre() {
         const tf = s.transport_fee ?? 0;
         const total = ef + tf;
         const adv = advMap[s.id] ?? 0;
+        const recordedSettlement = s.fee_paid_amount ?? 0;
+        const activeAdvanceOffset = Math.min(adv, total);
         return {
           id: s.id,
           siteName: s.site_name ?? '—',
@@ -456,9 +459,10 @@ export default function FieldPaymentsCentre() {
           transportFee: tf,
           totalFee: total,
           advancePaid: adv,
-          netPayable: Math.max(total - adv, 0),
+          netPayable: Math.max(total - Math.max(recordedSettlement, activeAdvanceOffset), 0),
           feePaidStatus: (s.fee_paid_status ?? 'unpaid') as FeeRow['feePaidStatus'],
           feePaidAmount: s.fee_paid_amount,
+          feeAdvanceOffsetAmount: s.fee_advance_offset_amount ?? 0,
           feePaidAt: s.fee_paid_at,
           feePaymentMethod: s.fee_payment_method,
           feeReceiptUrl: s.fee_receipt_url ?? null,
@@ -825,10 +829,17 @@ export default function FieldPaymentsCentre() {
     setPayDialog(d => ({ ...d, saving: true }));
     try {
       const now = new Date().toISOString();
-      const updates = payDialog.rows.map(row =>
-        supabase.from('mmp_site_entries').update({
+      const updates = payDialog.rows.map(row => {
+        const advanceOffset = Math.max(
+          row.feeAdvanceOffsetAmount,
+          Math.min(row.advancePaid, row.totalFee),
+        );
+        return supabase.from('mmp_site_entries').update({
           fee_paid_status:           'paid',
-          fee_paid_amount:           row.netPayable,
+          fee_paid_amount:           row.totalFee,
+          fee_cash_paid_amount:      Math.max(row.totalFee - advanceOffset, 0),
+          fee_advance_offset_amount: advanceOffset,
+          fee_unallocated_amount:    Math.max(row.advancePaid - row.totalFee, 0),
           fee_paid_at:               payDialog.date ? new Date(payDialog.date).toISOString() : now,
           fee_paid_by:               currentUser?.id,
           fee_payment_method:        payDialog.method,
@@ -836,8 +847,8 @@ export default function FieldPaymentsCentre() {
           fee_receipt_url:           payDialog.receiptUrl,
           fee_receipt_uploaded_at:   now,
           fee_receipt_uploaded_by:   currentUser?.id,
-        }).eq('id', row.id)
-      );
+        }).eq('id', row.id);
+      });
       const results = await Promise.all(updates);
       const errs = results.filter(r => r.error);
       if (errs.length) throw new Error(errs[0].error!.message);

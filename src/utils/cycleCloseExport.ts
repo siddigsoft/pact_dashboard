@@ -122,8 +122,11 @@ export interface ExceptionSite {
   walletTransactionIds?: string[];
 
   /** Enumerator-fee settlement fields, used to show the result of a Redirect. */
-  feePaidStatus?: 'unpaid' | 'paid';
+  feePaidStatus?: 'unpaid' | 'partially_paid' | 'paid';
   feePaidAmount?: number;
+  feeCashPaidAmount?: number;
+  feeAdvanceOffsetAmount?: number;
+  feeRemainingAmount?: number;
   feePaidAt?: string;
   feePaymentMethod?: string;
   feePaymentNotes?: string;
