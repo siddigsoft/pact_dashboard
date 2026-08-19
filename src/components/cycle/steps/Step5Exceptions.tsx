@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
   Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles,
@@ -65,13 +66,17 @@ interface TargetSite {
 
 interface CorrectedRedirectHistory {
   actionId: string;
-  correctionStatus: 'reopened_for_correction' | 'historically_reconciled';
+  correctionStatus: 'reopened_for_correction' | 'historically_reconciled' | 'reprocessed_payment_reversed';
   correctedAt?: string;
   correctedByName?: string;
   correctionReason?: string;
   originalJournalEntryId?: string;
   reversalJournalEntryId?: string;
   replacementActionId?: string;
+  laterJournalReversalIds?: string[];
+  laterWalletTransactionIds?: string[];
+  laterGlTotal?: number;
+  laterWalletTotal?: number;
 }
 
 interface FiscalPeriod {
@@ -88,8 +93,12 @@ interface RedirectCorrectionDialog {
   reason: string;
   periodId: string;
   idempotencyKey: string;
-  mode: 'reopen_advance' | 'historical_accounting_only';
+  mode: 'reopen_advance' | 'historical_accounting_only' | 'reverse_reprocessed_payment';
   historicalModeAvailable: boolean;
+  /** Set once a strict reopen fails because the advance changed after the Redirect. */
+  reprocessedModeAvailable: boolean;
+  /** Required high-risk acknowledgement, gated to the reverse_reprocessed_payment mode. */
+  confirmReverseLaterPayment: boolean;
   periods: FiscalPeriod[];
   loadingPeriods: boolean;
   submitting: boolean;
@@ -307,20 +316,20 @@ export default function Step5Exceptions({
     const [actionsResult] = await Promise.all([
       supabase
         .from('cycle_exception_actions')
-        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references, correction_status, corrected_at, corrected_by_name, correction_reason, correction_reversal_journal_id, correction_replacement_action_id')
+        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references, action_payload, correction_status, corrected_at, corrected_by_name, correction_reason, correction_reversal_journal_id, correction_replacement_action_id')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('executed', true),
     ]);
     const actionRows = (actionsResult.data ?? []) as any[];
     const correctedActionIds = new Set(
       actionRows
-        .filter(row => row.correction_status === 'reopened_for_correction')
+        .filter(row => ['reopened_for_correction', 'reprocessed_payment_reversed'].includes(row.correction_status))
         .map(row => row.id as string),
     );
     const correctedByAdvance = actionRows.reduce<Record<string, CorrectedRedirectHistory[]>>((history, row) => {
       if (
         !row.advance_id
-        || !['reopened_for_correction', 'historically_reconciled'].includes(row.correction_status)
+        || !['reopened_for_correction', 'historically_reconciled', 'reprocessed_payment_reversed'].includes(row.correction_status)
       ) return history;
       (history[row.advance_id] ??= []).push({
         actionId: row.id,
@@ -331,6 +340,18 @@ export default function Step5Exceptions({
         originalJournalEntryId: row.gl_journal_entry_id ?? undefined,
         reversalJournalEntryId: row.correction_reversal_journal_id ?? undefined,
         replacementActionId: row.correction_replacement_action_id ?? undefined,
+        laterJournalReversalIds: Array.isArray(row.action_payload?.correction?.later_journal_reversal_ids)
+          ? row.action_payload.correction.later_journal_reversal_ids
+          : undefined,
+        laterWalletTransactionIds: Array.isArray(row.action_payload?.correction?.later_wallet_transaction_ids)
+          ? row.action_payload.correction.later_wallet_transaction_ids
+          : undefined,
+        laterGlTotal: Number.isFinite(Number(row.action_payload?.correction?.later_gl_total))
+          ? Number(row.action_payload.correction.later_gl_total)
+          : undefined,
+        laterWalletTotal: Number.isFinite(Number(row.action_payload?.correction?.later_wallet_total))
+          ? Number(row.action_payload.correction.later_wallet_total)
+          : undefined,
       });
       return history;
     }, {});
@@ -627,6 +648,8 @@ export default function Step5Exceptions({
       idempotencyKey,
       mode: 'reopen_advance',
       historicalModeAvailable: false,
+      reprocessedModeAvailable: false,
+      confirmReverseLaterPayment: false,
       periods: [],
       loadingPeriods: true,
       submitting: false,
@@ -683,6 +706,12 @@ export default function Step5Exceptions({
         : current);
       return;
     }
+    if (correctionDialog.mode === 'reverse_reprocessed_payment' && !correctionDialog.confirmReverseLaterPayment) {
+      setCorrectionDialog(current => current
+        ? { ...current, error: 'Confirm the high-risk acknowledgement before reversing the reprocessed payment.' }
+        : current);
+      return;
+    }
 
     setCorrectionDialog(current => current
       ? { ...current, submitting: true, error: undefined }
@@ -691,23 +720,28 @@ export default function Step5Exceptions({
     try {
       const rpcName = correctionDialog.mode === 'historical_accounting_only'
         ? 'reconcile_reprocessed_cycle_redirect'
-        : 'reopen_cycle_redirect_for_correction';
-      const { data, error } = await (supabase as any).rpc(
-        rpcName,
-        {
-          p_action_id: correctionDialog.decision.actionId,
-          p_reason: correctionDialog.reason.trim(),
-          p_period_id: correctionDialog.periodId,
-          p_idempotency_key: correctionDialog.idempotencyKey,
-        },
-      );
+        : correctionDialog.mode === 'reverse_reprocessed_payment'
+          ? 'reverse_reprocessed_cycle_redirect_for_correction'
+          : 'reopen_cycle_redirect_for_correction';
+      const rpcParams: Record<string, unknown> = {
+        p_action_id: correctionDialog.decision.actionId,
+        p_reason: correctionDialog.reason.trim(),
+        p_period_id: correctionDialog.periodId,
+        p_idempotency_key: correctionDialog.idempotencyKey,
+      };
+      if (correctionDialog.mode === 'reverse_reprocessed_payment') {
+        rpcParams.p_confirm_reverse_later_payment = true;
+      }
+      const { data, error } = await (supabase as any).rpc(rpcName, rpcParams);
       if (error) throw new Error(error.message);
       const result = data as { ok?: boolean; error?: string } | null;
       if (!result?.ok) {
         throw new Error(result?.error || (
           correctionDialog.mode === 'historical_accounting_only'
             ? 'The server did not reconcile this historical Redirect.'
-            : 'The server did not reopen this Redirect.'
+            : correctionDialog.mode === 'reverse_reprocessed_payment'
+              ? 'The server did not reverse the reprocessed payment for this Redirect.'
+              : 'The server did not reopen this Redirect.'
         ));
       }
 
@@ -722,7 +756,9 @@ export default function Step5Exceptions({
       const message = error?.message ?? 'The correction failed. Nothing was changed.';
       const expectedRpc = correctionDialog?.mode === 'historical_accounting_only'
         ? 'reconcile_reprocessed_cycle_redirect'
-        : 'reopen_cycle_redirect_for_correction';
+        : correctionDialog?.mode === 'reverse_reprocessed_payment'
+          ? 'reverse_reprocessed_cycle_redirect_for_correction'
+          : 'reopen_cycle_redirect_for_correction';
       const migrationMissing = message.includes(expectedRpc)
         && message.toLowerCase().includes('schema cache');
       const reprocessedAdvance = correctionDialog.mode === 'reopen_advance'
@@ -733,10 +769,11 @@ export default function Step5Exceptions({
           ...current,
           submitting: false,
           historicalModeAvailable: current.historicalModeAvailable || reprocessedAdvance,
+          reprocessedModeAvailable: current.reprocessedModeAvailable || reprocessedAdvance,
           error: migrationMissing
             ? 'Apply the latest Redirect correction migration in Supabase, then reload this wizard.'
             : reprocessedAdvance
-              ? `${message} Choose the historical accounting-only path below to preserve the later advance and payment.`
+              ? `${message} Choose the accounting-only path to preserve the later advance and payment, or reverse the reprocessed payment to restore the original advance for a new resolution.`
               : message,
         }
         : current);
@@ -1276,14 +1313,18 @@ function SiteCard({
             <RotateCcw className="h-3.5 w-3.5" />
             {history.correctionStatus === 'historically_reconciled'
               ? 'Historical Redirect accounting reversed; later advance preserved'
-              : 'Previous Redirect reversed and reopened for correction'}
+              : history.correctionStatus === 'reprocessed_payment_reversed'
+                ? 'Reprocessed later payment reversed; original advance restored for a new resolution'
+                : 'Previous Redirect reversed and reopened for correction'}
           </div>
           <p className="text-amber-800">
             Corrected {history.correctedAt ? new Date(history.correctedAt).toLocaleString('en-GB') : 'at an unrecorded time'}
             {history.correctedByName ? ` by ${history.correctedByName}` : ''}.
             {history.correctionStatus === 'historically_reconciled'
               ? ' The original action and payment history remain intact; the current advance, site, and later payment were not changed.'
-              : ' The original action is retained below for audit history.'}
+              : history.correctionStatus === 'reprocessed_payment_reversed'
+                ? ' All later-payment GL and wallet effects were reversed and every record is preserved; the original advance is restored for a new resolution.'
+                : ' The original action is retained below for audit history.'}
           </p>
           {history.correctionReason && (
             <p className="rounded border border-amber-200 bg-white/70 px-2 py-1">
@@ -1300,6 +1341,34 @@ function SiteCard({
             <DetailRow label="Original action" value={history.actionId} mono />
             {history.replacementActionId && (
               <DetailRow label="Replacement action" value={history.replacementActionId} mono />
+            )}
+            {history.correctionStatus === 'reprocessed_payment_reversed' && (
+              <>
+                <DetailRow
+                  label="Later GL reversed"
+                  value={`${history.laterJournalReversalIds?.length ?? 0} journal(s) · SDG ${fmt(history.laterGlTotal ?? 0)}`}
+                />
+                <DetailRow
+                  label="Later wallet records reversed"
+                  value={`${history.laterWalletTransactionIds?.length ?? 0} record(s) · SDG ${fmt(history.laterWalletTotal ?? 0)}`}
+                />
+                {history.laterJournalReversalIds?.map((journalId, index) => (
+                  <DetailRow
+                    key={journalId}
+                    label={`Later payment reversal ${index + 1}`}
+                    value={journalId}
+                    mono
+                  />
+                ))}
+                {history.laterWalletTransactionIds?.map((transactionId, index) => (
+                  <DetailRow
+                    key={transactionId}
+                    label={`Reversed wallet record ${index + 1}`}
+                    value={transactionId}
+                    mono
+                  />
+                ))}
+              </>
             )}
           </div>
         </div>
@@ -2084,11 +2153,14 @@ function RedirectCorrectionPanel({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const historicalOnly = correction.mode === 'historical_accounting_only';
+  const reverseReprocessed = correction.mode === 'reverse_reprocessed_payment';
+  const showModeSelector = correction.historicalModeAvailable || correction.reprocessedModeAvailable;
   const canSubmit = !correction.submitting
     && !correction.loadingPeriods
     && !!correction.periodId
-    && correction.reason.trim().length >= 10;
-  const historicalOnly = correction.mode === 'historical_accounting_only';
+    && correction.reason.trim().length >= 10
+    && (!reverseReprocessed || correction.confirmReverseLaterPayment);
 
   return (
     <div
@@ -2102,7 +2174,9 @@ function RedirectCorrectionPanel({
           <p className="text-amber-900">
             {historicalOnly
               ? 'This reverses only the original Redirect accounting and fee settlement. The current reprocessed advance, its site, and its later payment remain unchanged.'
-              : 'This posts a reversing journal, restores the paid advance, and leaves the original Redirect and payment audit trail intact.'}
+              : reverseReprocessed
+                ? 'This reverses all GL and wallet effects of the later reprocessed payment, preserves every record for audit, and restores the original advance so it can be resolved again.'
+                : 'This posts a reversing journal, restores the paid advance, and leaves the original Redirect and payment audit trail intact.'}
           </p>
         </div>
       </div>
@@ -2117,13 +2191,15 @@ function RedirectCorrectionPanel({
         />
       </div>
 
-      {correction.historicalModeAvailable && (
+      {showModeSelector && (
         <div className="space-y-1.5">
           <Label>Correction path</Label>
           <Select
             value={correction.mode}
             onValueChange={mode => onChange({
               mode: mode as RedirectCorrectionDialog['mode'],
+              // Reset the high-risk acknowledgement whenever the mode changes.
+              confirmReverseLaterPayment: false,
               error: undefined,
             })}
             disabled={correction.submitting}
@@ -2135,9 +2211,16 @@ function RedirectCorrectionPanel({
               <SelectItem value="reopen_advance">
                 Restore the original advance for a new resolution
               </SelectItem>
-              <SelectItem value="historical_accounting_only">
-                Keep the reprocessed advance; reverse historical Redirect only
-              </SelectItem>
+              {correction.historicalModeAvailable && (
+                <SelectItem value="historical_accounting_only">
+                  Keep the reprocessed advance; reverse historical Redirect only
+                </SelectItem>
+              )}
+              {correction.reprocessedModeAvailable && (
+                <SelectItem value="reverse_reprocessed_payment">
+                  Reverse the reprocessed payment and restore the original advance
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
           {historicalOnly && (
@@ -2146,7 +2229,37 @@ function RedirectCorrectionPanel({
               original Redirect. The server rejects incomplete or conflicting history.
             </p>
           )}
+          {reverseReprocessed && (
+            <p className="text-[11px] text-amber-800">
+              High-risk. Use this only when the later reprocessed payment must be undone entirely.
+              All of its GL and wallet effects are reversed, every record is preserved for audit, and
+              the original advance is restored so the exception can be resolved again.
+            </p>
+          )}
         </div>
+      )}
+
+      {reverseReprocessed && (
+        <label
+          className="flex items-start gap-2 rounded border border-red-300 bg-red-50/80 p-2 cursor-pointer"
+          data-testid="redirect-correction-reverse-confirm-label"
+        >
+          <Checkbox
+            checked={correction.confirmReverseLaterPayment}
+            onCheckedChange={checked => onChange({
+              confirmReverseLaterPayment: checked === true,
+              error: undefined,
+            })}
+            disabled={correction.submitting}
+            className="mt-0.5"
+            data-testid="checkbox-confirm-reverse-later-payment"
+          />
+          <span className="text-[11px] text-red-900">
+            I understand this will reverse all later-payment GL and wallet effects. All records are
+            preserved for audit, and the original advance is restored for a new resolution.
+            <span className="font-semibold"> Required to proceed.</span>
+          </span>
+        </label>
       )}
 
       <div className="space-y-1.5">
@@ -2223,7 +2336,11 @@ function RedirectCorrectionPanel({
           {correction.submitting
             ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
-          {historicalOnly ? 'Reverse historical Redirect only' : 'Reverse journal and reopen'}
+          {historicalOnly
+            ? 'Reverse historical Redirect only'
+            : reverseReprocessed
+              ? 'Reverse reprocessed payment and restore advance'
+              : 'Reverse journal and reopen'}
         </Button>
       </div>
     </div>

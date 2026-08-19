@@ -220,6 +220,19 @@ function titleCaseLabel(value?: string | null) {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+/** Human-readable label for a correction status, distinguishing all completed correction paths. */
+function correctionStatusLabel(status?: string | null): string {
+  switch (status) {
+    case 'historically_reconciled':
+      return 'Historical Redirect reversed';
+    case 'reprocessed_payment_reversed':
+      return 'Reprocessed payment reversed';
+    case 'reopened_for_correction':
+    default:
+      return 'Reopened for correction';
+  }
+}
+
 function getFeeAdvanceDeduction(row: FeeRow) {
   return resolveFeeAdvanceDeduction({
     grossFee: row.totalFee,
@@ -1410,7 +1423,7 @@ export default function FieldPaymentsCentre() {
             { label: 'Advance amount', value: `SDG ${fmt(advanceTotal)}` },
             { label: 'Recovered amount', value: `SDG ${fmt(recoveredTotal)}` },
             { label: 'Executed', value: filteredExceptions.filter(row => row.executed).length },
-            { label: 'Reopened corrections', value: filteredExceptions.filter(row => !!row.correctionStatus).length },
+            { label: 'Corrected actions', value: filteredExceptions.filter(row => !!row.correctionStatus).length },
           ],
           columns: [
             { key: 'number', header: '#', width: 7, format: 'integer' },
@@ -1444,7 +1457,7 @@ export default function FieldPaymentsCentre() {
             advanceAmount: row.advanceAmount,
             decision: titleCaseLabel(row.decision),
             executionStatus: row.correctionStatus
-              ? 'Reopened for correction'
+              ? correctionStatusLabel(row.correctionStatus)
               : row.executed ? 'Executed' : 'Pending',
             glStatus: row.correctionStatus
               ? 'Reversed'
@@ -2063,7 +2076,7 @@ export default function FieldPaymentsCentre() {
                         <p className="font-semibold text-sm">{action.siteName}</p>
                         {decisionBadge(action.decision)}
                         {action.correctionStatus
-                          ? <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">↺ Reopened for correction</Badge>
+                          ? <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">↺ {correctionStatusLabel(action.correctionStatus)}</Badge>
                           : action.executed
                           ? <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">✓ Executed</Badge>
                           : <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Pending</Badge>

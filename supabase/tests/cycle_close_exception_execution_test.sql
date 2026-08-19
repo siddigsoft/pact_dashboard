@@ -7,7 +7,9 @@
 --    20260818b_field_payments_columns.sql,
 --    20260819b_cycle_close_finalizer_role_variants.sql, and
 --    20260819c_cycle_close_mmp_country_scope.sql,
---    20260819h_cycle_exception_journal_line_ids.sql)
+--    20260819h_cycle_exception_journal_line_ids.sql, and — for the
+--    reprocessed-payment reversal regression (section 11) —
+--    20260819o_cycle_redirect_reprocessed_payment_reversal.sql)
 --
 -- Task #548 — Cycle Close: Inline Exception Execution
 --
@@ -250,6 +252,90 @@ BEGIN
       || E'\n';
   END IF;
 
+  -- Task #562 — reprocessed-payment reversal RPC, status, and audit tables.
+  IF to_regprocedure(
+    'public.reverse_reprocessed_cycle_redirect_for_correction(uuid,text,uuid,text,boolean)'
+  ) IS NULL THEN
+    v_missing := v_missing
+      || '  - function reverse_reprocessed_cycle_redirect_for_correction(uuid,text,uuid,text,boolean) is missing'
+      || E'\n';
+  END IF;
+
+  IF to_regclass('public.cycle_redirect_reprocessed_reversals') IS NULL THEN
+    v_missing := v_missing
+      || '  - table cycle_redirect_reprocessed_reversals is missing' || E'\n';
+  END IF;
+  IF to_regclass('public.cycle_redirect_reprocessed_journal_reversals') IS NULL THEN
+    v_missing := v_missing
+      || '  - table cycle_redirect_reprocessed_journal_reversals is missing' || E'\n';
+  END IF;
+  IF to_regclass('public.cycle_redirect_reprocessed_wallet_reversals') IS NULL THEN
+    v_missing := v_missing
+      || '  - table cycle_redirect_reprocessed_wallet_reversals is missing' || E'\n';
+  END IF;
+
+  -- The third correction_status must be accepted by the check constraint.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'cycle_exception_actions_correction_status_check'
+      AND conrelid = 'public.cycle_exception_actions'::regclass
+      AND pg_get_constraintdef(oid) ILIKE '%reprocessed_payment_reversed%'
+  ) THEN
+    v_missing := v_missing
+      || '  - correction_status check does not allow reprocessed_payment_reversed' || E'\n';
+  END IF;
+
+  -- Columns the reprocessed-payment reversal fixtures/RPC rely on.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'down_payment_requests'
+      AND column_name = 'wallet_transaction_ids'
+  ) THEN
+    v_missing := v_missing
+      || '  - column down_payment_requests.wallet_transaction_ids is missing' || E'\n';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'down_payment_requests'
+      AND column_name = 'payment_proof_url'
+  ) THEN
+    v_missing := v_missing
+      || '  - column down_payment_requests.payment_proof_url is missing' || E'\n';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'acct_gl_bridge_log'
+      AND column_name = 'amount'
+  ) THEN
+    v_missing := v_missing
+      || '  - column acct_gl_bridge_log.amount is missing' || E'\n';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'acct_journal_entries'
+      AND column_name = 'country_id'
+  ) THEN
+    v_missing := v_missing
+      || '  - column acct_journal_entries.country_id is missing' || E'\n';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'acct_journal_lines'
+      AND column_name = 'company_id'
+  ) THEN
+    v_missing := v_missing
+      || '  - column acct_journal_lines.company_id is missing' || E'\n';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions'
+      AND column_name = 'balance_before'
+  ) THEN
+    v_missing := v_missing
+      || '  - column wallet_transactions.balance_before is missing' || E'\n';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_proc procedure
@@ -272,7 +358,8 @@ BEGIN
       '20260819c_cycle_close_mmp_country_scope, 20260819e_cycle_redirect_fee_settlement_safety, '
       '20260819f_cycle_redirect_multi_site_allocations, and '
       '20260819g_cycle_redirect_correction through '
-      '20260819m_cycle_redirect_historical_reconciliation first.%s%s',
+      '20260819m_cycle_redirect_historical_reconciliation, and '
+      '20260819o_cycle_redirect_reprocessed_payment_reversal first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -691,6 +778,7 @@ DECLARE
   m8 uuid := 'ce54c008-0000-4000-8000-000000000008';
   s8 uuid := 'ce54c008-0000-4000-8000-0000000000a8';
   a8 uuid := 'ce54c008-0000-4000-8000-0000000000b8';
+  t8 uuid := 'ce54c008-0000-4000-8000-0000000000c8';
   -- role restriction MMP (finance vs manager vs enumerator)
   m9 uuid := 'ce54c009-0000-4000-8000-000000000009';
   s9 uuid := 'ce54c009-0000-4000-8000-0000000000a9';
@@ -793,24 +881,26 @@ BEGIN
 
   -- ── A8. redirect (paid, GL, reclassify to enumerator fee) ────────────────
   PERFORM pg_temp.mk_case(m8, s8, a8, 'paid', 1000, 1000);
+  PERFORM pg_temp.mk_covered_site(t8, m8, MGR::text);
+  UPDATE public.mmp_site_entries SET enumerator_fee = 1000 WHERE id = t8;
   res := public.execute_cycle_close_exception(
-    m8, s8, a8, 'redirect', 1000, 'redirect to fee');
+    m8, s8, a8, 'redirect', 1000, 'redirect to fee', NULL, t8);
   PERFORM pg_temp.assert_ok('redirect executes', res);
   SELECT id INTO v_action FROM public.cycle_exception_actions WHERE advance_id = a8;
   v_gl := pg_temp.assert_single_balanced_gl('redirect GL', v_action);
   -- Redirect: DR enumerator fee (5200), CR advance (1510)
   PERFORM pg_temp.assert_txt('redirect GL accounts (DR enum-fee / CR advance)', v_gl, 'DR:5200|CR:1510');
   -- (a) the fee-status update completed (the AFTER UPDATE trigger fired)
-  SELECT fee_paid_status INTO v_status FROM public.mmp_site_entries WHERE id = s8;
+  SELECT fee_paid_status INTO v_status FROM public.mmp_site_entries WHERE id = t8;
   PERFORM pg_temp.assert_txt('redirect → site fee marked paid', v_status, 'paid');
 
   -- (b) the trigger saw the sentinel: the RPC pre-inserted a 'success' row for
-  --     (mmp_site_entries, s8, enumerator_fee_paid) BEFORE flipping the status,
+  --     (mmp_site_entries, t8, enumerator_fee_paid) BEFORE flipping the status,
   --     so the trigger's "already posted" guard finds it and early-returns.
   SELECT count(*) INTO v_count
   FROM public.acct_gl_bridge_log
   WHERE source_table = 'mmp_site_entries'
-    AND source_id = s8
+    AND source_id = t8
     AND event_type = 'enumerator_fee_paid'
     AND status = 'success';
   PERFORM pg_temp.assert_eq('redirect → sentinel fee-paid bridge row present', v_count, 1);
@@ -1898,6 +1988,13 @@ END $$;
 --    rolled back with the rest of this file, so the real reversal RPC remains
 --    untouched after the test.
 -- ---------------------------------------------------------------------------
+-- The double mirrors the two invariants the Task #562 migration adds to the
+-- REAL acct_post_reversal: it copies the ORIGINAL journal's country_id onto the
+-- reversal header and copies each ORIGINAL line's company_id onto the matching
+-- reversal line (by line_no). This lets the reprocessed-payment reversal
+-- regression assert country_id / company_id preservation without a fully seeded
+-- posting engine. It also fails closed exactly like the shared reversal guard:
+-- a second reversal of an already-reversed entry raises ORIGINAL_NOT_REVERSIBLE.
 CREATE OR REPLACE FUNCTION public.acct_post_reversal(
   p_original_entry_id uuid,
   p_payload jsonb,
@@ -1909,6 +2006,9 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_reversal_id uuid;
+  v_original_status text;
+  v_original_country uuid;
+  v_line jsonb;
 BEGIN
   SELECT id
   INTO v_reversal_id
@@ -1919,6 +2019,21 @@ BEGIN
     RETURN v_reversal_id;
   END IF;
 
+  -- Fail closed like the real guard: the original must be a posted entry.
+  SELECT status, country_id
+  INTO v_original_status, v_original_country
+  FROM public.acct_journal_entries
+  WHERE id = p_original_entry_id;
+
+  IF v_original_status IS NULL THEN
+    RAISE EXCEPTION 'ORIGINAL_NOT_FOUND: journal entry % does not exist', p_original_entry_id;
+  END IF;
+  IF v_original_status <> 'posted' THEN
+    RAISE EXCEPTION
+      'ORIGINAL_NOT_REVERSIBLE: entry % has status %; only posted entries can be reversed',
+      p_original_entry_id, v_original_status;
+  END IF;
+
   INSERT INTO public.acct_journal_entries (
     period_id,
     posting_date,
@@ -1927,6 +2042,7 @@ BEGIN
     source_id,
     status,
     idempotency_key,
+    country_id,
     created_by,
     posted_at,
     posted_by
@@ -1938,6 +2054,7 @@ BEGIN
     p_original_entry_id,
     'posted',
     p_idempotency_key,
+    v_original_country,        -- preserve original journal country_id
     auth.uid(),
     now(),
     auth.uid()
@@ -1949,7 +2066,52 @@ BEGIN
     SELECT id INTO v_reversal_id
     FROM public.acct_journal_entries
     WHERE idempotency_key = p_idempotency_key;
+    RETURN v_reversal_id;
   END IF;
+
+  -- Copy the reversed lines (flipped DR/CR already applied by the caller) and
+  -- carry each ORIGINAL line's company_id across by line_no. The USER trigger on
+  -- acct_journal_lines is disabled by the callers that seed source lines, so this
+  -- INSERT is safe inside the test transaction.
+  ALTER TABLE public.acct_journal_lines DISABLE TRIGGER USER;
+  FOR v_line IN
+    SELECT * FROM jsonb_array_elements(coalesce(p_payload->'lines', '[]'::jsonb))
+  LOOP
+    INSERT INTO public.acct_journal_lines (
+      entry_id, line_no, account_id, fund_id, function, company_id,
+      project_id, grant_id, cost_center_id, partner_id,
+      original_amount, original_currency,
+      functional_amount, functional_currency, fx_rate,
+      debit_credit, description
+    )
+    SELECT
+      v_reversal_id,
+      (v_line->>'line_no')::int,
+      (v_line->>'account_id')::uuid,
+      (v_line->>'fund_id')::uuid,
+      coalesce(v_line->>'function', 'none'),
+      original_line.company_id,
+      nullif(v_line->>'project_id', '')::uuid,
+      nullif(v_line->>'grant_id', '')::uuid,
+      nullif(v_line->>'cost_center_id', '')::uuid,
+      nullif(v_line->>'partner_id', '')::uuid,
+      coalesce((v_line->>'original_amount')::numeric, (v_line->>'functional_amount')::numeric),
+      coalesce(v_line->>'original_currency', 'SDG'),
+      (v_line->>'functional_amount')::numeric,
+      coalesce(v_line->>'functional_currency', 'SDG'),
+      nullif(v_line->>'fx_rate', '')::numeric,
+      v_line->>'debit_credit',
+      v_line->>'description'
+    FROM (
+      SELECT company_id
+      FROM public.acct_journal_lines
+      WHERE entry_id = p_original_entry_id
+        AND line_no = (v_line->>'line_no')::int
+      LIMIT 1
+    ) original_line
+    ON CONFLICT (entry_id, line_no) DO NOTHING;
+  END LOOP;
+  ALTER TABLE public.acct_journal_lines ENABLE TRIGGER USER;
 
   UPDATE public.acct_journal_entries
   SET status = 'reversed',
@@ -1994,11 +2156,35 @@ BEGIN
 
   -- Simulate the exact post-20260819e normalization signature of a Redirect
   -- executed before component tracking was introduced.
+  DELETE FROM public.cycle_exception_action_allocations
+  WHERE action_id = v_action_id;
+  UPDATE public.cycle_exception_actions
+  SET target_site_id = SITE,
+      redirect_fee_site_entry_id = SITE,
+      redirect_allocation_count = 0,
+      redirect_unallocated_amount = 0
+  WHERE id = v_action_id;
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, created_at
+  )
+  SELECT
+    'mmp_site_entries', SITE, 'enumerator_fee_paid', 'success',
+    v_original_journal_id, now()
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.acct_gl_bridge_log
+    WHERE source_table = 'mmp_site_entries'
+      AND source_id = SITE
+      AND event_type = 'enumerator_fee_paid'
+      AND journal_entry_id = v_original_journal_id
+  );
   UPDATE public.mmp_site_entries
   SET enumerator_fee = 1000,
       transport_fee = 0,
       fee_paid_status = 'paid',
       fee_paid_amount = 1000,
+      fee_paid_at = (SELECT executed_at FROM public.cycle_exception_actions WHERE id = v_action_id),
+      fee_paid_by = (SELECT executed_by FROM public.cycle_exception_actions WHERE id = v_action_id),
       fee_cash_paid_amount = 1000,
       fee_advance_offset_amount = 0,
       fee_unallocated_amount = 0,
@@ -2245,9 +2431,11 @@ BEGIN
   UPDATE public.profiles SET role = 'superAdmin' WHERE id = FIN;
   PERFORM pg_temp.mk_case(H_MMP, H_SOURCE, H_ADVANCE, 'paid', 1000, 1000);
   PERFORM pg_temp.mk_covered_site(H_CURRENT, H_MMP, FIN::text);
+  UPDATE public.mmp_site_entries SET enumerator_fee = 1000 WHERE id = H_CURRENT;
 
   v_result := public.execute_cycle_close_exception(
-    H_MMP, H_SOURCE, H_ADVANCE, 'redirect', 1000, 'historical redirect fixture'
+    H_MMP, H_SOURCE, H_ADVANCE, 'redirect', 1000, 'historical redirect fixture',
+    NULL, H_CURRENT
   );
   PERFORM pg_temp.assert_ok('historical fixture Redirect executes', v_result);
 
@@ -2265,19 +2453,41 @@ BEGIN
     v_action_id IS NOT NULL AND v_original_journal_id IS NOT NULL
   );
 
+  DELETE FROM public.cycle_exception_action_allocations
+  WHERE action_id = v_action_id;
   UPDATE public.cycle_exception_actions
-  SET redirect_fee_gross_amount = 1000,
+  SET target_site_id = H_SOURCE,
+      redirect_fee_site_entry_id = H_SOURCE,
+      redirect_allocation_count = 0,
+      redirect_unallocated_amount = 0,
+      redirect_fee_gross_amount = 1000,
       redirect_fee_prior_settled_amount = 0,
       redirect_fee_settled_amount = 1000,
       redirect_fee_remaining_amount = 0,
       redirect_fee_status = 'paid'
   WHERE id = v_action_id;
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, created_at
+  )
+  SELECT
+    'mmp_site_entries', H_SOURCE, 'enumerator_fee_paid', 'success',
+    v_original_journal_id, now()
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.acct_gl_bridge_log
+    WHERE source_table = 'mmp_site_entries'
+      AND source_id = H_SOURCE
+      AND event_type = 'enumerator_fee_paid'
+      AND journal_entry_id = v_original_journal_id
+  );
 
   UPDATE public.mmp_site_entries
   SET enumerator_fee = 1000,
       transport_fee = 0,
       fee_paid_status = 'paid',
       fee_paid_amount = 1000,
+      fee_paid_at = (SELECT executed_at FROM public.cycle_exception_actions WHERE id = v_action_id),
+      fee_paid_by = (SELECT executed_by FROM public.cycle_exception_actions WHERE id = v_action_id),
       fee_cash_paid_amount = 1000,
       fee_advance_offset_amount = 0,
       fee_unallocated_amount = 0,
@@ -2548,12 +2758,708 @@ BEGIN
 END;
 $historical_reconciliation_test$;
 
+-- ---------------------------------------------------------------------------
+-- 11. Reprocessed-payment reversal regression (Task #562).
+--
+--   A legacy Redirect whose advance was RESTORED (cancelled -> pending) and then
+--   PAID AGAIN (one full down-payment journal + one wallet debit) is reversed by
+--   reverse_reprocessed_cycle_redirect_for_correction(). This exercises:
+--     * mandatory high-risk confirmation flag,
+--     * authorization (unauthorized caller rejected),
+--     * missing later journal / mixed success+error bridge history,
+--     * mismatched current paid delta,
+--     * malformed and missing wallet provenance,
+--     * insufficient/ambiguous wallet effect,
+--     * the full happy path: reverses BOTH the original Redirect journal and the
+--       later payment journal (preserving country_id + per-line company_id on the
+--       reversals), marks the later wallet row reversed without deleting it,
+--       restores the exact original paid amount/status/site/original refs, drops
+--       the stale exception_action_id, resets the fee, records parent + child
+--       audits, flips the old action to reprocessed_payment_reversed, and creates
+--       exactly one unexecuted replacement action,
+--     * same-key idempotency (no duplicate audit links), different-key rejection,
+--     * restored advance + new unexecuted action block Final Close,
+--     * atomicity: a deliberate wallet/GL total mismatch after the original
+--       reversal would begin leaves the original journal/fee/later journal intact.
+--
+--   The test uses the same country_id/company_id-preserving acct_post_reversal
+--   double installed above, and the seeded CE54 country + fund.
+-- ---------------------------------------------------------------------------
+DO $reprocessed_reversal_test$
+DECLARE
+  MGR  constant uuid := 'ce540000-0000-4000-8000-000000000001';
+  FIN  constant uuid := 'ce540000-0000-4000-8000-000000000002';
+  ENU  constant uuid := 'ce540000-0000-4000-8000-000000000003';
+  CTRY constant uuid := 'ce540000-c001-4000-8000-000000000c01';
+  PERIOD constant uuid := 'ce540000-feed-4000-8000-0000000000f1';
+
+  R_MMP    constant uuid := 'ce54c010-0000-4000-8000-000000000010';
+  R_SOURCE constant uuid := 'ce54c010-0000-4000-8000-0000000000a0';
+  R_TARGET constant uuid := 'ce54c010-0000-4000-8000-0000000000a1';
+  R_ADVANCE constant uuid := 'ce54c010-0000-4000-8000-0000000000b0';
+  R_COMPANY constant uuid := 'ce54c010-0000-4000-8000-0000000000c0';
+  R_WALLET constant uuid := 'ce54c010-0000-4000-8000-0000000000d0';
+  ORIG_WT constant uuid := 'ce54c010-0000-4000-8000-0000000000e0';
+  LATER_WT constant uuid := 'ce54c010-0000-4000-8000-0000000000e1';
+  LATER_JE constant uuid := 'ce54c010-0000-4000-8000-0000000000f1';
+
+  v_action_id uuid;
+  v_original_journal_id uuid;
+  v_fund_id uuid;
+  v_result jsonb;
+  v_count bigint;
+  v_status text;
+  v_num numeric;
+  v_uuid uuid;
+  v_reversal_id uuid;
+  v_later_reversal_id uuid;
+  v_replacement_id uuid;
+  v_parent_id uuid;
+  v_restore_ts timestamptz := clock_timestamp() + interval '5 minutes';
+  v_later_ts timestamptz := clock_timestamp() + interval '10 minutes';
+  v_before_journal_status text;
+  v_before_fee_status text;
+  v_before_later_status text;
+  v_reason constant text := 'Reverse reprocessed Redirect payment after intentional repayment';
+BEGIN
+  PERFORM pg_temp.as_user(FIN);
+  UPDATE public.profiles SET role = 'superAdmin' WHERE id = FIN;
+  UPDATE public.profiles SET role = 'enumerator' WHERE id = ENU;
+
+  -- A company so the original journal lines can carry a per-line company_id that
+  -- the reversal must preserve.
+  INSERT INTO public.companies (id, code, name_en, name_ar, is_active)
+  VALUES (R_COMPANY, 'CE54RP', 'CE54 Reprocess Co', 'شركة اختبار', true)
+  ON CONFLICT (id) DO NOTHING;
+
+  SELECT id INTO v_fund_id FROM public.acct_funds WHERE code = 'CE54-CORRECTION';
+  IF v_fund_id IS NULL THEN
+    INSERT INTO public.acct_funds (code, name_en, name_ar, restriction_type, is_active)
+    VALUES ('CE54-CORRECTION', 'CE54 Correction Fund', 'CE54', 'without_restriction', true)
+    ON CONFLICT (code) DO NOTHING;
+    SELECT id INTO v_fund_id FROM public.acct_funds WHERE code = 'CE54-CORRECTION';
+  END IF;
+
+  -- Source cycle assigned to CE54 so the reversal must preserve a non-null
+  -- country_id.
+  INSERT INTO public.mmp_files (id, cycle_status, status, country_id)
+  VALUES (R_MMP, 'open', 'active', CTRY)
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM pg_temp.mk_case(R_MMP, R_SOURCE, R_ADVANCE, 'paid', 1000, 1000, FIN::text);
+  PERFORM pg_temp.mk_covered_site(R_TARGET, R_MMP, FIN::text);
+  UPDATE public.mmp_site_entries SET enumerator_fee = 1000 WHERE id = R_TARGET;
+
+  -- Execute one explicit single-target Redirect; the correction RPC deliberately
+  -- rejects ambiguous multi-target allocation history.
+  v_result := public.execute_cycle_close_exception(
+    R_MMP, R_SOURCE, R_ADVANCE, 'redirect', 1000, 'reprocessed redirect fixture',
+    NULL, R_TARGET
+  );
+  PERFORM pg_temp.assert_ok('reprocessed fixture Redirect executes', v_result);
+
+  SELECT id, gl_journal_entry_id
+  INTO v_action_id, v_original_journal_id
+  FROM public.cycle_exception_actions
+  WHERE advance_id = R_ADVANCE
+    AND decision = 'redirect'
+    AND executed = true
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  PERFORM pg_temp.assert_true(
+    'reprocessed fixture has an executed Redirect journal',
+    v_action_id IS NOT NULL AND v_original_journal_id IS NOT NULL
+  );
+
+  -- Immutable full-settlement fee snapshot on the action.
+  DELETE FROM public.cycle_exception_action_allocations
+  WHERE action_id = v_action_id;
+  UPDATE public.cycle_exception_actions
+  SET target_site_id = R_SOURCE,
+      redirect_fee_site_entry_id = R_SOURCE,
+      redirect_allocation_count = 0,
+      redirect_unallocated_amount = 0,
+      redirect_fee_gross_amount = 1000,
+      redirect_fee_prior_settled_amount = 0,
+      redirect_fee_settled_amount = 1000,
+      redirect_fee_remaining_amount = 0,
+      redirect_fee_status = 'paid'
+  WHERE id = v_action_id;
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, created_at
+  )
+  SELECT
+    'mmp_site_entries', R_SOURCE, 'enumerator_fee_paid', 'success',
+    v_original_journal_id, now()
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.acct_gl_bridge_log
+    WHERE source_table = 'mmp_site_entries'
+      AND source_id = R_SOURCE
+      AND event_type = 'enumerator_fee_paid'
+      AND journal_entry_id = v_original_journal_id
+  );
+
+  -- Exact legacy fee state on the source fee site.
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1000,
+      transport_fee = 0,
+      fee_paid_status = 'paid',
+      fee_paid_amount = 1000,
+      fee_paid_at = (SELECT executed_at FROM public.cycle_exception_actions WHERE id = v_action_id),
+      fee_paid_by = (SELECT executed_by FROM public.cycle_exception_actions WHERE id = v_action_id),
+      fee_cash_paid_amount = 1000,
+      fee_advance_offset_amount = 0,
+      fee_unallocated_amount = 0,
+      fee_payment_method = NULL,
+      fee_payment_notes = NULL,
+      fee_receipt_url = NULL
+  WHERE id = R_SOURCE;
+
+  -- Give the original Redirect journal country_id + balanced source lines whose
+  -- company_id the reversal must carry across.
+  UPDATE public.acct_journal_entries SET country_id = CTRY WHERE id = v_original_journal_id;
+  ALTER TABLE public.acct_journal_lines DISABLE TRIGGER USER;
+  INSERT INTO public.acct_journal_lines (
+    entry_id, line_no, account_id, fund_id, function, company_id,
+    original_amount, original_currency,
+    functional_amount, functional_currency, fx_rate,
+    debit_credit, description
+  )
+  SELECT
+    v_original_journal_id, line_no, account_id, v_fund_id, function_name, R_COMPANY,
+    1000, 'SDG', 1000, 'SDG', 1, debit_credit, description
+  FROM (
+    VALUES
+      (1, 'ce540000-acc0-4000-8000-000000005200'::uuid, 'program', 'DR', 'Reprocessed enumerator fee reclassification'),
+      (2, 'ce540000-acc0-4000-8000-000000001510'::uuid, 'none', 'CR', 'Reprocessed transport advance reclassification')
+  ) AS lines(line_no, account_id, function_name, debit_credit, description)
+  ON CONFLICT (entry_id, line_no) DO NOTHING;
+
+  -- Later full-payment journal for the reprocessed advance: posted, unreversed,
+  -- balanced, with its own company_id and a matching success bridge log.
+  INSERT INTO public.acct_journal_entries (
+    id, period_id, posting_date, description_en, source_type, source_id, status,
+    idempotency_key, country_id, created_by, posted_at, posted_by
+  ) VALUES (
+    LATER_JE, PERIOD, current_date, 'Reprocessed advance fully paid',
+    'down_payment_requests', R_ADVANCE, 'posted',
+    'ce54-reprocessed-later-payment', CTRY, FIN, now(), FIN
+  )
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.acct_journal_lines (
+    entry_id, line_no, account_id, fund_id, function, company_id,
+    original_amount, original_currency,
+    functional_amount, functional_currency, fx_rate,
+    debit_credit, description
+  )
+  SELECT
+    LATER_JE, line_no, account_id, v_fund_id, function_name, R_COMPANY,
+    1000, 'SDG', 1000, 'SDG', 1, debit_credit, description
+  FROM (
+    VALUES
+      (1, 'ce540000-acc0-4000-8000-000000001510'::uuid, 'program', 'DR', 'Reprocessed advance debit'),
+      (2, 'ce540000-acc0-4000-8000-000000001010'::uuid, 'none', 'CR', 'Reprocessed advance cash out')
+  ) AS lines(line_no, account_id, function_name, debit_credit, description)
+  ON CONFLICT (entry_id, line_no) DO NOTHING;
+  ALTER TABLE public.acct_journal_lines ENABLE TRIGGER USER;
+
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, amount, created_at
+  ) VALUES (
+    'down_payment_requests', R_ADVANCE, 'down_payment_fully_paid', 'success',
+    LATER_JE, 1000, v_later_ts
+  );
+
+  -- Wallet + wallet transactions: one original (pre-Redirect) debit that must be
+  -- preserved, and one later (post-restore) debit that must be reversed.
+  -- The advance's requested_by (from mk_case) is MGR; the wallet + both wallet
+  -- transactions must belong to that same user for the RPC's provenance checks.
+  -- Clear any pre-existing wallet for MGR (unique on user_id) and its rows first.
+  DELETE FROM public.wallet_transactions
+  WHERE wallet_id IN (
+    SELECT id FROM public.wallets WHERE user_id = MGR AND id <> R_WALLET
+  );
+  DELETE FROM public.wallets WHERE user_id = MGR AND id <> R_WALLET;
+  INSERT INTO public.wallets (
+    id, user_id, currency, balance_cents, total_earned_cents,
+    balances, total_earned
+  ) VALUES (
+    R_WALLET, MGR, 'SDG', 100000, 100000,
+    jsonb_build_object('SDG', 1000), 1000
+  )
+  ON CONFLICT (id) DO UPDATE SET balance_cents = EXCLUDED.balance_cents,
+    total_earned_cents = EXCLUDED.total_earned_cents,
+    balances = EXCLUDED.balances, total_earned = EXCLUDED.total_earned;
+
+  INSERT INTO public.wallet_transactions (
+    id, wallet_id, user_id, amount_cents, amount, currency, type, status,
+    balance_before, balance_after, metadata, created_at
+  ) VALUES (
+    ORIG_WT, R_WALLET, MGR, 100000, 1000, 'SDG', 'down_payment', 'posted',
+    0, 0, jsonb_build_object('down_payment_request_id', R_ADVANCE::text),
+    clock_timestamp()
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.wallet_transactions (
+    id, wallet_id, user_id, amount_cents, amount, currency, type, status,
+    balance_before, balance_after, metadata, created_at
+  ) VALUES (
+    LATER_WT, R_WALLET, MGR, 100000, 1000, 'SDG', 'down_payment', 'posted',
+    0, 1000, jsonb_build_object('down_payment_request_id', R_ADVANCE::text),
+    v_later_ts
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  -- Reprocess the advance: record one later full-payment increment on top of the
+  -- original paid total, carrying BOTH wallet refs and the restore audit. The
+  -- immutable requested/approved amount remains the original 1000.
+  UPDATE public.down_payment_requests
+  SET status = 'fully_paid',
+      total_paid_amount = 2000,
+      payment_type = 'full_advance',
+      wallet_transaction_ids = jsonb_build_array(ORIG_WT::text, LATER_WT::text),
+      payment_proof_url = 'https://proof.example/ce54-reprocessed.pdf',
+      payment_proof_uploaded_at = v_later_ts,
+      metadata = jsonb_build_object(
+        'exception_action_id', v_action_id::text,
+        'audit_log', jsonb_build_array(
+          jsonb_build_object(
+            'action', 'restored',
+            'previousValue', 'cancelled',
+            'newValue', 'pending_admin',
+            'timestamp', to_char(v_restore_ts, 'YYYY-MM-DD"T"HH24:MI:SS')
+          )
+        )
+      )
+  WHERE id = R_ADVANCE;
+
+  -- The action recorded the ORIGINAL paid amount (1000) and the original wallet
+  -- provenance (only the original wallet transaction).
+  UPDATE public.cycle_exception_actions
+  SET advance_amount = 1000,
+      advance_status = 'paid',
+      source_payment_references = jsonb_build_array(ORIG_WT::text)
+  WHERE id = v_action_id;
+
+  -- ── Rejection: confirmation flag false ────────────────────────────────────
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-confirm', false
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects unconfirmed high-risk call',
+    v_result, 'confirm the high-risk reversal');
+
+  -- ── Rejection: unauthorized caller (enumerator) ───────────────────────────
+  PERFORM pg_temp.as_user(ENU);
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-unauthorized', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects unauthorized caller',
+    v_result, 'Only Super Admin');
+  PERFORM pg_temp.as_user(FIN);
+
+  -- ── Rejection: mismatched current paid delta ──────────────────────────────
+  -- Current delta is 2000-1000=1000 = later GL total, which is valid. Break it
+  -- temporarily by inflating the current paid total so the delta no longer
+  -- equals the proven later GL total.
+  UPDATE public.down_payment_requests SET total_paid_amount = 2100 WHERE id = R_ADVANCE;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-delta', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects mismatched paid delta',
+    v_result, 'current paid delta');
+  UPDATE public.down_payment_requests SET total_paid_amount = 2000 WHERE id = R_ADVANCE;
+
+  -- ── Rejection: mixed success/error later-payment bridge history ────────────
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, error_message, amount, created_at
+  ) VALUES (
+    'down_payment_requests', R_ADVANCE, 'down_payment_fully_paid', 'error',
+    'simulated later posting failure', 1000, v_later_ts + interval '1 minute'
+  );
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-mixed', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects mixed later bridge history',
+    v_result, 'payment bridge attempt failed');
+  DELETE FROM public.acct_gl_bridge_log
+  WHERE source_table = 'down_payment_requests'
+    AND source_id = R_ADVANCE
+    AND status = 'error';
+
+  -- ── Rejection: missing later journal ──────────────────────────────────────
+  UPDATE public.acct_gl_bridge_log
+  SET created_at = v_restore_ts - interval '1 minute'
+  WHERE source_table = 'down_payment_requests'
+    AND source_id = R_ADVANCE
+    AND status = 'success';
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-nolater', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects missing later journal',
+    v_result, 'no post-restore payment journal');
+  UPDATE public.acct_gl_bridge_log
+  SET created_at = v_later_ts
+  WHERE source_table = 'down_payment_requests'
+    AND source_id = R_ADVANCE
+    AND status = 'success';
+
+  -- ── Rejection: malformed / missing wallet provenance ──────────────────────
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = jsonb_build_array('not-a-uuid')
+  WHERE id = v_action_id;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-badref', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects malformed wallet provenance',
+    v_result, 'not a UUID');
+
+  -- Unknown root shapes are not equivalent to an explicit empty provenance
+  -- snapshot. Each must fail closed even if a payment proof exists.
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = 'null'::jsonb
+  WHERE id = v_action_id;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-original-null', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects JSON-null original wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = jsonb_build_object('wallet_id', ORIG_WT::text)
+  WHERE id = v_action_id;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-original-object', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects object original wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = to_jsonb(ORIG_WT::text)
+  WHERE id = v_action_id;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-original-scalar', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects scalar original wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = jsonb_build_array(ORIG_WT::text)
+  WHERE id = v_action_id;
+
+  UPDATE public.down_payment_requests
+  SET wallet_transaction_ids = 'null'::jsonb
+  WHERE id = R_ADVANCE;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-current-null', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects JSON-null current wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.down_payment_requests
+  SET wallet_transaction_ids = jsonb_build_object('wallet_id', LATER_WT::text)
+  WHERE id = R_ADVANCE;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-current-object', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects object current wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.down_payment_requests
+  SET wallet_transaction_ids = to_jsonb(LATER_WT::text)
+  WHERE id = R_ADVANCE;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-current-scalar', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects scalar current wallet provenance',
+    v_result, 'explicit JSON array');
+  UPDATE public.down_payment_requests
+  SET wallet_transaction_ids = jsonb_build_array(ORIG_WT::text, LATER_WT::text)
+  WHERE id = R_ADVANCE;
+  SELECT status::text INTO v_status
+  FROM public.wallet_transactions WHERE id = ORIG_WT;
+  PERFORM pg_temp.assert_txt('malformed provenance never reverses the original wallet row',
+    v_status, 'posted');
+
+  -- Missing provenance: the original ref no longer present on the current advance.
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references =
+    jsonb_build_array('ce54c010-0000-4000-8000-0000000000ee')
+  WHERE id = v_action_id;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-missingref', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects missing original wallet reference',
+    v_result, 'no longer contains all original references');
+  UPDATE public.cycle_exception_actions
+  SET source_payment_references = jsonb_build_array(ORIG_WT::text)
+  WHERE id = v_action_id;
+
+  -- ── Rejection: ambiguous wallet effect (posted row with no balance effect) ─
+  UPDATE public.wallet_transactions
+  SET balance_before = 500, balance_after = 500
+  WHERE id = LATER_WT;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-ambeffect', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects ambiguous wallet effect',
+    v_result, 'no recorded balance effect');
+
+  -- Insufficient wallet balance to prove an exact reversal.
+  UPDATE public.wallet_transactions
+  SET balance_before = 0, balance_after = 1000
+  WHERE id = LATER_WT;
+  UPDATE public.wallets
+  SET balance_cents = 0, total_earned_cents = 0,
+      balances = jsonb_build_object('SDG', 0), total_earned = 0
+  WHERE id = R_WALLET;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-insufficient', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal rejects insufficient wallet balance',
+    v_result, 'cannot prove an exact reversal');
+  UPDATE public.wallets
+  SET balance_cents = 100000, total_earned_cents = 100000,
+      balances = jsonb_build_object('SDG', 1000), total_earned = 1000
+  WHERE id = R_WALLET;
+
+  -- ── Supported web shape: pending audit row with zero wallet balance effect ─
+  -- Run the complete success path inside a deliberate subtransaction rollback so
+  -- the credited mobile-style fixture remains available for the final happy path.
+  BEGIN
+    UPDATE public.wallet_transactions
+    SET status = 'pending', balance_before = 0, balance_after = 0
+    WHERE id = LATER_WT;
+    SELECT (balances->>'SDG')::numeric INTO v_num
+    FROM public.wallets WHERE id = R_WALLET;
+    v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+      v_action_id, v_reason, PERIOD, 'ce54-reprocessed-web-zero-effect', true
+    );
+    PERFORM pg_temp.assert_ok('web zero-effect wallet reversal succeeds', v_result);
+    SELECT status::text INTO v_status
+    FROM public.wallet_transactions WHERE id = LATER_WT;
+    PERFORM pg_temp.assert_txt('web pending wallet row is marked reversed', v_status, 'reversed');
+    PERFORM pg_temp.assert_true(
+      'web zero-effect wallet reversal leaves wallet balance unchanged',
+      (SELECT (balances->>'SDG')::numeric FROM public.wallets WHERE id = R_WALLET) = v_num
+    );
+    RAISE EXCEPTION USING
+      ERRCODE = 'P562W',
+      MESSAGE = 'ROLLBACK_WEB_ZERO_EFFECT_PROBE';
+  EXCEPTION WHEN SQLSTATE 'P562W' THEN
+    IF SQLERRM <> 'ROLLBACK_WEB_ZERO_EFFECT_PROBE' THEN
+      RAISE;
+    END IF;
+  END;
+  SELECT status::text INTO v_status
+  FROM public.wallet_transactions WHERE id = LATER_WT;
+  PERFORM pg_temp.assert_txt('web probe rollback restores mobile credited fixture',
+    v_status, 'posted');
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_reversals
+  WHERE correction_action_id = v_action_id;
+  PERFORM pg_temp.assert_eq('web probe rollback leaves no audit row', v_count, 0);
+
+  -- ── Atomicity: force a wallet/GL total mismatch AFTER the original reversal
+  --    would begin, and prove nothing was left mutated ────────────────────────
+  SELECT status::text INTO v_before_journal_status
+  FROM public.acct_journal_entries WHERE id = v_original_journal_id;
+  SELECT fee_paid_status INTO v_before_fee_status
+  FROM public.mmp_site_entries WHERE id = R_SOURCE;
+  SELECT status::text INTO v_before_later_status
+  FROM public.acct_journal_entries WHERE id = LATER_JE;
+
+  -- Inflate the later wallet amount so wallet total (2000) no longer equals the
+  -- later GL total (1000): the RPC reverses the original journal + later journal,
+  -- marks the wallet row and undoes its (provable) balance effect, then hits the
+  -- wallet/GL reconciliation and rolls the ENTIRE transaction back. Give the
+  -- wallet enough balance so the per-row effect is provable and only the final
+  -- total reconciliation fails.
+  UPDATE public.wallets
+  SET balance_cents = 500000, total_earned_cents = 500000,
+      balances = jsonb_build_object('SDG', 5000), total_earned = 5000
+  WHERE id = R_WALLET;
+  UPDATE public.wallet_transactions
+  SET amount = 2000, amount_cents = 200000, balance_before = 0, balance_after = 2000
+  WHERE id = LATER_WT;
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-atomicfail', true
+  );
+  PERFORM pg_temp.assert_err('reprocessed reversal fails on wallet/GL total mismatch',
+    v_result, 'does not equal GL total');
+
+  SELECT status::text INTO v_status FROM public.acct_journal_entries WHERE id = v_original_journal_id;
+  PERFORM pg_temp.assert_txt('atomicity: original Redirect journal unchanged',
+    v_status, v_before_journal_status);
+  SELECT fee_paid_status INTO v_status FROM public.mmp_site_entries WHERE id = R_SOURCE;
+  PERFORM pg_temp.assert_txt('atomicity: source fee unchanged', v_status, v_before_fee_status);
+  SELECT status::text INTO v_status FROM public.acct_journal_entries WHERE id = LATER_JE;
+  PERFORM pg_temp.assert_txt('atomicity: later payment journal unchanged',
+    v_status, v_before_later_status);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_reversals WHERE correction_action_id = v_action_id;
+  PERFORM pg_temp.assert_eq('atomicity: no parent audit row survived the rollback', v_count, 0);
+  SELECT correction_status INTO v_status
+  FROM public.cycle_exception_actions WHERE id = v_action_id;
+  PERFORM pg_temp.assert_true('atomicity: action correction_status still null',
+    v_status IS NULL);
+
+  -- Restore the valid full-payment wallet row.
+  UPDATE public.wallet_transactions
+  SET amount = 1000, amount_cents = 100000, balance_before = 0, balance_after = 1000
+  WHERE id = LATER_WT;
+
+  -- ── Happy path: full reprocessed-payment reversal ─────────────────────────
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-success', true
+  );
+  PERFORM pg_temp.assert_ok('reprocessed reversal succeeds', v_result);
+  v_reversal_id := (v_result->>'reversal_journal_entry_id')::uuid;
+  v_replacement_id := (v_result->>'replacement_action_id')::uuid;
+  PERFORM pg_temp.assert_txt('reprocessed reversal reports mode',
+    v_result->>'correction_mode', 'reprocessed_payment_reversed');
+  PERFORM pg_temp.assert_true('reprocessed reversal reports one later journal + one wallet',
+    (v_result->>'later_journal_reversal_count')::int = 1
+    AND (v_result->>'later_wallet_reversal_count')::int = 1);
+
+  -- Original Redirect journal reversed; reversal preserves country_id + company_id.
+  SELECT status::text INTO v_status FROM public.acct_journal_entries WHERE id = v_original_journal_id;
+  PERFORM pg_temp.assert_txt('original Redirect journal marked reversed', v_status, 'reversed');
+  SELECT country_id INTO v_uuid FROM public.acct_journal_entries WHERE id = v_reversal_id;
+  PERFORM pg_temp.assert_txt('original reversal preserves country_id', v_uuid::text, CTRY::text);
+  SELECT count(*) INTO v_count
+  FROM public.acct_journal_lines
+  WHERE entry_id = v_reversal_id AND company_id = R_COMPANY;
+  PERFORM pg_temp.assert_eq('original reversal preserves per-line company_id', v_count, 2);
+
+  -- Later payment journal reversed; its reversal also preserves country + company.
+  SELECT status::text INTO v_status FROM public.acct_journal_entries WHERE id = LATER_JE;
+  PERFORM pg_temp.assert_txt('later payment journal marked reversed', v_status, 'reversed');
+  SELECT reversal_journal_entry_id INTO v_later_reversal_id
+  FROM public.cycle_redirect_reprocessed_journal_reversals
+  WHERE original_journal_entry_id = LATER_JE;
+  SELECT count(*) INTO v_count
+  FROM public.acct_journal_lines
+  WHERE entry_id = v_later_reversal_id AND company_id = R_COMPANY;
+  PERFORM pg_temp.assert_eq('later reversal preserves per-line company_id', v_count, 2);
+
+  -- Later wallet row marked reversed, not deleted; original wallet row untouched.
+  SELECT status::text INTO v_status FROM public.wallet_transactions WHERE id = LATER_WT;
+  PERFORM pg_temp.assert_txt('later wallet transaction marked reversed', v_status, 'reversed');
+  SELECT count(*) INTO v_count FROM public.wallet_transactions WHERE id = LATER_WT;
+  PERFORM pg_temp.assert_eq('later wallet transaction is not deleted', v_count, 1);
+  SELECT status::text INTO v_status FROM public.wallet_transactions WHERE id = ORIG_WT;
+  PERFORM pg_temp.assert_txt('original wallet transaction preserved', v_status, 'posted');
+
+  -- Advance restored to exact original paid amount/status/site/original refs; the
+  -- stale exception_action_id marker is removed.
+  SELECT status INTO v_status FROM public.down_payment_requests WHERE id = R_ADVANCE;
+  PERFORM pg_temp.assert_txt('advance restored to original paid status', v_status, 'paid');
+  SELECT total_paid_amount INTO v_num FROM public.down_payment_requests WHERE id = R_ADVANCE;
+  PERFORM pg_temp.assert_true('advance restored to original paid amount', v_num = 1000);
+  SELECT mmp_site_entry_id INTO v_uuid FROM public.down_payment_requests WHERE id = R_ADVANCE;
+  PERFORM pg_temp.assert_txt('advance restored to original source site', v_uuid::text, R_SOURCE::text);
+  SELECT count(*) INTO v_count
+  FROM public.down_payment_requests
+  WHERE id = R_ADVANCE
+    AND wallet_transaction_ids = jsonb_build_array(ORIG_WT::text)
+    AND coalesce(metadata ? 'exception_action_id', false) = false;
+  PERFORM pg_temp.assert_eq('advance restored refs + stale marker removed', v_count, 1);
+
+  -- Fee reset on the legacy source site.
+  SELECT count(*) INTO v_count
+  FROM public.mmp_site_entries
+  WHERE id = R_SOURCE
+    AND fee_paid_status = 'unpaid'
+    AND fee_paid_amount = 0
+    AND fee_cash_paid_amount = 0
+    AND fee_advance_offset_amount = 0;
+  PERFORM pg_temp.assert_eq('source fee reset after reprocessed reversal', v_count, 1);
+
+  -- Old action flipped; exactly one new unexecuted replacement action created.
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE id = v_action_id
+    AND executed = true
+    AND correction_status = 'reprocessed_payment_reversed'
+    AND correction_reversal_journal_id = v_reversal_id
+    AND correction_replacement_action_id = v_replacement_id;
+  PERFORM pg_temp.assert_eq('old action marked reprocessed_payment_reversed', v_count, 1);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE id = v_replacement_id
+    AND advance_id = R_ADVANCE
+    AND executed = false
+    AND action_payload->>'reopened_from_action_id' = v_action_id::text;
+  PERFORM pg_temp.assert_eq('one unexecuted replacement action created', v_count, 1);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE advance_id = R_ADVANCE AND executed = false;
+  PERFORM pg_temp.assert_eq('exactly one replacement (no duplicates)', v_count, 1);
+
+  -- Parent + child audit rows recorded.
+  SELECT id INTO v_parent_id
+  FROM public.cycle_redirect_reprocessed_reversals WHERE correction_action_id = v_action_id;
+  PERFORM pg_temp.assert_true('parent reprocessed reversal audit recorded', v_parent_id IS NOT NULL);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_journal_reversals WHERE parent_id = v_parent_id;
+  PERFORM pg_temp.assert_eq('one later-journal child audit row', v_count, 1);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_wallet_reversals
+  WHERE parent_id = v_parent_id AND wallet_transaction_id = LATER_WT;
+  PERFORM pg_temp.assert_eq('one later-wallet child audit row', v_count, 1);
+
+  -- Original Redirect bridge success row remains intact + auditable via links.
+  SELECT count(*) INTO v_count
+  FROM public.acct_gl_bridge_reversal_links
+  WHERE correction_action_id = v_action_id
+    AND original_journal_entry_id = v_original_journal_id
+    AND reversal_journal_entry_id = v_reversal_id;
+  PERFORM pg_temp.assert_eq('original bridge reversal link is auditable', v_count, 1);
+
+  -- ── Same-key idempotent retry: same result, NO duplicate audit links ──────
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-success', true
+  );
+  PERFORM pg_temp.assert_ok('reprocessed reversal retry is idempotent', v_result);
+  PERFORM pg_temp.assert_true('retry returns same reversal + replacement',
+    coalesce((v_result->>'already_corrected')::boolean, false)
+    AND (v_result->>'reversal_journal_entry_id')::uuid = v_reversal_id
+    AND (v_result->>'replacement_action_id')::uuid = v_replacement_id);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_reversals WHERE correction_action_id = v_action_id;
+  PERFORM pg_temp.assert_eq('retry creates no duplicate parent audit', v_count, 1);
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_reprocessed_journal_reversals WHERE parent_id = v_parent_id;
+  PERFORM pg_temp.assert_eq('retry creates no duplicate child journal audit', v_count, 1);
+
+  -- ── Different-key retry on an already-corrected action is rejected ─────────
+  v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
+    v_action_id, v_reason, PERIOD, 'ce54-reprocessed-different-key', true
+  );
+  PERFORM pg_temp.assert_err('different key rejected on corrected action',
+    v_result, 'already has a different completed correction');
+
+  -- ── Final Close remains blocked by the restored advance + new action ──────
+  BEGIN
+    UPDATE public.mmp_files SET cycle_status = 'closed' WHERE id = R_MMP;
+    RAISE EXCEPTION 'REPROCESSED_CLOSE_GATE_NOT_RAISED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'REPROCESSED_CLOSE_GATE_NOT_RAISED' THEN
+      RAISE EXCEPTION 'FAIL [reprocessed close gate]: restored advance did not block close';
+    END IF;
+    IF SQLERRM NOT ILIKE '%CYCLE_CLOSE_GATE%' THEN
+      RAISE EXCEPTION 'FAIL [reprocessed close gate]: unexpected error: %', SQLERRM;
+    END IF;
+  END;
+
+  RAISE NOTICE 'PASS [reprocessed-payment Redirect reversal regression].';
+END;
+$reprocessed_reversal_test$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 11. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 12. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;

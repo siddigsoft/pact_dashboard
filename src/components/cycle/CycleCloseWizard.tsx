@@ -49,7 +49,7 @@ export interface ExceptionDecision {
   executedByName?: string;
   journalEntryId?: string;
   executionError?: string;
-  correctionStatus?: 'reopened_for_correction' | 'historically_reconciled';
+  correctionStatus?: 'reopened_for_correction' | 'historically_reconciled' | 'reprocessed_payment_reversed';
   /** Redirect fee-settlement trace returned by the server. */
   allocations?: RedirectAllocationDraft[];
   unallocatedAmount?: number;
