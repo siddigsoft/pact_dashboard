@@ -934,6 +934,21 @@
     });
 
     const { counts } = useNavBadgeCountsContext();
+    const { data: unresolvedGlBridgeErrors = [] } = useQuery({
+      queryKey: ['sidebar-unresolved-gl-bridge-errors'],
+      queryFn: async () => {
+        const { data, error } = await (supabase as any).rpc('get_unresolved_gl_bridge_errors', { p_limit: 100 });
+        if (error) {
+          console.warn('[Sidebar] unresolved GL bridge error count:', error.message);
+          return [];
+        }
+        return Array.isArray(data) ? data : [];
+      },
+      enabled: !!currentUser?.id && (isSuperAdmin || roleIsFinance),
+      staleTime: 60_000,
+      refetchInterval: 60_000,
+    });
+    const unresolvedGlBridgeErrorCount = unresolvedGlBridgeErrors.length;
     const pendingReclaimCount = counts.pendingReclaimCount;
     const pendingCostApprovalCount = counts.pendingCostTier1Hub;
     const pendingDownPaymentCount = counts.pendingDpSupervisor;
@@ -1411,6 +1426,8 @@
                   return <NavCountBadge count={pendingDownPaymentCount} className={BADGE_ACTION} testId="badge-down-payment-count" />;
                 case 'mmp-management':
                   return <NavCountBadge count={pendingMmpCount} className={BADGE_ACTION} testId="badge-mmp-count" />;
+                case 'accounting-gl-bridge':
+                  return <NavCountBadge count={unresolvedGlBridgeErrorCount} className={BADGE_ACTION} testId="badge-gl-bridge-errors-count" />;
                 case 'site-verification':
                 case 'sites-for-verification':
                   return <NavCountBadge count={pendingVerificationCount} className={BADGE_ACTION} testId="badge-site-verification-count" />;
