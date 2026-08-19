@@ -240,8 +240,12 @@ export default function Step5Exceptions({
     roleFlags?.isFinance || roleFlags?.isFOM || roleFlags?.isAdmin || roleFlags?.isSuperAdmin
   );
   const correctionRole = String(currentUser?.role ?? '').toLowerCase().replace(/[\s_()-]+/g, '');
-  const canCorrectRedirect = ['superadmin', 'finance', 'financialadmin', 'financeadmin', 'accountant']
-    .includes(correctionRole);
+  const canCorrectRedirect = !!(
+    roleFlags?.isFinance
+    || roleFlags?.isSuperAdmin
+    || ['superadmin', 'finance', 'financialadmin', 'financeadmin', 'accountant']
+      .includes(correctionRole)
+  );
   useEffect(() => {
     if (wizardState.selectedMmpId) loadExceptions();
   }, [wizardState.selectedMmpId, wizardState.uncoveredReasons]);
