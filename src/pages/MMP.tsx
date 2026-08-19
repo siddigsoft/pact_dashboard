@@ -59,6 +59,7 @@ import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/uti
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
 import CycleCloseWizard from '@/components/cycle/CycleCloseWizard';
+import { getMmpCycleCloseAccess } from '@/components/cycle/cycleCloseAccess';
 import ErrorBoundary from '@/components/ErrorBoundary';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
@@ -2179,7 +2180,15 @@ const MMP = () => {
     const normalize = (r: string) => r.toLowerCase().replace(/[\s_-]/g, '');
     
     const userRole = normalize(currentUser.role || '');
-    const userRoles = (currentUser.roles || []).map(r => normalize(r));
+    const userRoles = [
+      ...(currentUser.roles || []),
+      ...(Array.isArray(currentUser.additionalRoles)
+        ? currentUser.additionalRoles.map((row: any) => row?.role).filter(Boolean)
+        : []),
+      ...(Array.isArray(currentUser.additional_roles)
+        ? currentUser.additional_roles.map((row: any) => row?.role).filter(Boolean)
+        : []),
+    ].map(r => normalize(r));
     
     return rolesToCheck.some(role => {
       const normalizedRole = normalize(role);
@@ -2187,20 +2196,14 @@ const MMP = () => {
     });
   };
 
-  const isSuperAdmin = hasRole([
-    'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin',
-    'super_administrator', 'Super Administrator', 'superadministrator',
-  ]);
-  const isAdmin = hasRole([
-    'Admin', 'admin',
-    'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin',
-    'super_administrator', 'Super Administrator', 'superadministrator',
-  ]);
+  const cycleCloseAccess = getMmpCycleCloseAccess(currentUser);
+  const isSuperAdmin = cycleCloseAccess.isSuperAdmin;
+  const isAdmin = cycleCloseAccess.isAdmin;
   const isICT = hasRole(['ICT', 'ict']);
-  const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
-  const isFinance = hasRole(['Finance', 'Finance Admin', 'Financial Admin', 'Accountant']);
-  const isSupervisor = hasRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
-  const isCoordinator = hasRole(['Coordinator', 'coordinator']);
+  const isFOM = cycleCloseAccess.isFOM;
+  const isFinance = cycleCloseAccess.isFinance;
+  const isSupervisor = cycleCloseAccess.isSupervisor;
+  const isCoordinator = cycleCloseAccess.isCoordinator;
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
   // Data collectors and coordinators can claim/accept sites; supervisors, FOM, ICT and admins are oversight-only.
@@ -2210,7 +2213,7 @@ const MMP = () => {
   const [showCycleWizard, setShowCycleWizard] = useState(false);
   const [cycleWizardInit, setCycleWizardInit] = useState<{ initialStep?: number; initialMmpId?: string | null }>({});
 
-  const canAccessCycleWizard = isFOM || isFinance || isAdmin || isSuperAdmin || isSupervisor || isCoordinator;
+  const canAccessCycleWizard = cycleCloseAccess.canAccessCycleWizard;
 
   // Auto-open the Close Cycle wizard when navigated to via ?action=close-cycle
   useEffect(() => {

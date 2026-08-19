@@ -114,7 +114,11 @@ DECLARE
     ['acct_gl_bridge_log','source_table'],
     ['acct_gl_bridge_log','journal_entry_id'],
     ['acct_journal_entries','idempotency_key'],
-    ['acct_journal_entries','period_id']
+    ['acct_journal_entries','period_id'],
+    -- columns required by close_mmp_and_lock_incentives
+    ['mmp_files','cycle_closed_at'],
+    ['mmp_files','cycle_closed_by'],
+    ['mmp_files','updated_at']
   ];
   r text[];
 BEGIN
@@ -161,6 +165,12 @@ BEGIN
       || '  - function acct_trig_mmp_site_entries_fee_paid() is missing' || E'\n';
   END IF;
 
+  -- The final-close RPC (Task #548 regression + 20260819b corrective migration).
+  IF to_regprocedure('public.close_mmp_and_lock_incentives(uuid,text)') IS NULL THEN
+    v_missing := v_missing
+      || '  - function close_mmp_and_lock_incentives(uuid,text) is missing' || E'\n';
+  END IF;
+
   IF to_regclass('public.trg_mmp_files_exception_close_gate') IS NULL
      AND NOT EXISTS (
        SELECT 1 FROM pg_trigger
@@ -173,7 +183,9 @@ BEGIN
 
   IF v_missing <> '' THEN
     RAISE EXCEPTION
-      'PREFLIGHT FAILED — required schema not present. Apply migration 20260819_cycle_close_inline_exception_execution.sql (and its 20260818* deps) first.%s%s',
+      'PREFLIGHT FAILED — required schema not present. Apply migrations '
+      '20260818_close_mmp_and_lock_incentives, 20260819_cycle_close_inline_exception_execution '
+      '(and their 20260818* deps), and 20260819b_cycle_close_finalizer_role_variants first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -821,7 +833,7 @@ BEGIN
     'ce54c00c-0000-4000-8000-00000000000c'::uuid,
     'ce54c00c-0000-4000-8000-0000000000ac'::uuid,
     'ce54c00c-0000-4000-8000-0000000000bc'::uuid,
-    'roll', NULL, 'roll cross-country', 
+    'roll', NULL, 'roll cross-country',
     'ce54c00c-0000-4000-8000-0000000000ec'::uuid,
     'ce54c00c-0000-4000-8000-0000000000fc'::uuid);
   PERFORM pg_temp.assert_err('roll to different country rejected', res, 'same country');
@@ -1083,12 +1095,333 @@ BEGIN
   RAISE NOTICE 'PASS [RLS direct UPDATE]: authenticated direct update blocked (0 rows)';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- 6. Regression: close_mmp_and_lock_incentives role-variant authorization
+--    (20260819b_cycle_close_finalizer_role_variants corrective migration)
+--
+--    The original 20260818_close_mmp_and_lock_incentives used a hard-coded IN
+--    list that included 'Super Admin' (two words, mixed case) but omitted
+--    'Super Administrator' — the full phrase shown in the UI and stored in
+--    some profiles.role values.  20260819b replaces the IN list with a
+--    regexp_replace normalization so every spacing/punctuation/case variant of
+--    "super admin*" resolves to the canonical key.
+--
+--    20260819b was later broadened to authorize supported finalizer roles from
+--    THREE sources — profiles.role, profiles.additional_roles[].role, and
+--    user_roles.role — with normalized values that include the various
+--    "Field Operation Manager" spellings (fieldoperationmanager, fom, …).
+--
+--    This section verifies:
+--      (a) a profile with role='Super Administrator' can call
+--          close_mmp_and_lock_incentives successfully on a clean, eligible
+--          open cycle (regression: old code rejects this with "Only FOM /
+--          Director / Admin / Super Admin can close a cycle");
+--      (a2) a profile with role='Field Operation Manager' can close
+--           (primary-role normalization → fieldoperationmanager);
+--      (a3) a profile whose PRIMARY role is unprivileged but whose
+--           additional_roles contains {role:'FOM'} can close
+--           (additional_roles source);
+--      (a4) a profile whose PRIMARY role is unprivileged but who has a
+--           user_roles row 'field_operation_manager' can close
+--           (user_roles source);
+--      (b) a profile with an unpermitted role ('enumerator'), no privileged
+--          additional_roles, and no privileged user_roles is still rejected
+--          with the expected error message.
+--
+--    Each success case closes its OWN clean MMP so closures are independent
+--    (the RPC's already-closed guard never cross-contaminates the cases).
+--
+--    Fixtures are inserted inside the current transaction (rolled back at end).
+--    The close RPC reads auth.uid() from request.jwt.claims, so we use
+--    set_config to set the JWT sub before each call, matching the pattern used
+--    by the RLS section above.
+-- ---------------------------------------------------------------------------
+
+-- Seed a 'Super Administrator' actor.
+DO $$
+BEGIN
+  INSERT INTO auth.users (id, email)
+  VALUES ('ce540000-0000-4000-8000-000000000099'::uuid, 'superadmin-full@test')
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.profiles (id, email, role)
+  VALUES ('ce540000-0000-4000-8000-000000000099'::uuid,
+          'superadmin-full@test', 'Super Administrator')
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role;
+END $$;
+
+-- Seed an unauthorized actor.
+DO $$
+BEGIN
+  INSERT INTO auth.users (id, email)
+  VALUES ('ce540000-0000-4000-8000-0000000000ee'::uuid, 'unauth@test')
+  ON CONFLICT (id) DO NOTHING;
+
+  -- Unprivileged across ALL three sources: primary role + empty additional_roles,
+  -- and (below) no user_roles rows.
+  INSERT INTO public.profiles (id, email, role, additional_roles)
+  VALUES ('ce540000-0000-4000-8000-0000000000ee'::uuid,
+          'unauth@test', 'enumerator', '[]'::jsonb)
+  ON CONFLICT (id) DO UPDATE
+    SET role = EXCLUDED.role, additional_roles = EXCLUDED.additional_roles;
+END $$;
+
+-- Seed a clean eligible MMP for the Super Administrator close test.
+-- No not-covered advances, cycle_closed_at NULL, cycle_status='open'.
+DO $$
+BEGIN
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, cycle_closed_at, cycle_closed_by, updated_at)
+  VALUES
+    ('ce540000-0000-4000-8000-000000009901'::uuid,
+     'open', 'active', NULL, NULL, NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+END $$;
+
+-- (a) Super Administrator must be allowed to close.
+DO $$
+DECLARE
+  v_res  jsonb;
+  v_ok   boolean;
+  v_err  text;
+BEGIN
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-000000000099')::text, true);
+
+  v_res := public.close_mmp_and_lock_incentives(
+    'ce540000-0000-4000-8000-000000009901'::uuid, NULL);
+
+  v_ok  := (v_res->>'ok')::boolean;
+  v_err := v_res->>'error';
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [Super Administrator can close cycle]: RPC rejected with: %', v_err;
+  END IF;
+  RAISE NOTICE 'PASS [Super Administrator can close cycle]: ok=true, closed_at=%',
+    v_res->>'closed_at';
+END $$;
+
+-- (a2) profiles.role='Field Operation Manager' must be allowed to close.
+DO $$
+DECLARE
+  v_res jsonb; v_ok boolean; v_err text;
+BEGIN
+  -- Actor with the full FOM phrase as PRIMARY role.
+  INSERT INTO auth.users (id, email)
+  VALUES ('ce540000-0000-4000-8000-0000000000f1'::uuid, 'fom-primary@test')
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.profiles (id, email, role)
+  VALUES ('ce540000-0000-4000-8000-0000000000f1'::uuid,
+          'fom-primary@test', 'Field Operation Manager')
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role;
+
+  -- Own clean MMP.
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, cycle_closed_at, cycle_closed_by, updated_at)
+  VALUES
+    ('ce540000-0000-4000-8000-000000009903'::uuid,
+     'open', 'active', NULL, NULL, NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-0000000000f1')::text, true);
+
+  v_res := public.close_mmp_and_lock_incentives(
+    'ce540000-0000-4000-8000-000000009903'::uuid, NULL);
+  v_ok  := (v_res->>'ok')::boolean;
+  v_err := v_res->>'error';
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [Field Operation Manager (primary role) can close cycle]: RPC rejected with: %', v_err;
+  END IF;
+  RAISE NOTICE 'PASS [Field Operation Manager (primary role) can close cycle]: ok=true, closed_at=%',
+    v_res->>'closed_at';
+END $$;
+
+-- (a3) primary role unprivileged, additional_roles contains {role:'FOM'} → allowed.
+DO $$
+DECLARE
+  v_res jsonb; v_ok boolean; v_err text;
+BEGIN
+  INSERT INTO auth.users (id, email)
+  VALUES ('ce540000-0000-4000-8000-0000000000f2'::uuid, 'fom-additional@test')
+  ON CONFLICT (id) DO NOTHING;
+  -- Unprivileged PRIMARY role, but a privileged entry in additional_roles.
+  INSERT INTO public.profiles (id, email, role, additional_roles)
+  VALUES ('ce540000-0000-4000-8000-0000000000f2'::uuid,
+          'fom-additional@test', 'enumerator',
+          '[{"role":"FOM"}]'::jsonb)
+  ON CONFLICT (id) DO UPDATE
+    SET role = EXCLUDED.role, additional_roles = EXCLUDED.additional_roles;
+
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, cycle_closed_at, cycle_closed_by, updated_at)
+  VALUES
+    ('ce540000-0000-4000-8000-000000009904'::uuid,
+     'open', 'active', NULL, NULL, NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-0000000000f2')::text, true);
+
+  v_res := public.close_mmp_and_lock_incentives(
+    'ce540000-0000-4000-8000-000000009904'::uuid, NULL);
+  v_ok  := (v_res->>'ok')::boolean;
+  v_err := v_res->>'error';
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [additional_roles FOM can close cycle]: RPC rejected with: %', v_err;
+  END IF;
+  RAISE NOTICE 'PASS [additional_roles {role:FOM} can close cycle]: ok=true, closed_at=%',
+    v_res->>'closed_at';
+END $$;
+
+-- (a4) primary role unprivileged, user_roles has 'field_operation_manager' → allowed.
+DO $$
+DECLARE
+  v_res jsonb; v_ok boolean; v_err text;
+BEGIN
+  INSERT INTO auth.users (id, email)
+  VALUES ('ce540000-0000-4000-8000-0000000000f3'::uuid, 'fom-userroles@test')
+  ON CONFLICT (id) DO NOTHING;
+  -- Unprivileged PRIMARY role and NO privileged additional_roles.
+  INSERT INTO public.profiles (id, email, role, additional_roles)
+  VALUES ('ce540000-0000-4000-8000-0000000000f3'::uuid,
+          'fom-userroles@test', 'enumerator', '[]'::jsonb)
+  ON CONFLICT (id) DO UPDATE
+    SET role = EXCLUDED.role, additional_roles = EXCLUDED.additional_roles;
+  -- Privilege granted only via the user_roles table.
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES ('ce540000-0000-4000-8000-0000000000f3'::uuid, 'field_operation_manager');
+
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, cycle_closed_at, cycle_closed_by, updated_at)
+  VALUES
+    ('ce540000-0000-4000-8000-000000009905'::uuid,
+     'open', 'active', NULL, NULL, NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-0000000000f3')::text, true);
+
+  v_res := public.close_mmp_and_lock_incentives(
+    'ce540000-0000-4000-8000-000000009905'::uuid, NULL);
+  v_ok  := (v_res->>'ok')::boolean;
+  v_err := v_res->>'error';
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [user_roles field_operation_manager can close cycle]: RPC rejected with: %', v_err;
+  END IF;
+  RAISE NOTICE 'PASS [user_roles field_operation_manager can close cycle]: ok=true, closed_at=%',
+    v_res->>'closed_at';
+END $$;
+
+-- (b) Unauthorized role must remain rejected.
+DO $$
+DECLARE
+  v_res  jsonb;
+  v_ok   boolean;
+  v_err  text;
+BEGIN
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', 'ce540000-0000-4000-8000-0000000000ee')::text, true);
+
+  -- Use a different (still-open) MMP so the already-closed guard does not fire.
+  INSERT INTO public.mmp_files
+    (id, cycle_status, status, country_id, cycle_closed_at, cycle_closed_by, updated_at)
+  VALUES
+    ('ce540000-0000-4000-8000-000000009902'::uuid,
+     'open', 'active', NULL, NULL, NULL, now())
+  ON CONFLICT (id) DO NOTHING;
+
+  v_res := public.close_mmp_and_lock_incentives(
+    'ce540000-0000-4000-8000-000000009902'::uuid, NULL);
+
+  v_ok  := (v_res->>'ok')::boolean;
+  v_err := v_res->>'error';
+
+  IF v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [unauthorized role rejected from close]: RPC accepted an enumerator';
+  END IF;
+  IF v_err NOT ILIKE '%FOM%' AND v_err NOT ILIKE '%Admin%' AND v_err NOT ILIKE '%close%' THEN
+    RAISE EXCEPTION
+      'FAIL [unauthorized role rejected from close]: unexpected error message: %', v_err;
+  END IF;
+  RAISE NOTICE 'PASS [unauthorized role rejected from close]: correctly rejected — %', v_err;
+END $$;
+
+-- (a5) profiles.role='Field Operation Manager (FOM)' — the parenthesised
+--      abbreviation form that normalizes (non-alphanumeric stripped) to
+--      'fieldoperationmanagerfom'. Prove BOTH exception-role helpers accept
+--      it, then execute one manager-only exception action (cancel of a fresh
+--      approved advance) successfully as that role.
+DO $$
+DECLARE
+  FOMP uuid := 'ce540000-0000-4000-8000-0000000000f4';   -- actor
+  m5   uuid := 'ce540000-0000-4000-8000-000000009906';   -- fresh MMP
+  s5   uuid := 'ce540000-0000-4000-8000-000000009916';   -- not-covered site
+  a5   uuid := 'ce540000-0000-4000-8000-000000009926';   -- approved advance
+  v_exec boolean;
+  v_mgr  boolean;
+  v_res  jsonb;
+  v_ok   boolean;
+BEGIN
+  -- Seed actor whose PRIMARY role is the parenthesised FOM phrase.
+  INSERT INTO auth.users (id, email)
+  VALUES (FOMP, 'fom-paren@test')
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.profiles (id, email, full_name, role, additional_roles)
+  VALUES (FOMP, 'fom-paren@test', 'FOM Paren',
+          'Field Operation Manager (FOM)', '[]'::jsonb)
+  ON CONFLICT (id) DO UPDATE
+    SET role = EXCLUDED.role, additional_roles = EXCLUDED.additional_roles;
+
+  -- Helper predicates must both accept the normalized 'fieldoperationmanagerfom'.
+  v_exec := public.is_cycle_exception_executor(FOMP);
+  v_mgr  := public.is_cycle_exception_manager(FOMP);
+
+  IF NOT v_exec THEN
+    RAISE EXCEPTION
+      'FAIL [FOM (FOM) is exception executor]: is_cycle_exception_executor returned false';
+  END IF;
+  RAISE NOTICE 'PASS [FOM (FOM) is exception executor]: is_cycle_exception_executor=true';
+
+  IF NOT v_mgr THEN
+    RAISE EXCEPTION
+      'FAIL [FOM (FOM) is exception manager]: is_cycle_exception_manager returned false';
+  END IF;
+  RAISE NOTICE 'PASS [FOM (FOM) is exception manager]: is_cycle_exception_manager=true';
+
+  -- Execute a manager-only exception action as this role: cancel a fresh
+  -- approved (unpaid) advance. mk_case builds MMP + not-covered site + advance.
+  PERFORM pg_temp.mk_case(m5, s5, a5, 'approved', 1000, 0);
+  PERFORM pg_temp.as_user(FOMP);
+
+  v_res := public.execute_cycle_close_exception(
+    m5, s5, a5, 'cancel', NULL, 'FOM (FOM) cancels approved advance');
+  v_ok  := (v_res->>'ok')::boolean;
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION
+      'FAIL [FOM (FOM) executes manager-only cancel]: RPC rejected with: %',
+      v_res->>'error';
+  END IF;
+  RAISE NOTICE
+    'PASS [FOM (FOM) executes manager-only cancel]: ok=true, decision=%',
+    v_res->>'decision';
+END $$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 6. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 7. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;

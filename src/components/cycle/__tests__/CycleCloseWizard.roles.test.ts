@@ -36,6 +36,12 @@ describe('getCycleCloseRoleFlags', () => {
     expect(getCycleCloseRoleFlags({ role: 'Finance Admin' }).isFinance).toBe(true);
     expect(getCycleCloseRoleFlags({ roles: ['Accountant'] }).isFinance).toBe(true);
   });
+
+  it('detects Field Operation Manager variants used by final close', () => {
+    expect(getCycleCloseRoleFlags({ role: 'Field Operation Manager' }).isFOM).toBe(true);
+    expect(getCycleCloseRoleFlags({ role: 'Field Operation Manager (FOM)' }).isFOM).toBe(true);
+    expect(getCycleCloseRoleFlags({ additionalRoles: [{ role: 'FOM' }] }).isFOM).toBe(true);
+  });
 });
 
 describe('isCycleCloseStep4ContributorOnly', () => {
@@ -159,7 +165,14 @@ describe('isCycleCloseFinalizerProfile', () => {
   it('targets admin, super admin, and FOM for the post-confirmation handoff', () => {
     expect(isCycleCloseFinalizerProfile({ role: 'admin' })).toBe(true);
     expect(isCycleCloseFinalizerProfile({ role: 'super_admin' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'Super Administrator' })).toBe(true);
     expect(isCycleCloseFinalizerProfile({ role: 'fom' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'Field Operation Manager' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({ role: 'Field Operation Manager (FOM)' })).toBe(true);
+    expect(isCycleCloseFinalizerProfile({
+      role: 'enumerator',
+      additional_roles: [{ role: 'FOM' }],
+    })).toBe(true);
     expect(isCycleCloseFinalizerProfile({ role: 'supervisor' })).toBe(false);
     expect(isCycleCloseFinalizerProfile({ role: 'coordinator' })).toBe(false);
   });

@@ -33,6 +33,7 @@ interface OpenMmp {
   id: string;
   name: string;
   status: string | null;
+  cycle_status: string | null;
   start_date: string | null;
 }
 
@@ -149,6 +150,7 @@ export default function Step5Exceptions({
   const [targetSites, setTargetSites]          = useState<Record<string, TargetSite[]>>({});
   const [loadingTargetSites, setLoadingTargetSites] = useState<Record<string, boolean>>({});
   const [executing, setExecuting]              = useState<Record<string, boolean>>({});
+  const [migrationRequired, setMigrationRequired] = useState(false);
   const decisionsRef = useRef(wizardState.exceptionDecisions);
 
   useEffect(() => {
@@ -194,12 +196,13 @@ export default function Step5Exceptions({
         .eq('executed', true),
       supabase
         .from('mmp_files')
-        .select('id, name, status, start_date')
+        .select('id, name, status, cycle_status, start_date')
         .neq('id', wizardState.selectedMmpId!)
-        .neq('status', 'closed')
         .order('start_date', { ascending: false }),
     ]);
-    setOpenMmps((mmpResult.data ?? []) as OpenMmp[]);
+    setOpenMmps(((mmpResult.data ?? []) as OpenMmp[]).filter(mmp =>
+      mmp.status !== 'closed' && mmp.cycle_status !== 'closed'
+    ));
 
     const siteData = siteResult.data;
     if (!siteData?.length) { setLoading(false); return; }
@@ -442,9 +445,19 @@ export default function Step5Exceptions({
         executionError: undefined,
       });
     } catch (error: any) {
+      const rawMessage = error?.message ?? 'The action failed. Nothing was changed.';
+      if (
+        rawMessage.includes('execute_cycle_close_exception') &&
+        rawMessage.toLowerCase().includes('schema cache')
+      ) {
+        setMigrationRequired(true);
+      }
       setDecision(key, {
         executed: false,
-        executionError: error?.message ?? 'The action failed. Nothing was changed.',
+        executionError: rawMessage.includes('execute_cycle_close_exception') &&
+          rawMessage.toLowerCase().includes('schema cache')
+          ? 'The Cycle Close database migration is not applied in Supabase yet. Apply supabase/migrations/20260819_cycle_close_inline_exception_execution.sql, then reload this page. No action was changed.'
+          : rawMessage,
       });
     } finally {
       setExecuting(prev => ({ ...prev, [key]: false }));
@@ -484,6 +497,23 @@ export default function Step5Exceptions({
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <Header />
+
+      {migrationRequired && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Database setup required.</strong> Apply the ordered Cycle Close migration set from
+            {' '}<code className="text-xs">supabase/migrations/</code>:
+            {' '}<code className="text-xs">20260818_cycle_exception_actions.sql</code>,
+            {' '}<code className="text-xs">20260818b_field_payments_columns.sql</code>,
+            {' '}<code className="text-xs">20260818d_enumerator_fee_gl_bridge.sql</code>,
+            {' '}<code className="text-xs">20260818_close_mmp_and_lock_incentives.sql</code>,
+            {' '}<code className="text-xs">20260819_cycle_close_inline_exception_execution.sql</code>, then
+            {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>.
+            {' '}Reload this wizard after they are applied.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* ── Summary counts ── */}
       <div className="flex flex-wrap gap-2 text-sm">

@@ -152,7 +152,7 @@ export function getCycleCloseRoleFlags(currentUser: any) {
 
   const isCoordinator = hasAny(['coordinator']);
   const isSupervisor = hasAny(['supervisor', 'hubsupervisor']);
-  const isFOM = hasAny(['fom', 'fieldoperationmanager']);
+  const isFOM = hasAny(['fom', 'fieldoperationmanager', 'fieldoperationmanagerfom']);
   const isFinance = hasAny(['finance', 'financeadmin', 'financialadmin', 'accountant']);
   const isAdmin = hasAny(['admin']);
   const isSuperAdmin = hasAny(['superadmin', 'superadministrator']);
