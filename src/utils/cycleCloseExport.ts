@@ -120,6 +120,13 @@ export interface ExceptionSite {
   installmentPlan?: InstallmentEntry[];
   paidInstallments?: InstallmentEntry[];
   walletTransactionIds?: string[];
+
+  /** Enumerator-fee settlement fields, used to show the result of a Redirect. */
+  feePaidStatus?: 'unpaid' | 'paid';
+  feePaidAmount?: number;
+  feePaidAt?: string;
+  feePaymentMethod?: string;
+  feePaymentNotes?: string;
 }
 
 // ── Low-level cell helpers ────────────────────────────────────────────────────

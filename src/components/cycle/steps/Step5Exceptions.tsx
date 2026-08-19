@@ -224,7 +224,7 @@ export default function Step5Exceptions({
     const [siteResult, siteAdvancesResult, actionAdvancesResult] = await Promise.all([
       supabase
         .from('mmp_site_entries')
-        .select('id, site_name, state, locality, accepted_by')
+        .select('id, site_name, state, locality, accepted_by, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
         .in('id', sourceSiteIds),
       supabase
         .from('down_payment_requests')
@@ -354,6 +354,11 @@ export default function Step5Exceptions({
           installmentPlan:     adv.installmentPlan,
           paidInstallments:    adv.paidInstallments,
           walletTransactionIds: adv.walletTransactionIds,
+          feePaidStatus:       (s.fee_paid_status as 'unpaid' | 'paid' | null) ?? undefined,
+          feePaidAmount:       s.fee_paid_amount ?? undefined,
+          feePaidAt:           s.fee_paid_at ?? undefined,
+          feePaymentMethod:    s.fee_payment_method ?? undefined,
+          feePaymentNotes:     s.fee_payment_notes ?? undefined,
         };
       });
 
@@ -853,6 +858,7 @@ function SiteCard({
               decision={d}
               chosenLabel={chosen.label}
               openMmps={openMmps}
+              site={site}
             />
           )}
         </>
@@ -1347,10 +1353,12 @@ function ExecutionDetails({
   decision,
   chosenLabel,
   openMmps,
+  site,
 }: {
   decision: ExceptionDecision | undefined;
   chosenLabel: string;
   openMmps: OpenMmp[];
+  site: ExceptionSite;
 }) {
   if (!decision) return null;
 
@@ -1404,10 +1412,38 @@ function ExecutionDetails({
           <span className="text-slate-700">{decision.justification}</span>
         </div>
       )}
-      {decision.journalEntryId && decision.decision === 'redirect' && (
-        <p className="text-green-700">
-          GL posting: Debit Enumerator Fees · Credit Transport Advance
-        </p>
+      {decision.decision === 'redirect' && (
+        <div className="rounded border border-green-200 bg-white/70 px-2 py-2 space-y-1.5 text-slate-700">
+          <p className="font-medium text-green-800">Payment trace — no second cash payment</p>
+          <p>
+            This uses the already-disbursed transportation advance as the fee settlement.
+            It does not create a new payment, receipt, or Cost Submission.
+          </p>
+          <DetailRow label="Source Down Payment ID" value={site.advanceId} mono />
+          <DetailRow label="Original transport amount" value={`SDG ${site.advancePaid.toLocaleString()}`} />
+          {site.walletTransactionIds?.length ? (
+            <DetailRow label="Original payment reference(s)" value={site.walletTransactionIds.join(', ')} mono />
+          ) : (
+            <DetailRow label="Original payment reference(s)" value="No wallet transaction reference recorded" />
+          )}
+          <DetailRow
+            label="Fee settlement"
+            value={site.feePaymentMethod === 'advance_offset'
+              ? 'Advance offset (transport advance reclassified to fees)'
+              : 'Marked paid by this Redirect action'}
+          />
+          {site.feePaidAt && <DetailRow label="Fee marked paid at" value={formatDateTime(site.feePaidAt)} />}
+          {site.feePaymentNotes && <DetailRow label="Fee ledger note" value={site.feePaymentNotes} />}
+          <p className="pt-1 text-green-700">
+            GL posting: Debit Enumerator Fees · Credit Transport Advance
+          </p>
+          <p className="text-muted-foreground">
+            Verify the original payment in <strong>Down Payment Approval</strong> or
+            <strong> Field Payments Centre → Advances</strong>; verify the fee result in
+            <strong> Field Payments Centre → Fees</strong>; and search the GL journal ID in
+            <strong> Accounting → GL Bridge Audit / Ledger</strong>.
+          </p>
+        </div>
       )}
       {decision.actionId && (
         <p className="font-mono text-[10px] text-green-700/80">Action ID: {decision.actionId}</p>
