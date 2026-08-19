@@ -39,7 +39,7 @@ const AUDIENCE_OPTIONS = [
 ];
 
 const SUDAN_STATES = [
-  'Blue Nile', 'Central Darfur', 'East Darfur', 'Gedaref', 'Kassala',
+  'Blue Nile', 'Central Darfur', 'East Darfur', 'Gedarif', 'Kassala',
   'Khartoum', 'North Darfur', 'North Kordofan', 'Northern', 'Red Sea',
   'River Nile', 'Sennar', 'South Darfur', 'South Kordofan', 'West Darfur',
   'West Kordofan', 'White Nile',

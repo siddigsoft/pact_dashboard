@@ -179,7 +179,7 @@ const ArchiveFilters: FC<ArchiveFiltersProps> = ({ open, onOpenChange }) => {
                     <SelectItem value="North Darfur">North Darfur</SelectItem>
                     <SelectItem value="Red Sea">Red Sea</SelectItem>
                     <SelectItem value="Kassala">Kassala</SelectItem>
-                    <SelectItem value="Al Jazirah">Al Jazirah</SelectItem>
+                    <SelectItem value="Al Gezira">Al Gezira</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

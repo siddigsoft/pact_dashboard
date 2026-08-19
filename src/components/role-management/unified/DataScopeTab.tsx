@@ -18,7 +18,7 @@ const SCOPE_LABELS: Record<ScopeType, string> = {
   hub: 'Hub', project: 'Project', state: 'State / Region', cost_center: 'Cost Center',
 };
 const SUDAN_STATES = [
-  'Khartoum', 'Omdurman', 'Kassala', 'Gedaref', 'Port Sudan', 'Atbara',
+  'Khartoum', 'Omdurman', 'Kassala', 'Gedarif', 'Port Sudan', 'Atbara',
   'Al Qadarif', 'Wad Madani', 'Al Fasher', 'Nyala', 'El Obeid', 'Rabak',
   'Sennar', 'Damazin', 'Ed Daein', 'Kadugli', 'Dilling', 'Geneina',
   'Zalingei', 'Ed Damazin', 'Dongola', 'Berber', 'Malakal',

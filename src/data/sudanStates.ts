@@ -33,10 +33,10 @@ export const sudanStates: SudanState[] = [
     ]
   },
   
-  // 2. Al Jazirah (Gezira) State - 8 localities
+  // 2. Al Gezira (Gezira) State - 8 localities
   { 
     id: 'gezira', 
-    name: 'Aj Jazirah', 
+    name: 'Al Gezira', 
     nameAr: 'الجزيرة',
     code: 'GZ', 
     localities: [
@@ -582,6 +582,8 @@ const hubAliases: Record<string, string> = {
   'algezira': 'kassala-hub',
   'al-gazira': 'kassala-hub',
   'gazira': 'kassala-hub',
+  'aj jazirah': 'kassala-hub',
+  'al jazirah': 'kassala-hub',
   'sennar': 'kassala-hub',
   'blue nile': 'kassala-hub',
   
