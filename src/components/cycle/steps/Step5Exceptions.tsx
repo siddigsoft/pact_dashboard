@@ -647,8 +647,11 @@ export default function Step5Exceptions({
       periodId: '',
       idempotencyKey,
       mode: 'reopen_advance',
-      historicalModeAvailable: false,
-      reprocessedModeAvailable: false,
+      // Show all correction paths immediately. Eligibility is verified by the
+      // corresponding server-side RPC; hiding the alternatives until the
+      // strict path fails made the safe recovery choices look unavailable.
+      historicalModeAvailable: true,
+      reprocessedModeAvailable: true,
       confirmReverseLaterPayment: false,
       periods: [],
       loadingPeriods: true,
@@ -2155,7 +2158,7 @@ function RedirectCorrectionPanel({
 }) {
   const historicalOnly = correction.mode === 'historical_accounting_only';
   const reverseReprocessed = correction.mode === 'reverse_reprocessed_payment';
-  const showModeSelector = correction.historicalModeAvailable || correction.reprocessedModeAvailable;
+  const showModeSelector = true;
   const canSubmit = !correction.submitting
     && !correction.loadingPeriods
     && !!correction.periodId
@@ -2236,6 +2239,10 @@ function RedirectCorrectionPanel({
               the original advance is restored so the exception can be resolved again.
             </p>
           )}
+          <p className="text-[11px] text-muted-foreground">
+            The selected path is checked against the complete payment and GL history when submitted.
+            Unsupported, incomplete, or ambiguous histories fail closed without changing records.
+          </p>
         </div>
       )}
 
