@@ -85,6 +85,9 @@ DECLARE
     ['cycle_exception_actions','action_payload'],
     ['cycle_exception_actions','gl_posted'],
     ['cycle_exception_actions','gl_journal_entry_id'],
+    ['cycle_exception_actions','correction_status'],
+    ['cycle_exception_actions','correction_reversal_journal_id'],
+    ['cycle_exception_actions','correction_replacement_action_id'],
     ['cycle_exception_actions','recovery_date'],
     ['cycle_exception_actions','decision'],
     ['cycle_exception_actions','advance_id'],
@@ -208,13 +211,27 @@ BEGIN
       || '  - view cycle_legacy_redirect_review is missing' || E'\n';
   END IF;
 
+  IF to_regclass('public.acct_gl_bridge_reversal_links') IS NULL THEN
+    v_missing := v_missing
+      || '  - table acct_gl_bridge_reversal_links is missing' || E'\n';
+  END IF;
+
+  IF to_regprocedure(
+    'public.reopen_cycle_redirect_for_correction(uuid,text,uuid,text)'
+  ) IS NULL THEN
+    v_missing := v_missing
+      || '  - function reopen_cycle_redirect_for_correction(uuid,text,uuid,text) is missing'
+      || E'\n';
+  END IF;
+
   IF v_missing <> '' THEN
     RAISE EXCEPTION
       'PREFLIGHT FAILED — required schema not present. Apply migrations '
       '20260818_close_mmp_and_lock_incentives, 20260819_cycle_close_inline_exception_execution '
       '(and their 20260818* deps), 20260819b_cycle_close_finalizer_role_variants, and '
       '20260819c_cycle_close_mmp_country_scope, 20260819e_cycle_redirect_fee_settlement_safety, '
-      'and 20260819f_cycle_redirect_multi_site_allocations first.%s%s',
+      '20260819f_cycle_redirect_multi_site_allocations, and '
+      '20260819g_cycle_redirect_correction first.%s%s',
       E'\n', v_missing;
   END IF;
 
@@ -1794,12 +1811,330 @@ BEGIN
   RAISE NOTICE 'PASS [multi-site Redirect allocation ledger and accounting regression].';
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- 9. Focused correction regression. The replacement is transactional and is
+--    rolled back with the rest of this file, so the real reversal RPC remains
+--    untouched after the test.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.acct_post_reversal(
+  p_original_entry_id uuid,
+  p_payload jsonb,
+  p_idempotency_key text
+) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_reversal_id uuid;
+BEGIN
+  SELECT id
+  INTO v_reversal_id
+  FROM public.acct_journal_entries
+  WHERE idempotency_key = p_idempotency_key;
+
+  IF FOUND THEN
+    RETURN v_reversal_id;
+  END IF;
+
+  INSERT INTO public.acct_journal_entries (
+    period_id,
+    posting_date,
+    description_en,
+    source_type,
+    source_id,
+    status,
+    idempotency_key,
+    created_by,
+    posted_at,
+    posted_by
+  ) VALUES (
+    (p_payload->>'period_id')::uuid,
+    coalesce((p_payload->>'posting_date')::date, current_date),
+    p_payload->>'description_en',
+    'reversal',
+    p_original_entry_id,
+    'posted',
+    p_idempotency_key,
+    auth.uid(),
+    now(),
+    auth.uid()
+  )
+  ON CONFLICT (idempotency_key) DO NOTHING
+  RETURNING id INTO v_reversal_id;
+
+  IF v_reversal_id IS NULL THEN
+    SELECT id INTO v_reversal_id
+    FROM public.acct_journal_entries
+    WHERE idempotency_key = p_idempotency_key;
+  END IF;
+
+  UPDATE public.acct_journal_entries
+  SET status = 'reversed',
+      reversed_by_entry_id = v_reversal_id
+  WHERE id = p_original_entry_id
+    AND status = 'posted';
+
+  RETURN v_reversal_id;
+END;
+$$;
+
+DO $correction_test$
+DECLARE
+  FIN constant uuid := 'ce540000-0000-4000-8000-000000000002';
+  ENU constant uuid := 'ce540000-0000-4000-8000-000000000003';
+  MMP constant uuid := 'ce54c008-0000-4000-8000-000000000008';
+  SITE constant uuid := 'ce54c008-0000-4000-8000-0000000000a8';
+  ADVANCE constant uuid := 'ce54c008-0000-4000-8000-0000000000b8';
+  PERIOD constant uuid := 'ce540000-feed-4000-8000-0000000000f1';
+  v_action_id uuid;
+  v_original_journal_id uuid;
+  v_other_journal_id uuid;
+  v_reversal_id uuid;
+  v_replacement_id uuid;
+  v_result jsonb;
+  v_count bigint;
+  v_status text;
+BEGIN
+  SELECT id, gl_journal_entry_id
+  INTO v_action_id, v_original_journal_id
+  FROM public.cycle_exception_actions
+  WHERE advance_id = ADVANCE
+    AND decision = 'redirect'
+    AND executed = true
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  PERFORM pg_temp.assert_true(
+    'correction fixture has executed legacy Redirect',
+    v_action_id IS NOT NULL AND v_original_journal_id IS NOT NULL
+  );
+
+  -- Simulate the exact post-20260819e normalization signature of a Redirect
+  -- executed before component tracking was introduced.
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1000,
+      transport_fee = 0,
+      fee_paid_status = 'paid',
+      fee_paid_amount = 1000,
+      fee_cash_paid_amount = 1000,
+      fee_advance_offset_amount = 0,
+      fee_unallocated_amount = 0,
+      fee_payment_method = NULL,
+      fee_payment_notes = NULL,
+      fee_receipt_url = NULL
+  WHERE id = SITE;
+
+  INSERT INTO public.acct_funds (
+    code, name_en, name_ar, restriction_type, is_active
+  )
+  VALUES (
+    'CE54-CORRECTION', 'CE54 Correction Fund', 'CE54', 'without_restriction', true
+  )
+  ON CONFLICT (code) DO NOTHING;
+
+  -- The bridge double deliberately creates header-only journals. Add the real
+  -- balanced source lines required by the correction preflight.
+  ALTER TABLE public.acct_journal_lines DISABLE TRIGGER USER;
+  INSERT INTO public.acct_journal_lines (
+    entry_id, line_no, account_id, fund_id, function,
+    original_amount, original_currency,
+    functional_amount, functional_currency, fx_rate,
+    debit_credit, description
+  )
+  SELECT
+    v_original_journal_id,
+    line_no,
+    account_id,
+    (SELECT id FROM public.acct_funds WHERE code = 'CE54-CORRECTION'),
+    function_name,
+    1000,
+    'SDG',
+    1000,
+    'SDG',
+    1,
+    debit_credit,
+    description
+  FROM (
+    VALUES
+      (1, 'ce540000-acc0-4000-8000-000000005200'::uuid, 'program', 'DR', 'Enumerator fee reclassification'),
+      (2, 'ce540000-acc0-4000-8000-000000001510'::uuid, 'none', 'CR', 'Transport advance reclassification')
+  ) AS lines(line_no, account_id, function_name, debit_credit, description)
+  ON CONFLICT (entry_id, line_no) DO NOTHING;
+  ALTER TABLE public.acct_journal_lines ENABLE TRIGGER USER;
+
+  -- Unauthorized caller.
+  PERFORM pg_temp.as_user(ENU);
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-unauthorized'
+  );
+  PERFORM pg_temp.assert_err('Redirect correction rejects unauthorized caller', v_result, 'Only Super Admin');
+
+  PERFORM pg_temp.as_user(FIN);
+
+  -- Missing original journal reference.
+  UPDATE public.cycle_exception_actions
+  SET gl_journal_entry_id = NULL
+  WHERE id = v_action_id;
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-no-journal'
+  );
+  PERFORM pg_temp.assert_err('Redirect correction rejects missing journal', v_result, 'no GL journal');
+  UPDATE public.cycle_exception_actions
+  SET gl_journal_entry_id = v_original_journal_id
+  WHERE id = v_action_id;
+
+  -- Closed/invalid period.
+  UPDATE public.acct_fiscal_periods SET status = 'hard_closed' WHERE id = PERIOD;
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-closed-period'
+  );
+  PERFORM pg_temp.assert_err('Redirect correction rejects closed period', v_result, 'open or soft-closed');
+  UPDATE public.acct_fiscal_periods SET status = 'open' WHERE id = PERIOD;
+
+  -- A separately posted reversal must block correction.
+  v_reversal_id := public.acct_post_reversal(
+    v_original_journal_id,
+    jsonb_build_object('period_id', PERIOD, 'posting_date', current_date),
+    'ce54-correction-pre-reversed'
+  );
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-already-reversed'
+  );
+  PERFORM pg_temp.assert_err('Redirect correction rejects already-reversed journal', v_result, 'unreversed posted');
+  UPDATE public.acct_journal_entries
+  SET status = 'posted', reversed_by_entry_id = NULL
+  WHERE id = v_original_journal_id;
+  DELETE FROM public.acct_journal_entries WHERE id = v_reversal_id;
+
+  -- Later fee settlement evidence must fail closed.
+  SELECT gl_journal_entry_id
+  INTO v_other_journal_id
+  FROM public.cycle_exception_actions
+  WHERE decision = 'return'
+    AND gl_journal_entry_id IS NOT NULL
+  LIMIT 1;
+  INSERT INTO public.acct_gl_bridge_log (
+    source_table, source_id, event_type, status, journal_entry_id, created_at
+  )
+  SELECT
+    'mmp_site_entries', SITE, 'enumerator_fee_paid', 'success',
+    v_other_journal_id, action.executed_at + interval '1 minute'
+  FROM public.cycle_exception_actions action
+  WHERE action.id = v_action_id;
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-later-fee'
+  );
+  PERFORM pg_temp.assert_err('Redirect correction rejects later fee activity', v_result, 'Later fee-settlement');
+  DELETE FROM public.acct_gl_bridge_log
+  WHERE source_table = 'mmp_site_entries'
+    AND source_id = SITE
+    AND journal_entry_id = v_other_journal_id;
+
+  -- Successful correction.
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-success'
+  );
+  PERFORM pg_temp.assert_ok('legacy Redirect correction succeeds', v_result);
+  v_reversal_id := (v_result->>'reversal_journal_entry_id')::uuid;
+  v_replacement_id := (v_result->>'replacement_action_id')::uuid;
+
+  SELECT status INTO v_status
+  FROM public.down_payment_requests
+  WHERE id = ADVANCE;
+  PERFORM pg_temp.assert_txt('correction restores paid advance', v_status, 'paid');
+
+  SELECT fee_paid_status INTO v_status
+  FROM public.mmp_site_entries
+  WHERE id = SITE;
+  PERFORM pg_temp.assert_txt('correction restores source fee to unpaid', v_status, 'unpaid');
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE id = v_action_id
+    AND executed = true
+    AND correction_status = 'reopened_for_correction'
+    AND correction_reversal_journal_id = v_reversal_id
+    AND correction_replacement_action_id = v_replacement_id;
+  PERFORM pg_temp.assert_eq('original action retained with correction audit', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.cycle_exception_actions
+  WHERE id = v_replacement_id
+    AND advance_id = ADVANCE
+    AND executed = false
+    AND action_payload->>'reopened_from_action_id' = v_action_id::text;
+  PERFORM pg_temp.assert_eq('pending replacement action created', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.acct_gl_bridge_log
+  WHERE source_table = 'mmp_site_entries'
+    AND source_id = SITE
+    AND journal_entry_id = v_original_journal_id
+    AND status = 'success';
+  PERFORM pg_temp.assert_eq('original bridge success row remains intact', v_count, 1);
+
+  SELECT count(*) INTO v_count
+  FROM public.acct_gl_bridge_reversal_links
+  WHERE correction_action_id = v_action_id
+    AND original_journal_entry_id = v_original_journal_id
+    AND reversal_journal_entry_id = v_reversal_id;
+  PERFORM pg_temp.assert_eq('bridge reversal link is auditable', v_count, 1);
+
+  -- Same request is idempotent and returns the original correction.
+  v_result := public.reopen_cycle_redirect_for_correction(
+    v_action_id, 'Legacy Redirect selected the wrong source site', PERIOD, 'ce54-correction-success'
+  );
+  PERFORM pg_temp.assert_ok('correction retry is idempotent', v_result);
+  PERFORM pg_temp.assert_true(
+    'correction retry returns same reversal and replacement',
+    coalesce((v_result->>'already_corrected')::boolean, false)
+    AND (v_result->>'reversal_journal_entry_id')::uuid = v_reversal_id
+    AND (v_result->>'replacement_action_id')::uuid = v_replacement_id
+  );
+
+  -- The shared reversal guard rejects a second reversal with a different key.
+  BEGIN
+    INSERT INTO public.acct_journal_entries (
+      period_id, posting_date, description_en, source_type, source_id,
+      status, idempotency_key, created_by
+    ) VALUES (
+      PERIOD, current_date, 'Illegal second reversal', 'reversal',
+      v_original_journal_id, 'posted', 'ce54-correction-second-reversal', FIN
+    );
+    RAISE EXCEPTION 'SECOND_REVERSAL_NOT_BLOCKED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'SECOND_REVERSAL_NOT_BLOCKED' THEN
+      RAISE EXCEPTION 'FAIL [shared reversal guard]: duplicate reversal was inserted';
+    END IF;
+    IF SQLERRM NOT ILIKE '%ORIGINAL_NOT_REVERSIBLE%' THEN
+      RAISE EXCEPTION 'FAIL [shared reversal guard]: unexpected error: %', SQLERRM;
+    END IF;
+  END;
+
+  -- Restored paid advance plus pending action are visible to the close gate.
+  BEGIN
+    UPDATE public.mmp_files SET cycle_status = 'closed' WHERE id = MMP;
+    RAISE EXCEPTION 'CORRECTION_CLOSE_GATE_NOT_RAISED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'CORRECTION_CLOSE_GATE_NOT_RAISED' THEN
+      RAISE EXCEPTION 'FAIL [correction close gate]: reopened advance did not block close';
+    END IF;
+    IF SQLERRM NOT ILIKE '%CYCLE_CLOSE_GATE%' THEN
+      RAISE EXCEPTION 'FAIL [correction close gate]: unexpected error: %', SQLERRM;
+    END IF;
+  END;
+
+  RAISE NOTICE 'PASS [legacy Redirect correction and reversal audit regression].';
+END;
+$correction_test$;
+
 DO $$ BEGIN
   RAISE NOTICE '✅  All cycle-close exception-execution tests passed.';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 9. Roll back everything: fixtures, seeded rows, and — crucially — the
+-- 10. Roll back everything: fixtures, seeded rows, and — crucially — the
 --    transactional replacement of acct_bridge_post_journal (restores real fn).
 -- ---------------------------------------------------------------------------
 ROLLBACK;

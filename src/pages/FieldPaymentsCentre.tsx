@@ -146,6 +146,13 @@ interface ExceptionActionRow {
   createdAt: string;
   executedAt: string | null;
   approvedByName: string | null;
+  correctionStatus: string | null;
+  correctedAt: string | null;
+  correctedByName: string | null;
+  correctionReason: string | null;
+  originalJournalEntryId: string | null;
+  reversalJournalEntryId: string | null;
+  reopenedFromActionId: string | null;
 }
 
 interface RecoveryRow {
@@ -748,6 +755,13 @@ export default function FieldPaymentsCentre() {
         createdAt: r.created_at,
         executedAt: r.executed_at ?? null,
         approvedByName: nameMap[r.executed_by] ?? null,
+        correctionStatus: r.correction_status ?? null,
+        correctedAt: r.corrected_at ?? null,
+        correctedByName: r.corrected_by_name ?? null,
+        correctionReason: r.correction_reason ?? null,
+        originalJournalEntryId: r.gl_journal_entry_id ?? null,
+        reversalJournalEntryId: r.correction_reversal_journal_id ?? null,
+        reopenedFromActionId: r.action_payload?.reopened_from_action_id ?? null,
       }));
 
       if (requestGeneration !== dataLoadGeneration.current) return;
@@ -1396,6 +1410,7 @@ export default function FieldPaymentsCentre() {
             { label: 'Advance amount', value: `SDG ${fmt(advanceTotal)}` },
             { label: 'Recovered amount', value: `SDG ${fmt(recoveredTotal)}` },
             { label: 'Executed', value: filteredExceptions.filter(row => row.executed).length },
+            { label: 'Reopened corrections', value: filteredExceptions.filter(row => !!row.correctionStatus).length },
           ],
           columns: [
             { key: 'number', header: '#', width: 7, format: 'integer' },
@@ -1412,6 +1427,11 @@ export default function FieldPaymentsCentre() {
             { key: 'recoveryDate', header: 'Recovery Date', width: 17, format: 'date' },
             { key: 'executedDate', header: 'Executed Date', width: 17, format: 'date' },
             { key: 'approvedBy', header: 'Executed By', width: 25 },
+            { key: 'correctedDate', header: 'Corrected Date', width: 17, format: 'date' },
+            { key: 'correctedBy', header: 'Corrected By', width: 25 },
+            { key: 'correctionReason', header: 'Correction Reason', width: 42, format: 'text' },
+            { key: 'originalJournal', header: 'Original Journal', width: 38 },
+            { key: 'reversalJournal', header: 'Reversal Journal', width: 38 },
             { key: 'justification', header: 'Justification', width: 42, format: 'text' },
           ],
           rows: filteredExceptions.map((row, index) => ({
@@ -1423,12 +1443,21 @@ export default function FieldPaymentsCentre() {
             mmp: row.mmpName,
             advanceAmount: row.advanceAmount,
             decision: titleCaseLabel(row.decision),
-            executionStatus: row.executed ? 'Executed' : 'Pending',
-            glStatus: row.glPosted ? 'Posted' : row.executed ? 'Pending' : 'Not posted',
+            executionStatus: row.correctionStatus
+              ? 'Reopened for correction'
+              : row.executed ? 'Executed' : 'Pending',
+            glStatus: row.correctionStatus
+              ? 'Reversed'
+              : row.glPosted ? 'Posted' : row.executed ? 'Pending' : 'Not posted',
             recoveryAmount: row.recoveryAmount,
             recoveryDate: row.recoveryDate,
             executedDate: row.executedAt,
             approvedBy: row.approvedByName,
+            correctedDate: row.correctedAt,
+            correctedBy: row.correctedByName,
+            correctionReason: row.correctionReason,
+            originalJournal: row.originalJournalEntryId,
+            reversalJournal: row.reversalJournalEntryId,
             justification: row.justification,
           })),
         });
@@ -2020,7 +2049,9 @@ export default function FieldPaymentsCentre() {
                 </div>
               ) : filteredExceptions.map(action => (
                 <div key={action.id} className={`border rounded-lg p-4 space-y-2 ${
-                  action.executed
+                  action.correctionStatus
+                    ? 'border-amber-300 bg-amber-50/30 dark:bg-amber-950/10'
+                    : action.executed
                     ? 'border-green-200 bg-green-50/20 dark:bg-green-950/10'
                     : action.decision === 'return' || action.decision === 'writeoff'
                       ? 'border-red-200 bg-red-50/10'
@@ -2031,19 +2062,42 @@ export default function FieldPaymentsCentre() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm">{action.siteName}</p>
                         {decisionBadge(action.decision)}
-                        {action.executed
+                        {action.correctionStatus
+                          ? <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">↺ Reopened for correction</Badge>
+                          : action.executed
                           ? <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">✓ Executed</Badge>
                           : <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Pending</Badge>
                         }
-                        {action.executed && !action.glPosted && ['return','writeoff','redirect'].includes(action.decision) && (
+                        {action.executed && !action.correctionStatus && !action.glPosted && ['return','writeoff','redirect'].includes(action.decision) && (
                           <Badge className="bg-red-100 text-red-700 border-red-300 text-[10px]">GL pending</Badge>
                         )}
-                        {action.glPosted && <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px]">✓ GL posted</Badge>}
+                        {action.correctionStatus
+                          ? <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">↺ GL reversed</Badge>
+                          : action.glPosted && <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px]">✓ GL posted</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {action.enumeratorName} · {action.mmpName} · SDG {fmt(action.advanceAmount)}
                       </p>
                       {action.justification && <p className="text-xs text-muted-foreground italic">"{action.justification}"</p>}
+                      {action.correctionStatus && (
+                        <div className="rounded border border-amber-200 bg-white/70 px-2 py-1.5 text-xs space-y-1">
+                          <p className="font-medium text-amber-900">
+                            Corrected {fmtDate(action.correctedAt)}
+                            {action.correctedByName && ` by ${action.correctedByName}`}
+                          </p>
+                          {action.correctionReason && <p className="text-amber-800">Reason: {action.correctionReason}</p>}
+                          {action.originalJournalEntryId && (
+                            <p className="font-mono text-[10px] text-amber-800 break-all">
+                              Original journal: {action.originalJournalEntryId}
+                            </p>
+                          )}
+                          {action.reversalJournalEntryId && (
+                            <p className="font-mono text-[10px] text-amber-800 break-all">
+                              Reversal journal: {action.reversalJournalEntryId}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {action.executed && (
                         <p className="text-xs text-muted-foreground">
                           Executed {fmtDate(action.executedAt)}
@@ -2059,9 +2113,19 @@ export default function FieldPaymentsCentre() {
                           <ExternalLink className="h-3 w-3" /> Receipt
                         </a>
                       )}
-                      {!action.executed && (
+                      {!action.executed && !action.reopenedFromActionId && (
                         <Button size="sm" className="h-7 text-xs" onClick={() => openExcDialog(action)}>
                           Execute →
+                        </Button>
+                      )}
+                      {!action.executed && action.reopenedFromActionId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-amber-300 text-amber-800"
+                          onClick={() => navigate(`/mmp/cycle-close?mmpId=${action.mmpFileId}`)}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" /> Resolve in Cycle Close
                         </Button>
                       )}
                       {/* Roll/Hold actions link to rollover tracker */}

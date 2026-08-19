@@ -7,8 +7,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
-  Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles } from 'lucide-react';
+  Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles,
+  AlertTriangle, RotateCcw } from 'lucide-react';
 import type { WizardState, ExceptionDecision, RoleFlags } from '../CycleCloseWizard';
 import {
   canExecuteExceptionDecision,
@@ -59,6 +64,36 @@ interface TargetSite {
   fee_advance_offset_amount?: number | null;
   accepted_by?: string | null;
   sameEnumerator?: boolean;
+}
+
+interface CorrectedRedirectHistory {
+  actionId: string;
+  correctedAt?: string;
+  correctedByName?: string;
+  correctionReason?: string;
+  originalJournalEntryId?: string;
+  reversalJournalEntryId?: string;
+  replacementActionId?: string;
+}
+
+interface FiscalPeriod {
+  id: string;
+  period_no: number;
+  start_date: string;
+  end_date: string;
+  status: 'open' | 'soft_closed';
+}
+
+interface RedirectCorrectionDialog {
+  site: ExceptionSite;
+  decision: ExceptionDecision;
+  reason: string;
+  periodId: string;
+  idempotencyKey: string;
+  periods: FiscalPeriod[];
+  loadingPeriods: boolean;
+  submitting: boolean;
+  error?: string;
 }
 
 const toSettlementTarget = (target: TargetSite): RedirectSettlementTarget => ({
@@ -188,6 +223,8 @@ export default function Step5Exceptions({
   const [loadingTargetSites, setLoadingTargetSites] = useState<Record<string, boolean>>({});
   const [executing, setExecuting]              = useState<Record<string, boolean>>({});
   const [migrationRequired, setMigrationRequired] = useState(false);
+  const [correctedRedirects, setCorrectedRedirects] = useState<Record<string, CorrectedRedirectHistory[]>>({});
+  const [correctionDialog, setCorrectionDialog] = useState<RedirectCorrectionDialog | null>(null);
   const decisionsRef = useRef(wizardState.exceptionDecisions);
 
   useEffect(() => {
@@ -197,6 +234,9 @@ export default function Step5Exceptions({
   const canExecute = !!(
     roleFlags?.isFinance || roleFlags?.isFOM || roleFlags?.isAdmin || roleFlags?.isSuperAdmin
   );
+  const correctionRole = String(currentUser?.role ?? '').toLowerCase().replace(/[\s_()-]+/g, '');
+  const canCorrectRedirect = ['superadmin', 'finance', 'accountant']
+    .includes(correctionRole);
   useEffect(() => {
     if (wizardState.selectedMmpId) loadExceptions();
   }, [wizardState.selectedMmpId, wizardState.uncoveredReasons]);
@@ -212,7 +252,7 @@ export default function Step5Exceptions({
     const [actionsResult, mmpResult] = await Promise.all([
       supabase
         .from('cycle_exception_actions')
-        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references')
+        .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references, correction_status, corrected_at, corrected_by_name, correction_reason, correction_reversal_journal_id, correction_replacement_action_id')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('executed', true),
       supabase
@@ -222,6 +262,25 @@ export default function Step5Exceptions({
         .order('created_at', { ascending: false }),
     ]);
     const actionRows = (actionsResult.data ?? []) as any[];
+    const correctedActionIds = new Set(
+      actionRows
+        .filter(row => row.correction_status === 'reopened_for_correction')
+        .map(row => row.id as string),
+    );
+    const correctedByAdvance = actionRows.reduce<Record<string, CorrectedRedirectHistory[]>>((history, row) => {
+      if (!row.advance_id || row.correction_status !== 'reopened_for_correction') return history;
+      (history[row.advance_id] ??= []).push({
+        actionId: row.id,
+        correctedAt: row.corrected_at ?? undefined,
+        correctedByName: row.corrected_by_name ?? undefined,
+        correctionReason: row.correction_reason ?? undefined,
+        originalJournalEntryId: row.gl_journal_entry_id ?? undefined,
+        reversalJournalEntryId: row.correction_reversal_journal_id ?? undefined,
+        replacementActionId: row.correction_replacement_action_id ?? undefined,
+      });
+      return history;
+    }, {});
+    setCorrectedRedirects(correctedByAdvance);
     const actionIds = actionRows.map(row => row.id as string).filter(Boolean);
     let allocationRows: any[] = [];
     if (actionIds.length) {
@@ -429,7 +488,7 @@ export default function Step5Exceptions({
 
     const executedFromServer: Record<string, ExceptionDecision> = {};
     for (const row of actionRows) {
-      if (!row.advance_id) continue;
+      if (!row.advance_id || correctedActionIds.has(row.id)) continue;
       executedFromServer[row.advance_id] = {
         decision: row.decision,
         amount: row.decision_amount ?? undefined,
@@ -484,11 +543,13 @@ export default function Step5Exceptions({
     }, {});
     const normalizedDecisions: Record<string, ExceptionDecision> = {};
     for (const site of exceptionSites) {
-      const existing = wizardState.exceptionDecisions[site.advanceId]
+      const existing = decisionsRef.current[site.advanceId]
         ?? (advancesPerSite[site.siteId] === 1
-          ? wizardState.exceptionDecisions[site.siteId]
+          ? decisionsRef.current[site.siteId]
           : undefined);
-      if (existing) normalizedDecisions[site.advanceId] = existing;
+      if (existing && !correctedActionIds.has(existing.actionId ?? '')) {
+        normalizedDecisions[site.advanceId] = existing;
+      }
     }
     const nextDecisions = {
       ...normalizedDecisions,
@@ -509,6 +570,97 @@ export default function Step5Exceptions({
     };
     decisionsRef.current = nextDecisions;
     updateWizardState({ exceptionDecisions: nextDecisions });
+  };
+
+  const openRedirectCorrection = async (site: ExceptionSite, decision: ExceptionDecision) => {
+    if (!decision.actionId || !canCorrectRedirect) return;
+    const idempotencyKey = `${decision.actionId}:${crypto.randomUUID()}`;
+    setCorrectionDialog({
+      site,
+      decision,
+      reason: '',
+      periodId: '',
+      idempotencyKey,
+      periods: [],
+      loadingPeriods: true,
+      submitting: false,
+    });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await (supabase as any)
+      .from('acct_fiscal_periods')
+      .select('id, period_no, start_date, end_date, status')
+      .in('status', ['open', 'soft_closed'])
+      .lte('start_date', today)
+      .gte('end_date', today)
+      .order('start_date', { ascending: false });
+    const periods = (data ?? []) as FiscalPeriod[];
+    setCorrectionDialog(current => current?.idempotencyKey === idempotencyKey
+      ? {
+        ...current,
+        periods,
+        periodId: periods[0]?.id ?? '',
+        loadingPeriods: false,
+        error: error ? `Could not load fiscal periods: ${error.message}` : undefined,
+      }
+      : current);
+  };
+
+  const submitRedirectCorrection = async () => {
+    if (!correctionDialog?.decision.actionId) return;
+    if (correctionDialog.reason.trim().length < 10) {
+      setCorrectionDialog(current => current
+        ? { ...current, error: 'Enter a correction reason of at least 10 characters.' }
+        : current);
+      return;
+    }
+    if (!correctionDialog.periodId) {
+      setCorrectionDialog(current => current
+        ? { ...current, error: 'Select an open fiscal period for the reversal.' }
+        : current);
+      return;
+    }
+
+    setCorrectionDialog(current => current
+      ? { ...current, submitting: true, error: undefined }
+      : current);
+    const key = exceptionKey(correctionDialog.site);
+    try {
+      const { data, error } = await (supabase as any).rpc(
+        'reopen_cycle_redirect_for_correction',
+        {
+          p_action_id: correctionDialog.decision.actionId,
+          p_reason: correctionDialog.reason.trim(),
+          p_period_id: correctionDialog.periodId,
+          p_idempotency_key: correctionDialog.idempotencyKey,
+        },
+      );
+      if (error) throw new Error(error.message);
+      const result = data as { ok?: boolean; error?: string } | null;
+      if (!result?.ok) throw new Error(result?.error || 'The server did not reopen this Redirect.');
+
+      const nextDecisions = { ...decisionsRef.current };
+      delete nextDecisions[key];
+      delete nextDecisions[correctionDialog.site.siteId];
+      decisionsRef.current = nextDecisions;
+      updateWizardState({ exceptionDecisions: nextDecisions });
+      setCorrectionDialog(null);
+      await loadExceptions();
+    } catch (error: any) {
+      const message = error?.message ?? 'The correction failed. Nothing was changed.';
+      const migrationMissing = message.includes('reopen_cycle_redirect_for_correction')
+        && message.toLowerCase().includes('schema cache');
+      if (migrationMissing) setMigrationRequired(true);
+      setCorrectionDialog(current => current
+        ? {
+          ...current,
+          submitting: false,
+          error: migrationMissing
+            ? 'Apply the Redirect correction migration in Supabase, then reload this wizard.'
+            : message,
+        }
+        : current);
+    }
   };
 
   const isDraftValid = (site: ExceptionSite): boolean => {
@@ -728,7 +880,8 @@ export default function Step5Exceptions({
             {' '}<code className="text-xs">20260819b_cycle_close_finalizer_role_variants.sql</code>, then
              {' '}<code className="text-xs">20260819c_cycle_close_mmp_country_scope.sql</code>, then
              {' '}<code className="text-xs">20260819e_cycle_redirect_fee_settlement_safety.sql</code>, then
-             {' '}<code className="text-xs">20260819f_cycle_redirect_multi_site_allocations.sql</code>.
+             {' '}<code className="text-xs">20260819f_cycle_redirect_multi_site_allocations.sql</code>, then
+             {' '}<code className="text-xs">20260819g_cycle_redirect_correction.sql</code>.
             {' '}Reload this wizard after they are applied.
           </AlertDescription>
         </Alert>
@@ -803,6 +956,12 @@ export default function Step5Exceptions({
               onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
               onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
               onExecute={() => executeDecision(site)}
+              correctedHistory={correctedRedirects[site.advanceId] ?? []}
+              canCorrectRedirect={canCorrectRedirect}
+              onCorrectRedirect={() => {
+                const decision = wizardState.exceptionDecisions[exceptionKey(site)];
+                if (decision) void openRedirectCorrection(site, decision);
+              }}
               variant="paid"
             />
           ))}
@@ -869,6 +1028,12 @@ export default function Step5Exceptions({
               onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
               onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
               onExecute={() => executeDecision(site)}
+              correctedHistory={correctedRedirects[site.advanceId] ?? []}
+              canCorrectRedirect={canCorrectRedirect}
+              onCorrectRedirect={() => {
+                const decision = wizardState.exceptionDecisions[exceptionKey(site)];
+                if (decision) void openRedirectCorrection(site, decision);
+              }}
               variant="approved"
             />
           ))}
@@ -908,6 +1073,132 @@ export default function Step5Exceptions({
           Next: Financial Reconciliation →
         </Button>
       </div>
+
+      <Dialog
+        open={!!correctionDialog}
+        onOpenChange={open => {
+          if (!open && !correctionDialog?.submitting) setCorrectionDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-amber-600" />
+              Reopen advance for correction
+            </DialogTitle>
+            <DialogDescription>
+              Reverse the incorrect Redirect journal and return this paid advance to the unresolved
+              Cycle Close queue. The old action and both journals remain in history.
+            </DialogDescription>
+          </DialogHeader>
+
+          {correctionDialog && (
+            <div className="space-y-4">
+              <Alert className="border-amber-300 bg-amber-50">
+                <AlertTriangle className="h-4 w-4 text-amber-700" />
+                <AlertDescription className="text-amber-900 text-xs">
+                  This does not delete or edit the original Redirect. It posts a reversing journal,
+                  restores the original paid advance status, and requires a new resolution before Final Close.
+                </AlertDescription>
+              </Alert>
+
+              <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                <DetailRow label="Site" value={correctionDialog.site.siteName} />
+                <DetailRow label="Advance" value={correctionDialog.site.advanceId} mono />
+                <DetailRow
+                  label="Original journal"
+                  value={correctionDialog.decision.journalEntryId ?? 'Missing — correction will be rejected'}
+                  mono
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="redirect-correction-reason">Correction reason</Label>
+                <Textarea
+                  id="redirect-correction-reason"
+                  value={correctionDialog.reason}
+                  onChange={event => setCorrectionDialog(current => current
+                    ? { ...current, reason: event.target.value, error: undefined }
+                    : current)}
+                  placeholder="Explain why the original Redirect was incorrect and must be reopened…"
+                  rows={4}
+                  disabled={correctionDialog.submitting}
+                  data-testid="textarea-redirect-correction-reason"
+                />
+                <p className="text-[11px] text-muted-foreground">Required · minimum 10 characters</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Reversal fiscal period</Label>
+                {correctionDialog.loadingPeriods ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading open periods…
+                  </div>
+                ) : correctionDialog.periods.length === 0 ? (
+                  <p className="text-xs text-destructive">
+                    No open or soft-closed fiscal period contains today. Finance must open a valid period first.
+                  </p>
+                ) : (
+                  <Select
+                    value={correctionDialog.periodId}
+                    onValueChange={periodId => setCorrectionDialog(current => current
+                      ? { ...current, periodId, error: undefined }
+                      : current)}
+                    disabled={correctionDialog.submitting}
+                  >
+                    <SelectTrigger data-testid="select-redirect-correction-period">
+                      <SelectValue placeholder="Select fiscal period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {correctionDialog.periods.map(period => (
+                        <SelectItem key={period.id} value={period.id}>
+                          Period {period.period_no} · {period.start_date} to {period.end_date} ({period.status})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {correctionDialog.error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{correctionDialog.error}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCorrectionDialog(null)}
+              disabled={correctionDialog?.submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => void submitRedirectCorrection()}
+              disabled={
+                !correctionDialog
+                || correctionDialog.submitting
+                || correctionDialog.loadingPeriods
+                || !correctionDialog.periodId
+                || correctionDialog.reason.trim().length < 10
+              }
+              data-testid="button-confirm-redirect-correction"
+            >
+              {correctionDialog?.submitting
+                ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                : <RotateCcw className="h-4 w-4 mr-1.5" />}
+              Reverse journal and reopen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -950,13 +1241,17 @@ interface SiteCardProps {
   onTargetMmpChange: (mmpId: string) => void;
   onLoadSameMmpSites: () => void;
   onExecute: () => void;
+  correctedHistory: CorrectedRedirectHistory[];
+  canCorrectRedirect: boolean;
+  onCorrectRedirect: () => void;
   variant: 'paid' | 'approved';
 }
 
 function SiteCard({
   site, decision: d, decisions, isDone, canOverride, canExecute, setDecision, variant,
   openMmps, targetCycleLoadError, targetSites, loadingTargetSites, executing, isDraftValid,
-  onTargetMmpChange, onLoadSameMmpSites, onExecute,
+  onTargetMmpChange, onLoadSameMmpSites, onExecute, correctedHistory,
+  canCorrectRedirect, onCorrectRedirect,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
@@ -996,6 +1291,40 @@ function SiteCard({
 
   return (
     <div className={`border rounded-lg overflow-hidden ${borderClass}`}>
+      {correctedHistory.map(history => (
+        <div
+          key={history.actionId}
+          className="border-b border-amber-200 bg-amber-50/80 px-4 py-3 text-xs space-y-1.5"
+          data-testid={`corrected-redirect-history-${history.actionId}`}
+        >
+          <div className="flex items-center gap-2 text-amber-900 font-semibold">
+            <RotateCcw className="h-3.5 w-3.5" />
+            Previous Redirect reversed and reopened for correction
+          </div>
+          <p className="text-amber-800">
+            Corrected {history.correctedAt ? new Date(history.correctedAt).toLocaleString('en-GB') : 'at an unrecorded time'}
+            {history.correctedByName ? ` by ${history.correctedByName}` : ''}.
+            The original action is retained below for audit history.
+          </p>
+          {history.correctionReason && (
+            <p className="rounded border border-amber-200 bg-white/70 px-2 py-1">
+              <span className="font-medium">Reason: </span>{history.correctionReason}
+            </p>
+          )}
+          <div className="grid gap-x-3 sm:grid-cols-2">
+            {history.originalJournalEntryId && (
+              <DetailRow label="Original journal" value={history.originalJournalEntryId} mono />
+            )}
+            {history.reversalJournalEntryId && (
+              <DetailRow label="Reversal journal" value={history.reversalJournalEntryId} mono />
+            )}
+            <DetailRow label="Original action" value={history.actionId} mono />
+            {history.replacementActionId && (
+              <DetailRow label="Replacement action" value={history.replacementActionId} mono />
+            )}
+          </div>
+        </div>
+      ))}
       {/* ── Done banner ─────────────────────────────────────────────── */}
       {isDone && chosen && (
         <>
@@ -1021,6 +1350,13 @@ function SiteCard({
               chosenLabel={chosen.label}
               openMmps={openMmps}
               site={site}
+              canCorrectRedirect={
+                canCorrectRedirect
+                && d?.decision === 'redirect'
+                && !!d.actionId
+                && (d.allocations?.length ?? 0) === 0
+              }
+              onCorrectRedirect={onCorrectRedirect}
             />
           )}
         </>
@@ -1551,11 +1887,15 @@ function ExecutionDetails({
   chosenLabel,
   openMmps,
   site,
+  canCorrectRedirect,
+  onCorrectRedirect,
 }: {
   decision: ExceptionDecision | undefined;
   chosenLabel: string;
   openMmps: OpenMmp[];
   site: ExceptionSite;
+  canCorrectRedirect: boolean;
+  onCorrectRedirect: () => void;
 }) {
   if (!decision) return null;
 
@@ -1691,6 +2031,25 @@ function ExecutionDetails({
             <a className="font-semibold underline" href="/field-payments?tab=fees">Field Payments Centre → Fees</a>;
             and search the GL journal ID in <strong>Accounting → GL Bridge Audit / Ledger</strong>.
           </p>
+          {canCorrectRedirect && (
+            <div className="border-t border-amber-200 pt-2 mt-2 space-y-2">
+              <p className="text-amber-800">
+                If this legacy Redirect settled the wrong site, Finance can reverse its journal
+                and return the paid advance to the unresolved queue without deleting this history.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-amber-400 text-amber-800 hover:bg-amber-50"
+                onClick={onCorrectRedirect}
+                data-testid={`button-reopen-redirect-${decision.actionId}`}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                Reopen advance for correction
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {decision.actionId && (
