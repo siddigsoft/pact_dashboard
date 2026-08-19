@@ -63,7 +63,6 @@ export type JournalEntryFilters = {
   periodId: string;
   status: string;
   source: string;
-  countryId: string;
   search: string;
   page: number;
   pageSize?: number;
@@ -78,14 +77,13 @@ export type JournalEntriesPage = {
 function applyJournalFilters(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
-  filters: Pick<JournalEntryFilters, 'periodId' | 'status' | 'source' | 'countryId' | 'search'>,
+  filters: Pick<JournalEntryFilters, 'periodId' | 'status' | 'source' | 'search'>,
   opts?: { skipStatus?: boolean }
 ) {
   let q = query;
   if (filters.periodId !== 'all') q = q.eq('period_id', filters.periodId);
   if (!opts?.skipStatus && filters.status !== 'all') q = q.eq('status', filters.status);
   if (filters.source !== 'all') q = q.eq('source_type', filters.source);
-  if (filters.countryId !== 'all') q = q.eq('country_id', filters.countryId);
   const search = filters.search.trim().replace(/[%_,]/g, ' ').slice(0, 80);
   if (search) {
     const asNum = Number(search);
@@ -180,7 +178,6 @@ export async function fetchJournalEntriesPage(
     periodId: filters.periodId,
     status: 'all' as const,
     source: filters.source,
-    countryId: filters.countryId,
     search: filters.search,
   };
 
@@ -248,7 +245,6 @@ export function useJournalEntriesQuery(filters: JournalEntryFilters, enabled = t
       periodId: filters.periodId,
       status: filters.status,
       source: filters.source,
-      countryId: filters.countryId,
       search: filters.search,
       page: filters.page,
       pageSize: filters.pageSize ?? JOURNAL_PAGE_SIZE,

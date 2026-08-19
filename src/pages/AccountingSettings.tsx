@@ -10,10 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import {
   Loader2, RefreshCw, Settings2, FlaskConical, AlertTriangle, CheckCircle2,
-  Globe, Save, Database, Activity, Zap, Shield, BookOpen, BarChart3,
+  Database, Activity, Zap, Shield, BookOpen, BarChart3,
   TrendingUp, Package, Landmark, Clock, FileText, ShoppingCart, Receipt,
   ClipboardList, ChevronRight, ExternalLink, Wallet, CreditCard, PiggyBank,
   ListChecks, Circle, AlertCircle, Info,
@@ -21,8 +20,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatNumber } from '@/lib/accountingFormat';
 
 interface FeatureFlag {
@@ -177,8 +174,6 @@ export default function AccountingSettings() {
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canToggle = isSuperAdmin;
   const { toast } = useToast();
-  const { countryId, setCountryId, saveProfileCountry, countries: acctCountries, selectedCountry, loading: acctLoading } = useAccountingCountry();
-  const [savingCountry, setSavingCountry] = useState(false);
 
   const [flags, setFlags]       = useState<FeatureFlag[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -282,7 +277,7 @@ export default function AccountingSettings() {
     { id: 'health',   label: 'Module Health',   icon: Activity },
     { id: 'phases',   label: 'Phase Roadmap',   icon: ListChecks },
     { id: 'flags',    label: 'Feature Flags',   icon: Settings2 },
-    { id: 'country',  label: 'Country Scope',   icon: Globe },
+    { id: 'links',    label: 'Quick Links',     icon: BookOpen },
     ...(isSuperAdmin ? [{ id: 'seed', label: 'Dev Tools', icon: FlaskConical }] : []),
   ];
 
@@ -595,95 +590,31 @@ export default function AccountingSettings() {
         </div>
       )}
 
-      {/* ── COUNTRY SCOPE ─────────────────────────────────────────────── */}
-      {activeSection === 'country' && (
+      {activeSection === 'links' && (
         <Card className="border shadow-sm">
-          <CardHeader className="bg-gradient-to-r from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-800/20 border-b p-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-teal-500 rounded-lg"><Globe className="h-4 w-4 text-white" /></div>
-              <div>
-                <CardTitle className="text-base">Active Country Scope</CardTitle>
-                <CardDescription className="text-xs">
-                  Your session default country for COA, Journals &amp; Trial Balance.
-                </CardDescription>
-              </div>
-            </div>
+          <CardHeader className="border-b p-4">
+            <CardTitle className="text-base">Accounting Quick Links</CardTitle>
+            <CardDescription className="text-xs">
+              Open the accounting workspace you need without applying a country scope.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-              <div className="space-y-1 flex-1">
-                <Label className="text-sm font-medium">Country</Label>
-                <Select value={countryId} onValueChange={setCountryId} disabled={acctLoading}>
-                  <SelectTrigger className="h-10" data-testid="select-acct-settings-country">
-                    <SelectValue placeholder="Select country…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      <span className="flex items-center gap-2"><Globe className="h-4 w-4 text-muted-foreground" /> All countries</span>
-                    </SelectItem>
-                    {acctCountries.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          {c.flag_emoji && <span>{c.flag_emoji}</span>}
-                          {c.name_en}
-                          <span className="text-muted-foreground text-xs">({c.currency_code})</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedCountry && (
-                <div className="p-3 bg-muted/50 rounded-lg flex items-center gap-3 min-w-[200px]">
-                  <span className="text-2xl">{selectedCountry.flag_emoji ?? '🌍'}</span>
-                  <div>
-                    <p className="text-sm font-medium">{selectedCountry.name_en}</p>
-                    <p className="text-xs text-muted-foreground">{selectedCountry.currency_code} {selectedCountry.currency_symbol}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline"
-                onClick={async () => {
-                  setSavingCountry(true);
-                  const ok = await saveProfileCountry(countryId);
-                  setSavingCountry(false);
-                  if (ok) toast({ title: 'Default country saved' });
-                  else toast({ title: 'Save failed', variant: 'destructive' });
-                }}
-                disabled={savingCountry || acctLoading}
-                data-testid="button-save-acct-country">
-                {savingCountry ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                Set as My Default
-              </Button>
-              <p className="text-xs text-muted-foreground self-center">
-                Saves permanently to your profile (same as Settings → Workspace).
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* Quick links */}
-            <div>
-              <p className="text-sm font-medium mb-3">Quick Navigation</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {[
-                  { label: 'Chart of Accounts', to: '/accounting/coa', icon: BarChart3 },
-                  { label: 'Journal Entries', to: '/accounting/journals', icon: BookOpen },
-                  { label: 'Trial Balance', to: '/accounting/trial-balance', icon: TrendingUp },
-                  { label: 'General Ledger', to: '/accounting/ledger', icon: BookOpen },
-                  { label: 'Financial Statements', to: '/accounting/reports', icon: FileText },
-                  { label: 'GL Bridge', to: '/accounting/gl-bridge', icon: Zap },
-                ].map(link => (
-                  <Link key={link.to} to={link.to}
-                    className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors text-sm">
-                    <link.icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">{link.label}</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0" />
-                  </Link>
-                ))}
-              </div>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { label: 'Chart of Accounts', to: '/accounting/coa', icon: BarChart3 },
+                { label: 'Journal Entries', to: '/accounting/journals', icon: BookOpen },
+                { label: 'Trial Balance', to: '/accounting/trial-balance', icon: TrendingUp },
+                { label: 'General Ledger', to: '/accounting/ledger', icon: BookOpen },
+                { label: 'Financial Statements', to: '/accounting/reports', icon: FileText },
+                { label: 'GL Bridge', to: '/accounting/gl-bridge', icon: Zap },
+              ].map(link => (
+                <Link key={link.to} to={link.to}
+                  className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors text-sm">
+                  <link.icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="truncate">{link.label}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0" />
+                </Link>
+              ))}
             </div>
           </CardContent>
         </Card>

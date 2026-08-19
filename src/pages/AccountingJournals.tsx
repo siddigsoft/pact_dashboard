@@ -17,7 +17,6 @@ import { format, parseISO } from 'date-fns';
 import { exportToExcel } from '@/utils/report-export';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
-import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -70,14 +69,12 @@ export default function AccountingJournals() {
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
   const { toast } = useToast();
-  const { countryId: defaultCountryId } = useAccountingCountry();
 
   const invalidateJournals = useInvalidateJournalsBundle();
 
   const [periodFilter, setPeriodFilter]   = useState<string>('all');
   const [statusFilter, setStatusFilter]   = useState<string>('all');
   const [sourceFilter, setSourceFilter]   = useState<string>('all');
-  const [countryFilter]                   = useState<string>('all'); // country filter removed — always show all
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -93,7 +90,6 @@ export default function AccountingJournals() {
       periodId: periodFilter,
       status: statusFilter,
       source: sourceFilter,
-      countryId: countryFilter,
       search: debouncedSearch,
       page,
       pageSize: PAGE_SIZE,
@@ -168,7 +164,7 @@ export default function AccountingJournals() {
     setNewDate(today);
     setNewDescEn('');
     setNewDescAr('');
-    setNewCountryId(defaultCountryId);
+    setNewCountryId('all');
     setNewLines([BLANK_LINE(), BLANK_LINE()]);
     setBackdateReason('');
     setNewOpen(true);
@@ -251,7 +247,7 @@ export default function AccountingJournals() {
     }
   };
 
-  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, countryFilter, debouncedSearch]);
+  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, debouncedSearch]);
 
   const periodLabel = (id: string) => {
     const p = periods.find(x => x.id === id);
@@ -279,7 +275,6 @@ export default function AccountingJournals() {
         periodId: periodFilter,
         status: statusFilter,
         source: sourceFilter,
-        countryId: countryFilter,
         search: debouncedSearch,
       });
       const rows = rowsData.map(e => ({
@@ -311,7 +306,6 @@ export default function AccountingJournals() {
         periodId: periodFilter,
         status: statusFilter,
         source: sourceFilter,
-        countryId: countryFilter,
         search: debouncedSearch,
       });
       const header = ['Entry #', 'Posting Date', 'Period', 'Status', 'Source Type', 'Source ID', 'Description (EN)', 'Description (AR)', 'Idempotency Key', 'Posted At', 'Created At'];
