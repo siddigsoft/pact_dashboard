@@ -140,7 +140,7 @@ const approvedDecisionsFor = (s: ExceptionSite) =>
 
 export default function Step5Exceptions({
   wizardState, updateWizardState, onNext, onBack, canGoBack, canOverride,
-  roleFlags,
+  roleFlags, currentUser,
 }: Props) {
   const [exceptions, setExceptions]           = useState<ExceptionSite[]>([]);
   const [loading, setLoading]                 = useState(true);
@@ -323,6 +323,7 @@ export default function Step5Exceptions({
         receiptReference: row.receipt_reference ?? undefined,
         returnMethod: row.return_method ?? undefined,
         recoveryDate: row.recovery_date ?? undefined,
+        executedByName: row.executed_by_name ?? undefined,
         executed: true,
         actionId: row.id,
         executedAt: row.executed_at ?? undefined,
@@ -448,6 +449,7 @@ export default function Step5Exceptions({
         executed: true,
         actionId: result.action_id,
         executedAt: result.executed_at,
+        executedByName: currentUser?.fullName ?? currentUser?.full_name ?? currentUser?.email ?? undefined,
         journalEntryId: result.journal_entry_id ?? undefined,
         targetSiteName: selectedTarget?.site_name ?? d.targetSiteName,
         executionError: undefined,
@@ -752,6 +754,7 @@ function SiteCard({
   onTargetMmpChange, onLoadSameMmpSites, onExecute,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
+  const [showExecutionDetails, setShowExecutionDetails] = useState(false);
   const isPartial = site.advanceStatus === 'partially_paid';
 
   const badgeEl = variant === 'paid' ? (
@@ -780,13 +783,31 @@ function SiteCard({
     <div className={`border rounded-lg overflow-hidden ${borderClass}`}>
       {/* ── Done banner ─────────────────────────────────────────────── */}
       {isDone && chosen && (
-        <div className="bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2 text-green-700 text-xs font-semibold">
-          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-          Action executed — {chosen.label}
-          <span className="ml-auto text-green-500 text-[10px] font-normal">
-            {d?.journalEntryId ? `GL journal ${d.journalEntryId.slice(0, 8)}…` : 'Ready to advance ✓'}
-          </span>
-        </div>
+        <>
+          <button
+            type="button"
+            className="w-full bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2 text-green-700 text-xs font-semibold text-left hover:bg-green-100 transition-colors"
+            onClick={() => setShowExecutionDetails(value => !value)}
+            aria-expanded={showExecutionDetails}
+            data-testid={`toggle-execution-details-${site.advanceId}`}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Action executed — {chosen.label}</span>
+            <span className="ml-auto flex items-center gap-2 text-green-500 text-[10px] font-normal">
+              {d?.journalEntryId ? `GL journal ${d.journalEntryId.slice(0, 8)}…` : 'Completed ✓'}
+              {showExecutionDetails
+                ? <ChevronUp className="h-3.5 w-3.5" />
+                : <ChevronDown className="h-3.5 w-3.5" />}
+            </span>
+          </button>
+          {showExecutionDetails && (
+            <ExecutionDetails
+              decision={d}
+              chosenLabel={chosen.label}
+              openMmps={openMmps}
+            />
+          )}
+        </>
       )}
       <div className="p-4 space-y-3">
       {/* Site header */}
@@ -1270,6 +1291,96 @@ function SiteCard({
         </p>
       )}
       </div>
+    </div>
+  );
+}
+
+function ExecutionDetails({
+  decision,
+  chosenLabel,
+  openMmps,
+}: {
+  decision: ExceptionDecision | undefined;
+  chosenLabel: string;
+  openMmps: OpenMmp[];
+}) {
+  if (!decision) return null;
+
+  const targetMmpName = decision.targetMmpId
+    ? openMmps.find(mmp => mmp.id === decision.targetMmpId)?.name
+    : undefined;
+  const formatDateTime = (value?: string) => value
+    ? new Date(value).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+    : 'Not recorded';
+
+  return (
+    <div
+      className="border-b border-green-200 bg-green-50/60 px-4 py-3 text-xs space-y-2"
+      data-testid={`execution-details-${decision.actionId ?? 'completed'}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-green-800">Execution details</p>
+        <span className="text-green-700">Completed successfully</span>
+      </div>
+      <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        <DetailRow label="Action" value={chosenLabel} />
+        <DetailRow label="Executed at" value={formatDateTime(decision.executedAt)} />
+        <DetailRow label="Executed by" value={decision.executedByName || 'Not recorded'} />
+        <DetailRow label="Amount" value={decision.amount != null ? `SDG ${decision.amount.toLocaleString()}` : 'Not applicable'} />
+        {decision.journalEntryId && (
+          <DetailRow label="GL journal entry" value={decision.journalEntryId} mono />
+        )}
+        {decision.returnMethod && (
+          <DetailRow
+            label="Return method"
+            value={decision.returnMethod === 'bank_transfer' ? 'Bank transfer' : 'Cash'}
+          />
+        )}
+        {decision.recoveryDate && <DetailRow label="Recovery date" value={decision.recoveryDate} />}
+        {decision.receiptReference && (
+          <DetailRow label="Receipt / transfer reference" value={decision.receiptReference} />
+        )}
+        {decision.targetMmpId && (
+          <DetailRow label="Target cycle" value={targetMmpName || decision.targetMmpId} />
+        )}
+        {decision.targetSiteId && (
+          <DetailRow label="Target site" value={decision.targetSiteName || decision.targetSiteId} />
+        )}
+      </div>
+      {decision.justification && (
+        <div className="rounded border border-green-200 bg-white/70 px-2 py-1.5">
+          <span className="font-medium text-green-800">Justification: </span>
+          <span className="text-slate-700">{decision.justification}</span>
+        </div>
+      )}
+      {decision.journalEntryId && decision.decision === 'redirect' && (
+        <p className="text-green-700">
+          GL posting: Debit Enumerator Fees · Credit Transport Advance
+        </p>
+      )}
+      {decision.actionId && (
+        <p className="font-mono text-[10px] text-green-700/80">Action ID: {decision.actionId}</p>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="text-muted-foreground">{label}: </span>
+      <span className={mono ? 'font-mono break-all' : 'font-medium text-slate-700'}>{value}</span>
     </div>
   );
 }
