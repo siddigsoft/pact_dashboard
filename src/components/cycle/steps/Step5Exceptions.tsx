@@ -96,6 +96,12 @@ interface RedirectCorrectionDialog {
   error?: string;
 }
 
+const createCorrectionIdempotencyKey = (actionId: string): string => {
+  const browserUuid = globalThis.crypto?.randomUUID?.();
+  const fallbackNonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${actionId}:${browserUuid || fallbackNonce}`;
+};
+
 const toSettlementTarget = (target: TargetSite): RedirectSettlementTarget => ({
   id: target.id,
   siteName: target.site_name,
@@ -572,9 +578,9 @@ export default function Step5Exceptions({
     updateWizardState({ exceptionDecisions: nextDecisions });
   };
 
-  const openRedirectCorrection = async (site: ExceptionSite, decision: ExceptionDecision) => {
+  const openRedirectCorrection = (site: ExceptionSite, decision: ExceptionDecision) => {
     if (!decision.actionId || !canCorrectRedirect) return;
-    const idempotencyKey = `${decision.actionId}:${crypto.randomUUID()}`;
+    const idempotencyKey = createCorrectionIdempotencyKey(decision.actionId);
     setCorrectionDialog({
       site,
       decision,
@@ -586,24 +592,37 @@ export default function Step5Exceptions({
       submitting: false,
     });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await (supabase as any)
-      .from('acct_fiscal_periods')
-      .select('id, period_no, start_date, end_date, status')
-      .in('status', ['open', 'soft_closed'])
-      .lte('start_date', today)
-      .gte('end_date', today)
-      .order('start_date', { ascending: false });
-    const periods = (data ?? []) as FiscalPeriod[];
-    setCorrectionDialog(current => current?.idempotencyKey === idempotencyKey
-      ? {
-        ...current,
-        periods,
-        periodId: periods[0]?.id ?? '',
-        loadingPeriods: false,
-        error: error ? `Could not load fiscal periods: ${error.message}` : undefined,
+    void (async () => {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data, error } = await (supabase as any)
+          .from('acct_fiscal_periods')
+          .select('id, period_no, start_date, end_date, status')
+          .in('status', ['open', 'soft_closed'])
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .order('start_date', { ascending: false });
+        const periods = (data ?? []) as FiscalPeriod[];
+        setCorrectionDialog(current => current?.idempotencyKey === idempotencyKey
+          ? {
+            ...current,
+            periods,
+            periodId: periods[0]?.id ?? '',
+            loadingPeriods: false,
+            error: error ? `Could not load fiscal periods: ${error.message}` : undefined,
+          }
+          : current);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        setCorrectionDialog(current => current?.idempotencyKey === idempotencyKey
+          ? {
+            ...current,
+            loadingPeriods: false,
+            error: `Could not load fiscal periods: ${message}`,
+          }
+          : current);
       }
-      : current);
+    })();
   };
 
   const submitRedirectCorrection = async () => {
@@ -2042,7 +2061,11 @@ function ExecutionDetails({
                 size="sm"
                 variant="outline"
                 className="h-8 border-amber-400 text-amber-800 hover:bg-amber-50"
-                onClick={onCorrectRedirect}
+                onClick={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onCorrectRedirect();
+                }}
                 data-testid={`button-reopen-redirect-${decision.actionId}`}
               >
                 <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
