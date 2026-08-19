@@ -10,7 +10,8 @@
 --    20260819h_cycle_exception_journal_line_ids.sql, and — for the
 --    reprocessed-payment reversal regression (section 11) —
 --    20260819o_cycle_redirect_reprocessed_payment_reversal.sql and
---    20260819p_cycle_redirect_finance_snapshot_review.sql)
+--    20260819p_cycle_redirect_finance_snapshot_review.sql and
+--    20260819q_cycle_redirect_finance_confirmation.sql)
 --
 -- Task #548 — Cycle Close: Inline Exception Execution
 --
@@ -3339,11 +3340,11 @@ BEGIN
   PERFORM pg_temp.assert_eq('invalid Finance review creates no audit record', v_count, 0);
 
   v_result := public.review_legacy_redirect_fee_snapshot(
-    v_action_id, 1000, 0, 1000, 0,
+    v_action_id,
     'Verified original journal, advance, fee, later activity and payment provenance',
     true, 'ce54-finance-review-success'
   );
-  PERFORM pg_temp.assert_ok('Finance review accepts exact legacy evidence', v_result);
+  PERFORM pg_temp.assert_ok('confirmation-only Finance review derives exact legacy evidence', v_result);
   SELECT count(*) INTO v_count FROM public.cycle_redirect_fee_snapshot_reviews
   WHERE action_id = v_action_id
     AND gross_fee = 1000 AND prior_settled_amount = 0

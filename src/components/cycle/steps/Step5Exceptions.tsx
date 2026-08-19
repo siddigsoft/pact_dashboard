@@ -101,11 +101,6 @@ interface RedirectCorrectionDialog {
   confirmReverseLaterPayment: boolean;
   /** Separate immutable Finance attestation for a legacy action with no snapshot. */
   snapshotReviewKey: string;
-  snapshotGrossFee: string;
-  snapshotPriorSettled: string;
-  snapshotSettled: string;
-  snapshotRemaining: string;
-  snapshotReviewReason: string;
   confirmSnapshotReview: boolean;
   snapshotReviewSubmitting: boolean;
   snapshotReviewedAt?: string;
@@ -720,11 +715,6 @@ export default function Step5Exceptions({
       reprocessedModeAvailable: true,
       confirmReverseLaterPayment: false,
       snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
-      snapshotGrossFee: String(decision.feeGrossAmount ?? decision.feeSettledAmount ?? decision.amount ?? site.advancePaid ?? ''),
-      snapshotPriorSettled: String(decision.feePriorSettledAmount ?? 0),
-      snapshotSettled: String(decision.feeSettledAmount ?? decision.amount ?? site.advancePaid ?? ''),
-      snapshotRemaining: String(decision.feeRemainingAmount ?? 0),
-      snapshotReviewReason: '',
       confirmSnapshotReview: false,
       snapshotReviewSubmitting: false,
       periods: [],
@@ -771,25 +761,9 @@ export default function Step5Exceptions({
 
   const submitSnapshotReview = async () => {
     if (!correctionDialog?.decision.actionId) return;
-    const gross = Number(correctionDialog.snapshotGrossFee);
-    const prior = Number(correctionDialog.snapshotPriorSettled);
-    const settled = Number(correctionDialog.snapshotSettled);
-    const remaining = Number(correctionDialog.snapshotRemaining);
     if (!correctionDialog.confirmSnapshotReview) {
       updateRedirectCorrection({
-        error: 'Confirm the Finance evidence review before saving it.\nأكد مراجعة الأدلة المالية قبل حفظها.',
-      });
-      return;
-    }
-    if (correctionDialog.snapshotReviewReason.trim().length < 10) {
-      updateRedirectCorrection({
-        error: 'Enter a Finance review reason of at least 10 characters.\nأدخل سبب مراجعة مالية مكوّناً من 10 أحرف على الأقل.',
-      });
-      return;
-    }
-    if (![gross, prior, settled, remaining].every(Number.isFinite)) {
-      updateRedirectCorrection({
-        error: 'Enter valid numeric amounts for every reviewed fee field.\nأدخل مبالغ رقمية صالحة لكل حقول الرسوم التي تمت مراجعتها.',
+        error: 'Confirm the Finance review before recalling the payment.\nأكد مراجعة المالية قبل استدعاء الدفعة.',
       });
       return;
     }
@@ -800,23 +774,25 @@ export default function Step5Exceptions({
         'review_legacy_redirect_fee_snapshot',
         {
           p_action_id: correctionDialog.decision.actionId,
-          p_gross_fee: gross,
-          p_prior_settled_amount: prior,
-          p_settled_amount: settled,
-          p_remaining_amount: remaining,
-          p_reason: correctionDialog.snapshotReviewReason.trim(),
+          p_reason: 'Finance confirmed restoration to the exact pre-Redirect payment state.',
           p_confirm_review: true,
           p_idempotency_key: correctionDialog.snapshotReviewKey,
         },
       );
       if (error) throw new Error(error.message);
       const result = data as { ok?: boolean; error?: string; reviewed_at?: string } | null;
-      if (!result?.ok) throw new Error(result?.error || 'The Finance snapshot review could not be saved.');
+      // A complete immutable snapshot does not need a separate review row. The
+      // same confirmation still authorizes the normal reversal path.
+      if (!result?.ok && !result?.error?.includes('already has an immutable fee snapshot')) {
+        throw new Error(result?.error || 'The Finance review could not be saved.');
+      }
       updateRedirectCorrection({
         snapshotReviewSubmitting: false,
         snapshotReviewedAt: result.reviewed_at ?? new Date().toISOString(),
+        confirmReverseLaterPayment: true,
         error: undefined,
       });
+      await submitRedirectCorrection(true);
     } catch (error: unknown) {
       updateRedirectCorrection({
         snapshotReviewSubmitting: false,
@@ -825,9 +801,11 @@ export default function Step5Exceptions({
     }
   };
 
-  const submitRedirectCorrection = async () => {
+  const submitRedirectCorrection = async (confirmedFromFinanceReview = false) => {
     if (!correctionDialog?.decision.actionId) return;
-    if (correctionDialog.reason.trim().length < 10) {
+    const correctionReason = correctionDialog.reason.trim()
+      || 'Finance confirmed recall of the reprocessed payment to restore the original payment state.';
+    if (!confirmedFromFinanceReview && correctionDialog.reason.trim().length < 10) {
       setCorrectionDialog(current => current
         ? {
           ...current,
@@ -845,7 +823,11 @@ export default function Step5Exceptions({
         : current);
       return;
     }
-    if (correctionDialog.mode === 'reverse_reprocessed_payment' && !correctionDialog.confirmReverseLaterPayment) {
+    if (
+      correctionDialog.mode === 'reverse_reprocessed_payment'
+      && !correctionDialog.confirmReverseLaterPayment
+      && !confirmedFromFinanceReview
+    ) {
       setCorrectionDialog(current => current
         ? {
           ...current,
@@ -867,7 +849,7 @@ export default function Step5Exceptions({
           : 'reopen_cycle_redirect_for_correction';
       const rpcParams: Record<string, unknown> = {
         p_action_id: correctionDialog.decision.actionId,
-        p_reason: correctionDialog.reason.trim(),
+        p_reason: correctionReason,
         p_period_id: correctionDialog.periodId,
         p_idempotency_key: correctionDialog.idempotencyKey,
       };
@@ -2323,7 +2305,8 @@ function RedirectCorrectionPanel({
     && correction.error?.includes('Redirect fee snapshot is incomplete');
   const canSaveSnapshotReview = !correction.snapshotReviewSubmitting
     && correction.confirmSnapshotReview
-    && correction.snapshotReviewReason.trim().length >= 10;
+    && !correction.loadingPeriods
+    && !!correction.periodId;
 
   return (
     <div
@@ -2417,111 +2400,62 @@ function RedirectCorrectionPanel({
       )}
 
       {reverseReprocessed && (
-        <label
-          className="flex items-start gap-2 rounded border border-red-300 bg-red-50/80 p-2 cursor-pointer"
-          data-testid="redirect-correction-reverse-confirm-label"
-        >
-          <Checkbox
-            checked={correction.confirmReverseLaterPayment}
-            onCheckedChange={checked => onChange({
-              confirmReverseLaterPayment: checked === true,
-              error: undefined,
-            })}
-            disabled={correction.submitting}
-            className="mt-0.5"
-            data-testid="checkbox-confirm-reverse-later-payment"
-          />
-          <span className="text-[11px] text-red-900">
-            <span className="block">I understand this will reverse all later-payment GL and wallet effects. All records are preserved for audit, and the original advance is restored for a new resolution.</span>
-            <span dir="rtl" className="block">أفهم أن هذا سيعكس جميع آثار دفتر الأستاذ والمحفظة للدفعات اللاحقة. ستُحفظ جميع السجلات للتدقيق، وستُعاد السلفة الأصلية لتسوية جديدة.</span>
-            <span className="font-semibold block">Required to proceed · مطلوب للمتابعة</span>
-          </span>
-        </label>
-      )}
-
-      {reverseReprocessed && (
         <div className="rounded border border-blue-300 bg-blue-50/80 p-3 space-y-3" data-testid="finance-snapshot-review-panel">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-800" />
             <div className="text-xs text-blue-950 space-y-0.5">
               <p className="font-semibold">Finance evidence review · مراجعة الأدلة المالية</p>
-              <p>This is needed only when the legacy Redirect has no immutable fee snapshot. It records a separate, immutable attestation; it never changes the original Redirect.</p>
-              <p dir="rtl">تُطلب هذه المراجعة فقط عندما لا تحتوي إعادة التوجيه القديمة على لقطة رسوم غير قابلة للتغيير. تحفظ إقراراً مستقلاً لا يُعدّل إعادة التوجيه الأصلية أبداً.</p>
+              <p>Confirm once to recall the later payment and restore the original payment state. The system calculates and validates the exact amount from the locked fee and journal records.</p>
+              <p dir="rtl">أكد مرة واحدة لاستدعاء الدفعة اللاحقة وإعادة حالة الدفعة الأصلية. يحسب النظام المبلغ الدقيق ويتحقق منه من سجلات الرسوم والقيد المقفلة.</p>
             </div>
           </div>
           <div className="grid gap-x-3 sm:grid-cols-2 text-xs">
-            <DetailRow label="Original Redirect journal · القيد الأصلي" value={correction.decision.journalEntryId ?? 'Missing'} mono />
-            <DetailRow label="Original paid advance · السلفة المدفوعة الأصلية" value={`SDG ${(correction.site.advancePaid ?? correction.decision.amount ?? 0).toLocaleString()}`} />
-            <DetailRow label="Current gross fee · إجمالي الرسوم الحالي" value={correction.decision.feeGrossAmount != null ? `SDG ${correction.decision.feeGrossAmount.toLocaleString()}` : 'Not recorded on legacy action'} />
-            <DetailRow label="Current fee settlement · تسوية الرسوم الحالية" value={correction.decision.feeSettlementStatus === 'paid' ? 'Paid · مدفوعة' : correction.decision.feeSettlementStatus ?? 'Legacy record'} />
-            <DetailRow label="Saved payment references · مراجع الدفع المحفوظة" value={correction.decision.sourcePaymentReferences?.join(', ') || 'No reference recorded'} mono />
-            <DetailRow label="Redirect allocations · تخصيصات إعادة التوجيه" value={correction.decision.allocations?.length ? `${correction.decision.allocations.length} target(s)` : 'Legacy single-site settlement'} />
+            <DetailRow label="Amount to recall · مبلغ الاستدعاء" value={`SDG ${(correction.site.feePaidAmount ?? correction.decision.feeSettledAmount ?? correction.site.advancePaid ?? 0).toLocaleString()}`} />
+            <DetailRow label="Original payment · الدفعة الأصلية" value={correction.site.advanceId} mono />
           </div>
           {correction.snapshotReviewedAt ? (
-            <Alert className="border-green-300 bg-green-50 text-green-950">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Finance review saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The high-risk reversal will re-check all evidence on submission.
-                <span dir="rtl" className="block">تم حفظ مراجعة المالية. سيُعاد التحقق من جميع الأدلة عند تقديم العكس عالي الخطورة.</span>
-              </AlertDescription>
-            </Alert>
+            <>
+              <Alert className="border-green-300 bg-green-50 text-green-950">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  Finance confirmation saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The payment can now be recalled safely.
+                  <span dir="rtl" className="block">تم حفظ تأكيد المالية. يمكن الآن استدعاء الدفعة بأمان.</span>
+                </AlertDescription>
+              </Alert>
+              <div className="flex justify-end">
+                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={correction.snapshotReviewSubmitting || correction.submitting}>
+                  {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
+                </Button>
+              </div>
+            </>
           ) : (
             <>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  ['snapshotGrossFee', 'Gross fee · إجمالي الرسوم', correction.snapshotGrossFee],
-                  ['snapshotPriorSettled', 'Prior settled · المسدد سابقاً', correction.snapshotPriorSettled],
-                  ['snapshotSettled', 'Settled by Redirect · المسدد بإعادة التوجيه', correction.snapshotSettled],
-                  ['snapshotRemaining', 'Fee remaining · الرسوم المتبقية', correction.snapshotRemaining],
-                ].map(([field, label, value]) => (
-                  <div key={field} className="space-y-1">
-                    <Label htmlFor={`finance-review-${field}`}>{label}</Label>
-                    <Input
-                      id={`finance-review-${field}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={value}
-                      onChange={event => onChange({ [field]: event.target.value } as Partial<RedirectCorrectionDialog>)}
-                      disabled={correction.snapshotReviewSubmitting || correction.submitting}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="finance-snapshot-review-reason">Review evidence and reason · سبب ومصدر المراجعة</Label>
-                <Textarea
-                  id="finance-snapshot-review-reason"
-                  rows={2}
-                  value={correction.snapshotReviewReason}
-                  onChange={event => onChange({ snapshotReviewReason: event.target.value, error: undefined })}
-                  placeholder="State the journal, advance and fee evidence verified… · اذكر أدلة القيد والسلفة والرسوم التي تم التحقق منها…"
-                  disabled={correction.snapshotReviewSubmitting || correction.submitting}
-                />
-              </div>
               <label className="flex items-start gap-2 rounded border border-blue-200 bg-white/70 p-2 cursor-pointer text-xs">
                 <Checkbox
                   checked={correction.confirmSnapshotReview}
                   onCheckedChange={checked => onChange({ confirmSnapshotReview: checked === true, error: undefined })}
                   disabled={correction.snapshotReviewSubmitting || correction.submitting}
                 />
-                <span>I verified the original posted journal, paid advance, fee state, later fee activity, and payment provenance. Save this immutable Finance review.<span dir="rtl" className="block">لقد تحققت من القيد والسلفة وحالة الرسوم والنشاط اللاحق وسجل الدفع. احفظ مراجعة المالية غير القابلة للتغيير.</span></span>
+                <span>I confirm that this payment should be recalled and restored to the original pre-Redirect state.<span dir="rtl" className="block">أؤكد أنه يجب استدعاء هذه الدفعة وإعادتها إلى الحالة الأصلية قبل إعادة التوجيه.</span></span>
               </label>
               <div className="flex justify-end">
-                <Button type="button" size="sm" variant="secondary" onClick={onReviewSnapshot} disabled={!canSaveSnapshotReview}>
+                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={!canSaveSnapshotReview}>
                   {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-                  Save Finance review · حفظ مراجعة المالية
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
                 </Button>
               </div>
               {needsSnapshotReview && (
-                <p className="text-xs font-medium text-blue-900">Save the verified review here, then submit the same reversal below. · احفظ المراجعة المتحققة هنا ثم أرسل العكس نفسه أدناه.</p>
+                <p className="text-xs font-medium text-blue-900">Confirmation is all that is needed. The system will calculate the amount and recall it safely. · التأكيد هو كل ما يلزم. سيحسب النظام المبلغ ويستدعيه بأمان.</p>
               )}
             </>
           )}
         </div>
       )}
 
-      <div className="space-y-1.5">
+      {!reverseReprocessed && <div className="space-y-1.5">
         <Label htmlFor={`redirect-correction-reason-${correction.decision.actionId}`}>
           Why must this Redirect be corrected? · لماذا يجب تصحيح إعادة التوجيه هذه؟
         </Label>
@@ -2535,9 +2469,9 @@ function RedirectCorrectionPanel({
           data-testid="textarea-redirect-correction-reason"
         />
         <p className="text-[11px] text-amber-800">Required · minimum 10 characters · مطلوب · 10 أحرف على الأقل</p>
-      </div>
+      </div>}
 
-      <div className="space-y-1.5">
+      {!reverseReprocessed && <div className="space-y-1.5">
         <Label>Reversal fiscal period · الفترة المالية للعكس</Label>
         {correction.loadingPeriods ? (
           <div className="flex items-center gap-2 text-xs text-amber-800 py-1">
@@ -2566,7 +2500,7 @@ function RedirectCorrectionPanel({
             </SelectContent>
           </Select>
         )}
-      </div>
+      </div>}
 
       {correction.error && (
         <Alert variant="destructive">
@@ -2585,23 +2519,23 @@ function RedirectCorrectionPanel({
         >
           Cancel · إلغاء
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="bg-amber-700 hover:bg-amber-800"
-          onClick={onSubmit}
-          disabled={!canSubmit}
-          data-testid="button-confirm-redirect-correction"
-        >
-          {correction.submitting
-            ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
-          {historicalOnly
-            ? 'Reverse historical Redirect only · عكس إعادة التوجيه التاريخية فقط'
-            : reverseReprocessed
-              ? 'Reverse reprocessed payment and restore advance · عكس الدفعة المعاد تشغيلها وإعادة السلفة'
+        {!reverseReprocessed && (
+          <Button
+            type="button"
+            size="sm"
+            className="bg-amber-700 hover:bg-amber-800"
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            data-testid="button-confirm-redirect-correction"
+          >
+            {correction.submitting
+              ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
+            {historicalOnly
+              ? 'Reverse historical Redirect only · عكس إعادة التوجيه التاريخية فقط'
               : 'Reverse journal and reopen · عكس القيد وإعادة الفتح'}
-        </Button>
+          </Button>
+        )}
       </div>
     </div>
   );
