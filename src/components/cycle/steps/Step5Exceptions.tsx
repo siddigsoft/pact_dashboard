@@ -8,9 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
   Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles,
   AlertTriangle, RotateCcw } from 'lucide-react';
@@ -225,6 +222,7 @@ export default function Step5Exceptions({
   const [showApprGuide, setShowApprGuide]     = useState(false);
   const [openMmps, setOpenMmps]               = useState<OpenMmp[]>([]);
   const [targetCycleLoadError, setTargetCycleLoadError] = useState<string | null>(null);
+  const [loadingTargetCycles, setLoadingTargetCycles] = useState(false);
   const [targetSites, setTargetSites]          = useState<Record<string, TargetSite[]>>({});
   const [loadingTargetSites, setLoadingTargetSites] = useState<Record<string, boolean>>({});
   const [executing, setExecuting]              = useState<Record<string, boolean>>({});
@@ -232,6 +230,7 @@ export default function Step5Exceptions({
   const [correctedRedirects, setCorrectedRedirects] = useState<Record<string, CorrectedRedirectHistory[]>>({});
   const [correctionDialog, setCorrectionDialog] = useState<RedirectCorrectionDialog | null>(null);
   const decisionsRef = useRef(wizardState.exceptionDecisions);
+  const targetCycleRequestRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     decisionsRef.current = wizardState.exceptionDecisions;
@@ -247,7 +246,50 @@ export default function Step5Exceptions({
     if (wizardState.selectedMmpId) loadExceptions();
   }, [wizardState.selectedMmpId, wizardState.uncoveredReasons]);
 
+  useEffect(() => {
+    setOpenMmps([]);
+    setTargetCycleLoadError(null);
+    setLoadingTargetCycles(false);
+    targetCycleRequestRef.current = null;
+  }, [wizardState.selectedMmpId]);
+
   // ── Data loading ────────────────────────────────────────────────────────────
+
+  const loadOpenTargetCycles = async () => {
+    if (!wizardState.selectedMmpId || targetCycleRequestRef.current) {
+      return targetCycleRequestRef.current;
+    }
+
+    const request = (async () => {
+      setLoadingTargetCycles(true);
+      setTargetCycleLoadError(null);
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select('id, name, status, cycle_status, created_at')
+        .neq('id', wizardState.selectedMmpId!)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[CycleClose] Could not load target cycles:', error);
+        setOpenMmps([]);
+        setTargetCycleLoadError(`Could not load target cycles: ${error.message}`);
+      } else {
+        setOpenMmps(((data ?? []) as OpenMmp[]).filter(mmp =>
+          mmp.status !== 'closed' && mmp.cycle_status !== 'closed'
+        ));
+      }
+      setLoadingTargetCycles(false);
+    })();
+
+    targetCycleRequestRef.current = request;
+    try {
+      await request;
+    } finally {
+      if (targetCycleRequestRef.current === request) {
+        targetCycleRequestRef.current = null;
+      }
+    }
+  };
 
   const loadExceptions = async () => {
     setLoading(true);
@@ -255,17 +297,12 @@ export default function Step5Exceptions({
 
     // Load persisted successful actions first. They remain reviewable after the
     // wizard is reopened, even when the transient uncovered-reason state is gone.
-    const [actionsResult, mmpResult] = await Promise.all([
+    const [actionsResult] = await Promise.all([
       supabase
         .from('cycle_exception_actions')
         .select('id, advance_id, mmp_site_entry_id, decision, decision_amount, justification, target_site_id, rollover_mmp_id, rollover_site_id, rollover_site_name, receipt_reference, return_method, recovery_date, executed, executed_at, executed_by_name, gl_journal_entry_id, execution_error, redirect_fee_gross_amount, redirect_fee_prior_settled_amount, redirect_fee_settled_amount, redirect_fee_remaining_amount, redirect_fee_status, source_payment_references, correction_status, corrected_at, corrected_by_name, correction_reason, correction_reversal_journal_id, correction_replacement_action_id')
         .eq('mmp_file_id', wizardState.selectedMmpId!)
         .eq('executed', true),
-      supabase
-        .from('mmp_files')
-        .select('id, name, status, cycle_status, created_at')
-        .neq('id', wizardState.selectedMmpId!)
-        .order('created_at', { ascending: false }),
     ]);
     const actionRows = (actionsResult.data ?? []) as any[];
     const correctedActionIds = new Set(
@@ -315,17 +352,6 @@ export default function Step5Exceptions({
       .map(row => row.advance_id as string | null)
       .filter((id): id is string => !!id);
     const sourceSiteIds = [...new Set([...notCoveredIds, ...actionSiteIds])];
-
-    if (mmpResult.error) {
-      console.error('[CycleClose] Could not load target cycles:', mmpResult.error);
-      setOpenMmps([]);
-      setTargetCycleLoadError(`Could not load target cycles: ${mmpResult.error.message}`);
-    } else {
-      setTargetCycleLoadError(null);
-      setOpenMmps(((mmpResult.data ?? []) as OpenMmp[]).filter(mmp =>
-        mmp.status !== 'closed' && mmp.cycle_status !== 'closed'
-      ));
-    }
 
     if (!sourceSiteIds.length) {
       setExceptions([]);
@@ -623,6 +649,10 @@ export default function Step5Exceptions({
           : current);
       }
     })();
+  };
+
+  const updateRedirectCorrection = (patch: Partial<RedirectCorrectionDialog>) => {
+    setCorrectionDialog(current => current ? { ...current, ...patch } : current);
   };
 
   const submitRedirectCorrection = async () => {
@@ -968,12 +998,14 @@ export default function Step5Exceptions({
               setDecision={setDecision}
               openMmps={openMmps}
               targetCycleLoadError={targetCycleLoadError}
+              loadingTargetCycles={loadingTargetCycles}
               targetSites={targetSites[exceptionKey(site)] ?? []}
               loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
               executing={!!executing[exceptionKey(site)]}
               isDraftValid={isDraftValid(site)}
               onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
               onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
+              onLoadOpenTargetCycles={() => void loadOpenTargetCycles()}
               onExecute={() => executeDecision(site)}
               correctedHistory={correctedRedirects[site.advanceId] ?? []}
               canCorrectRedirect={canCorrectRedirect}
@@ -981,6 +1013,10 @@ export default function Step5Exceptions({
                 const decision = wizardState.exceptionDecisions[exceptionKey(site)];
                 if (decision) void openRedirectCorrection(site, decision);
               }}
+              correctionDialog={correctionDialog}
+              onUpdateCorrection={updateRedirectCorrection}
+              onCancelCorrection={() => setCorrectionDialog(null)}
+              onSubmitCorrection={() => void submitRedirectCorrection()}
               variant="paid"
             />
           ))}
@@ -1040,12 +1076,14 @@ export default function Step5Exceptions({
               setDecision={setDecision}
               openMmps={openMmps}
               targetCycleLoadError={targetCycleLoadError}
+              loadingTargetCycles={loadingTargetCycles}
               targetSites={targetSites[exceptionKey(site)] ?? []}
               loadingTargetSites={!!loadingTargetSites[exceptionKey(site)]}
               executing={!!executing[exceptionKey(site)]}
               isDraftValid={isDraftValid(site)}
               onTargetMmpChange={mmpId => selectTargetMmp(site, mmpId)}
               onLoadSameMmpSites={() => loadTargetSites(site, wizardState.selectedMmpId!)}
+              onLoadOpenTargetCycles={() => void loadOpenTargetCycles()}
               onExecute={() => executeDecision(site)}
               correctedHistory={correctedRedirects[site.advanceId] ?? []}
               canCorrectRedirect={canCorrectRedirect}
@@ -1053,6 +1091,10 @@ export default function Step5Exceptions({
                 const decision = wizardState.exceptionDecisions[exceptionKey(site)];
                 if (decision) void openRedirectCorrection(site, decision);
               }}
+              correctionDialog={correctionDialog}
+              onUpdateCorrection={updateRedirectCorrection}
+              onCancelCorrection={() => setCorrectionDialog(null)}
+              onSubmitCorrection={() => void submitRedirectCorrection()}
               variant="approved"
             />
           ))}
@@ -1093,131 +1135,6 @@ export default function Step5Exceptions({
         </Button>
       </div>
 
-      <Dialog
-        open={!!correctionDialog}
-        onOpenChange={open => {
-          if (!open && !correctionDialog?.submitting) setCorrectionDialog(null);
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-amber-600" />
-              Reopen advance for correction
-            </DialogTitle>
-            <DialogDescription>
-              Reverse the incorrect Redirect journal and return this paid advance to the unresolved
-              Cycle Close queue. The old action and both journals remain in history.
-            </DialogDescription>
-          </DialogHeader>
-
-          {correctionDialog && (
-            <div className="space-y-4">
-              <Alert className="border-amber-300 bg-amber-50">
-                <AlertTriangle className="h-4 w-4 text-amber-700" />
-                <AlertDescription className="text-amber-900 text-xs">
-                  This does not delete or edit the original Redirect. It posts a reversing journal,
-                  restores the original paid advance status, and requires a new resolution before Final Close.
-                </AlertDescription>
-              </Alert>
-
-              <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
-                <DetailRow label="Site" value={correctionDialog.site.siteName} />
-                <DetailRow label="Advance" value={correctionDialog.site.advanceId} mono />
-                <DetailRow
-                  label="Original journal"
-                  value={correctionDialog.decision.journalEntryId ?? 'Missing — correction will be rejected'}
-                  mono
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="redirect-correction-reason">Correction reason</Label>
-                <Textarea
-                  id="redirect-correction-reason"
-                  value={correctionDialog.reason}
-                  onChange={event => setCorrectionDialog(current => current
-                    ? { ...current, reason: event.target.value, error: undefined }
-                    : current)}
-                  placeholder="Explain why the original Redirect was incorrect and must be reopened…"
-                  rows={4}
-                  disabled={correctionDialog.submitting}
-                  data-testid="textarea-redirect-correction-reason"
-                />
-                <p className="text-[11px] text-muted-foreground">Required · minimum 10 characters</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Reversal fiscal period</Label>
-                {correctionDialog.loadingPeriods ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading open periods…
-                  </div>
-                ) : correctionDialog.periods.length === 0 ? (
-                  <p className="text-xs text-destructive">
-                    No open or soft-closed fiscal period contains today. Finance must open a valid period first.
-                  </p>
-                ) : (
-                  <Select
-                    value={correctionDialog.periodId}
-                    onValueChange={periodId => setCorrectionDialog(current => current
-                      ? { ...current, periodId, error: undefined }
-                      : current)}
-                    disabled={correctionDialog.submitting}
-                  >
-                    <SelectTrigger data-testid="select-redirect-correction-period">
-                      <SelectValue placeholder="Select fiscal period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {correctionDialog.periods.map(period => (
-                        <SelectItem key={period.id} value={period.id}>
-                          Period {period.period_no} · {period.start_date} to {period.end_date} ({period.status})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {correctionDialog.error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{correctionDialog.error}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCorrectionDialog(null)}
-              disabled={correctionDialog?.submitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-amber-600 hover:bg-amber-700"
-              onClick={() => void submitRedirectCorrection()}
-              disabled={
-                !correctionDialog
-                || correctionDialog.submitting
-                || correctionDialog.loadingPeriods
-                || !correctionDialog.periodId
-                || correctionDialog.reason.trim().length < 10
-              }
-              data-testid="button-confirm-redirect-correction"
-            >
-              {correctionDialog?.submitting
-                ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                : <RotateCcw className="h-4 w-4 mr-1.5" />}
-              Reverse journal and reopen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -1253,24 +1170,32 @@ interface SiteCardProps {
   setDecision: (advanceId: string, patch: Partial<ExceptionDecision>) => void;
   openMmps: OpenMmp[];
   targetCycleLoadError: string | null;
+  loadingTargetCycles: boolean;
   targetSites: TargetSite[];
   loadingTargetSites: boolean;
   executing: boolean;
   isDraftValid: boolean;
   onTargetMmpChange: (mmpId: string) => void;
   onLoadSameMmpSites: () => void;
+  onLoadOpenTargetCycles: () => void;
   onExecute: () => void;
   correctedHistory: CorrectedRedirectHistory[];
   canCorrectRedirect: boolean;
   onCorrectRedirect: () => void;
+  correctionDialog: RedirectCorrectionDialog | null;
+  onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
+  onCancelCorrection: () => void;
+  onSubmitCorrection: () => void;
   variant: 'paid' | 'approved';
 }
 
 function SiteCard({
   site, decision: d, decisions, isDone, canOverride, canExecute, setDecision, variant,
   openMmps, targetCycleLoadError, targetSites, loadingTargetSites, executing, isDraftValid,
-  onTargetMmpChange, onLoadSameMmpSites, onExecute, correctedHistory,
-  canCorrectRedirect, onCorrectRedirect,
+  loadingTargetCycles,
+  onTargetMmpChange, onLoadSameMmpSites, onLoadOpenTargetCycles, onExecute, correctedHistory,
+  canCorrectRedirect, onCorrectRedirect, correctionDialog, onUpdateCorrection,
+  onCancelCorrection, onSubmitCorrection,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
@@ -1376,6 +1301,12 @@ function SiteCard({
                 && (d.allocations?.length ?? 0) === 0
               }
               onCorrectRedirect={onCorrectRedirect}
+              correctionDialog={correctionDialog?.decision.actionId === d?.actionId
+                ? correctionDialog
+                : null}
+              onUpdateCorrection={onUpdateCorrection}
+              onCancelCorrection={onCancelCorrection}
+              onSubmitCorrection={onSubmitCorrection}
             />
           )}
         </>
@@ -1592,6 +1523,7 @@ function SiteCard({
             executionError: undefined,
           });
           if (decision === 'reassign' || decision === 'redirect') onLoadSameMmpSites();
+          if (decision === 'roll' || decision === 'hold') onLoadOpenTargetCycles();
         }}
       >
         <SelectTrigger className="w-full" data-testid={`select-decision-${site.advanceId}`}>
@@ -1746,7 +1678,11 @@ function SiteCard({
                   <SelectValue placeholder="Select an open cycle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {openMmps.length > 0 ? openMmps.map(mmp => (
+                  {loadingTargetCycles ? (
+                    <SelectItem value="__loading_open_cycles__" disabled>
+                      Loading open cycles…
+                    </SelectItem>
+                  ) : openMmps.length > 0 ? openMmps.map(mmp => (
                     <SelectItem key={mmp.id} value={mmp.id}>
                       {mmp.name} {mmp.created_at ? `· ${new Date(mmp.created_at).toLocaleDateString()}` : ''}
                     </SelectItem>
@@ -1759,6 +1695,8 @@ function SiteCard({
               </Select>
               {targetCycleLoadError ? (
                 <p className="text-xs text-destructive">{targetCycleLoadError}</p>
+              ) : loadingTargetCycles ? (
+                <p className="text-xs text-muted-foreground">Loading open cycles…</p>
               ) : openMmps.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Create or reopen another MMP cycle to use Roll or Hold.
@@ -1908,6 +1846,10 @@ function ExecutionDetails({
   site,
   canCorrectRedirect,
   onCorrectRedirect,
+  correctionDialog,
+  onUpdateCorrection,
+  onCancelCorrection,
+  onSubmitCorrection,
 }: {
   decision: ExceptionDecision | undefined;
   chosenLabel: string;
@@ -1915,6 +1857,10 @@ function ExecutionDetails({
   site: ExceptionSite;
   canCorrectRedirect: boolean;
   onCorrectRedirect: () => void;
+  correctionDialog: RedirectCorrectionDialog | null;
+  onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
+  onCancelCorrection: () => void;
+  onSubmitCorrection: () => void;
 }) {
   if (!decision) return null;
 
@@ -2053,24 +1999,33 @@ function ExecutionDetails({
           {canCorrectRedirect && (
             <div className="border-t border-amber-200 pt-2 mt-2 space-y-2">
               <p className="text-amber-800">
-                If this legacy Redirect settled the wrong site, Finance can reverse its journal
-                and return the paid advance to the unresolved queue without deleting this history.
+                If this legacy Redirect settled the wrong site, correct it here. The original
+                journal and action stay in history; the paid advance returns to this exception list.
               </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 border-amber-400 text-amber-800 hover:bg-amber-50"
-                onClick={event => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onCorrectRedirect();
-                }}
-                data-testid={`button-reopen-redirect-${decision.actionId}`}
-              >
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                Reopen advance for correction
-              </Button>
+              {!correctionDialog ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-amber-400 text-amber-800 hover:bg-amber-50"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onCorrectRedirect();
+                  }}
+                  data-testid={`button-reopen-redirect-${decision.actionId}`}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Correct this Redirect
+                </Button>
+              ) : (
+                <RedirectCorrectionPanel
+                  correction={correctionDialog}
+                  onChange={onUpdateCorrection}
+                  onCancel={onCancelCorrection}
+                  onSubmit={onSubmitCorrection}
+                />
+              )}
             </div>
           )}
         </div>
@@ -2078,6 +2033,129 @@ function ExecutionDetails({
       {decision.actionId && (
         <p className="font-mono text-[10px] text-green-700/80">Action ID: {decision.actionId}</p>
       )}
+    </div>
+  );
+}
+
+function RedirectCorrectionPanel({
+  correction,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  correction: RedirectCorrectionDialog;
+  onChange: (patch: Partial<RedirectCorrectionDialog>) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const canSubmit = !correction.submitting
+    && !correction.loadingPeriods
+    && !!correction.periodId
+    && correction.reason.trim().length >= 10;
+
+  return (
+    <div
+      className="rounded-md border border-amber-300 bg-amber-50/80 p-3 space-y-3"
+      data-testid={`redirect-correction-panel-${correction.decision.actionId}`}
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
+        <div>
+          <p className="font-semibold text-amber-950">Correct this payment exception</p>
+          <p className="text-amber-900">
+            This posts a reversing journal, restores the paid advance, and leaves the original
+            Redirect and payment audit trail intact.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded border border-amber-200 bg-white/70 p-2 grid gap-x-3 sm:grid-cols-2">
+        <DetailRow label="Site" value={correction.site.siteName} />
+        <DetailRow label="Advance" value={correction.site.advanceId} mono />
+        <DetailRow
+          label="Original journal"
+          value={correction.decision.journalEntryId ?? 'Missing — correction will be rejected'}
+          mono
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`redirect-correction-reason-${correction.decision.actionId}`}>
+          Why must this Redirect be corrected?
+        </Label>
+        <Textarea
+          id={`redirect-correction-reason-${correction.decision.actionId}`}
+          value={correction.reason}
+          onChange={event => onChange({ reason: event.target.value, error: undefined })}
+          placeholder="Explain why the original Redirect was incorrect and must be reopened…"
+          rows={3}
+          disabled={correction.submitting}
+          data-testid="textarea-redirect-correction-reason"
+        />
+        <p className="text-[11px] text-amber-800">Required · minimum 10 characters</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Reversal fiscal period</Label>
+        {correction.loadingPeriods ? (
+          <div className="flex items-center gap-2 text-xs text-amber-800 py-1">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading open periods…
+          </div>
+        ) : correction.periods.length === 0 ? (
+          <p className="text-xs text-destructive">
+            No open or soft-closed fiscal period contains today. Finance must open a valid period first.
+          </p>
+        ) : (
+          <Select
+            value={correction.periodId}
+            onValueChange={periodId => onChange({ periodId, error: undefined })}
+            disabled={correction.submitting}
+          >
+            <SelectTrigger data-testid="select-redirect-correction-period">
+              <SelectValue placeholder="Select fiscal period" />
+            </SelectTrigger>
+            <SelectContent>
+              {correction.periods.map(period => (
+                <SelectItem key={period.id} value={period.id}>
+                  Period {period.period_no} · {period.start_date} to {period.end_date} ({period.status})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {correction.error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{correction.error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex flex-wrap justify-end gap-2 border-t border-amber-200 pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          disabled={correction.submitting}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="bg-amber-700 hover:bg-amber-800"
+          onClick={onSubmit}
+          disabled={!canSubmit}
+          data-testid="button-confirm-redirect-correction"
+        >
+          {correction.submitting
+            ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
+          Reverse journal and reopen
+        </Button>
+      </div>
     </div>
   );
 }
