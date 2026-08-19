@@ -59,6 +59,9 @@ export interface ExceptionDecision {
   feeRemainingAmount?: number;
   feeSettlementStatus?: 'partially_paid' | 'paid';
   sourcePaymentReferences?: string[];
+  /** Separate immutable Finance attestation used only for legacy missing snapshots. */
+  financeSnapshotReviewId?: string;
+  financeSnapshotReviewedAt?: string;
 }
 
 export interface UncoveredReason {

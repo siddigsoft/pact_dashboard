@@ -99,6 +99,16 @@ interface RedirectCorrectionDialog {
   reprocessedModeAvailable: boolean;
   /** Required high-risk acknowledgement, gated to the reverse_reprocessed_payment mode. */
   confirmReverseLaterPayment: boolean;
+  /** Separate immutable Finance attestation for a legacy action with no snapshot. */
+  snapshotReviewKey: string;
+  snapshotGrossFee: string;
+  snapshotPriorSettled: string;
+  snapshotSettled: string;
+  snapshotRemaining: string;
+  snapshotReviewReason: string;
+  confirmSnapshotReview: boolean;
+  snapshotReviewSubmitting: boolean;
+  snapshotReviewedAt?: string;
   periods: FiscalPeriod[];
   loadingPeriods: boolean;
   submitting: boolean;
@@ -409,6 +419,28 @@ export default function Step5Exceptions({
       (rows[allocation.action_id] ??= []).push(allocation);
       return rows;
     }, {});
+    let financeReviewRows: Array<{ id: string; action_id: string; reviewed_at: string }> = [];
+    if (actionIds.length) {
+      const financeReviewResult = await (supabase as any)
+        .from('cycle_redirect_fee_snapshot_reviews')
+        .select('id, action_id, reviewed_at')
+        .in('action_id', actionIds);
+      if (financeReviewResult.error) {
+        const message = String(financeReviewResult.error.message ?? '').toLowerCase();
+        if (!message.includes('does not exist') && !message.includes('schema cache')) {
+          console.error('[CycleClose] Could not load Finance Redirect reviews:', financeReviewResult.error);
+        }
+      } else {
+        financeReviewRows = financeReviewResult.data ?? [];
+      }
+    }
+    const financeReviewByAction = financeReviewRows.reduce<Record<string, { id: string; reviewed_at: string }>>(
+      (reviews, review) => {
+        reviews[review.action_id] = review;
+        return reviews;
+      },
+      {},
+    );
     const actionSiteIds = actionRows
       .map(row => row.mmp_site_entry_id as string | null)
       .filter((id): id is string => !!id);
@@ -622,6 +654,8 @@ export default function Step5Exceptions({
         sourcePaymentReferences: Array.isArray(row.source_payment_references)
           ? row.source_payment_references.flat().filter(Boolean)
           : undefined,
+        financeSnapshotReviewId: financeReviewByAction[row.id]?.id,
+        financeSnapshotReviewedAt: financeReviewByAction[row.id]?.reviewed_at,
       };
       if (executedFromServer[row.advance_id].allocations?.length) {
         const totalAllocated = executedFromServer[row.advance_id].allocations!
@@ -685,6 +719,14 @@ export default function Step5Exceptions({
       historicalModeAvailable: true,
       reprocessedModeAvailable: true,
       confirmReverseLaterPayment: false,
+      snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
+      snapshotGrossFee: String(decision.feeGrossAmount ?? decision.feeSettledAmount ?? decision.amount ?? site.advancePaid ?? ''),
+      snapshotPriorSettled: String(decision.feePriorSettledAmount ?? 0),
+      snapshotSettled: String(decision.feeSettledAmount ?? decision.amount ?? site.advancePaid ?? ''),
+      snapshotRemaining: String(decision.feeRemainingAmount ?? 0),
+      snapshotReviewReason: '',
+      confirmSnapshotReview: false,
+      snapshotReviewSubmitting: false,
       periods: [],
       loadingPeriods: true,
       submitting: false,
@@ -725,6 +767,62 @@ export default function Step5Exceptions({
 
   const updateRedirectCorrection = (patch: Partial<RedirectCorrectionDialog>) => {
     setCorrectionDialog(current => current ? { ...current, ...patch } : current);
+  };
+
+  const submitSnapshotReview = async () => {
+    if (!correctionDialog?.decision.actionId) return;
+    const gross = Number(correctionDialog.snapshotGrossFee);
+    const prior = Number(correctionDialog.snapshotPriorSettled);
+    const settled = Number(correctionDialog.snapshotSettled);
+    const remaining = Number(correctionDialog.snapshotRemaining);
+    if (!correctionDialog.confirmSnapshotReview) {
+      updateRedirectCorrection({
+        error: 'Confirm the Finance evidence review before saving it.\nأكد مراجعة الأدلة المالية قبل حفظها.',
+      });
+      return;
+    }
+    if (correctionDialog.snapshotReviewReason.trim().length < 10) {
+      updateRedirectCorrection({
+        error: 'Enter a Finance review reason of at least 10 characters.\nأدخل سبب مراجعة مالية مكوّناً من 10 أحرف على الأقل.',
+      });
+      return;
+    }
+    if (![gross, prior, settled, remaining].every(Number.isFinite)) {
+      updateRedirectCorrection({
+        error: 'Enter valid numeric amounts for every reviewed fee field.\nأدخل مبالغ رقمية صالحة لكل حقول الرسوم التي تمت مراجعتها.',
+      });
+      return;
+    }
+
+    updateRedirectCorrection({ snapshotReviewSubmitting: true, error: undefined });
+    try {
+      const { data, error } = await (supabase as any).rpc(
+        'review_legacy_redirect_fee_snapshot',
+        {
+          p_action_id: correctionDialog.decision.actionId,
+          p_gross_fee: gross,
+          p_prior_settled_amount: prior,
+          p_settled_amount: settled,
+          p_remaining_amount: remaining,
+          p_reason: correctionDialog.snapshotReviewReason.trim(),
+          p_confirm_review: true,
+          p_idempotency_key: correctionDialog.snapshotReviewKey,
+        },
+      );
+      if (error) throw new Error(error.message);
+      const result = data as { ok?: boolean; error?: string; reviewed_at?: string } | null;
+      if (!result?.ok) throw new Error(result?.error || 'The Finance snapshot review could not be saved.');
+      updateRedirectCorrection({
+        snapshotReviewSubmitting: false,
+        snapshotReviewedAt: result.reviewed_at ?? new Date().toISOString(),
+        error: undefined,
+      });
+    } catch (error: unknown) {
+      updateRedirectCorrection({
+        snapshotReviewSubmitting: false,
+        error: correctionErrorWithArabic(error instanceof Error ? error.message : 'The Finance snapshot review could not be saved.'),
+      });
+    }
   };
 
   const submitRedirectCorrection = async () => {
@@ -1129,6 +1227,7 @@ export default function Step5Exceptions({
               onUpdateCorrection={updateRedirectCorrection}
               onCancelCorrection={() => setCorrectionDialog(null)}
               onSubmitCorrection={() => void submitRedirectCorrection()}
+              onReviewSnapshot={() => void submitSnapshotReview()}
               variant="paid"
             />
           ))}
@@ -1207,6 +1306,7 @@ export default function Step5Exceptions({
               onUpdateCorrection={updateRedirectCorrection}
               onCancelCorrection={() => setCorrectionDialog(null)}
               onSubmitCorrection={() => void submitRedirectCorrection()}
+              onReviewSnapshot={() => void submitSnapshotReview()}
               variant="approved"
             />
           ))}
@@ -1298,6 +1398,7 @@ interface SiteCardProps {
   onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancelCorrection: () => void;
   onSubmitCorrection: () => void;
+  onReviewSnapshot: () => void;
   variant: 'paid' | 'approved';
 }
 
@@ -1307,7 +1408,7 @@ function SiteCard({
   loadingTargetCycles,
   onTargetMmpChange, onLoadSameMmpSites, onLoadOpenTargetCycles, onExecute, correctedHistory,
   canCorrectRedirect, onCorrectRedirect, correctionDialog, onUpdateCorrection,
-  onCancelCorrection, onSubmitCorrection,
+  onCancelCorrection, onSubmitCorrection, onReviewSnapshot,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
@@ -1456,6 +1557,7 @@ function SiteCard({
               onUpdateCorrection={onUpdateCorrection}
               onCancelCorrection={onCancelCorrection}
               onSubmitCorrection={onSubmitCorrection}
+              onReviewSnapshot={onReviewSnapshot}
             />
           )}
         </>
@@ -1999,6 +2101,7 @@ function ExecutionDetails({
   onUpdateCorrection,
   onCancelCorrection,
   onSubmitCorrection,
+  onReviewSnapshot,
 }: {
   decision: ExceptionDecision | undefined;
   chosenLabel: string;
@@ -2010,6 +2113,7 @@ function ExecutionDetails({
   onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancelCorrection: () => void;
   onSubmitCorrection: () => void;
+  onReviewSnapshot: () => void;
 }) {
   if (!decision) return null;
 
@@ -2135,6 +2239,12 @@ function ExecutionDetails({
           {decision.sourcePaymentReferences?.length ? (
             <DetailRow label="Saved payment references" value={decision.sourcePaymentReferences.join(', ')} mono />
           ) : null}
+          {decision.financeSnapshotReviewedAt && (
+            <DetailRow
+              label="Finance snapshot review · مراجعة لقطة المالية"
+              value={`Verified ${new Date(decision.financeSnapshotReviewedAt).toLocaleString()}`}
+            />
+          )}
           <p className="pt-1 text-green-700">
             GL posting: Debit Enumerator Fees · Credit Transport Advance
           </p>
@@ -2173,6 +2283,7 @@ function ExecutionDetails({
                   onChange={onUpdateCorrection}
                   onCancel={onCancelCorrection}
                   onSubmit={onSubmitCorrection}
+                  onReviewSnapshot={onReviewSnapshot}
                 />
               )}
             </div>
@@ -2191,11 +2302,13 @@ function RedirectCorrectionPanel({
   onChange,
   onCancel,
   onSubmit,
+  onReviewSnapshot,
 }: {
   correction: RedirectCorrectionDialog;
   onChange: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancel: () => void;
   onSubmit: () => void;
+  onReviewSnapshot: () => void;
 }) {
   const historicalOnly = correction.mode === 'historical_accounting_only';
   const reverseReprocessed = correction.mode === 'reverse_reprocessed_payment';
@@ -2205,6 +2318,12 @@ function RedirectCorrectionPanel({
     && !!correction.periodId
     && correction.reason.trim().length >= 10
     && (!reverseReprocessed || correction.confirmReverseLaterPayment);
+  const needsSnapshotReview = reverseReprocessed
+    && !correction.snapshotReviewedAt
+    && correction.error?.includes('Redirect fee snapshot is incomplete');
+  const canSaveSnapshotReview = !correction.snapshotReviewSubmitting
+    && correction.confirmSnapshotReview
+    && correction.snapshotReviewReason.trim().length >= 10;
 
   return (
     <div
@@ -2318,6 +2437,88 @@ function RedirectCorrectionPanel({
             <span className="font-semibold block">Required to proceed · مطلوب للمتابعة</span>
           </span>
         </label>
+      )}
+
+      {reverseReprocessed && (
+        <div className="rounded border border-blue-300 bg-blue-50/80 p-3 space-y-3" data-testid="finance-snapshot-review-panel">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-800" />
+            <div className="text-xs text-blue-950 space-y-0.5">
+              <p className="font-semibold">Finance evidence review · مراجعة الأدلة المالية</p>
+              <p>This is needed only when the legacy Redirect has no immutable fee snapshot. It records a separate, immutable attestation; it never changes the original Redirect.</p>
+              <p dir="rtl">تُطلب هذه المراجعة فقط عندما لا تحتوي إعادة التوجيه القديمة على لقطة رسوم غير قابلة للتغيير. تحفظ إقراراً مستقلاً لا يُعدّل إعادة التوجيه الأصلية أبداً.</p>
+            </div>
+          </div>
+          <div className="grid gap-x-3 sm:grid-cols-2 text-xs">
+            <DetailRow label="Original Redirect journal · القيد الأصلي" value={correction.decision.journalEntryId ?? 'Missing'} mono />
+            <DetailRow label="Original paid advance · السلفة المدفوعة الأصلية" value={`SDG ${(correction.site.advancePaid ?? correction.decision.amount ?? 0).toLocaleString()}`} />
+            <DetailRow label="Current gross fee · إجمالي الرسوم الحالي" value={correction.decision.feeGrossAmount != null ? `SDG ${correction.decision.feeGrossAmount.toLocaleString()}` : 'Not recorded on legacy action'} />
+            <DetailRow label="Current fee settlement · تسوية الرسوم الحالية" value={correction.decision.feeSettlementStatus === 'paid' ? 'Paid · مدفوعة' : correction.decision.feeSettlementStatus ?? 'Legacy record'} />
+            <DetailRow label="Saved payment references · مراجع الدفع المحفوظة" value={correction.decision.sourcePaymentReferences?.join(', ') || 'No reference recorded'} mono />
+            <DetailRow label="Redirect allocations · تخصيصات إعادة التوجيه" value={correction.decision.allocations?.length ? `${correction.decision.allocations.length} target(s)` : 'Legacy single-site settlement'} />
+          </div>
+          {correction.snapshotReviewedAt ? (
+            <Alert className="border-green-300 bg-green-50 text-green-950">
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                Finance review saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The high-risk reversal will re-check all evidence on submission.
+                <span dir="rtl" className="block">تم حفظ مراجعة المالية. سيُعاد التحقق من جميع الأدلة عند تقديم العكس عالي الخطورة.</span>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ['snapshotGrossFee', 'Gross fee · إجمالي الرسوم', correction.snapshotGrossFee],
+                  ['snapshotPriorSettled', 'Prior settled · المسدد سابقاً', correction.snapshotPriorSettled],
+                  ['snapshotSettled', 'Settled by Redirect · المسدد بإعادة التوجيه', correction.snapshotSettled],
+                  ['snapshotRemaining', 'Fee remaining · الرسوم المتبقية', correction.snapshotRemaining],
+                ].map(([field, label, value]) => (
+                  <div key={field} className="space-y-1">
+                    <Label htmlFor={`finance-review-${field}`}>{label}</Label>
+                    <Input
+                      id={`finance-review-${field}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={value}
+                      onChange={event => onChange({ [field]: event.target.value } as Partial<RedirectCorrectionDialog>)}
+                      disabled={correction.snapshotReviewSubmitting || correction.submitting}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="finance-snapshot-review-reason">Review evidence and reason · سبب ومصدر المراجعة</Label>
+                <Textarea
+                  id="finance-snapshot-review-reason"
+                  rows={2}
+                  value={correction.snapshotReviewReason}
+                  onChange={event => onChange({ snapshotReviewReason: event.target.value, error: undefined })}
+                  placeholder="State the journal, advance and fee evidence verified… · اذكر أدلة القيد والسلفة والرسوم التي تم التحقق منها…"
+                  disabled={correction.snapshotReviewSubmitting || correction.submitting}
+                />
+              </div>
+              <label className="flex items-start gap-2 rounded border border-blue-200 bg-white/70 p-2 cursor-pointer text-xs">
+                <Checkbox
+                  checked={correction.confirmSnapshotReview}
+                  onCheckedChange={checked => onChange({ confirmSnapshotReview: checked === true, error: undefined })}
+                  disabled={correction.snapshotReviewSubmitting || correction.submitting}
+                />
+                <span>I verified the original posted journal, paid advance, fee state, later fee activity, and payment provenance. Save this immutable Finance review.<span dir="rtl" className="block">لقد تحققت من القيد والسلفة وحالة الرسوم والنشاط اللاحق وسجل الدفع. احفظ مراجعة المالية غير القابلة للتغيير.</span></span>
+              </label>
+              <div className="flex justify-end">
+                <Button type="button" size="sm" variant="secondary" onClick={onReviewSnapshot} disabled={!canSaveSnapshotReview}>
+                  {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                  Save Finance review · حفظ مراجعة المالية
+                </Button>
+              </div>
+              {needsSnapshotReview && (
+                <p className="text-xs font-medium text-blue-900">Save the verified review here, then submit the same reversal below. · احفظ المراجعة المتحققة هنا ثم أرسل العكس نفسه أدناه.</p>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       <div className="space-y-1.5">

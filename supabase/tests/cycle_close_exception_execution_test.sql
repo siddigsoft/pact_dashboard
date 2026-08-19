@@ -9,7 +9,8 @@
 --    20260819c_cycle_close_mmp_country_scope.sql,
 --    20260819h_cycle_exception_journal_line_ids.sql, and — for the
 --    reprocessed-payment reversal regression (section 11) —
---    20260819o_cycle_redirect_reprocessed_payment_reversal.sql)
+--    20260819o_cycle_redirect_reprocessed_payment_reversal.sql and
+--    20260819p_cycle_redirect_finance_snapshot_review.sql)
 --
 -- Task #548 — Cycle Close: Inline Exception Execution
 --
@@ -3305,6 +3306,84 @@ BEGIN
   UPDATE public.wallet_transactions
   SET amount = 1000, amount_cents = 100000, balance_before = 0, balance_after = 1000
   WHERE id = LATER_WT;
+
+  -- ── Finance review: incomplete legacy snapshot can be attested separately ──
+  -- The legacy action itself remains untouched: the review is a protected
+  -- audit record that only the full-restore RPC can consume after revalidating
+  -- all payment, fee, and journal evidence.
+  UPDATE public.cycle_exception_actions
+  SET redirect_fee_gross_amount = NULL,
+      redirect_fee_prior_settled_amount = NULL,
+      redirect_fee_settled_amount = NULL,
+      redirect_fee_remaining_amount = NULL,
+      redirect_fee_status = NULL
+  WHERE id = v_action_id;
+
+  PERFORM pg_temp.as_user(ENU);
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 1000, 0, 1000, 0, 'Unauthorized snapshot review attempt', true,
+    'ce54-finance-review-unauthorized'
+  );
+  PERFORM pg_temp.assert_err('Finance review rejects unauthorized caller', v_result,
+    'Only Super Admin');
+  PERFORM pg_temp.as_user(FIN);
+
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 999, 0, 999, 0, 'Journal mismatch must be rejected', true,
+    'ce54-finance-review-invalid'
+  );
+  PERFORM pg_temp.assert_err('Finance review rejects journal/advance mismatch', v_result,
+    'does not exactly match');
+  SELECT count(*) INTO v_count FROM public.cycle_redirect_fee_snapshot_reviews
+  WHERE action_id = v_action_id;
+  PERFORM pg_temp.assert_eq('invalid Finance review creates no audit record', v_count, 0);
+
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 1000, 0, 1000, 0,
+    'Verified original journal, advance, fee, later activity and payment provenance',
+    true, 'ce54-finance-review-success'
+  );
+  PERFORM pg_temp.assert_ok('Finance review accepts exact legacy evidence', v_result);
+  SELECT count(*) INTO v_count FROM public.cycle_redirect_fee_snapshot_reviews
+  WHERE action_id = v_action_id
+    AND gross_fee = 1000 AND prior_settled_amount = 0
+    AND settled_amount = 1000 AND remaining_amount = 0
+    AND fee_status = 'paid';
+  PERFORM pg_temp.assert_eq('Finance review is stored separately from action', v_count, 1);
+  SELECT count(*) INTO v_count FROM public.cycle_exception_actions
+  WHERE id = v_action_id
+    AND redirect_fee_gross_amount IS NULL
+    AND redirect_fee_status IS NULL;
+  PERFORM pg_temp.assert_eq('Finance review never rewrites the legacy action', v_count, 1);
+
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 1000, 0, 1000, 0,
+    'Verified original journal, advance, fee, later activity and payment provenance',
+    true, 'ce54-finance-review-success'
+  );
+  PERFORM pg_temp.assert_ok('Finance review retry is idempotent', v_result);
+  PERFORM pg_temp.assert_true('Finance review retry reports existing review',
+    coalesce((v_result->>'already_reviewed')::boolean, false));
+  v_result := public.review_legacy_redirect_fee_snapshot(
+    v_action_id, 1000, 0, 1000, 0,
+    'A different review cannot overwrite the immutable attestation', true,
+    'ce54-finance-review-different-key'
+  );
+  PERFORM pg_temp.assert_err('different Finance review key cannot overwrite audit', v_result,
+    'already has an immutable');
+  BEGIN
+    UPDATE public.cycle_redirect_fee_snapshot_reviews
+    SET gross_fee = 999
+    WHERE action_id = v_action_id;
+    RAISE EXCEPTION 'FINANCE_REVIEW_MUTATION_NOT_BLOCKED';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'FINANCE_REVIEW_MUTATION_NOT_BLOCKED' THEN
+      RAISE EXCEPTION 'FAIL [Finance review immutability]: direct mutation succeeded';
+    END IF;
+    IF SQLERRM NOT ILIKE '%immutable%' THEN
+      RAISE;
+    END IF;
+  END;
 
   -- ── Happy path: full reprocessed-payment reversal ─────────────────────────
   v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
