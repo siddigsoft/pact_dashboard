@@ -26,6 +26,7 @@ import {
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { unlinkPaymentFromPreFund, reverseDirectDeduction } from '@/utils/preFundLinkage';
+import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 
 interface RevertToPendingData {
   requestId: string;
@@ -1335,52 +1336,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const deleteRequest = async (requestId: string): Promise<boolean> => {
     try {
-      const now = new Date().toISOString();
-
-      // Fetch before wiping so we can fall back to reverseDirectDeduction
-      const { data: dpPre } = await supabase
-        .from('down_payment_requests')
-        .select('total_paid_amount, pre_fund_transaction_id, metadata, requested_by')
-        .eq('id', requestId)
-        .single();
-
-      // Reverse any pre-fund linkage first (restores fund balance + allocation)
-      const unlinkResult = await unlinkPaymentFromPreFund('down_payment_requests', requestId);
-
-      // If the unlink RPC is not deployed AND the deduction was made via the
-      // directLinkPayment balance-UPDATE path, fall back to reverseDirectDeduction
-      if (!unlinkResult.unlinked && dpPre) {
-        const meta = (dpPre.metadata ?? {}) as any;
-        if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dpPre.total_paid_amount) > 0) {
-          await reverseDirectDeduction(
-            meta.pre_fund_id,
-            Number(dpPre.total_paid_amount),
-            (dpPre as any).requested_by ?? null,
-          );
-        }
-      }
-
-      const { data: updated, error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'cancelled',
-          site_visit_id: null,
-          mmp_site_entry_id: null,
-          updated_at: now,
-          metadata: { deleted: true, deleted_at: now },
-        } as any)
-        .eq('id', requestId)
-        .select('id');
-
-      if (error) throw error;
-
-      if (!updated || updated.length === 0) {
-        throw new Error('Delete failed: record not found or permission denied. Contact your administrator.');
-      }
+      await voidUnpaidDownPaymentRequest(requestId);
 
       toast({
         title: 'Request Deleted / تم حذف الطلب',
-        description: 'The request has been removed. / تم إزالة الطلب.',
+        description: 'The unpaid request has been removed from active payment and Cycle Close screens. / تم إزالة الطلب غير المدفوع من شاشات الدفع وإغلاق الدورة.',
       });
 
       await refreshRequests();

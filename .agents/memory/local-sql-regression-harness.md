@@ -18,3 +18,12 @@ and related commands; initialize under `/tmp`, use a non-default port and
 socket directory, then stop the server after the check. Treat `psql` success
 and the final `ROLLBACK` as the result; PostgreSQL `NOTICE` messages are
 written to stderr.
+
+When compiling a Supabase migration that grants permissions, create the
+`authenticated` role in the disposable schema before loading the migration.
+
+**Why:** The local PostgreSQL cluster does not include Supabase runtime roles,
+so an otherwise-valid `GRANT ... TO authenticated` fails only in the harness.
+
+**How to apply:** Add `CREATE ROLE authenticated;` to the local schema setup;
+do not remove the production grant from the migration.

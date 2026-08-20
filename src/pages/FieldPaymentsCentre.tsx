@@ -31,6 +31,7 @@ import {
   resolveFieldPaymentEnumeratorName,
 } from '@/utils/fieldPaymentsEnumerator';
 import { resolveFeeAdvanceDeduction } from '@/components/cycle/redirectSettlement';
+import { isSoftDeletedDownPayment } from '@/utils/downPaymentVoid';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -486,10 +487,10 @@ export default function FieldPaymentsCentre() {
       if (siteIds.length) {
         const { data: advs } = await supabase
           .from('down_payment_requests')
-          .select('mmp_site_entry_id, total_paid_amount')
+          .select('mmp_site_entry_id, total_paid_amount, metadata')
           .in('mmp_site_entry_id', siteIds)
           .in('status', ['paid', 'fully_paid', 'partially_paid']);
-        for (const a of advs ?? []) {
+        for (const a of (advs ?? []).filter(a => !isSoftDeletedDownPayment(a))) {
           const prev = advMap[a.mmp_site_entry_id] ?? 0;
           advMap[a.mmp_site_entry_id] = Math.max(prev, a.total_paid_amount ?? 0);
         }
@@ -557,9 +558,15 @@ export default function FieldPaymentsCentre() {
         const total = ef + tf;
         const adv = advMap[s.id] ?? 0;
         const redirectAllocations = allocationMap[s.id] ?? [];
-        const recordedSettlement = s.fee_paid_amount ?? 0;
         const activeAdvanceOffset = Math.min(adv, total);
-        const effectiveAdvanceOffset = redirectAllocations.length > 0
+        const staleAdvanceOnlySettlement = redirectAllocations.length === 0
+          && activeAdvanceOffset === 0
+          && Number(s.fee_cash_paid_amount ?? 0) === 0
+          && s.fee_payment_method === 'advance_offset';
+        const recordedSettlement = staleAdvanceOnlySettlement ? 0 : (s.fee_paid_amount ?? 0);
+        const effectiveAdvanceOffset = staleAdvanceOnlySettlement
+          ? 0
+          : redirectAllocations.length > 0
           ? Math.min(s.fee_advance_offset_amount ?? 0, total)
           : Math.max(s.fee_advance_offset_amount ?? 0, activeAdvanceOffset);
         return {
@@ -575,10 +582,10 @@ export default function FieldPaymentsCentre() {
           totalFee: total,
           advancePaid: adv,
           netPayable: Math.max(total - Math.max(recordedSettlement, effectiveAdvanceOffset), 0),
-          feePaidStatus: (s.fee_paid_status ?? 'unpaid') as FeeRow['feePaidStatus'],
-          feePaidAmount: s.fee_paid_amount,
+          feePaidStatus: (staleAdvanceOnlySettlement ? 'unpaid' : (s.fee_paid_status ?? 'unpaid')) as FeeRow['feePaidStatus'],
+          feePaidAmount: staleAdvanceOnlySettlement ? 0 : s.fee_paid_amount,
           feeCashPaidAmount: s.fee_cash_paid_amount ?? 0,
-          feeAdvanceOffsetAmount: s.fee_advance_offset_amount ?? 0,
+          feeAdvanceOffsetAmount: staleAdvanceOnlySettlement ? 0 : (s.fee_advance_offset_amount ?? 0),
           feeUnallocatedAmount: s.fee_unallocated_amount ?? 0,
           feePaidAt: s.fee_paid_at,
           feePaymentMethod: s.fee_payment_method,
@@ -619,15 +626,16 @@ export default function FieldPaymentsCentre() {
       const { data, error } = await fetchAllRows<any>((from, to) =>
         supabase
           .from('down_payment_requests')
-          .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id, requested_by')
+          .select('id, status, requested_amount, total_paid_amount, updated_at, site_name, hub_name, mmp_site_entry_id, requested_by, metadata')
           .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid', 'cancelled'])
           .order('updated_at', { ascending: false })
           .range(from, to)
       );
       if (error) throw error;
+      const visibleAdvances = (data ?? []).filter((record: any) => !isSoftDeletedDownPayment(record));
 
       // Step 2: resolve mmp_site_entries → mmp_files in two separate queries
-      const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
+      const siteEntryIds = [...new Set(visibleAdvances.map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
       const entryMap: Record<string, {
         accepted_by: string | null;
         claimed_by: string | null;
@@ -664,10 +672,10 @@ export default function FieldPaymentsCentre() {
       }
 
       // Step 3: resolve enumerator names + GL bridge in parallel
-      const enumIds = [...new Set((data ?? [])
+      const enumIds = [...new Set(visibleAdvances
         .map((r: any) => getFieldPaymentEnumeratorReference(entryMap[r.mmp_site_entry_id], r.requested_by))
         .filter(isProfileUuid))];
-      const advIds  = (data ?? []).map((r: any) => r.id as string);
+      const advIds  = visibleAdvances.map((r: any) => r.id as string);
       const nameMap: Record<string, string> = {};
       const glMap:   Record<string, 'posted' | 'error' | 'pending'> = {};
 
@@ -683,7 +691,7 @@ export default function FieldPaymentsCentre() {
           }) : Promise.resolve(),
       ]);
 
-      const rows: AdvanceSummaryRow[] = (data ?? []).map((r: any) => {
+      const rows: AdvanceSummaryRow[] = visibleAdvances.map((r: any) => {
         const entry  = entryMap[r.mmp_site_entry_id] ?? {};
         const mmpFid = entry.mmp_file_id ?? '';
         const mmp    = mmpMap[mmpFid] ?? {};
@@ -803,15 +811,16 @@ export default function FieldPaymentsCentre() {
       const { data, error } = await fetchAllRows<any>((from, to) =>
         supabase
           .from('down_payment_requests')
-          .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id, requested_by')
+          .select('id, requested_amount, total_paid_amount, status, updated_at, hub_name, site_name, mmp_site_entry_id, requested_by, metadata')
           .in('status', ['paid', 'partially_paid', 'fully_paid'])
           .order('updated_at')
           .range(from, to)
       );
       if (error) throw error;
+      const visibleAdvances = (data ?? []).filter((record: any) => !isSoftDeletedDownPayment(record));
 
       // Step 2: resolve mmp_site_entries → mmp_files
-      const siteEntryIds = [...new Set((data ?? []).map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
+      const siteEntryIds = [...new Set(visibleAdvances.map((r: any) => r.mmp_site_entry_id).filter(Boolean))];
       const entryMap: Record<string, {
         id: string;
         accepted_by: string | null;
@@ -847,7 +856,7 @@ export default function FieldPaymentsCentre() {
       }
 
       // Step 3: enumerator names + fee-offset check in parallel
-      const enumIds = [...new Set((data ?? [])
+      const enumIds = [...new Set(visibleAdvances
         .map((r: any) => getFieldPaymentEnumeratorReference(entryMap[r.mmp_site_entry_id], r.requested_by))
         .filter(isProfileUuid))];
       const siteIdList = Object.values(entryMap).map(e => e.id).filter(Boolean);
@@ -862,7 +871,7 @@ export default function FieldPaymentsCentre() {
           .select('id, fee_paid_status').in('id', siteIdList).eq('fee_paid_status', 'paid')
           .then(({ data: feeSites }) => {
             const paidSiteIds = new Set((feeSites ?? []).map((s: any) => s.id));
-            for (const r of (data ?? []) as any[]) {
+            for (const r of visibleAdvances as any[]) {
               const entry = entryMap[r.mmp_site_entry_id];
               if (entry?.id && paidSiteIds.has(entry.id)) {
                 offsetMap[r.id] = r.total_paid_amount ?? 0;
@@ -871,7 +880,7 @@ export default function FieldPaymentsCentre() {
           }) : Promise.resolve(),
       ]);
 
-      const rows: RecoveryRow[] = (data ?? [])
+      const rows: RecoveryRow[] = visibleAdvances
         .map((r: any): RecoveryRow => {
           const entry     = entryMap[r.mmp_site_entry_id] ?? {};
           const mmpFid    = (entry as any).mmp_file_id ?? '';

@@ -87,6 +87,7 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
+import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
@@ -848,39 +849,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     try {
       let successCount = 0;
       let failCount = 0;
-      const now = new Date().toISOString();
       const ids = Array.from(selectedIds);
       for (const id of ids) {
         try {
-          const { data: existingMeta } = await supabase
-            .from('down_payment_requests')
-            .select('metadata')
-            .eq('id', id)
-            .maybeSingle();
-          const meta = (existingMeta?.metadata as Record<string, any>) || {};
-
-          const { error: softErr } = await supabase
-            .from('down_payment_requests')
-            .update({
-              status: 'cancelled',
-              site_visit_id: null,
-              mmp_site_entry_id: null,
-              updated_at: now,
-              metadata: { ...meta, deleted: true, deleted_at: now },
-            } as any)
-            .eq('id', id);
-
-          if (softErr) { failCount++; continue; }
-
-          const { error: deleteError } = await supabase
-            .from('down_payment_requests')
-            .delete()
-            .eq('id', id)
-            .eq('status', 'cancelled');
-
-          if (deleteError) {
-            console.log('Hard delete blocked for', id, '(RLS), record stays as cancelled+deleted');
-          }
+          await voidUnpaidDownPaymentRequest(id);
           successCount++;
         } catch (e: any) {
           console.error('Delete error for', id, ':', e?.message || e);

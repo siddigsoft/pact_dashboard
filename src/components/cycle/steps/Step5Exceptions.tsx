@@ -32,6 +32,7 @@ import {
   getRedirectCorrectionRpcName,
   buildRedirectCorrectionRequest,
 } from '@/utils/cycleRedirectFinanceReview';
+import { isSoftDeletedDownPayment } from '@/utils/downPaymentVoid';
 
 interface Props {
   wizardState: WizardState;
@@ -455,6 +456,7 @@ export default function Step5Exceptions({
       'id', 'mmp_site_entry_id', 'status',
       'total_paid_amount', 'requested_amount', 'remaining_amount',
       'payment_type', 'installment_plan', 'paid_installments', 'wallet_transaction_ids',
+      'metadata',
       'requested_by', 'requested_at',
       'supervisor_approved_by', 'supervisor_approved_at',
       'admin_processed_by', 'admin_processed_at',
@@ -514,7 +516,8 @@ export default function Step5Exceptions({
       advancesById.set(advance.id, advance);
     }
     const advances: AdvanceRec[] = [...advancesById.values()]
-      .filter(a => activeAdvanceStatuses.has(a.status) || executedAdvanceIdSet.has(a.id))
+      .filter(a => !isSoftDeletedDownPayment(a)
+        && (activeAdvanceStatuses.has(a.status) || executedAdvanceIdSet.has(a.id)))
       .map(a => ({
       id: a.id as string,
       siteId: a.mmp_site_entry_id as string,
