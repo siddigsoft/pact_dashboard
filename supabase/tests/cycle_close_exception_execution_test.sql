@@ -3368,7 +3368,11 @@ BEGIN
   SET enumerator_fee = 1100,
       transport_fee = 0,
       fee_paid_amount = 1100,
-      fee_cash_paid_amount = 1100
+      fee_cash_paid_amount = 1100,
+      fee_paid_at = NULL,
+      fee_paid_by = NULL,
+      fee_payment_method = 'legacy-edited',
+      fee_payment_notes = 'Legacy fee metadata was edited after posting'
   WHERE id = R_SOURCE;
   SELECT count(*) INTO v_count
   FROM public.cycle_redirect_fee_snapshot_reviews
