@@ -34,3 +34,4 @@
 - [cycle-redirect-allocation-ledger](cycle-redirect-allocation-ledger.md) — Redirect fee offsets come from a per-target ledger; later payments must reconcile exactly and never repost the advance.
 - [cycle-redirect-correction-safety](cycle-redirect-correction-safety.md) — Correct legacy Redirects only from proven snapshots; preserve bridge rows and make posting guards reversal-aware.
 - [immutable-gl-line-identifiers](immutable-gl-line-identifiers.md) — Add a final journal UUID in a line BEFORE INSERT; never rewrite immutable posted accounting lines.
+- [automatic-redirect-recall-authority](automatic-redirect-recall-authority.md) — Automatic legacy Redirect recall uses the original balanced journal and paid advance, not mutable later fee values.
