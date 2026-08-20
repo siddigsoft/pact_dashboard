@@ -1374,8 +1374,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         };
 
         if (dispatchType === "individual" && selectedCollector) {
-          updateData.accepted_by = selectedCollector;
-          updateData.accepted_at = dispatchedAt;
           additionalData.assigned_to = selectedCollector;
           additionalData.assigned_at = dispatchedAt;
           additionalData.assigned_by = dispatchedBy;
@@ -1396,6 +1394,18 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           if (result.error) {
             console.error(`❌ Update failed for ${entryId}:`, result.error);
             return "error";
+          }
+          if (dispatchType === "individual" && selectedCollector) {
+            const { error: acceptanceError } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+              p_site_id: entryId,
+              p_accepted_by: selectedCollector,
+              p_status: newStatus,
+              p_accepted_at: dispatchedAt,
+            });
+            if (acceptanceError) {
+              console.error(`❌ Assignment update failed for ${entryId}:`, acceptanceError);
+              return "error";
+            }
           }
           console.log(`✅ Dispatched ${entryId}`);
           return "success";

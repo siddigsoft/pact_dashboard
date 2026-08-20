@@ -601,15 +601,12 @@ const MMP = () => {
       } else {
         // Standard accept for Smart Assigned sites
         const now = new Date().toISOString();
-        const { error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            status: 'accepted',
-            accepted_by: currentUser?.id,
-            accepted_at: now,
-            updated_at: now
-          })
-          .eq('id', site.id);
+        const { error } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+          p_site_id: site.id,
+          p_accepted_by: currentUser?.id,
+          p_status: 'accepted',
+          p_accepted_at: now,
+        });
 
         if (error) {
           throw error;
@@ -1166,8 +1163,13 @@ const MMP = () => {
 
       // If site was 'assigned' (not yet accepted), also set acceptance fields AND ensure fees are set
       if (siteStatus === 'assigned' && !site.accepted_by) {
-        updateData.accepted_by = currentUser?.id;
-        updateData.accepted_at = now;
+        const { error: acceptanceError } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+          p_site_id: site.id,
+          p_accepted_by: currentUser?.id,
+          p_status: 'accepted',
+          p_accepted_at: now,
+        });
+        if (acceptanceError) throw acceptanceError;
         console.log('[StartVisit] Site was assigned - auto-accepting before starting');
         
         // Fetch fresh site data from database to get the latest fee values
@@ -7081,7 +7083,16 @@ const MMP = () => {
                       updateData
                     });
 
-                    // First update the main fields
+                    const { error: acceptanceError } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+                      p_site_id: selectedSiteForAcknowledgment.id,
+                      p_accepted_by: acknowledgedBy || selectedSiteForAcknowledgment.accepted_by,
+                      p_status: 'accepted',
+                      p_accepted_at: acknowledgedAt,
+                    });
+                    if (acceptanceError) throw acceptanceError;
+
+                    // Then update the acknowledgement fields. Acceptance itself
+                    // is recorded by the protected server-side operation above.
                     const { data: updateResult, error: updateError } = await supabase
                       .from('mmp_site_entries')
                       .update({
@@ -7089,8 +7100,6 @@ const MMP = () => {
                         cost_acknowledged: true,
                         cost_acknowledged_at: acknowledgedAt,
                         cost_acknowledged_by: acknowledgedBy,
-                        accepted_at: acknowledgedAt,
-                        accepted_by: acknowledgedBy || selectedSiteForAcknowledgment.accepted_by,
                         updated_at: new Date().toISOString()
                       })
                       .eq('id', selectedSiteForAcknowledgment.id)

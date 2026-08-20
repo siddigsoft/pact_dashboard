@@ -126,17 +126,15 @@ export function useOfflineSiteVisit() {
             throw new Error(result.message || result.error || 'Claim failed');
           }
         } else {
-          const { error } = await supabase
-            .from('mmp_site_entries')
-            .update({
-              status: 'accepted',
-              accepted_by: userId,
-              accepted_at: new Date().toISOString(),
-              enumerator_fee: enumeratorFee,
-              transport_fee: transportFee,
-              cost: totalCost,
-            })
-            .eq('id', siteEntryId);
+          const { error } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+            p_site_id: siteEntryId,
+            p_accepted_by: userId,
+            p_status: 'accepted',
+            p_accepted_at: new Date().toISOString(),
+            p_enumerator_fee: enumeratorFee,
+            p_transport_fee: transportFee,
+            p_cost: totalCost,
+          });
 
           if (error) throw error;
         }

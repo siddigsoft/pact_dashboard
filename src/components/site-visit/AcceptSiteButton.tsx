@@ -253,18 +253,15 @@ export function AcceptSiteButton({
         }
       } else {
         const now = new Date().toISOString();
-        const { error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            status: 'accepted',
-            accepted_by: userId,
-            accepted_at: now,
-            updated_at: now,
-            enumerator_fee: feeBreakdown.enumeratorFee,
-            transport_fee: feeBreakdown.transportBudget,
-            cost: feeBreakdown.totalPayout
-          })
-          .eq('id', site.id);
+        const { error } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+          p_site_id: site.id,
+          p_accepted_by: userId,
+          p_status: 'accepted',
+          p_accepted_at: now,
+          p_enumerator_fee: feeBreakdown.enumeratorFee,
+          p_transport_fee: feeBreakdown.transportBudget,
+          p_cost: feeBreakdown.totalPayout,
+        });
 
         if (error) {
           console.error('Database update failed:', error);

@@ -58,7 +58,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   const [incentiveConfirmText, setIncentiveConfirmText] = useState('');
 
   // ── Field Payments checks (async) ────────────────────────────────────────
-  // Check 8: enumerators who had an advance but fee is still unpaid
+  // Check 8: WFP-confirmed covered sites whose fee still has a cash balance
   // Check 9: exception actions that have not executed successfully in the wizard
   const [unpaidFeeCount,  setUnpaidFeeCount]  = useState<number | null>(null); // null = loading
   const [pendingExcCount, setPendingExcCount]  = useState<number | null>(null);
@@ -76,42 +76,27 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         setIncentiveStatus(data.skipped ? 'skipped' : data.status);
       });
 
-    // Check 8: distinct enumerators who had an advance disbursed but whose fee is still unpaid.
-    // We count enumerator UUIDs (accepted_by), not site rows, so the message is accurate.
+    // Check 8: only persisted WFP-confirmed covered sites may be paid. Assigned,
+    // claimed, rejected, submitted, and explicitly not-covered sites are never
+    // financial obligations merely because they exist in this cycle.
     supabase
       .from('mmp_site_entries')
-      .select('id, accepted_by')
+      .select('id, accepted_by, enumerator_fee, transport_fee, fee_cash_paid_amount, fee_advance_offset_amount')
       .eq('mmp_file_id', mmpId)
-      .not('accepted_by', 'is', null)
-      .neq('fee_paid_status', 'paid')
-      .then(async ({ data: sites }) => {
-        if (!sites?.length) { setUnpaidFeeCount(0); return; }
-        const siteIds = sites.map((s: any) => s.id as string);
-        // Executed exceptions are financially resolved by their selected action and
-        // must not be counted again as unpaid normal-cycle enumerator fees.
-        const [{ data: advances }, { data: executedActions }] = await Promise.all([
-          supabase
-            .from('down_payment_requests')
-            .select('mmp_site_entry_id')
-            .in('mmp_site_entry_id', siteIds)
-            .in('status', ['paid', 'partially_paid', 'fully_paid']),
-          supabase
-            .from('cycle_exception_actions')
-            .select('mmp_site_entry_id')
-            .eq('mmp_file_id', mmpId)
-            .eq('executed', true),
-        ]);
-        const siteIdsWithAdvance = new Set((advances ?? []).map((a: any) => a.mmp_site_entry_id as string));
-        const resolvedExceptionSiteIds = new Set(
-          (executedActions ?? []).map((action: any) => action.mmp_site_entry_id as string)
-        );
-        // Count distinct enumerator UUIDs from those sites
-        const enumsWithUnpaidFees = new Set(
-          (sites as any[])
-            .filter(s => siteIdsWithAdvance.has(s.id) && !resolvedExceptionSiteIds.has(s.id))
-            .map(s => s.accepted_by as string)
-        );
-        setUnpaidFeeCount(enumsWithUnpaidFees.size);
+      .eq('status', 'wfp_confirmed')
+      .or('not_covered_flag.is.null,not_covered_flag.eq.false')
+      .then(({ data: sites, error }) => {
+        if (error) {
+          setUnpaidFeeCount(null);
+          return;
+        }
+        const unpaidCoveredSites = (sites as any[] ?? []).filter(site => {
+          if (!site.accepted_by) return false;
+          const grossFee = Number(site.enumerator_fee ?? 0) + Number(site.transport_fee ?? 0);
+          const settled = Number(site.fee_cash_paid_amount ?? 0) + Number(site.fee_advance_offset_amount ?? 0);
+          return grossFee - settled > 0.005;
+        });
+        setUnpaidFeeCount(unpaidCoveredSites.length);
       });
 
     // Check 9: any exception action still unexecuted, regardless of decision type
@@ -159,10 +144,10 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       description: unpaidFeeCount === null
         ? 'Checking fee payment status…'
         : unpaidFeeCount === 0
-          ? 'All enumerators with advances have had their fees paid'
-          : `${unpaidFeeCount} enumerator${unpaidFeeCount !== 1 ? 's' : ''} received an advance but fee is still unpaid — pay via Field Payments Centre`,
+          ? 'All WFP-confirmed covered-site fees are settled'
+          : `${unpaidFeeCount} WFP-confirmed covered site${unpaidFeeCount !== 1 ? 's have' : ' has'} an unpaid fee balance — pay via Field Payments Centre`,
       jumpStep: 1,
-      passes: unpaidFeeCount === null ? true : unpaidFeeCount === 0,
+      passes: unpaidFeeCount === 0,
       fixItUrl: '/field-payments?tab=fees',
     },
     {
@@ -178,7 +163,7 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     },
   ];
 
-  const hardBlockCheckIds = new Set([5, 9]);
+  const hardBlockCheckIds = new Set([5, 8, 9]);
   const allPassed = checks.every(c =>
     c.passes || (!hardBlockCheckIds.has(c.id) && !!wizardState.overrides[c.id])
   );

@@ -100,6 +100,8 @@ interface FeeRow {
   feePaidAt: string | null;
   feePaymentMethod: string | null;
   feePaymentNotes: string | null;
+  feePaymentReference: string | null;
+  feeFundingSource: string | null;
   feeReceiptUrl: string | null;
   redirectAllocations: FeeAllocationTrace[];
   mmpId: string;
@@ -180,6 +182,10 @@ type PayDialog = {
   method: string;
   date: string;
   notes: string;
+  reference: string;
+  preFundId: string;
+  preFunds: Array<{ id: string; name: string; available_balance: number; currency: string }>;
+  loadingPreFunds: boolean;
   receiptFile: File | null;
   receiptUrl: string | null;
   uploading: boolean;
@@ -355,7 +361,8 @@ export default function FieldPaymentsCentre() {
   const [payDialog, setPayDialog] = useState<PayDialog>({
     open: false, rows: [], amount: 0, method: 'Cash',
     date: new Date().toISOString().slice(0, 10),
-    notes: '', receiptFile: null, receiptUrl: null,
+    notes: '', reference: '', preFundId: '', preFunds: [], loadingPreFunds: false,
+    receiptFile: null, receiptUrl: null,
     uploading: false, saving: false,
   });
 
@@ -458,19 +465,32 @@ export default function FieldPaymentsCentre() {
           .from('mmp_site_entries')
           .select(`
           id, site_name, site_code, state, locality, status,
-          accepted_by, enumerator_fee, transport_fee,
+           not_covered_flag, accepted_by, enumerator_fee, transport_fee,
           fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, fee_unallocated_amount,
           fee_paid_at, fee_payment_method, fee_payment_notes,
-          fee_receipt_url,
+           fee_payment_reference, fee_pre_fund_id, fee_receipt_url,
           mmp_file_id,
           mmp_files!mmp_file_id(id, name, hub, cycle_status)
           `)
+          .eq('status', 'wfp_confirmed')
+          .or('not_covered_flag.is.null,not_covered_flag.eq.false')
           .not('accepted_by', 'is', null)
           .order('state')
           .range(from, to)
       );
 
       if (error) throw error;
+
+      const preFundNameMap: Record<string, string> = {};
+      const preFundIds = [...new Set((sites ?? []).map((site: any) => site.fee_pre_fund_id).filter(Boolean))];
+      if (preFundIds.length) {
+        const { data: preFunds, error: preFundError } = await (supabase as any)
+          .from('pre_fund_requests')
+          .select('id, name')
+          .in('id', preFundIds);
+        if (preFundError) throw preFundError;
+        for (const fund of preFunds ?? []) preFundNameMap[fund.id] = fund.name;
+      }
 
       // Resolve enumerator names
       const enumIds = [...new Set((sites ?? []).map((s: any) => s.accepted_by).filter(Boolean))];
@@ -590,6 +610,8 @@ export default function FieldPaymentsCentre() {
           feePaidAt: s.fee_paid_at,
           feePaymentMethod: s.fee_payment_method,
           feePaymentNotes: s.fee_payment_notes ?? null,
+          feePaymentReference: s.fee_payment_reference ?? null,
+          feeFundingSource: s.fee_pre_fund_id ? (preFundNameMap[s.fee_pre_fund_id] ?? 'Pre-fund') : null,
           feeReceiptUrl: s.fee_receipt_url ?? null,
           redirectAllocations,
           mmpId: mmp.id ?? s.mmp_file_id,
@@ -939,9 +961,24 @@ export default function FieldPaymentsCentre() {
       amount: totalNet,
       method: 'Cash',
       date: new Date().toISOString().slice(0, 10),
-      notes: '', receiptFile: null, receiptUrl: null,
+      notes: '', reference: '', preFundId: '', preFunds: [], loadingPreFunds: true,
+      receiptFile: null, receiptUrl: null,
       uploading: false, saving: false,
     }));
+    void (async () => {
+      const { data, error } = await (supabase as any)
+        .from('pre_fund_requests')
+        .select('id, name, available_balance, currency')
+        .in('status', ['active', 'low_balance'])
+        .eq('currency', 'SDG')
+        .lte('start_date', new Date().toISOString().slice(0, 10))
+        .gte('end_date', new Date().toISOString().slice(0, 10))
+        .order('name');
+      if (error) {
+        toast({ title: 'Pre-fund list unavailable', description: error.message, variant: 'destructive' });
+      }
+      setPayDialog(d => ({ ...d, preFunds: data ?? [], loadingPreFunds: false }));
+    })();
   };
 
   const handleFeeReceiptUpload = async (file: File) => {
@@ -963,37 +1000,24 @@ export default function FieldPaymentsCentre() {
     }
     setPayDialog(d => ({ ...d, saving: true }));
     try {
-      const now = new Date().toISOString();
-      const updates = payDialog.rows.map(row => {
-        const advanceOffset = getFeeAdvanceDeduction(row);
-        const paymentNotes = [
-          row.feePaymentNotes,
-          payDialog.notes.trim() || null,
-        ].filter(Boolean).join('; ');
-        return supabase.from('mmp_site_entries').update({
-          fee_paid_status:           'paid',
-          fee_paid_amount:           row.totalFee,
-          fee_cash_paid_amount:      Math.max(row.totalFee - advanceOffset, 0),
-          fee_advance_offset_amount: advanceOffset,
-          fee_unallocated_amount:    row.redirectAllocations.length > 0
-            ? 0
-            : Math.max(row.advancePaid - row.totalFee, 0),
-          fee_paid_at:               payDialog.date ? new Date(payDialog.date).toISOString() : now,
-          fee_paid_by:               currentUser?.id,
-          fee_payment_method:        payDialog.method,
-          fee_payment_notes:         paymentNotes || null,
-          fee_receipt_url:           payDialog.receiptUrl,
-          fee_receipt_uploaded_at:   now,
-          fee_receipt_uploaded_by:   currentUser?.id,
-        }).eq('id', row.id);
-      });
-      const results = await Promise.all(updates);
-      const errs = results.filter(r => r.error);
-      if (errs.length) throw new Error(errs[0].error!.message);
+      const { data, error } = await (supabase as any).rpc(
+        'record_covered_enumerator_fee_payments',
+        {
+          p_items: payDialog.rows.map(row => ({ site_id: row.id, amount: row.netPayable })),
+          p_payment_method: payDialog.method,
+          p_payment_date: payDialog.date,
+          p_receipt_url: payDialog.receiptUrl,
+          p_payment_reference: payDialog.reference.trim() || null,
+          p_notes: payDialog.notes.trim() || null,
+          p_pre_fund_id: payDialog.preFundId || null,
+        },
+      );
+      if (error) throw new Error(error.message);
+      if (!data?.ok) throw new Error(data?.error ?? 'The fee payment batch could not be recorded.');
 
       toast({
-        title: `${payDialog.rows.length} fee${payDialog.rows.length !== 1 ? 's' : ''} marked paid`,
-        description: 'GL entry will be posted automatically.',
+        title: `${payDialog.rows.length} covered fee${payDialog.rows.length !== 1 ? 's' : ''} recorded`,
+        description: 'The full batch was saved with its receipt and accounting evidence.',
       });
       setPayDialog(d => ({ ...d, open: false, saving: false }));
       setFeeSelected(new Set());
@@ -1740,9 +1764,9 @@ export default function FieldPaymentsCentre() {
           <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
             <Info className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm">
-              Mark fees as paid after cash / bank transfer is made to enumerators. A receipt must be uploaded.
+              This queue contains WFP-confirmed covered sites only. Mark fees as paid after cash / bank transfer is made to enumerators. A receipt must be uploaded.
               GL entries (DR 5200 Enumerator Fees / CR 1010 Cash or 1020 Bank) are posted automatically.
-              Advances are deducted from the net payable shown below.
+              Advance offsets are deducted from the net payable shown below; claimed, rejected, submitted, and not-covered sites cannot be paid here.
             </AlertDescription>
           </Alert>
 
@@ -1792,9 +1816,9 @@ export default function FieldPaymentsCentre() {
                   <TableRow className="bg-slate-50 dark:bg-slate-900">
                     <TableHead className="w-8">
                       <Checkbox
-                        checked={feeSelected.size === filteredFees.filter(r => r.feePaidStatus !== 'paid').length && filteredFees.filter(r => r.feePaidStatus !== 'paid').length > 0}
+                        checked={feeSelected.size === filteredFees.filter(r => r.feePaidStatus !== 'paid' && r.netPayable > 0).length && filteredFees.filter(r => r.feePaidStatus !== 'paid' && r.netPayable > 0).length > 0}
                         onCheckedChange={checked => {
-                          if (checked) setFeeSelected(new Set(filteredFees.filter(r => r.feePaidStatus !== 'paid').map(r => r.id)));
+                          if (checked) setFeeSelected(new Set(filteredFees.filter(r => r.feePaidStatus !== 'paid' && r.netPayable > 0).map(r => r.id)));
                           else setFeeSelected(new Set());
                         }}
                       />
@@ -1806,7 +1830,7 @@ export default function FieldPaymentsCentre() {
                     <TableHead className="text-xs text-right">Advance Offset</TableHead>
                     <TableHead className="text-xs text-right font-semibold">Net Payable</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs">Receipt</TableHead>
+                    <TableHead className="text-xs">Evidence</TableHead>
                     <TableHead className="text-xs">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1816,7 +1840,7 @@ export default function FieldPaymentsCentre() {
                   ) : filteredFees.map(row => (
                     <TableRow key={row.id} className={row.feePaidStatus === 'paid' ? 'opacity-60' : ''}>
                       <TableCell>
-                        {row.feePaidStatus !== 'paid' && (
+                        {row.feePaidStatus !== 'paid' && row.netPayable > 0 && (
                           <Checkbox
                             checked={feeSelected.has(row.id)}
                             onCheckedChange={c => {
@@ -1866,19 +1890,26 @@ export default function FieldPaymentsCentre() {
                         {row.feePaidAt && <p className="text-[10px] text-muted-foreground mt-0.5">{fmtDate(row.feePaidAt)}</p>}
                       </TableCell>
                       <TableCell>
-                        {row.feeReceiptUrl
-                          ? <a href={row.feeReceiptUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-[10px] flex items-center gap-1 hover:underline"><ExternalLink className="h-3 w-3" /> View</a>
-                          : <span className="text-[10px] text-muted-foreground">—</span>
-                        }
+                        <div className="space-y-0.5">
+                          {row.feeReceiptUrl
+                            ? <a href={row.feeReceiptUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-[10px] flex items-center gap-1 hover:underline"><ExternalLink className="h-3 w-3" /> Receipt</a>
+                            : <span className="text-[10px] text-muted-foreground">—</span>
+                          }
+                          {row.feeFundingSource && <p className="text-[10px] text-muted-foreground">Fund: {row.feeFundingSource}</p>}
+                          {row.feePaymentReference && <p className="text-[10px] text-muted-foreground">Ref: {row.feePaymentReference}</p>}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        {row.feePaidStatus !== 'paid' && row.cycleStatus !== 'closed' && (
+                        {row.feePaidStatus !== 'paid' && row.netPayable > 0 && row.cycleStatus !== 'closed' && (
                           <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => openPayDialog([row])}>
                             <Banknote className="h-3 w-3 mr-1" /> Pay
                           </Button>
                         )}
                         {row.cycleStatus === 'closed' && row.feePaidStatus !== 'paid' && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Lock className="h-3 w-3" /> Cycle closed</span>
+                        )}
+                        {row.netPayable <= 0 && row.feePaidStatus !== 'paid' && (
+                          <span className="text-[10px] text-green-700">No cash due</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -2449,6 +2480,27 @@ export default function FieldPaymentsCentre() {
                   onChange={e => setPayDialog(d => ({ ...d, date: e.target.value }))} />
               </div>
               <div>
+                <Label className="text-xs">Pre-funding source (optional)</Label>
+                <Select value={payDialog.preFundId || '__none__'} onValueChange={v => setPayDialog(d => ({ ...d, preFundId: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger className="h-9 text-sm mt-1">
+                    <SelectValue placeholder={payDialog.loadingPreFunds ? 'Loading eligible pre-funds…' : 'Pay outside pre-funding'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Pay outside pre-funding</SelectItem>
+                    {payDialog.preFunds.map(fund => (
+                      <SelectItem key={fund.id} value={fund.id}>
+                        {fund.name} — SDG {fmt(Number(fund.available_balance ?? 0))} available
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {payDialog.preFundId && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    The protected payment transaction will verify the live balance before it saves the batch.
+                  </p>
+                )}
+              </div>
+              <div>
                 <Label className="text-xs">Receipt / Proof of Payment *</Label>
                 <div className="mt-1 border-2 border-dashed rounded-lg p-3 text-center hover:bg-muted/50 transition-colors cursor-pointer relative">
                   <input type="file" accept="image/*,.pdf" className="absolute inset-0 opacity-0 cursor-pointer"
@@ -2471,6 +2523,11 @@ export default function FieldPaymentsCentre() {
                     </div>
                   )}
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs">Payment reference (optional)</Label>
+                <Input className="h-9 text-sm mt-1" placeholder="Transfer ID, voucher, or cashbook reference"
+                  value={payDialog.reference} onChange={e => setPayDialog(d => ({ ...d, reference: e.target.value }))} />
               </div>
               <div>
                 <Label className="text-xs">Notes (optional)</Label>

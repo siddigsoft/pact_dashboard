@@ -47,6 +47,7 @@ import Navbar from '@/components/Navbar';
 import { WorkspaceAccessGate } from '@/components/workspace/WorkspaceAccessGate';
 import { WorkspaceAccessManager } from '@/components/workspace/WorkspaceAccessManager';
 import { startWorkspaceTour, hasCompletedWorkspaceTour, markWorkspaceTourCompleted } from '@/components/onboarding/workspaceTour';
+import { openGoogleDrivePicker, type GoogleDrivePickedFile } from '@/lib/googleDrivePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -850,6 +851,10 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [importingDrive, setImportingDrive] = useState(false);
+  const [openingDrivePicker, setOpeningDrivePicker] = useState(false);
+  const [driveInput, setDriveInput] = useState('');
+  const [driveImportLabel, setDriveImportLabel] = useState('');
   const [progress, setProgress] = useState(0);
   const [currentUploadingName, setCurrentUploadingName] = useState('');
   const [extractZips, setExtractZips] = useState(true);
@@ -868,6 +873,7 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
     if (!open) {
       setFiles([]); setDescription(''); setTags(''); setProgress(0); setCurrentUploadingName('');
       setExtractZips(true); setDuplicates([]); setSecLevel(folderSecurityLevel);
+      setDriveInput(''); setDriveImportLabel('');
     }
   }, [open, initialEntries]);
 
@@ -911,6 +917,137 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
     setFiles(prev => [...prev, ...entries]);
     checkDuplicates(newFiles);
   };
+
+  function extractGoogleDriveFileId(input: string): string | null {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    if (!trimmed.includes('/')) return trimmed;
+    const byD = trimmed.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+    if (byD?.[1]) return byD[1];
+    const byId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+    if (byId?.[1]) return byId[1];
+    return null;
+  }
+
+  async function importDriveFileById(driveFileId: string): Promise<string | null> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('Not authenticated');
+    const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive-import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        driveFileId,
+        folderId,
+        folderPath,
+        securityLevel: secLevel,
+        description: description || null,
+        tags: tagList,
+      }),
+    });
+    const result = await response.json() as { success?: boolean; error?: string; file?: { name?: string } };
+    if (!response.ok || result.error || !result.success) {
+      throw new Error(result.error || 'Drive import failed');
+    }
+    return result.file?.name ?? null;
+  }
+
+  async function importDriveFiles(picked: GoogleDrivePickedFile[]) {
+    const importable = picked.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
+    const skippedFolders = picked.length - importable.length;
+    if (importable.length === 0) {
+      toast({
+        title: 'No files selected',
+        description: skippedFolders > 0 ? 'Folders cannot be imported yet. Select individual files.' : 'Choose at least one file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setImportingDrive(true);
+    let imported = 0;
+    const failures: string[] = [];
+    try {
+      for (let i = 0; i < importable.length; i++) {
+        const file = importable[i];
+        setDriveImportLabel(`Importing ${i + 1} of ${importable.length}: ${file.name}`);
+        try {
+          await importDriveFileById(file.id);
+          imported++;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Import failed';
+          failures.push(`${file.name}: ${message}`);
+        }
+      }
+
+      if (imported > 0) {
+        toast({
+          title: `Imported ${imported} file${imported !== 1 ? 's' : ''} from Google Drive`,
+          description: failures.length > 0
+            ? `${failures.length} failed. ${skippedFolders > 0 ? `${skippedFolders} folder(s) skipped.` : ''}`
+            : skippedFolders > 0
+              ? `${skippedFolders} folder(s) skipped.`
+              : 'Files were added to this workspace folder.',
+        });
+        onUploaded();
+        if (failures.length === 0) onClose();
+      } else {
+        toast({
+          title: 'Drive import failed',
+          description: failures[0] ?? 'No files could be imported.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setImportingDrive(false);
+      setDriveImportLabel('');
+    }
+  }
+
+  async function importFromGoogleDrive() {
+    const parsedId = extractGoogleDriveFileId(driveInput);
+    if (!parsedId) {
+      toast({ title: 'Invalid Drive link', description: 'Paste a valid Google Drive file URL or file ID.', variant: 'destructive' });
+      return;
+    }
+    setImportingDrive(true);
+    setDriveImportLabel('Importing from Google Drive…');
+    try {
+      const name = await importDriveFileById(parsedId);
+      toast({
+        title: 'Imported from Google Drive',
+        description: name ? `${name} was added to workspace.` : 'File imported successfully.',
+      });
+      setDriveInput('');
+      onUploaded();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import from Google Drive';
+      toast({ title: 'Drive import failed', description: message, variant: 'destructive' });
+    } finally {
+      setImportingDrive(false);
+      setDriveImportLabel('');
+    }
+  }
+
+  async function browseGoogleDrive() {
+    setOpeningDrivePicker(true);
+    try {
+      await openGoogleDrivePicker({
+        title: 'Import files into Workspace',
+        onPicked: (files) => { void importDriveFiles(files); },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to open Google Drive picker';
+      toast({ title: 'Google Drive picker unavailable', description: message, variant: 'destructive' });
+    } finally {
+      setOpeningDrivePicker(false);
+    }
+  }
 
   async function handleUpload() {
     if (files.length === 0) return;
@@ -1124,6 +1261,44 @@ function UploadDialog({ folderId, folderName, folderPath, folderSecurityLevel = 
             <input ref={fileRef} type="file" multiple className="hidden" onChange={e => addFiles(e.target.files ?? [])} />
             {/* @ts-ignore */}
             <input ref={folderRef} type="file" multiple className="hidden" webkitdirectory="" onChange={e => addFiles(e.target.files ?? [])} />
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+            <p className="text-xs font-semibold text-foreground">Import directly from Google Drive</p>
+            <p className="text-[11px] text-muted-foreground">
+              Browse your Drive or paste a file link. The server imports straight into this folder (no local upload).
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={browseGoogleDrive}
+              disabled={importingDrive || openingDrivePicker}
+              className="w-full h-9 gap-2 text-xs border-[#1D3461]/30 text-[#1D3461] hover:bg-[#1D3461]/5"
+            >
+              {openingDrivePicker || importingDrive
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <FolderOpen className="h-3.5 w-3.5" />}
+              {openingDrivePicker ? 'Opening Drive…' : importingDrive ? 'Importing…' : 'Browse Google Drive'}
+            </Button>
+            {driveImportLabel && (
+              <p className="text-[10px] text-muted-foreground">{driveImportLabel}</p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                value={driveInput}
+                onChange={e => setDriveInput(e.target.value)}
+                placeholder="Or paste link / file ID"
+                className="h-8 text-xs"
+                disabled={importingDrive}
+              />
+              <Button type="button" onClick={importFromGoogleDrive} disabled={importingDrive || openingDrivePicker} size="sm" className="h-8 px-3 gap-1.5">
+                {importingDrive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+                Import
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Connect Google Drive in Integrations first. You can select multiple files at once.
+            </p>
           </div>
 
           {/* File list */}

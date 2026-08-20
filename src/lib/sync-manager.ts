@@ -705,24 +705,26 @@ class SyncManager {
         throw new Error(result.message || result.error || 'Claim failed');
       }
     } else {
-      const { error } = await supabase
+      const { error } = await (supabase as any).rpc('set_mmp_site_entry_acceptance', {
+        p_site_id: siteEntryId,
+        p_accepted_by: userId,
+        p_status: 'accepted',
+        p_accepted_at: claimedAt,
+        p_enumerator_fee: enumeratorFee,
+        p_transport_fee: transportFee,
+        p_cost: totalCost,
+      });
+
+      if (error) throw error;
+      await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'accepted',
-          accepted_by: userId,
-          accepted_at: claimedAt,
-          updated_at: new Date().toISOString(),
-          enumerator_fee: enumeratorFee,
-          transport_fee: transportFee,
-          cost: totalCost,
           additional_data: {
             offline_claim: true,
             offline_synced_at: new Date().toISOString(),
-          }
+          },
         })
         .eq('id', siteEntryId);
-
-      if (error) throw error;
     }
   }
 

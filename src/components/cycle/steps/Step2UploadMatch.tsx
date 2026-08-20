@@ -123,6 +123,10 @@ export default function Step2UploadMatch({
   const [overrideJustification, setOverrideJustification] = useState('');
   const [overrideSaving, setOverrideSaving] = useState(false);
 
+  // ── WFP-covered site persistence (before advancing to Step 3) ────────────
+  const [persistError, setPersistError] = useState<string | null>(null);
+  const [persisting, setPersisting] = useState(false);
+
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const lastColumnsKey = useRef('');
 
@@ -396,6 +400,59 @@ export default function Step2UploadMatch({
 
   const exportMatchingReport = () => {
     void exportFormattedMatchingReport(wizardState);
+  };
+
+  // ── WFP-confirmed site IDs: auto matches + confirmed/manual links only.
+  //    Never rejects, never extras (extras have no MMP site), never unmatched.
+  const collectWfpConfirmedSiteIds = (): string[] => {
+    const ids = new Set<string>();
+    for (const r of wizardState.matchResults) {
+      if (!r.matchedSiteId) continue;
+      const isAuto = r.status === 'auto';
+      const isConfirmed = r.action === 'confirm'; // covers manual links (they set action='confirm')
+      if (isAuto || isConfirmed) ids.add(r.matchedSiteId);
+    }
+    return [...ids];
+  };
+
+  // ── Persist WFP-covered sites, then advance to Step 3. If persistence fails
+  //    we surface a visible error and DO NOT advance.
+  const handleNextWithPersist = async () => {
+    setPersistError(null);
+    const siteIds = collectWfpConfirmedSiteIds();
+
+    // Nothing to persist (e.g. all rejected/uncovered) — still allowed to advance.
+    if (siteIds.length === 0) {
+      onNext();
+      return;
+    }
+
+    setPersisting(true);
+    try {
+      const { error } = await (supabase as any).rpc('persist_wfp_covered_sites', {
+        p_mmp_file_id: wizardState.selectedMmpId,
+        p_site_ids: siteIds,
+      });
+      if (error) {
+        console.error('persist_wfp_covered_sites error:', error);
+        setPersistError(
+          'Could not save the WFP-confirmed sites. Please try again before continuing. ' +
+          (error.message ?? '')
+        );
+        setPersisting(false);
+        return;
+      }
+    } catch (err: any) {
+      console.error('persist_wfp_covered_sites threw:', err);
+      setPersistError(
+        'Could not save the WFP-confirmed sites. Please try again before continuing.'
+      );
+      setPersisting(false);
+      return;
+    }
+
+    setPersisting(false);
+    onNext();
   };
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -1360,6 +1417,7 @@ export default function Step2UploadMatch({
                       setOverrideSaving(true);
                       await supabase.from('mmp_site_entries').update({
                         status: 'wfp_confirmed',
+                        not_covered_flag: false,
                         wfp_override_justification: overrideJustification,
                         wfp_override_by: currentUser?.id,
                         wfp_override_at: new Date().toISOString(),
@@ -1381,6 +1439,13 @@ export default function Step2UploadMatch({
           </div>
         );
       })()}
+
+      {persistError && (
+        <Alert variant="destructive" data-testid="alert-persist-wfp-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{persistError}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex items-center justify-between pt-4 border-t">
         <div className="flex items-center gap-2">
@@ -1404,10 +1469,11 @@ export default function Step2UploadMatch({
         </div>
         <Button
           type="button"
-          onClick={onNext}
-          disabled={!canAdvance}
+          onClick={handleNextWithPersist}
+          disabled={!canAdvance || persisting}
           data-testid="button-next-step2"
         >
+          {persisting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Next: Mark Uncovered →
         </Button>
       </div>

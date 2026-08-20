@@ -24,9 +24,25 @@ interface Props {
   currentUser: any;
 }
 
+// ── Finance payment queue: one row per WFP-covered site Finance must pay ─────
+interface PaymentQueueRow {
+  siteId: string;
+  siteName: string;
+  enumeratorName: string;
+  enumeratorFee: number;
+  transportFee: number;
+  totalFee: number;
+  advanceOffset: number;
+  cashOutstanding: number;
+  feePaidStatus: string;
+  receiptUrl: string | null;
+  receiptReference: string | null;
+}
+
 export default function Step6Reconciliation({ wizardState, onNext, onBack, canGoBack }: Props) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<EnumRow[]>([]);
+  const [paymentQueue, setPaymentQueue] = useState<PaymentQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,10 +56,15 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
     // transport_fee / enumerator_fee live on each entry row, not on mmp_files.
     // Enumerator linkage may be accepted_by, claimed_by, or visit_started_by (UUID).
     // Do NOT join profiles!accepted_by — there is no FK constraint; do a separate lookup.
-    const { data: entries } = await supabase
+    // Cast to any: fee_* payment columns and not_covered_flag are newer DB
+    // columns not yet reflected in the generated Supabase types.
+    const { data: entries } = await (supabase as any)
       .from('mmp_site_entries')
       .select(
-        'id, accepted_by, claimed_by, visit_started_by, status, transport_fee, enumerator_fee, additional_data'
+        'id, site_name, accepted_by, claimed_by, visit_started_by, status, not_covered_flag, ' +
+        'transport_fee, enumerator_fee, additional_data, ' +
+        'fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, ' +
+        'fee_payment_reference, fee_receipt_url'
       )
       .eq('mmp_file_id', wizardState.selectedMmpId!);
 
@@ -157,6 +178,49 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
     });
 
     setRows(tableRows);
+
+    // ── Build the Finance payment queue: one row per WFP-covered site ────────
+    // Include a site only when it is confirmed by the current wizard result
+    // (auto match / confirmed link) OR already persisted as wfp_confirmed in the
+    // DB. Always exclude not-covered sites.
+    const enumNameById: Record<string, string> = {};
+    for (const [enumId, data] of Object.entries(byEnum)) enumNameById[enumId] = data.name;
+
+    const queueRows: PaymentQueueRow[] = (entries ?? [])
+      .filter((e: any) => {
+        if (notCoveredIds.has(e.id)) return false;
+        if (e.not_covered_flag === true) return false;
+        const persistedConfirmed = String(e.status ?? '').toLowerCase() === 'wfp_confirmed';
+        const wizardConfirmed = confirmedMatchIds.has(e.id);
+        return persistedConfirmed || wizardConfirmed;
+      })
+      .map((e: any) => {
+        const enumId = resolveEnumId(e);
+        const enumeratorName = (enumId && enumNameById[enumId]) || 'Unknown';
+        const enumeratorFee = Number(e.enumerator_fee) || 0;
+        const transportFee = Number(e.transport_fee) || 0;
+        const totalFee = enumeratorFee + transportFee;
+        const advanceOffset = Math.min(Number(e.fee_advance_offset_amount) || 0, totalFee);
+        // Cash still owed after advance offset and any cash already paid.
+        const cashPaid = Number(e.fee_cash_paid_amount) || 0;
+        const cashOutstanding = Math.max(totalFee - advanceOffset - cashPaid, 0);
+        return {
+          siteId: e.id,
+          siteName: e.site_name ?? '—',
+          enumeratorName,
+          enumeratorFee,
+          transportFee,
+          totalFee,
+          advanceOffset,
+          cashOutstanding,
+          feePaidStatus: String(e.fee_paid_status ?? 'unpaid'),
+          receiptUrl: e.fee_receipt_url ?? null,
+          receiptReference: e.fee_payment_reference ?? null,
+        };
+      })
+      .sort((a: PaymentQueueRow, b: PaymentQueueRow) => a.siteName.localeCompare(b.siteName));
+
+    setPaymentQueue(queueRows);
     setLoading(false);
   };
 
@@ -235,12 +299,12 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-amber-800 dark:text-amber-200 text-sm">Payments must be completed in Field Payments Centre</p>
+              <p className="font-semibold text-amber-800 dark:text-amber-200 text-sm">Finance pays only WFP-covered sites — complete payments in Field Payments Centre</p>
               <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                This step is a financial view only. Actual fee disbursements and advance recoveries are processed in Field Payments Centre — Finance marks each payment with a receipt, and the system updates the payment status automatically.
+                This step is a financial view only. Finance disburses fees exclusively for sites confirmed as covered by WFP (auto-matched or manually confirmed) — not-covered sites are never paid. Actual fee disbursements and advance recoveries are processed in Field Payments Centre, where Finance marks each payment with a receipt and the payment status updates automatically.
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5" dir="rtl">
-                هذه الخطوة للمراجعة فقط. تتم مدفوعات الأتعاب والاسترداد في مركز المدفوعات الميدانية.
+                هذه الخطوة للمراجعة فقط. تدفع المالية أتعاب المواقع المؤكدة من برنامج الغذاء فقط — لا تُدفع المواقع غير المغطاة. تتم المدفوعات والاسترداد في مركز المدفوعات الميدانية.
               </p>
             </div>
           </div>
@@ -346,6 +410,115 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
             )}
           </div>
         ))}
+      </div>
+
+      {/* ── Finance Payment Queue (WFP-covered sites only) ── */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between gap-2 flex-wrap px-4 py-3 bg-muted/40 border-b">
+          <div>
+            <h3 className="font-semibold text-sm">Finance Payment Queue — WFP-Covered Sites</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Only sites confirmed as covered by WFP appear here. Finance pays these in Field Payments Centre; not-covered sites are excluded.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 text-white text-xs gap-1.5"
+            onClick={() => navigate(fieldPaymentsUrl)}
+            data-testid="button-payment-queue-field-payments"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open Field Payments Centre (Fees)
+          </Button>
+        </div>
+        {paymentQueue.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            No WFP-covered sites to pay for this cycle.
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Site</th>
+                  <th className="px-3 py-2 text-left font-medium">Enumerator</th>
+                  <th className="px-3 py-2 text-right font-medium">Enum. Fee</th>
+                  <th className="px-3 py-2 text-right font-medium">Transport</th>
+                  <th className="px-3 py-2 text-right font-medium">Total Fee</th>
+                  <th className="px-3 py-2 text-right font-medium">Advance Offset</th>
+                  <th className="px-3 py-2 text-right font-medium">Cash Outstanding</th>
+                  <th className="px-3 py-2 text-left font-medium">Payment Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Receipt</th>
+                  <th className="px-3 py-2 text-center font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentQueue.map((q, i) => {
+                  const paid = q.feePaidStatus.toLowerCase() === 'paid' || q.feePaidStatus.toLowerCase() === 'fully_paid';
+                  const partial = q.feePaidStatus.toLowerCase() === 'partially_paid';
+                  return (
+                    <tr key={q.siteId} className={`border-t ${i % 2 === 0 ? '' : 'bg-muted/20'}`}>
+                      <td className="px-3 py-1.5 font-medium">{q.siteName}</td>
+                      <td className="px-3 py-1.5">{q.enumeratorName}</td>
+                      <td className="px-3 py-1.5 text-right">SDG {q.enumeratorFee.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right">SDG {q.transportFee.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right font-medium">SDG {q.totalFee.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right">SDG {q.advanceOffset.toLocaleString()}</td>
+                      <td className={`px-3 py-1.5 text-right font-semibold ${q.cashOutstanding > 0 ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                        SDG {q.cashOutstanding.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${
+                          paid
+                            ? 'bg-green-100 text-green-700 border-green-200'
+                            : partial
+                              ? 'bg-amber-100 text-amber-700 border-amber-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {q.feePaidStatus}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {q.receiptUrl ? (
+                          <a
+                            href={q.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {q.receiptReference ?? 'View'}
+                          </a>
+                        ) : q.receiptReference ? (
+                          <span className="text-muted-foreground">{q.receiptReference}</span>
+                        ) : (
+                          <span className="text-muted-foreground/50 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => navigate(fieldPaymentsUrl)}
+                          className="text-primary hover:underline inline-flex items-center gap-1"
+                          data-testid={`button-pay-site-${q.siteId}`}
+                        >
+                          <ArrowRight className="h-3 w-3" />
+                          {paid ? 'View' : 'Pay'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {paymentQueue.length > 0 && (
+          <div className="border-t px-4 py-2 bg-muted/20 text-[10px] text-muted-foreground">
+            {paymentQueue.length} WFP-covered site{paymentQueue.length !== 1 ? 's' : ''} · payments processed in Field Payments Centre
+          </div>
+        )}
       </div>
 
       {/* Totals */}

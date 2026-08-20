@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:covered-fee-payments": "bash scripts/test-covered-fee-payment-workflow.sh",
     "check:registry": "vitest run src/lib/__tests__/registry-drift.test.ts --reporter=verbose"
   },
   "dependencies": {
