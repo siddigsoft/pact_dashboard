@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pact-v7';
+const CACHE_NAME = 'pact-v8';
 const OFFLINE_URL = '/offline.html';
-const STATIC_CACHE = 'pact-static-v5';
-const API_CACHE = 'pact-api-v5';
-const DYNAMIC_CACHE = 'pact-dynamic-v4';
+const STATIC_CACHE = 'pact-static-v6';
+const API_CACHE = 'pact-api-v6';
+const DYNAMIC_CACHE = 'pact-dynamic-v5';
 
 const SW_DEBUG_HOSTS = ['localhost', '127.0.0.1'];
 const SW_DEBUG = SW_DEBUG_HOSTS.includes(self.location.hostname) || self.location.hostname.endsWith('.local');
@@ -68,7 +68,7 @@ const VIBRATION_PATTERNS = {
 };
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v7...');
+  console.log('[SW] Installing service worker v8...');
   event.waitUntil(
     Promise.all([
       caches.open(CACHE_NAME).then((cache) => {
@@ -90,7 +90,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v7...');
+  console.log('[SW] Activating service worker v8...');
   const validCaches = [CACHE_NAME, STATIC_CACHE, API_CACHE, DYNAMIC_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
