@@ -28,6 +28,7 @@ import {
   type RedirectSettlementTarget,
 } from '../redirectSettlement';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
+import { getFinanceReviewRecallAction } from '@/utils/cycleRedirectFinanceReview';
 
 interface Props {
   wizardState: WizardState;
@@ -717,6 +718,7 @@ export default function Step5Exceptions({
       snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
       confirmSnapshotReview: false,
       snapshotReviewSubmitting: false,
+      snapshotReviewedAt: decision.financeSnapshotReviewedAt,
       periods: [],
       loadingPeriods: true,
       submitting: false,
@@ -761,7 +763,18 @@ export default function Step5Exceptions({
 
   const submitSnapshotReview = async () => {
     if (!correctionDialog?.decision.actionId) return;
-    if (!correctionDialog.confirmSnapshotReview) {
+    const reviewAction = getFinanceReviewRecallAction(
+      correctionDialog.snapshotReviewedAt,
+      correctionDialog.confirmSnapshotReview,
+    );
+    // The immutable review is loaded with the action. Do not ask Finance to
+    // save it again when a previous recall attempt was interrupted or failed;
+    // consume the persisted attestation and retry only the protected reversal.
+    if (reviewAction === 'recall_saved_review') {
+      await submitRedirectCorrection(true);
+      return;
+    }
+    if (reviewAction === 'confirmation_required') {
       updateRedirectCorrection({
         error: 'Confirm the Finance review before recalling the payment.\nأكد مراجعة المالية قبل استدعاء الدفعة.',
       });
@@ -783,7 +796,11 @@ export default function Step5Exceptions({
       const result = data as { ok?: boolean; error?: string; reviewed_at?: string } | null;
       // A complete immutable snapshot does not need a separate review row. The
       // same confirmation still authorizes the normal reversal path.
-      if (!result?.ok && !result?.error?.includes('already has an immutable fee snapshot')) {
+      if (
+        !result?.ok
+        && !result?.error?.includes('already has an immutable fee snapshot')
+        && !result?.error?.includes('already has an immutable Finance snapshot review')
+      ) {
         throw new Error(result?.error || 'The Finance review could not be saved.');
       }
       updateRedirectCorrection({
