@@ -39,3 +39,23 @@ export const getRedirectCorrectionRpcName = (
   }
   return 'reopen_cycle_redirect_for_correction';
 };
+
+export const buildRedirectCorrectionRequest = (
+  mode: RedirectCorrectionMode,
+  actionId: string,
+  reason: string,
+  periodId: string,
+  idempotencyKey: string,
+) => {
+  const rpcName = getRedirectCorrectionRpcName(mode);
+  const params: Record<string, unknown> = {
+    p_action_id: actionId,
+    p_reason: reason,
+    p_period_id: periodId,
+    p_idempotency_key: idempotencyKey,
+  };
+  if (mode === 'reverse_reprocessed_payment') {
+    params.p_confirm_reverse_later_payment = true;
+  }
+  return { rpcName, params };
+};

@@ -32,6 +32,7 @@ import {
   getFinanceReviewRecallAction,
   getFinanceReviewRecallMode,
   getRedirectCorrectionRpcName,
+  buildRedirectCorrectionRequest,
 } from '@/utils/cycleRedirectFinanceReview';
 
 interface Props {
@@ -871,16 +872,13 @@ export default function Step5Exceptions({
       : current);
     const key = exceptionKey(correctionDialog.site);
     try {
-      const rpcName = getRedirectCorrectionRpcName(correctionMode);
-      const rpcParams: Record<string, unknown> = {
-        p_action_id: correctionDialog.decision.actionId,
-        p_reason: correctionReason,
-        p_period_id: correctionDialog.periodId,
-        p_idempotency_key: correctionDialog.idempotencyKey,
-      };
-      if (correctionMode === 'reverse_reprocessed_payment') {
-        rpcParams.p_confirm_reverse_later_payment = true;
-      }
+      const { rpcName, params: rpcParams } = buildRedirectCorrectionRequest(
+        correctionMode,
+        correctionDialog.decision.actionId,
+        correctionReason,
+        correctionDialog.periodId,
+        correctionDialog.idempotencyKey,
+      );
       const { data, error } = await (supabase as any).rpc(rpcName, rpcParams);
       if (error) throw new Error(error.message);
       const result = data as { ok?: boolean; error?: string } | null;
@@ -2334,6 +2332,10 @@ function RedirectCorrectionPanel({
     && correction.confirmSnapshotReview
     && !correction.loadingPeriods
     && !!correction.periodId;
+  const canRecallSavedReview = !correction.snapshotReviewSubmitting
+    && !correction.submitting
+    && !correction.loadingPeriods
+    && !!correction.periodId;
 
   return (
     <div
@@ -2478,7 +2480,7 @@ function RedirectCorrectionPanel({
                 </AlertDescription>
               </Alert>
               <div className="flex justify-end">
-                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={correction.snapshotReviewSubmitting || correction.submitting}>
+                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={!canRecallSavedReview}>
                   {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                   <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                   Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
@@ -2506,6 +2508,12 @@ function RedirectCorrectionPanel({
                 <p className="text-xs font-medium text-blue-900">Confirmation is all that is needed. The system will calculate the amount and recall it safely. · التأكيد هو كل ما يلزم. سيحسب النظام المبلغ ويستدعيه بأمان.</p>
               )}
             </>
+          )}
+          {correction.loadingPeriods && (
+            <p className="text-xs text-blue-900">Preparing the current fiscal period for this recall… · جارٍ تجهيز الفترة المالية الحالية لهذا الاستدعاء…</p>
+          )}
+          {!correction.loadingPeriods && !correction.periodId && (
+            <p className="text-xs font-medium text-destructive">No current open fiscal period is available. Finance must open a valid period before the recall can be posted. · لا توجد فترة مالية مفتوحة حالية. يجب فتح فترة مالية صالحة قبل تنفيذ الاستدعاء.</p>
           )}
         </div>
       )}
