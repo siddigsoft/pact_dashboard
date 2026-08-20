@@ -28,7 +28,6 @@ import {
 } from '../redirectSettlement';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
 import {
-  getFinanceReviewRecallAction,
   getFinanceReviewRecallMode,
   getRedirectCorrectionRpcName,
   buildRedirectCorrectionRequest,
@@ -104,10 +103,6 @@ interface RedirectCorrectionDialog {
   reprocessedModeAvailable: boolean;
   /** Required high-risk acknowledgement, gated to the reverse_reprocessed_payment mode. */
   confirmReverseLaterPayment: boolean;
-  /** Separate immutable Finance attestation for a legacy action with no snapshot. */
-  snapshotReviewKey: string;
-  snapshotReviewSubmitting: boolean;
-  snapshotReviewedAt?: string;
   periods: FiscalPeriod[];
   loadingPeriods: boolean;
   submitting: boolean;
@@ -712,7 +707,8 @@ export default function Step5Exceptions({
       reason: '',
       periodId: '',
       idempotencyKey,
-      // A persisted Finance review can only authorize the full recall path.
+      // An older persisted recall attestation should reopen on the full recall
+      // path. New recalls do not require a separate attestation.
       mode: hasSavedSnapshotReview
         ? getFinanceReviewRecallMode()
         : 'reopen_advance',
@@ -722,9 +718,6 @@ export default function Step5Exceptions({
       historicalModeAvailable: true,
       reprocessedModeAvailable: true,
       confirmReverseLaterPayment: hasSavedSnapshotReview,
-      snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
-      snapshotReviewSubmitting: false,
-      snapshotReviewedAt: decision.financeSnapshotReviewedAt,
       periods: [],
       loadingPeriods: true,
       submitting: false,
@@ -767,62 +760,19 @@ export default function Step5Exceptions({
     setCorrectionDialog(current => current ? { ...current, ...patch } : current);
   };
 
-  const submitSnapshotReview = async () => {
-    if (!correctionDialog?.decision.actionId) return;
-    const reviewAction = getFinanceReviewRecallAction(correctionDialog.snapshotReviewedAt);
-    // The immutable review is loaded with the action. Do not ask Finance to
-    // save it again when a previous recall attempt was interrupted or failed;
-    // consume the persisted attestation and retry only the protected reversal.
-    if (reviewAction === 'recall_saved_review') {
-      await submitRedirectCorrection(true, getFinanceReviewRecallMode());
-      return;
-    }
-    updateRedirectCorrection({ snapshotReviewSubmitting: true, error: undefined });
-    try {
-      const { data, error } = await (supabase as any).rpc(
-        'review_legacy_redirect_fee_snapshot',
-        {
-          p_action_id: correctionDialog.decision.actionId,
-          p_reason: 'Finance confirmed restoration to the exact pre-Redirect payment state.',
-          p_confirm_review: true,
-          p_idempotency_key: correctionDialog.snapshotReviewKey,
-        },
-      );
-      if (error) throw new Error(error.message);
-      const result = data as { ok?: boolean; error?: string; reviewed_at?: string } | null;
-      // A complete immutable snapshot does not need a separate review row. The
-      // same confirmation still authorizes the protected full recall path.
-      if (
-        !result?.ok
-        && !result?.error?.includes('already has an immutable fee snapshot')
-        && !result?.error?.includes('already has an immutable Finance snapshot review')
-      ) {
-        throw new Error(result?.error || 'The Finance review could not be saved.');
-      }
-      updateRedirectCorrection({
-        snapshotReviewSubmitting: false,
-        snapshotReviewedAt: result.reviewed_at ?? new Date().toISOString(),
-        confirmReverseLaterPayment: true,
-        error: undefined,
-      });
-      await submitRedirectCorrection(true, getFinanceReviewRecallMode());
-    } catch (error: unknown) {
-      updateRedirectCorrection({
-        snapshotReviewSubmitting: false,
-        error: correctionErrorWithArabic(error instanceof Error ? error.message : 'The Finance snapshot review could not be saved.'),
-      });
-    }
+  const submitAutomaticRecall = async () => {
+    await submitRedirectCorrection(true, getFinanceReviewRecallMode());
   };
 
   const submitRedirectCorrection = async (
-    confirmedFromFinanceReview = false,
+    isAutomaticRecall = false,
     correctionModeOverride?: RedirectCorrectionDialog['mode'],
   ) => {
     if (!correctionDialog?.decision.actionId) return;
     const correctionMode = correctionModeOverride ?? correctionDialog.mode;
     const correctionReason = correctionDialog.reason.trim()
-      || 'Finance confirmed recall of the reprocessed payment to restore the original payment state.';
-    if (!confirmedFromFinanceReview && correctionDialog.reason.trim().length < 10) {
+      || 'Authorized automatic recall of the reprocessed payment to restore the original payment state.';
+    if (!isAutomaticRecall && correctionDialog.reason.trim().length < 10) {
       setCorrectionDialog(current => current
         ? {
           ...current,
@@ -843,7 +793,7 @@ export default function Step5Exceptions({
     if (
       correctionMode === 'reverse_reprocessed_payment'
       && !correctionDialog.confirmReverseLaterPayment
-      && !confirmedFromFinanceReview
+      && !isAutomaticRecall
     ) {
       setCorrectionDialog(current => current
         ? {
@@ -1215,7 +1165,7 @@ export default function Step5Exceptions({
               onUpdateCorrection={updateRedirectCorrection}
               onCancelCorrection={() => setCorrectionDialog(null)}
               onSubmitCorrection={() => void submitRedirectCorrection()}
-              onReviewSnapshot={() => void submitSnapshotReview()}
+              onAutomaticRecall={() => void submitAutomaticRecall()}
               variant="paid"
             />
           ))}
@@ -1294,7 +1244,7 @@ export default function Step5Exceptions({
               onUpdateCorrection={updateRedirectCorrection}
               onCancelCorrection={() => setCorrectionDialog(null)}
               onSubmitCorrection={() => void submitRedirectCorrection()}
-              onReviewSnapshot={() => void submitSnapshotReview()}
+              onAutomaticRecall={() => void submitAutomaticRecall()}
               variant="approved"
             />
           ))}
@@ -1386,7 +1336,7 @@ interface SiteCardProps {
   onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancelCorrection: () => void;
   onSubmitCorrection: () => void;
-  onReviewSnapshot: () => void;
+  onAutomaticRecall: () => void;
   variant: 'paid' | 'approved';
 }
 
@@ -1396,7 +1346,7 @@ function SiteCard({
   loadingTargetCycles,
   onTargetMmpChange, onLoadSameMmpSites, onLoadOpenTargetCycles, onExecute, correctedHistory,
   canCorrectRedirect, onCorrectRedirect, correctionDialog, onUpdateCorrection,
-  onCancelCorrection, onSubmitCorrection, onReviewSnapshot,
+  onCancelCorrection, onSubmitCorrection, onAutomaticRecall,
 }: SiteCardProps) {
   const [showPayment, setShowPayment] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
@@ -1545,7 +1495,7 @@ function SiteCard({
               onUpdateCorrection={onUpdateCorrection}
               onCancelCorrection={onCancelCorrection}
               onSubmitCorrection={onSubmitCorrection}
-              onReviewSnapshot={onReviewSnapshot}
+              onAutomaticRecall={onAutomaticRecall}
             />
           )}
         </>
@@ -2089,7 +2039,7 @@ function ExecutionDetails({
   onUpdateCorrection,
   onCancelCorrection,
   onSubmitCorrection,
-  onReviewSnapshot,
+  onAutomaticRecall,
 }: {
   decision: ExceptionDecision | undefined;
   chosenLabel: string;
@@ -2101,7 +2051,7 @@ function ExecutionDetails({
   onUpdateCorrection: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancelCorrection: () => void;
   onSubmitCorrection: () => void;
-  onReviewSnapshot: () => void;
+  onAutomaticRecall: () => void;
 }) {
   if (!decision) return null;
 
@@ -2271,7 +2221,7 @@ function ExecutionDetails({
                   onChange={onUpdateCorrection}
                   onCancel={onCancelCorrection}
                   onSubmit={onSubmitCorrection}
-                  onReviewSnapshot={onReviewSnapshot}
+                  onAutomaticRecall={onAutomaticRecall}
                 />
               )}
             </div>
@@ -2290,13 +2240,13 @@ function RedirectCorrectionPanel({
   onChange,
   onCancel,
   onSubmit,
-  onReviewSnapshot,
+  onAutomaticRecall,
 }: {
   correction: RedirectCorrectionDialog;
   onChange: (patch: Partial<RedirectCorrectionDialog>) => void;
   onCancel: () => void;
   onSubmit: () => void;
-  onReviewSnapshot: () => void;
+  onAutomaticRecall: () => void;
 }) {
   const historicalOnly = correction.mode === 'historical_accounting_only';
   const reverseReprocessed = correction.mode === 'reverse_reprocessed_payment';
@@ -2306,20 +2256,7 @@ function RedirectCorrectionPanel({
     && !!correction.periodId
     && correction.reason.trim().length >= 10
     && (!reverseReprocessed || correction.confirmReverseLaterPayment);
-  const snapshotReviewRequired = !correction.snapshotReviewedAt
-    && (
-      correction.error?.includes('Redirect fee snapshot is incomplete')
-      || correction.error?.includes('Redirect fee snapshot is not an exact full legacy settlement')
-    );
-  // An approved Finance review is consumed only by the full recall-and-restore
-  // RPC. The accounting-only and ordinary reopen paths deliberately remain
-  // fail-closed when the immutable legacy snapshot is incomplete.
-  const showSnapshotReview = reverseReprocessed || !!correction.snapshotReviewedAt;
-  const canSaveSnapshotReview = !correction.snapshotReviewSubmitting
-    && !correction.loadingPeriods
-    && !!correction.periodId;
-  const canRecallSavedReview = !correction.snapshotReviewSubmitting
-    && !correction.submitting
+  const canAutomaticRecall = !correction.submitting
     && !correction.loadingPeriods
     && !!correction.periodId;
 
@@ -2411,82 +2348,30 @@ function RedirectCorrectionPanel({
             <span className="block">The selected path is checked against the complete payment and GL history when submitted. Unsupported, incomplete, or ambiguous histories fail closed without changing records.</span>
             <span dir="rtl" className="block">يتم التحقق من المسار المختار مقابل سجل الدفع ودفتر الأستاذ الكامل عند الإرسال. تُرفض السجلات غير المدعومة أو الناقصة أو غير الواضحة دون تغيير أي سجلات.</span>
           </p>
-          {snapshotReviewRequired && !reverseReprocessed && (
-            <Alert className="border-blue-300 bg-blue-50 text-blue-950">
-              <Info className="h-4 w-4" />
-              <AlertDescription className="space-y-2">
-                <span className="block">
-                  This legacy record can only be reviewed and recalled through the full
-                  “Reverse reprocessed payment and restore the original advance” path.
-                  The other correction routes remain blocked to protect the accounting history.
-                </span>
-                <span dir="rtl" className="block">
-                  يمكن مراجعة هذا السجل القديم واستدعاؤه فقط عبر مسار عكس الدفعة المعاد تشغيلها
-                  وإعادة السلفة الأصلية. تبقى مسارات التصحيح الأخرى محظورة لحماية السجل المحاسبي.
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-blue-700 hover:bg-blue-800"
-                  onClick={() => onChange({
-                    mode: 'reverse_reprocessed_payment',
-                    confirmReverseLaterPayment: false,
-                    error: undefined,
-                  })}
-                >
-                  Use recall and restore path · استخدم مسار الاستدعاء والإعادة
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
         </div>
       )}
 
-      {showSnapshotReview && (
-        <div className="rounded border border-blue-300 bg-blue-50/80 p-3 space-y-3" data-testid="finance-snapshot-review-panel">
+      {reverseReprocessed && (
+        <div className="rounded border border-blue-300 bg-blue-50/80 p-3 space-y-3" data-testid="automatic-recall-panel">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-800" />
             <div className="text-xs text-blue-950 space-y-0.5">
-              <p className="font-semibold">Automatic Finance validation · التحقق المالي التلقائي</p>
-              <p>Click Recall once. The system automatically records the Finance review, calculates and validates the exact amount, then restores the original payment state.</p>
-              <p dir="rtl">اضغط على الاستدعاء مرة واحدة. يسجل النظام المراجعة المالية تلقائياً، ويحسب المبلغ الدقيق ويتحقق منه، ثم يعيد حالة الدفعة الأصلية.</p>
+              <p className="font-semibold">Automatic payment recall · استدعاء الدفعة تلقائياً</p>
+              <p>Click Recall once. The system uses the original posted payment and journal, reverses the later payment safely, and restores the original advance.</p>
+              <p dir="rtl">اضغط على الاستدعاء مرة واحدة. يستخدم النظام الدفعة الأصلية المسجلة والقيد، ويعكس الدفعة اللاحقة بأمان، ثم يعيد السلفة الأصلية.</p>
             </div>
           </div>
           <div className="grid gap-x-3 sm:grid-cols-2 text-xs">
-            <DetailRow label="Amount to recall · مبلغ الاستدعاء" value={`SDG ${(correction.site.feePaidAmount ?? correction.decision.feeSettledAmount ?? correction.site.advancePaid ?? 0).toLocaleString()}`} />
+            <DetailRow label="Amount to recall · مبلغ الاستدعاء" value={`SDG ${(correction.site.advancePaid ?? 0).toLocaleString()}`} />
             <DetailRow label="Original payment · الدفعة الأصلية" value={correction.site.advanceId} mono />
           </div>
-          {correction.snapshotReviewedAt ? (
-            <>
-              <Alert className="border-green-300 bg-green-50 text-green-950">
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>
-                  Automatic Finance validation saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The payment can now be recalled safely.
-                  <span dir="rtl" className="block">تم حفظ التحقق المالي التلقائي. يمكن الآن استدعاء الدفعة بأمان.</span>
-                </AlertDescription>
-              </Alert>
-              <div className="flex justify-end">
-                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={!canRecallSavedReview}>
-                  {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-end">
-                <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={!canSaveSnapshotReview}>
-                  {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
-                </Button>
-              </div>
-              {snapshotReviewRequired && (
-                <p className="text-xs font-medium text-blue-900">Clicking Recall automatically completes the Finance validation and safely recalls the payment. · يؤدي الضغط على الاستدعاء إلى إكمال التحقق المالي واستدعاء الدفعة بأمان تلقائياً.</p>
-              )}
-            </>
-          )}
+          <div className="flex justify-end">
+            <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onAutomaticRecall} disabled={!canAutomaticRecall}>
+              {correction.submitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
+            </Button>
+          </div>
           {correction.loadingPeriods && (
             <p className="text-xs text-blue-900">Preparing the current fiscal period for this recall… · جارٍ تجهيز الفترة المالية الحالية لهذا الاستدعاء…</p>
           )}

@@ -1,24 +1,9 @@
-export type FinanceReviewRecallAction =
-  | 'recall_saved_review'
-  | 'save_review_then_recall';
-
 export type RedirectCorrectionMode =
   | 'reopen_advance'
   | 'historical_accounting_only'
   | 'reverse_reprocessed_payment';
 
-/**
- * A saved Finance review is immutable. On a retry, consume it directly instead
- * of attempting to create another review with a new idempotency key.
- */
-export const getFinanceReviewRecallAction = (
-  snapshotReviewedAt: string | undefined,
-): FinanceReviewRecallAction => {
-  if (snapshotReviewedAt) return 'recall_saved_review';
-  return 'save_review_then_recall';
-};
-
-/** Finance attestations are valid only for the full later-payment reversal. */
+/** Automatic recall always uses the full later-payment reversal. */
 export const getFinanceReviewRecallMode = (): RedirectCorrectionMode =>
   'reverse_reprocessed_payment';
 

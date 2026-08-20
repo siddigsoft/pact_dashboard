@@ -3308,10 +3308,11 @@ BEGIN
   SET amount = 1000, amount_cents = 100000, balance_before = 0, balance_after = 1000
   WHERE id = LATER_WT;
 
-  -- ── Finance review: incomplete legacy snapshot can be attested separately ──
-  -- The legacy action itself remains untouched: the review is a protected
-  -- audit record that only the full-restore RPC can consume after revalidating
-  -- all payment, fee, and journal evidence.
+  -- ── Automatic recall: original journal + advance are the amount authority ──
+  -- Legacy fee fields may have been edited after the original Redirect. The
+  -- automatic route must not ask for or create a Finance review: it must reverse
+  -- the original posted payment when all later-payment and provenance guards
+  -- continue to pass.
   UPDATE public.cycle_exception_actions
   SET redirect_fee_gross_amount = NULL,
       redirect_fee_prior_settled_amount = NULL,
@@ -3359,58 +3360,26 @@ BEGIN
   WHERE action_id = v_action_id;
   PERFORM pg_temp.assert_eq('invalid Finance review creates no audit record', v_count, 0);
 
-  v_result := public.review_legacy_redirect_fee_snapshot(
-    v_action_id,
-    'Verified original journal, advance, fee, later activity and payment provenance',
-    true, 'ce54-finance-review-success'
-  );
-  PERFORM pg_temp.assert_ok('confirmation-only Finance review derives exact legacy evidence', v_result);
-  SELECT count(*) INTO v_count FROM public.cycle_redirect_fee_snapshot_reviews
-  WHERE action_id = v_action_id
-    AND gross_fee = 1000 AND prior_settled_amount = 0
-    AND settled_amount = 1000 AND remaining_amount = 0
-    AND fee_status = 'paid';
-  PERFORM pg_temp.assert_eq('Finance review is stored separately from action', v_count, 1);
-  SELECT count(*) INTO v_count FROM public.cycle_exception_actions
-  WHERE id = v_action_id
-    AND redirect_fee_gross_amount IS NULL
-    AND redirect_fee_status IS NULL;
-  PERFORM pg_temp.assert_eq('Finance review never rewrites the legacy action', v_count, 1);
-
-  v_result := public.review_legacy_redirect_fee_snapshot(
-    v_action_id, 1000, 0, 1000, 0,
-    'Verified original journal, advance, fee, later activity and payment provenance',
-    true, 'ce54-finance-review-success'
-  );
-  PERFORM pg_temp.assert_ok('Finance review retry is idempotent', v_result);
-  PERFORM pg_temp.assert_true('Finance review retry reports existing review',
-    coalesce((v_result->>'already_reviewed')::boolean, false));
-  v_result := public.review_legacy_redirect_fee_snapshot(
-    v_action_id, 1000, 0, 1000, 0,
-    'A different review cannot overwrite the immutable attestation', true,
-    'ce54-finance-review-different-key'
-  );
-  PERFORM pg_temp.assert_err('different Finance review key cannot overwrite audit', v_result,
-    'already has an immutable');
-  BEGIN
-    UPDATE public.cycle_redirect_fee_snapshot_reviews
-    SET gross_fee = 999
-    WHERE action_id = v_action_id;
-    RAISE EXCEPTION 'FINANCE_REVIEW_MUTATION_NOT_BLOCKED';
-  EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'FINANCE_REVIEW_MUTATION_NOT_BLOCKED' THEN
-      RAISE EXCEPTION 'FAIL [Finance review immutability]: direct mutation succeeded';
-    END IF;
-    IF SQLERRM NOT ILIKE '%immutable%' THEN
-      RAISE;
-    END IF;
-  END;
+  -- Simulate the mismatch reported in production: a later fee edit makes the
+  -- current fee/payment markers 1,100 while the immutable journal and advance
+  -- are still the original 1,000 payment. The recall must use 1,000 and reset
+  -- the fee marker without demanding a Finance review.
+  UPDATE public.mmp_site_entries
+  SET enumerator_fee = 1100,
+      transport_fee = 0,
+      fee_paid_amount = 1100,
+      fee_cash_paid_amount = 1100
+  WHERE id = R_SOURCE;
+  SELECT count(*) INTO v_count
+  FROM public.cycle_redirect_fee_snapshot_reviews
+  WHERE action_id = v_action_id;
+  PERFORM pg_temp.assert_eq('automatic recall does not create a Finance review', v_count, 0);
 
   -- ── Happy path: full reprocessed-payment reversal ─────────────────────────
   v_result := public.reverse_reprocessed_cycle_redirect_for_correction(
     v_action_id, v_reason, PERIOD, 'ce54-reprocessed-success', true
   );
-  PERFORM pg_temp.assert_ok('reprocessed reversal succeeds', v_result);
+  PERFORM pg_temp.assert_ok('automatic reprocessed recall succeeds despite fee mismatch', v_result);
   v_reversal_id := (v_result->>'reversal_journal_entry_id')::uuid;
   v_replacement_id := (v_result->>'replacement_action_id')::uuid;
   PERFORM pg_temp.assert_txt('reprocessed reversal reports mode',
