@@ -2300,9 +2300,15 @@ function RedirectCorrectionPanel({
     && !!correction.periodId
     && correction.reason.trim().length >= 10
     && (!reverseReprocessed || correction.confirmReverseLaterPayment);
-  const needsSnapshotReview = reverseReprocessed
-    && !correction.snapshotReviewedAt
-    && correction.error?.includes('Redirect fee snapshot is incomplete');
+  const snapshotReviewRequired = !correction.snapshotReviewedAt
+    && (
+      correction.error?.includes('Redirect fee snapshot is incomplete')
+      || correction.error?.includes('Redirect fee snapshot is not an exact full legacy settlement')
+    );
+  // An approved Finance review is consumed only by the full recall-and-restore
+  // RPC. The accounting-only and ordinary reopen paths deliberately remain
+  // fail-closed when the immutable legacy snapshot is incomplete.
+  const showSnapshotReview = reverseReprocessed || !!correction.snapshotReviewedAt;
   const canSaveSnapshotReview = !correction.snapshotReviewSubmitting
     && correction.confirmSnapshotReview
     && !correction.loadingPeriods
@@ -2396,10 +2402,38 @@ function RedirectCorrectionPanel({
             <span className="block">The selected path is checked against the complete payment and GL history when submitted. Unsupported, incomplete, or ambiguous histories fail closed without changing records.</span>
             <span dir="rtl" className="block">يتم التحقق من المسار المختار مقابل سجل الدفع ودفتر الأستاذ الكامل عند الإرسال. تُرفض السجلات غير المدعومة أو الناقصة أو غير الواضحة دون تغيير أي سجلات.</span>
           </p>
+          {snapshotReviewRequired && !reverseReprocessed && (
+            <Alert className="border-blue-300 bg-blue-50 text-blue-950">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="space-y-2">
+                <span className="block">
+                  This legacy record can only be reviewed and recalled through the full
+                  “Reverse reprocessed payment and restore the original advance” path.
+                  The other correction routes remain blocked to protect the accounting history.
+                </span>
+                <span dir="rtl" className="block">
+                  يمكن مراجعة هذا السجل القديم واستدعاؤه فقط عبر مسار عكس الدفعة المعاد تشغيلها
+                  وإعادة السلفة الأصلية. تبقى مسارات التصحيح الأخرى محظورة لحماية السجل المحاسبي.
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-blue-700 hover:bg-blue-800"
+                  onClick={() => onChange({
+                    mode: 'reverse_reprocessed_payment',
+                    confirmReverseLaterPayment: false,
+                    error: undefined,
+                  })}
+                >
+                  Use recall and restore path · استخدم مسار الاستدعاء والإعادة
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
 
-      {reverseReprocessed && (
+      {showSnapshotReview && (
         <div className="rounded border border-blue-300 bg-blue-50/80 p-3 space-y-3" data-testid="finance-snapshot-review-panel">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-800" />
@@ -2447,7 +2481,7 @@ function RedirectCorrectionPanel({
                   Recall payment and restore original state · استدعاء الدفعة وإعادة الحالة الأصلية
                 </Button>
               </div>
-              {needsSnapshotReview && (
+              {snapshotReviewRequired && (
                 <p className="text-xs font-medium text-blue-900">Confirmation is all that is needed. The system will calculate the amount and recall it safely. · التأكيد هو كل ما يلزم. سيحسب النظام المبلغ ويستدعيه بأمان.</p>
               )}
             </>
