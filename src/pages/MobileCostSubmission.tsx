@@ -799,7 +799,12 @@ const MobileCostSubmission = () => {
     setActionProcessing(true);
     try {
       const now = new Date().toISOString();
-      const updatePayload: Record<string, unknown> = { status: 'paid', paid_at: now, updated_at: now };
+      const updatePayload: Record<string, unknown> = {
+        status: 'paid',
+        amount_paid_cents: oc.amount_cents,
+        paid_at: now,
+        updated_at: now,
+      };
       try { updatePayload.paid_by = currentUser.id; } catch { /* field may not exist */ }
       let { error } = await supabase.from('operational_cost_submissions').update(updatePayload).eq('id', oc.id);
       if (error?.message?.includes('paid_by')) {
@@ -813,7 +818,7 @@ const MobileCostSubmission = () => {
         toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "Payment recorded. / تم تسجيل الدفع." });
         fetchOperationalCosts();
         // Auto-link to active pre-fund (non-blocking — payment already recorded)
-        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund }) => {
+        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund, createPreFundPaymentEventKey }) => {
           // Extract first receipt URL from supporting_documents for GL audit trail
           const firstReceipt = (() => {
             const docs = (oc as any).supporting_documents;
@@ -835,6 +840,14 @@ const MobileCostSubmission = () => {
             createdBy: currentUser.id,
             userId: oc.submitted_by ?? null,
             receiptUrl: typeof firstReceipt === 'string' ? firstReceipt : null,
+            paymentEventKey: createPreFundPaymentEventKey({
+              sourceTable: 'operational_cost_submissions',
+              sourceId: oc.id,
+              amount: oc.amount_cents / 100,
+              paymentDate: now,
+              reference: oc.reference_number ?? null,
+              receiptUrl: typeof firstReceipt === 'string' ? firstReceipt : null,
+            }),
           }).then(r => {
             if (r.linked) {
               toast({ title: '✅ Linked to Pre-Fund', description: r.message });

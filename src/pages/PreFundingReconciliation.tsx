@@ -54,7 +54,7 @@ async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: strin
   }
   return (await Promise.all(batches)).flat();
 }
-import { linkPaymentToKnownFund } from '@/utils/preFundLinkage';
+import { createPreFundPaymentEventKey, linkPaymentToKnownFund } from '@/utils/preFundLinkage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -611,7 +611,7 @@ export default function PreFundingReconciliation() {
   const [txnLoading, setTxnLoading]   = useState(false);
   const [showAddTxn, setShowAddTxn]   = useState(false);
   const [showCloseDialog, setShowClose] = useState(false);
-  const [txnForm, setTxnForm]         = useState({ transaction_type: 'payment', amount: '', currency: '', reference: '', description: '', transaction_date: new Date().toISOString().split('T')[0] });
+  const [txnForm, setTxnForm]         = useState({ transaction_type: 'adjustment', amount: '', currency: '', reference: '', description: '', transaction_date: new Date().toISOString().split('T')[0] });
   const [closeForm, setCloseForm]     = useState({ surplus_action: 'carry_forward', carry_forward_amount: '', return_amount: '', notes: '' });
   const [saving, setSaving]           = useState(false);
   const [closing, setClosing]         = useState(false);
@@ -625,53 +625,31 @@ export default function PreFundingReconciliation() {
   const [assignUserId, setAssignUserId] = useState('');
   const [assigning, setAssigning]       = useState(false);
 
-  // Effective paid/available:
-  //   Priority 1 — sum of 'payment' txns from pre_fund_transactions (when RPC deployed).
-  //   Priority 2 — selectedFund.paid_amount DB column (updated by directLinkPayment balance
-  //                UPDATE even when the pre_fund_transactions INSERT is blocked by RLS).
+  // The ledger migration maintains these cache fields from the canonical,
+  // reversal-aware event view. Recomputing raw payment rows in the browser would
+  // reintroduce legacy-source and reversal discrepancies.
   const effectivePaidAmount = useMemo(() => {
-    const paymentTxns = transactions.filter(t => t.transaction_type === 'payment');
-    // Use row-count check (not sum > 0) so that zero/negative transaction amounts
-    // don't accidentally fall through to the DB column fallback
-    if (paymentTxns.length > 0) {
-      return paymentTxns.reduce((s, t) => s + Number(t.amount), 0);
-    }
-    // Fallback: use the DB's paid_amount column — reliably updated by directLinkPayment
-    // even when the pre_fund_transactions INSERT is blocked by RLS
     return Number(selectedFund?.paid_amount ?? 0);
-  }, [transactions, selectedFund]);
+  }, [selectedFund]);
   const effectiveAvailableBalance = useMemo(() =>
-    selectedFund ? selectedFund.amount - effectivePaidAmount : 0,
-  [selectedFund, effectivePaidAmount]);
+    Number(selectedFund?.available_balance ?? 0),
+  [selectedFund]);
 
   // True when paid_amount DB column is stale (no txn rows back it up).
   // Suppressed while txnLoading=true so we don't flash a false warning
   // during the window between fund switch (transactions cleared) and load completing.
   const isStaleBalance = useMemo(() => {
     if (!selectedFund || txnLoading) return false;
-    const paymentTxns = transactions.filter(t => t.transaction_type === 'payment');
-    return paymentTxns.length === 0 && Number(selectedFund.paid_amount) > 0;
+    return false;
   }, [selectedFund, transactions, txnLoading]);
 
   const handleResetBalance = async () => {
     if (!selectedFund) return;
-    setResettingBalance(true);
-    try {
-      const { error } = await (supabase as any)
-        .from('pre_fund_requests')
-        .update({ paid_amount: 0, available_balance: selectedFund.amount })
-        .eq('id', selectedFund.id);
-      if (error) throw error;
-      // Immediately patch selectedFund so the stale banner disappears without
-      // waiting for loadFunds to propagate through setFunds → selectedFund
-      setSelected(prev => prev ? { ...prev, paid_amount: 0, available_balance: prev.amount } : prev);
-      toast({ title: 'Balance reset', description: 'Paid Out cleared — fund is now fully available.' });
-      await loadFunds();
-    } catch (e: any) {
-      toast({ title: 'Reset failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setResettingBalance(false);
-    }
+    toast({
+      title: 'Direct balance reset disabled',
+      description: 'Use the Finance exceptions queue and a controlled historic correction. Fund balances are derived from immutable payment events.',
+      variant: 'destructive',
+    });
   };
 
   // Auto-link retry
@@ -814,6 +792,9 @@ export default function PreFundingReconciliation() {
           }
           avMap.set(fund.id, Math.max(0, fund.amount - paid));
         }
+        // The server-owned cache is the sole balance authority. The preceding
+        // legacy scan remains useful for the exception queue, not for balances.
+        loaded.forEach(fund => avMap.set(fund.id, Number(fund.available_balance ?? 0)));
       }
       setFundsComputedAvail(new Map(avMap));
     } catch (e: any) { toast({ title: 'Load failed', description: e.message, variant: 'destructive' }); }
@@ -824,69 +805,17 @@ export default function PreFundingReconciliation() {
     setTxnLoading(true);
     try {
       const [rawTxns, reconData] = await Promise.all([
-        // Unlimited fetch — paginate through all txns for this fund
-        fetchAll(() => supabase.from('pre_fund_transactions').select('*').eq('pre_fund_request_id', fundId).order('transaction_date', { ascending: false })),
+        // The canonical view excludes invalid source events and includes
+        // compensating reversals, so paid-out displays agree with the fund cache.
+        fetchAll(() => (supabase as any).from('pre_fund_event_ledger_v')
+          .select('*')
+          .eq('pre_fund_request_id', fundId)
+          .eq('source_is_verified', true)
+          .order('transaction_date', { ascending: false })),
         fetchAll(() => supabase.from('pre_fund_reconciliations').select('*').eq('pre_fund_request_id', fundId).order('created_at', { ascending: false })),
       ]);
 
-      // Filter out transactions whose source DP/OCS has been deleted or cancelled
-      const dpIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
-      const ocsIds = [...new Set(rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string))];
-      const rawTxnIds = rawTxns.map((t: any) => t.id as string).filter(Boolean);
-
-      // Batched .in() fetches — no row cap, no URL-length issues
-      const [validDpData, validOcsData, backLinkedDpData] = await Promise.all([
-        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpIds),
-        fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsIds),
-        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), rawTxnIds),
-      ]);
-
-      // DPs that still exist (non-cancelled, non-deleted) — used for commitment tracking
-      const validDpSet  = new Set(validDpData.filter((d: any) => d.status !== 'cancelled' && d.metadata?.deleted !== true).map((d: any) => d.id as string));
-      // DPs whose money has NOT yet moved (pre-disbursement / reverted / deleted).
-      // Payment txns linked to these DPs are excluded from Paid Out totals.
-      // 'approved' and all terminal paid states are intentionally NOT in this set.
-      const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
-      const paidDpSet = new Set(
-        validDpData
-          .filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true)
-          .map((d: any) => d.id as string)
-      );
-      const validOcsSet = new Set(validOcsData.map((o: any) => o.id as string));
-
-      // pre_fund_transactions IDs that are back-linked from deleted/cancelled DPs
-      const deletedDpTxnIds = new Set<string>(
-        backLinkedDpData
-          .filter((d: any) => d.status === 'cancelled' || d.metadata?.deleted === true)
-          .map((d: any) => d.pre_fund_transaction_id as string)
-      );
-      // Old-style txns (NULL source_table): IDs back-linked from a DP that has NOT disbursed
-      const nonPaidBackLinkedTxnIds = new Set<string>(
-        backLinkedDpData
-          .filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true)
-          .map((d: any) => d.pre_fund_transaction_id as string)
-      );
-
-      const txns = rawTxns.filter(t => {
-        if (t.source_table === 'down_payment_requests') {
-          if (!t.source_id) return true;
-          // payment txns excluded only if DP is in a pre-disbursement / reverted state
-          if (t.transaction_type === 'payment') return paidDpSet.has(t.source_id);
-          // commitment/other txns count if DP is not cancelled/deleted
-          return validDpSet.has(t.source_id);
-        }
-        if (t.source_table === 'operational_cost_submissions') return !t.source_id || validOcsSet.has(t.source_id);
-        // Old rows with NULL source_table — check back-links:
-        // Exclude only if a pre-disbursement/reverted DP back-links here.
-        // Manual payments (no DP back-link at all) are always included.
-        if (!t.source_table && t.transaction_type === 'payment') {
-          return !nonPaidBackLinkedTxnIds.has(t.id);
-        }
-        if (!t.source_table && t.transaction_type === 'commitment') {
-          return !deletedDpTxnIds.has(t.id);
-        }
-        return true;
-      });
+      const txns = rawTxns;
 
       setTxns(txns);
       setRecons(reconData as any);
@@ -1039,69 +968,36 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setRetryingId(sub.id);
     try {
-      // Fetch GL codes — optional, only used when both are configured
-      const { data: fd } = await supabase
-        .from('pre_fund_requests')
-        .select('gl_liability_account,gl_receipt_account')
-        .eq('id', selectedFund.id)
-        .maybeSingle();
+      if (sub._source !== 'down_payment_requests' && sub._source !== 'operational_cost_submissions') {
+        throw new Error('This legacy source cannot be linked automatically. Add it to the Finance exceptions queue with its payment evidence.');
+      }
 
-      // Route through the canonical atomic RPC — updates available_balance, paid_amount, and GL
+      // The source-aware linker owns the event, source back-link, allocation, and
+      // cache update in one database transaction.
       const txnDate = sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0];
-      const { data: result, error: rpcErr } = await (supabase as any).rpc('add_pre_fund_transaction_rpc', {
-        p_fund_id:          selectedFund.id,
-        p_fund_name:        selectedFund.name,
-        p_transaction_type: 'payment',
-        p_amount:           sub.amount,
-        p_currency:         sub.currency ?? selectedFund.currency,
-        p_reference:        sub.id,
-        p_description:      sub.title ?? 'Linked payment',
-        p_transaction_date: txnDate,
-        p_created_by:       currentUser?.id ?? null,
-        p_gl_debit_code:    fd?.gl_liability_account ?? null,
-        p_gl_credit_code:   fd?.gl_receipt_account ?? null,
-        // Pass the field-staff user so their allocation is deducted automatically
-        p_user_id:          sub.userId ?? null,
+      const result = await linkPaymentToKnownFund({
+        fundId: selectedFund.id,
+        fundName: selectedFund.name,
+        amount: sub.amount,
+        currency: sub.currency ?? selectedFund.currency,
+        sourceTable: sub._source,
+        sourceId: sub.id,
+        reference: sub.reference ?? sub.id,
+        description: sub.title ?? 'Linked payment',
+        paymentDate: txnDate,
+        createdBy: currentUser?.id ?? null,
+        userId: sub.userId ?? null,
+        paymentEventKey: createPreFundPaymentEventKey({
+          sourceTable: sub._source,
+          sourceId: sub.id,
+          amount: sub.amount,
+          paymentDate: txnDate,
+          reference: sub.reference ?? null,
+        }),
       });
-      if (rpcErr) {
-        const isNotDeployed =
-          (rpcErr as any).code === 'PGRST202' ||
-          String(rpcErr.message).toLowerCase().includes('could not find the function') ||
-          String(rpcErr.message).toLowerCase().includes('does not exist');
-        if (isNotDeployed) {
-          // RPC not deployed yet — fall back to directLinkPayment which updates fund balance
-          // even when pre_fund_transactions INSERT is blocked by RLS
-          setRpcMissing(true);
-          const fallback = await linkPaymentToKnownFund({
-            fundId:      selectedFund.id,
-            fundName:    selectedFund.name,
-            amount:      sub.amount,
-            currency:    sub.currency ?? selectedFund.currency,
-            sourceTable: sub._source,
-            sourceId:    sub.id,
-            reference:   sub.id,
-            description: sub.title ?? 'Linked payment',
-            paymentDate: txnDate,
-            createdBy:   currentUser?.id ?? null,
-            userId:      sub.userId ?? null,
-          });
-          if (!fallback.linked) throw new Error(fallback.message ?? 'Link failed');
-          toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
-          await loadFunds();
-          loadTxns(selectedFund.id);
-          loadUnlinkedPayments(selectedFund.id);
-          return;
-        }
-        throw new Error(rpcErr.message);
-      }
-      if (result && result.success === false) throw new Error(result.error ?? 'Link RPC failed.');
+      if (!result.linked) throw new Error(result.message ?? 'Link failed.');
 
-      // Back-link the source record so it knows which fund transaction covers it
-      if (sub._source && sub.id) {
-        await (supabase as any).from(sub._source).update({ pre_fund_transaction_id: result?.transaction_id ?? null }).eq('id', sub.id);
-      }
-
-      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}${result?.gl_posted ? ' — GL entry posted.' : ''}` });
+      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
       await loadFunds();
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
@@ -1116,60 +1012,14 @@ export default function PreFundingReconciliation() {
     setUnlinkingId(txn.id);
     setConfirmUnlinkTxn(null);
     try {
-      // 1. Delete the pre_fund_transactions row
-      const { error: delErr } = await supabase
-        .from('pre_fund_transactions')
-        .delete()
-        .eq('id', txn.id);
-      if (delErr) throw new Error(delErr.message);
-
-      // 2. Restore fund balance (reverse the payment deduction)
-      const { error: balErr } = await supabase
-        .from('pre_fund_requests')
-        .update({
-          available_balance: selectedFund.available_balance + txn.amount,
-          paid_amount:       Math.max(0, selectedFund.paid_amount - txn.amount),
-        })
-        .eq('id', selectedFund.id);
-      if (balErr) throw new Error(balErr.message);
-
-      // 3. If transaction was linked to a source record, clear the back-link
-      if (txn.source_table && txn.source_id) {
-        await (supabase as any)
-          .from(txn.source_table)
-          .update({ pre_fund_transaction_id: null })
-          .eq('id', txn.source_id);
+      if (txn.transaction_type !== 'payment' || !txn.source_table || !txn.source_id) {
+        throw new Error('Only source-linked payment events can be reversed here. Use a Finance correction with evidence for manual entries.');
       }
+      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
+      const result = await unlinkPaymentFromPreFund(txn.source_table, txn.source_id);
+      if (!result.unlinked) throw new Error(result.message);
 
-      // 4. Restore allocation spent_amount if there is an allocation for the source
-      if (txn.source_table && txn.source_id) {
-        // down_payment_requests has requested_by only; operational_cost_submissions has submitted_by
-        const dpCols = 'requested_by';
-        const ocsCols = 'submitted_by';
-        const selectCols = txn.source_table === 'down_payment_requests' ? dpCols : ocsCols;
-        const { data: srcRow } = await (supabase as any)
-          .from(txn.source_table)
-          .select(selectCols)
-          .eq('id', txn.source_id)
-          .maybeSingle();
-        const userId = srcRow?.requested_by ?? srcRow?.submitted_by ?? null;
-        if (userId) {
-          const { data: alloc } = await supabase
-            .from('pre_fund_allocations')
-            .select('id,spent_amount')
-            .eq('pre_fund_request_id', selectedFund.id)
-            .eq('user_id', userId)
-            .maybeSingle();
-          if (alloc) {
-            await supabase
-              .from('pre_fund_allocations')
-              .update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - txn.amount) })
-              .eq('id', alloc.id);
-          }
-        }
-      }
-
-      toast({ title: 'Unlinked', description: `Transaction removed and balance of ${selectedFund.currency} ${formatNumber(txn.amount, 0)} restored to fund.` });
+      toast({ title: 'Reversed', description: `A compensating event restored ${selectedFund.currency} ${formatNumber(txn.amount, 0)} to the fund.` });
       loadFunds();
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
@@ -1187,70 +1037,20 @@ export default function PreFundingReconciliation() {
     setConfirmBulkDelete(false);
     const toDelete = transactions.filter(t => selectedTxnIds.has(t.id));
     try {
-      // ── 1. Delete all transactions in a single batch query ──────────────
-      const ids = toDelete.map(t => t.id);
-      const { error: delErr } = await supabase
-        .from('pre_fund_transactions')
-        .delete()
-        .in('id', ids);
-      if (delErr) throw delErr;
-
-      const totalRestored = toDelete.reduce((s, t) => s + t.amount, 0);
-
-      // ── 2. Unlink source records — one UPDATE per source table ──────────
-      const byTable = new Map<string, { srcIds: string[]; txns: typeof toDelete }>();
-      for (const txn of toDelete) {
-        if (txn.source_table && txn.source_id) {
-          if (!byTable.has(txn.source_table)) byTable.set(txn.source_table, { srcIds: [], txns: [] });
-          byTable.get(txn.source_table)!.srcIds.push(txn.source_id);
-          byTable.get(txn.source_table)!.txns.push(txn);
-        }
+      if (toDelete.some(t => t.transaction_type !== 'payment' || !t.source_table || !t.source_id)) {
+        throw new Error('Bulk reversal only supports source-linked payment events. Finance corrections must retain their immutable audit trail.');
       }
-      await Promise.all([...byTable.entries()].map(([table, { srcIds }]) =>
-        (supabase as any).from(table).update({ pre_fund_transaction_id: null }).in('id', srcIds)
-      ));
-
-      // ── 3. Restore allocations — batch fetch source rows, compute deltas ─
-      const userDelta = new Map<string, number>();
-      await Promise.all([...byTable.entries()].map(async ([table, { srcIds, txns: tableTxns }]) => {
-        // down_payment_requests has no submitted_by; operational_cost_submissions has no requested_by
-        const selectCols = table === 'down_payment_requests'
-          ? 'id,requested_by'
-          : 'id,submitted_by';
-        const { data: srcRows } = await (supabase as any)
-          .from(table).select(selectCols).in('id', srcIds);
-        const rowMap = new Map((srcRows ?? []).map((r: any) => [r.id, r]));
-        for (const txn of tableTxns) {
-          const row = rowMap.get(txn.source_id);
-          const uid = row?.requested_by ?? row?.submitted_by ?? null;
-          if (uid) userDelta.set(uid, (userDelta.get(uid) ?? 0) + txn.amount);
-        }
-      }));
-      if (userDelta.size > 0) {
-        const { data: allocs } = await supabase
-          .from('pre_fund_allocations')
-          .select('id,user_id,spent_amount')
-          .eq('pre_fund_request_id', selectedFund.id)
-          .in('user_id', [...userDelta.keys()]);
-        await Promise.all((allocs ?? []).map((alloc: any) =>
-          supabase.from('pre_fund_allocations')
-            .update({ spent_amount: Math.max(0, (alloc.spent_amount ?? 0) - (userDelta.get(alloc.user_id) ?? 0)) })
-            .eq('id', alloc.id)
-        ));
-      }
-
-      // ── 4. Restore fund balance in one shot ─────────────────────────────
-      if (totalRestored > 0) {
-        await supabase.from('pre_fund_requests').update({
-          available_balance: (selectedFund.available_balance ?? 0) + totalRestored,
-          paid_amount: Math.max(0, (selectedFund.paid_amount ?? 0) - totalRestored),
-        }).eq('id', selectedFund.id);
+      const uniqueSources = new Map(toDelete.map(t => [`${t.source_table}:${t.source_id}`, t]));
+      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
+      for (const txn of uniqueSources.values()) {
+        const result = await unlinkPaymentFromPreFund(txn.source_table!, txn.source_id!);
+        if (!result.unlinked) throw new Error(result.message);
       }
 
       setSelectedTxnIds(new Set());
       loadFunds();
       loadTxns(selectedFund.id);
-      toast({ title: `${toDelete.length} transaction${toDelete.length !== 1 ? 's' : ''} removed`, description: `Balance restored by ${selectedFund.currency} ${formatNumber(totalRestored, 0)}.` });
+      toast({ title: `${uniqueSources.size} payment source${uniqueSources.size !== 1 ? 's' : ''} reversed`, description: 'Compensating events restored their fund balances.' });
     } catch (err) {
       console.error('[BULK_UNLINK] Error:', err);
       toast({ title: 'Removal failed', description: 'Could not complete removal. Please try again.', variant: 'destructive' });
@@ -1334,7 +1134,7 @@ export default function PreFundingReconciliation() {
       // They do NOT affect available_balance / paid_amount and do NOT trigger GL postings.
       // Use type 'bank_statement' (not 'payment') so they are excluded from accounting totals
       // and the GL bridge never picks them up.
-      const rows = csvParsed.map(r => ({
+      const rows = csvParsed.map((r, index) => ({
         pre_fund_request_id: selectedFund.id,
         transaction_type: 'bank_statement',
         amount: Math.abs(parseFloat(r.amount)),
@@ -1343,8 +1143,14 @@ export default function PreFundingReconciliation() {
         description: r.description ? `[Bank Statement] ${r.description}` : '[Bank Statement Import]',
         transaction_date: r.date || new Date().toISOString().split('T')[0],
         reconciled: false,
+        idempotency_key: `bank-statement:${selectedFund.id}:${r.date || ''}:${r.reference || ''}:${r.amount}:${index}`,
+        event_actor_id: currentUser?.id ?? null,
+        event_reason: 'bank_statement_import',
+        event_metadata: { import_source: 'reconciliation_csv' },
       }));
-      const { error } = await supabase.from('pre_fund_transactions').insert(rows);
+      const { error } = await supabase
+        .from('pre_fund_transactions')
+        .upsert(rows, { onConflict: 'idempotency_key', ignoreDuplicates: true });
       if (error) throw error;
       toast({ title: `${rows.length} bank statement row${rows.length !== 1 ? 's' : ''} imported for reconciliation matching`, description: 'These are reference-only entries and do not affect fund balances or GL.' });
       setShowCsvImport(false);
@@ -1359,16 +1165,7 @@ export default function PreFundingReconciliation() {
     if (!assignTxn || !assignUserId) return;
     setAssigning(true);
     try {
-      const { error } = await (supabase as any)
-        .from('pre_fund_transactions')
-        .update({ user_id: assignUserId })
-        .eq('id', assignTxn.id);
-      if (error) throw error;
-      setTxns(prev => prev.map(t => t.id === assignTxn.id ? { ...t, user_id: assignUserId } : t));
-      const name = allocUsers.find(u => u.id === assignUserId)?.name ?? 'staff member';
-      toast({ title: 'Staff assigned', description: `Transaction attributed to ${name}.` });
-      setAssignTxn(null);
-      setAssignUserId('');
+      throw new Error('Posted event attribution is immutable. Reverse and reprocess the source payment with the correct allocation holder, or record a Finance correction with evidence.');
     } catch (e: any) {
       toast({ title: 'Failed to assign', description: e.message, variant: 'destructive' });
     } finally {
@@ -1436,9 +1233,8 @@ export default function PreFundingReconciliation() {
           p_gl_debit_code:    glDebitCode,
           p_gl_credit_code:   glCreditCode,
           // Super-admin: deduct from selected user's allocation (null = no deduction)
-          p_user_id: (isSuperAdmin && txnForm.transaction_type === 'payment' && txnAllocUserId)
-            ? txnAllocUserId
-            : null,
+          p_user_id: null,
+          p_payment_event_key: `manual:${selectedFund.id}:${txnForm.transaction_type}:${txnForm.transaction_date}:${amount}:${txnForm.reference || txnForm.description || ''}`,
         }
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -1984,10 +1780,12 @@ export default function PreFundingReconciliation() {
 
                   {/* ── Category Breakdown ─────────────────────────────────────── */}
                   {transactions.length > 0 && (() => {
-                    const payTxns = transactions.filter(t => t.transaction_type === 'payment');
-                    const dpTotal  = payTxns.filter(t => t.source_table === 'down_payment_requests').reduce((s, t) => s + t.amount, 0);
-                    const ocsTotal = payTxns.filter(t => t.source_table === 'operational_cost_submissions').reduce((s, t) => s + t.amount, 0);
-                    const otherTotal = payTxns.filter(t => !t.source_table || (t.source_table !== 'down_payment_requests' && t.source_table !== 'operational_cost_submissions')).reduce((s, t) => s + t.amount, 0);
+                    const paidEvents = transactions.filter(t => ['payment', 'reversal', 'return'].includes(t.transaction_type));
+                    const signedAmount = (t: PreFundTransaction) =>
+                      ['reversal', 'return'].includes(t.transaction_type) ? -t.amount : t.amount;
+                    const dpTotal  = paidEvents.filter(t => t.source_table === 'down_payment_requests').reduce((s, t) => s + signedAmount(t), 0);
+                    const ocsTotal = paidEvents.filter(t => t.source_table === 'operational_cost_submissions').reduce((s, t) => s + signedAmount(t), 0);
+                    const otherTotal = paidEvents.filter(t => !t.source_table || (t.source_table !== 'down_payment_requests' && t.source_table !== 'operational_cost_submissions')).reduce((s, t) => s + signedAmount(t), 0);
                     const grandTotal = dpTotal + ocsTotal + otherTotal;
                     if (grandTotal === 0) return null;
                     return (
@@ -2650,9 +2448,9 @@ export default function PreFundingReconciliation() {
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30 font-semibold">
-                          <TableCell colSpan={8} className="text-xs">Totals (payments only)</TableCell>
+                          <TableCell colSpan={8} className="text-xs">Canonical paid out (including reversals)</TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {selectedFund.currency} {formatNumber(displayTxns.filter(t => t.transaction_type === 'payment').reduce((s, t) => s + t.amount, 0), 0)}
+                            {selectedFund.currency} {formatNumber(effectivePaidAmount, 0)}
                           </TableCell>
                           <TableCell />
                           <TableCell className="text-center text-xs text-muted-foreground">
@@ -2759,7 +2557,9 @@ export default function PreFundingReconciliation() {
               <Select value={txnForm.transaction_type} onValueChange={v => { setTxnForm(p => ({ ...p, transaction_type: v })); if (v !== 'payment') setTxnAllocUserId(null); }}>
                 <SelectTrigger data-testid="select-txn-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(TXN_TYPE_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                  {Object.entries(TXN_TYPE_CFG)
+                    .filter(([k]) => k !== 'payment' && k !== 'reversal')
+                    .map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

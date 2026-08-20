@@ -25,7 +25,7 @@ import {
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { EmailNotificationService } from '@/services/email-notification.service';
-import { unlinkPaymentFromPreFund, reverseDirectDeduction } from '@/utils/preFundLinkage';
+import { unlinkPaymentFromPreFund } from '@/utils/preFundLinkage';
 import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 
 interface RevertToPendingData {
@@ -1292,17 +1292,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         const meta = (dp.metadata ?? {}) as any;
         if (dp.pre_fund_transaction_id) {
           // Linked via a real txn row — use the full unlink path
-          await unlinkPaymentFromPreFund('down_payment_requests', requestId);
+          const result = await unlinkPaymentFromPreFund('down_payment_requests', requestId);
+          if (!result.unlinked) throw new Error(result.message);
         } else if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dp.total_paid_amount) > 0) {
-          // Deducted via directLinkPayment balance UPDATE (no txn row) — reverse directly
-          // Pass requested_by so the allocation spent_amount is also restored
-          const requestedBy = (dp as any).requested_by ?? null;
-          await reverseDirectDeduction(meta.pre_fund_id, Number(dp.total_paid_amount), requestedBy);
-          // Clear the marker so it isn't double-reversed if cancelled again
-          await supabase
-            .from('down_payment_requests')
-            .update({ metadata: { ...meta, pre_fund_deducted: false } } as any)
-            .eq('id', requestId);
+          throw new Error('This request has a legacy pre-fund balance marker without an immutable event. Finance must review it in Pre-Funding → Reconciliation before cancellation.');
         }
       }
 

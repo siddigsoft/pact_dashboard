@@ -1215,83 +1215,11 @@ export default function PreFundingRegistry() {
     }
   };
   const handleTransferFunds = async () => {
-    const { sourceFund, destFundId, amount, reason } = transferDialog;
-    if (!sourceFund || !destFundId) return;
-    const parsedAmt = parseFloat(amount.replace(/,/g, ''));
-    if (!amount || isNaN(parsedAmt) || parsedAmt <= 0) {
-      toast({ title: 'Enter a valid transfer amount', variant: 'destructive' }); return;
-    }
-    if (parsedAmt > sourceFund.available_balance) {
-      toast({ title: 'Insufficient balance', description: `Max transferable: ${formatNumber(sourceFund.available_balance, 0)} ${sourceFund.currency}`, variant: 'destructive' }); return;
-    }
-    if (!reason.trim()) {
-      toast({ title: 'Please provide a reason for the transfer', variant: 'destructive' }); return;
-    }
-    const destFund = funds.find(f => f.id === destFundId);
-    if (!destFund) return;
-    setTransferring(true);
-    try {
-      const now = new Date().toISOString().slice(0, 10);
-      // Debit source fund — record as a 'return' transaction
-      await (supabase as any).from('pre_fund_transactions').insert({
-        pre_fund_request_id: sourceFund.id,
-        transaction_type: 'return',
-        amount: parsedAmt,
-        currency: sourceFund.currency,
-        description: `Transfer to "${destFund.name}" — ${reason.trim()}`,
-        transaction_date: now,
-        created_by: currentUser?.id ?? null,
-      });
-      await supabase.from('pre_fund_requests').update({
-        available_balance: Math.max(0, sourceFund.available_balance - parsedAmt),
-        paid_amount: (sourceFund.paid_amount ?? 0) + parsedAmt,
-      }).eq('id', sourceFund.id);
-
-      // Credit destination fund — record as a 'receipt' transaction
-      await (supabase as any).from('pre_fund_transactions').insert({
-        pre_fund_request_id: destFund.id,
-        transaction_type: 'receipt',
-        amount: parsedAmt,
-        currency: destFund.currency,
-        description: `Transfer from "${sourceFund.name}" — ${reason.trim()}`,
-        transaction_date: now,
-        created_by: currentUser?.id ?? null,
-      });
-      await supabase.from('pre_fund_requests').update({
-        available_balance: (destFund.available_balance ?? 0) + parsedAmt,
-        amount: (destFund.amount ?? 0) + parsedAmt,
-      }).eq('id', destFund.id);
-
-      // Notify Finance Admin
-      await supabase.from('notification_events' as any).insert({
-        event_type: 'pre_fund_topup_requested',
-        reference_id: destFund.id,
-        reference_type: 'pre_fund_request',
-        title: 'Fund Transfer Completed',
-        message: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} transferred from "${sourceFund.name}" to "${destFund.name}". Reason: ${reason.trim()}`,
-        target_roles: ['super_admin', 'admin', 'financialAdmin'],
-        created_by: currentUser?.id ?? null,
-        metadata: { source_fund: sourceFund.name, dest_fund: destFund.name, amount: parsedAmt, currency: sourceFund.currency },
-      });
-      dispatchNotification({
-        event: 'pre_fund_topup_requested',
-        recipientRoles: ['super_admin', 'admin', 'financialAdmin'],
-        titleEn: 'Fund Transfer Completed', titleAr: 'اكتمل تحويل الصندوق',
-        messageEn: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} transferred from "${sourceFund.name}" to "${destFund.name}". Reason: ${reason.trim()}`,
-        messageAr: `تم تحويل ${sourceFund.currency} ${formatNumber(parsedAmt, 0)} من "${sourceFund.name}" إلى "${destFund.name}". السبب: ${reason.trim()}`,
-        entityType: 'pre_fund_request', entityId: destFund.id,
-        triggeredBy: currentUser?.id, priority: 'normal',
-        metadata: { fund_name: destFund.name, amount: parsedAmt, currency: sourceFund.currency, reason: reason.trim() },
-      });
-
-      toast({ title: 'Transfer complete', description: `${sourceFund.currency} ${formatNumber(parsedAmt, 0)} moved from "${sourceFund.name}" to "${destFund.name}".` });
-      setTransferDialog({ open: false, sourceFund: null, destFundId: '', amount: '', reason: '' });
-      await load();
-    } catch (e: any) {
-      toast({ title: 'Transfer failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setTransferring(false);
-    }
+    toast({
+      title: 'Fund transfer requires Finance review',
+      description: 'Transfers are temporarily unavailable while the immutable, paired transfer ledger is introduced. Do not move balances manually.',
+      variant: 'destructive',
+    });
   };
 
   const openEdit = (f: PreFundRequest) => {
@@ -1450,33 +1378,11 @@ export default function PreFundingRegistry() {
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
-    if (!isSuper) {
-      toast({ title: 'Permission denied', description: 'Only Super Admin can permanently delete pre-funds.', variant: 'destructive' });
-      return;
-    }
-    if (deleteFundTxns.length > 0) {
-      toast({ title: 'Cannot delete fund', description: 'Delete all transactions first, or use Force Delete (Super Admin).', variant: 'destructive' });
-      return;
-    }
-    setDeleting(true);
-    try {
-      // Save to recycle bin before deleting
-      const { data: snap } = await (supabase as any).from('pre_fund_requests').select('*').eq('id', deleteId).single();
-      if (snap) {
-        const { softDelete: sd } = await import('@/utils/softDelete');
-        await sd(supabase as any, 'pre_fund_requests', deleteId, snap, currentUser?.id, currentUser?.name || currentUser?.email);
-      }
-      const { error: e } = await supabase.from('pre_fund_requests').delete().eq('id', deleteId);
-      if (e) throw e;
-      toast({ title: 'Fund moved to Recycle Bin' });
-      setDeleteId(null);
-      await load();
-    } catch (e: any) {
-      toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setDeleting(false);
-    }
+    toast({
+      title: 'Fund deletion retired',
+      description: 'Pre-fund history is immutable. Close or archive the fund through Finance review instead of deleting it.',
+      variant: 'destructive',
+    });
   };
 
   // ── Fund status management ─────────────────────────────────────────────────
@@ -1502,31 +1408,11 @@ export default function PreFundingRegistry() {
 
   // Super Admin only — deletes all transactions in one batch then removes the fund
   const handleForceDelete = async () => {
-    if (!deleteId || !isSuper) return;
-    setDeleting(true);
-    try {
-      // 1. Bulk-delete all transactions for this fund
-      const { error: txnErr } = await (supabase as any)
-        .from('pre_fund_transactions')
-        .delete()
-        .eq('pre_fund_request_id', deleteId);
-      if (txnErr) throw txnErr;
-
-      // 2. Delete the fund itself
-      const { error: fundErr } = await supabase
-        .from('pre_fund_requests')
-        .delete()
-        .eq('id', deleteId);
-      if (fundErr) throw fundErr;
-
-      toast({ title: 'Fund force-deleted', description: 'Fund and all its transactions have been permanently removed.' });
-      setDeleteId(null);
-      await load();
-    } catch (e: any) {
-      toast({ title: 'Force delete failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setDeleting(false);
-    }
+    toast({
+      title: 'Force delete retired',
+      description: 'Payment events cannot be removed. Use a documented Finance correction or reversal so audit history remains intact.',
+      variant: 'destructive',
+    });
   };
 
   // Recalculate available_balance / paid_amount / committed_amount for a fund from its
@@ -1534,119 +1420,19 @@ export default function PreFundingRegistry() {
   // txn inserts, or any other path that updated balances out of sync with the ledger.
   const [recalcingId, setRecalcingId] = useState<string | null>(null);
   const handleRecalcBalance = async (f: PreFundRequest) => {
-    setRecalcingId(f.id);
-    try {
-      const { data: txns, error: sumErr } = await (supabase as any)
-        .from('pre_fund_transactions')
-        .select('transaction_type, amount')
-        .eq('pre_fund_request_id', f.id)
-        .not('transaction_type', 'eq', 'bank_statement');
-      if (sumErr) throw sumErr;
-
-      const sum = (types: string[]) =>
-        (txns ?? [])
-          .filter((t: any) => types.includes(t.transaction_type))
-          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
-
-      // Ledger approach: totalIn = money received into the fund (receipts + carry-forwards + reversals)
-      //                  totalOut = money that left the fund (payments + commitments + transfer-outs)
-      // This is correct because fund.amount is the planned/total allocation, but only the portion
-      // captured by receipt transactions was actually deposited and is therefore spendable.
-      // paid_amount tracks expense payments only (not transfer-outs, which are captured in the
-      // available ledger balance via the 'return' type in totalOut).
-      const totalIn      = sum(['receipt', 'carry_forward', 'reversal']);
-      const totalOut     = sum(['payment', 'commitment', 'return']);
-      const newPaid      = sum(['payment']);
-      const newCommitted = sum(['commitment']);
-      // Prefer ledger-derived balance when the fund has transaction history; otherwise
-      // fall back to the amount-based invariant for funds with no txn rows yet.
-      const ledgerBalance    = totalIn - totalOut;
-      const invariantBalance = f.amount - newPaid - newCommitted;
-      const newBalance = (txns ?? []).length > 0 ? ledgerBalance : invariantBalance;
-
-      const { error: upErr } = await supabase
-        .from('pre_fund_requests')
-        .update({
-          available_balance: Math.max(0, newBalance),
-          paid_amount: newPaid,
-          committed_amount: newCommitted,
-        })
-        .eq('id', f.id);
-      if (upErr) throw upErr;
-      toast({ title: 'Balance recalculated', description: `"${f.name}" balances refreshed from transaction history.` });
-      await load();
-    } catch (e: any) {
-      toast({ title: 'Recalculate failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setRecalcingId(null);
-    }
+    toast({
+      title: 'Direct balance recalculation retired',
+      description: 'Balances are refreshed from immutable events. Review the Finance exceptions queue when a historic correction is needed.',
+      variant: 'destructive',
+    });
   };
 
   const handleDeleteFundTxn = async (txnId: string) => {
-    if (!isSuper) {
-      toast({ title: 'Permission denied', description: 'Only Super Admin can delete transactions.', variant: 'destructive' });
-      return;
-    }
-    setDeletingTxnId(txnId);
-    try {
-      // Fetch the transaction so we can recalculate fund balances after removal
-      const { data: txn, error: fetchErr } = await (supabase as any)
-        .from('pre_fund_transactions')
-        .select('id, transaction_type, amount, pre_fund_request_id')
-        .eq('id', txnId)
-        .single();
-      if (fetchErr) throw fetchErr;
-
-      const fundId = txn?.pre_fund_request_id;
-
-      // Save to recycle bin before deleting
-      if (txn) {
-        const { softDelete: sd } = await import('@/utils/softDelete');
-        await sd(supabase as any, 'pre_fund_transactions', txnId, txn, currentUser?.id, currentUser?.name || currentUser?.email);
-      }
-      // Remove the transaction
-      const { error: delErr } = await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
-      if (delErr) throw delErr;
-
-      // Atomically recalculate fund balances from remaining transactions so there
-      // are no orphaned/misaligned balance figures in pre_fund_requests.
-      if (fundId) {
-        const { data: remaining, error: sumErr } = await (supabase as any)
-          .from('pre_fund_transactions')
-          .select('transaction_type, amount')
-          .eq('pre_fund_request_id', fundId)
-          .not('transaction_type', 'eq', 'bank_statement');
-
-        if (!sumErr && remaining) {
-          const sum = (types: string[]) =>
-            (remaining as any[])
-              .filter((t: any) => types.includes(t.transaction_type))
-              .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
-
-          const totalIn  = sum(['receipt', 'carry_forward', 'reversal']);
-          const totalOut = sum(['payment', 'commitment', 'return']);
-          const newBalance  = totalIn - totalOut;
-          const newPaid     = sum(['payment']);
-          const newCommitted = sum(['commitment']);
-
-          await (supabase as any)
-            .from('pre_fund_requests')
-            .update({
-              available_balance: Math.max(0, newBalance),
-              paid_amount:       newPaid,
-              committed_amount:  newCommitted,
-            })
-            .eq('id', fundId);
-        }
-      }
-
-      setDeleteFundTxns(prev => prev.filter(t => t.id !== txnId));
-      toast({ title: 'Transaction removed — fund balance recalculated' });
-    } catch (e: any) {
-      toast({ title: 'Failed to remove transaction', description: e.message, variant: 'destructive' });
-    } finally {
-      setDeletingTxnId(null);
-    }
+    toast({
+      title: 'Transaction deletion retired',
+      description: 'Payment history is immutable. Use an authorized reversal or historic correction through Finance review.',
+      variant: 'destructive',
+    });
   };
 
   const handleSubmitForApproval = async (f: PreFundRequest) => {
@@ -2275,18 +2061,6 @@ export default function PreFundingRegistry() {
                               <TrendingUp className="h-3.5 w-3.5" />Request Top-up
                             </DropdownMenuItem>
                           )}
-                          {['active', 'low_balance'].includes(f.status) && canManage && funds.filter(x => ['active','low_balance'].includes(x.status) && x.id !== f.id).length > 0 && (
-                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => setTransferDialog({ open: true, sourceFund: f, destFundId: '', amount: '', reason: '' })} data-testid={`menu-transfer-${f.id}`}>
-                              <ArrowLeftRight className="h-3.5 w-3.5" />Transfer Funds
-                            </DropdownMenuItem>
-                          )}
-                          {canManage && f.status !== 'draft' && f.status !== 'period_locked' && (
-                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-amber-700" onClick={() => handleRecalcBalance(f)} disabled={recalcingId === f.id} data-testid={`menu-recalc-${f.id}`}>
-                              <RefreshCw className={cn('h-3.5 w-3.5', recalcingId === f.id && 'animate-spin')} />
-                              {recalcingId === f.id ? 'Recalculating…' : 'Recalculate Balance'}
-                            </DropdownMenuItem>
-                          )}
-
                           {/* Status change sub-section */}
                           {canManage && f.status !== 'period_locked' && ADMIN_STATUS_OPTIONS.some(opt => opt.value !== f.status) && (
                             <>
@@ -2311,9 +2085,6 @@ export default function PreFundingRegistry() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => openEdit(f)} data-testid={`menu-edit-${f.id}`}>
                                 <Pencil className="h-3.5 w-3.5" />Edit Fund
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(f.id)} data-testid={`menu-delete-${f.id}`}>
-                                <Trash2 className="h-3.5 w-3.5" />Delete Fund
                               </DropdownMenuItem>
                             </>
                           )}

@@ -162,8 +162,9 @@ export default function PreFundingReport() {
 
       const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes, hubsRes, ratesRes] = await Promise.all([
         fundsQuery,
-        (supabase as any).from('pre_fund_transactions')
+        (supabase as any).from('pre_fund_event_ledger_v')
           .select('id,pre_fund_request_id,transaction_type,amount,currency,reference,description,transaction_date,created_at,user_id,created_by,receipt_url,source_table,source_id,reconciled')
+          .eq('source_is_verified', true)
           .order('transaction_date', { ascending: false }),
         supabase.from('pre_fund_approval_steps')
           .select('id,pre_fund_request_id,step_label,status,step_order,is_required,approved_at,notes,assigned_user_id,assigned_user_ids')
@@ -350,14 +351,16 @@ export default function PreFundingReport() {
     return steps.filter(s => fundIds.has(s.pre_fund_request_id));
   }, [steps, filteredFunds]);
 
-  // Accurate paid amount per fund: sum of payment-type transactions (not the stale paid_amount column)
+  // The ledger migration keeps this cached value in lockstep with the canonical
+  // immutable event view. Do not re-sum raw client rows here: that would include
+  // legacy unverified sources and omit compensating reversals.
   const fundPaidMap = useMemo(() => {
     const m = new Map<string, number>();
-    txns.filter(t => t.transaction_type === 'payment').forEach(t => {
-      m.set(t.pre_fund_request_id, (m.get(t.pre_fund_request_id) ?? 0) + t.amount);
+    funds.forEach(f => {
+      m.set(f.id, Number(f.paid_amount ?? 0));
     });
     return m;
-  }, [txns]);
+  }, [funds]);
 
   // ─── KPIs ────────────────────────────────────────────────────────────────────
 
@@ -365,13 +368,12 @@ export default function PreFundingReport() {
     const activeFunds    = filteredFunds.filter(f => ['active','low_balance'].includes(f.status));
     const totalFunded    = filteredFunds.reduce((s, f) => s + f.amount, 0);
     const totalPaid      = filteredFunds.reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0);
-    const totalBalance   = filteredFunds.reduce((s, f) => s + Math.max(0, f.amount - (fundPaidMap.get(f.id) ?? 0)), 0);
+    const totalBalance   = filteredFunds.reduce((s, f) => s + Number(f.available_balance ?? 0), 0);
     const totalCommit    = filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0);
     const utilPct        = totalFunded > 0 ? Math.round((totalPaid / totalFunded) * 100) : 0;
-    // SDG actually paid: sum of payment transactions denominated in SDG
-    const totalSdgPaid   = filteredTxns
-      .filter(t => t.currency === 'SDG' && t.transaction_type === 'payment')
-      .reduce((s, t) => s + t.amount, 0);
+    const totalSdgPaid = filteredFunds
+      .filter(f => f.currency === 'SDG')
+      .reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0);
     return { activeFunds, totalFunded, totalBalance, totalPaid, totalCommit, utilPct, totalSdgPaid };
   }, [filteredFunds, filteredTxns, fundPaidMap]);
 
@@ -411,8 +413,8 @@ export default function PreFundingReport() {
     }
     return months.map(({ month, label }) => {
       const total = filteredTxns
-        .filter(t => t.transaction_type === 'payment' && t.transaction_date?.startsWith(month))
-        .reduce((s, t) => s + t.amount, 0);
+        .filter(t => ['payment', 'reversal', 'return'].includes(t.transaction_type) && t.transaction_date?.startsWith(month))
+        .reduce((s, t) => s + (['reversal', 'return'].includes(t.transaction_type) ? -t.amount : t.amount), 0);
       return { label, disbursed: total };
     });
   }, [filteredTxns]);

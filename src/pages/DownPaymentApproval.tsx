@@ -552,21 +552,27 @@ export default function DownPaymentApproval() {
     setMarkingPaidId(req.id);
     try {
       const now = new Date().toISOString();
+      const paidAmount = req.approvedAmount ?? req.requestedAmount;
       const { error } = await supabase
         .from('down_payment_requests')
-        .update({ status: 'fully_paid', updated_at: now })
+        .update({
+          status: 'fully_paid',
+          total_paid_amount: paidAmount,
+          remaining_amount: 0,
+          updated_at: now,
+        })
         .eq('id', req.id);
       if (error) throw error;
       // Auto-link to active pre-fund — awaited so result is shown before UI refreshes
       try {
-        const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        const { linkPaymentToPreFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
         // payment_proof_url may be stored as a JSON array string e.g. ["url"] — extract first URL
         let receiptUrl: string | null = req.paymentProofUrl ?? null;
         if (receiptUrl) {
           try { const p = JSON.parse(receiptUrl); receiptUrl = Array.isArray(p) ? (p[0] ?? null) : receiptUrl; } catch { /* keep raw */ }
         }
         const pfResult = await linkPaymentToPreFund({
-          amount: req.approvedAmount ?? req.requestedAmount,
+          amount: paidAmount,
           currency: 'SDG',
           countryId: (req as any).country_id ?? null,
           projectId: null,
@@ -579,6 +585,13 @@ export default function DownPaymentApproval() {
           createdBy: currentUser?.id ?? null,
           userId: (req as any).requestedBy ?? null,
           receiptUrl,
+          paymentEventKey: createPreFundPaymentEventKey({
+            sourceTable: 'down_payment_requests',
+            sourceId: req.id,
+            amount: paidAmount,
+            paymentDate: now,
+            receiptUrl,
+          }),
         });
         if (pfResult.linked) {
           toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
@@ -631,25 +644,28 @@ export default function DownPaymentApproval() {
     if (!req || !currentUser?.id) return;
     const partialAmt = parseFloat(partialPayDialog.partialAmount);
     const maxAmt = req.approvedAmount ?? req.requestedAmount;
+    const alreadyPaid = req.totalPaidAmount ?? 0;
+    const remainingAmount = Math.max(0, maxAmt - alreadyPaid);
     if (isNaN(partialAmt) || partialAmt <= 0) {
       toast({ title: 'Invalid amount', description: 'Please enter a positive number.', variant: 'destructive' });
       return;
     }
-    if (partialAmt > maxAmt) {
-      toast({ title: 'Amount too large', description: `Cannot exceed the approved amount (${maxAmt.toLocaleString()} SDG).`, variant: 'destructive' });
+    if (partialAmt > remainingAmount) {
+      toast({ title: 'Amount too large', description: `Cannot exceed the remaining amount (${remainingAmount.toLocaleString()} SDG).`, variant: 'destructive' });
       return;
     }
     setPartialPayDialog(p => ({ ...p, saving: true }));
     try {
       const now = new Date().toISOString();
-      const isFullyPaid = partialAmt >= maxAmt;
+      const newTotalPaid = alreadyPaid + partialAmt;
+      const isFullyPaid = newTotalPaid >= maxAmt;
       const newStatus = isFullyPaid ? 'fully_paid' : 'partially_paid';
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
           status: newStatus,
-          total_paid_amount: partialAmt,
-          remaining_amount: Math.max(0, maxAmt - partialAmt),
+          total_paid_amount: newTotalPaid,
+          remaining_amount: Math.max(0, maxAmt - newTotalPaid),
           updated_at: now,
         })
         .eq('id', req.id);
@@ -659,7 +675,7 @@ export default function DownPaymentApproval() {
 
       // Auto-link the partial amount to an active pre-fund
       try {
-        const { linkPaymentToPreFund } = await import('@/utils/preFundLinkage');
+        const { linkPaymentToPreFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
         let receiptUrlPartial: string | null = req.paymentProofUrl ?? null;
         if (receiptUrlPartial) {
           try { const p = JSON.parse(receiptUrlPartial); receiptUrlPartial = Array.isArray(p) ? (p[0] ?? null) : receiptUrlPartial; } catch { /* keep raw */ }
@@ -678,6 +694,13 @@ export default function DownPaymentApproval() {
           createdBy: currentUser.id,
           userId: (req as any).requestedBy ?? currentUser.id,
           receiptUrl: receiptUrlPartial,
+          paymentEventKey: createPreFundPaymentEventKey({
+            sourceTable: 'down_payment_requests',
+            sourceId: req.id,
+            amount: partialAmt,
+            paymentDate: now,
+            receiptUrl: receiptUrlPartial,
+          }),
         });
         if (pfResult.linked) {
           toast({ title: 'Pre-Fund Deducted ✓', description: pfResult.message });

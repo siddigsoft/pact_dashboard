@@ -177,9 +177,10 @@ export default function PreFundingDistribute() {
     try {
       // Fetch ALL payment transactions for this fund (not filtered by user — full fund history)
       const { data: txnData } = await (supabase as any)
-        .from('pre_fund_transactions')
+        .from('pre_fund_event_ledger_v')
         .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id,created_by')
         .eq('pre_fund_request_id', fundId)
+        .eq('source_is_verified', true)
         .in('transaction_type', ['payment', 'disbursement'])
         .order('transaction_date', { ascending: false });
 
@@ -523,9 +524,10 @@ export default function PreFundingDistribute() {
           .order('created_at', { ascending: false }),
         // Fetch payment transactions to compute live spent amounts per user
         (supabase as any)
-          .from('pre_fund_transactions')
+          .from('pre_fund_event_ledger_v')
           .select('id,user_id,created_by,source_table,source_id,amount,transaction_type')
-          .eq('pre_fund_request_id', fundId),
+          .eq('pre_fund_request_id', fundId)
+          .eq('source_is_verified', true),
       ]);
       if (allocRes.error) throw allocRes.error;
 
@@ -569,8 +571,9 @@ export default function PreFundingDistribute() {
         const storedSpent = Number(a.spent_amount ?? 0);
         return {
           ...a,
-          // Use whichever is higher — txn-computed or stored column
-          spent_amount: Math.max(txnSpent, storedSpent),
+          // Stored spend is maintained in the same transaction as the payment
+          // event. Legacy attribution can fill an empty cache but cannot inflate it.
+          spent_amount: txnSpent || storedSpent,
           user_name:  profileMap[a.user_id]?.full_name ?? 'Unknown',
           user_email: profileMap[a.user_id]?.email ?? '',
           user_role:  profileMap[a.user_id]?.role ?? '',

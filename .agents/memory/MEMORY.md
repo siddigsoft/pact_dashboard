@@ -36,3 +36,4 @@
 - [cycle-redirect-correction-safety](cycle-redirect-correction-safety.md) — Correct legacy Redirects only from proven snapshots; preserve bridge rows and make posting guards reversal-aware.
 - [immutable-gl-line-identifiers](immutable-gl-line-identifiers.md) — Add a final journal UUID in a line BEFORE INSERT; never rewrite immutable posted accounting lines.
 - [automatic-redirect-recall-authority](automatic-redirect-recall-authority.md) — Automatic legacy Redirect recall uses the original balanced journal and paid advance, not mutable later fee values.
+- [pre-fund-source-validity-cache](pre-fund-source-validity-cache.md) — When a payment source changes validity, refresh every linked fund cache from the event projection, including split-source payments.

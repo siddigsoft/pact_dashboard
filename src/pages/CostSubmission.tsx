@@ -2127,9 +2127,9 @@ const CostSubmission = () => {
     return true;
   };
 
-  // FinancialAdmin, Admin, SuperAdmin can approve or reject pending delete requests
+  // Destructive deletion is enforced by the atomic server RPC for Super Admins only.
   const canApproveDeleteRequest = (oc: OperationalCostSubmission): boolean => {
-    return oc.delete_request_status === 'pending' && (isSuperAdmin || isAdmin || isFinanceAdmin);
+    return oc.delete_request_status === 'pending' && isSuperAdmin;
   };
 
   const openEditItem = (item: OperationalCostSubmission) => {
@@ -2390,7 +2390,6 @@ const CostSubmission = () => {
   // Per-user override checks (stored in user_permission_overrides with resource='cost_submissions')
   const cs = (a: string) => checkPermission('cost_submissions' as any, a as any);
   const hasMarkPaidOverride     = cs('mark_paid');
-  const hasRevertPaidOverride   = cs('revert_paid');
   const hasSendToFinanceOverride = cs('send_to_finance');
   const hasReconcileOverride    = cs('reconcile');
   const hasRecallOverride       = cs('recall');
@@ -2398,70 +2397,23 @@ const CostSubmission = () => {
   const hasEditOverride         = cs('edit');
   const hasDeleteOverride       = cs('delete');
 
-  // Revert Paid → back to Approved (SuperAdmin, Admin, or per-user override; not once reconciled)
-  // Country Directors are never allowed to revert paid — financial admin action only
+  // Revert Paid → back to Approved (SuperAdmin or Admin; not once reconciled).
+  // The atomic server RPC applies the same boundary.
   const canRevertPaid = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (isCountryDirector) return false;
-    return derivedStatus === 'paid' && (isSuperAdmin || isAdmin || hasRevertPaidOverride);
+    return derivedStatus === 'paid' && (isSuperAdmin || isAdmin);
   };
 
   const handleRevertPaid = async () => {
     if (!revertPaidConfirm) return;
     setActionProcessing(true);
     try {
-      // Capture paid amount and submitted_by BEFORE clearing, for pre-fund reversal
-      const paidAmountForReversal = (revertPaidConfirm.amount_paid_cents ?? 0) / 100;
-      const submittedBy = revertPaidConfirm.submitted_by ?? null;
-
-      const { error } = await supabase
-        .from('operational_cost_submissions')
-        .update({
-          status: 'approved',
-          paid_at: null,
-          paid_by: null,
-          amount_paid_cents: 0,
-          payment_proof_url: null,
-          payment_proof_notes: null,
-          payment_proof_uploaded_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', revertPaidConfirm.id);
-      if (error) {
-        toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
-      } else {
-        // Reverse any pre-fund deduction — try atomic RPC first, fall back to direct reversal
-        try {
-          const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
-          const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', revertPaidConfirm.id);
-          if (!unlinkResult.unlinked && paidAmountForReversal > 0) {
-            // OCS has no metadata column — resolve fund via pre_fund_transaction_id back-link
-            const { data: srcRow } = await (supabase as any)
-              .from('operational_cost_submissions')
-              .select('pre_fund_transaction_id')
-              .eq('id', revertPaidConfirm.id)
-              .maybeSingle();
-            if (srcRow?.pre_fund_transaction_id) {
-              const { data: txn } = await (supabase as any)
-                .from('pre_fund_transactions')
-                .select('pre_fund_request_id')
-                .eq('id', srcRow.pre_fund_transaction_id)
-                .maybeSingle();
-              if (txn?.pre_fund_request_id) {
-                await reverseDirectDeduction(
-                  txn.pre_fund_request_id,
-                  paidAmountForReversal,
-                  submittedBy,
-                );
-              }
-            }
-          }
-        } catch (pfErr: any) {
-          console.warn('[Pre-Fund] Revert cleanup failed:', pfErr?.message);
-        }
-        toast({ title: 'Payment Reverted / تم إرجاع الدفعة', description: 'Submission reset to Approved. Payment proof and amount cleared. / تم إعادة الطلب إلى حالة الموافقة ومسح الإيصال والمبلغ المدفوع.' });
-        fetchOperationalCosts();
-      }
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically([revertPaidConfirm.id], 'revert');
+      if (!result.success) throw new Error(result.message);
+      toast({ title: 'Payment Reverted / تم إرجاع الدفعة', description: 'Submission reset to Approved. Payment proof and amount cleared. / تم إعادة الطلب إلى حالة الموافقة ومسح الإيصال والمبلغ المدفوع.' });
+      fetchOperationalCosts();
     } catch (err: any) {
       toast({ title: 'Error / خطأ', description: 'Failed to revert payment.', variant: 'destructive' });
     } finally {
@@ -2470,94 +2422,19 @@ const CostSubmission = () => {
     }
   };
 
-  /** Revert ALL paid/reconciled items in a group back to Approved in one action */
+  /** Revert all paid items in a group back to Approved in one action. */
   const handleGroupRevertPaid = async () => {
     if (groupRevertPaidItems.length === 0) return;
     // Snapshot immediately — avoids stale React closure if a re-render fires mid-loop
     const itemsToRevert = [...groupRevertPaidItems];
     setActionProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
-    const now = new Date().toISOString();
     try {
-      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
-
-      // Step 1 — read pre-fund back-links for ALL items BEFORE any update
-      // OCS has no metadata column — use pre_fund_transaction_id + amount_paid_cents
-      const metaMap: Record<string, { paidAmount: number; preFundId: string | null; preFundDeducted: boolean }> = {};
-      await Promise.allSettled(
-        itemsToRevert.map(async (oc) => {
-          const { data: row } = await (supabase as any)
-            .from('operational_cost_submissions')
-            .select('amount_paid_cents, pre_fund_transaction_id')
-            .eq('id', oc.id)
-            .maybeSingle();
-          let preFundId: string | null = null;
-          if (row?.pre_fund_transaction_id) {
-            const { data: txn } = await (supabase as any)
-              .from('pre_fund_transactions')
-              .select('pre_fund_request_id')
-              .eq('id', row.pre_fund_transaction_id)
-              .maybeSingle();
-            preFundId = txn?.pre_fund_request_id ?? null;
-          }
-          metaMap[oc.id] = {
-            paidAmount: ((row?.amount_paid_cents ?? oc.amount_paid_cents) ?? 0) / 100,
-            preFundId,
-            preFundDeducted: !!preFundId,
-          };
-        })
-      );
-
-      // Step 2 — reset all items to Approved in parallel
-      const updateResults = await Promise.allSettled(
-        itemsToRevert.map((oc) =>
-          supabase
-            .from('operational_cost_submissions')
-            .update({
-              status: 'approved',
-              paid_at: null,
-              paid_by: null,
-              amount_paid_cents: 0,
-              payment_proof_url: null,
-              payment_proof_notes: null,
-              payment_proof_uploaded_at: null,
-              updated_at: now,
-            })
-            .eq('id', oc.id)
-        )
-      );
-      updateResults.forEach((r, i) => {
-        if (r.status === 'fulfilled' && !(r.value as any).error) {
-          successCount++;
-        } else {
-          failCount++;
-          console.warn('[GroupRevertPaid] Update failed for', itemsToRevert[i].id,
-            r.status === 'fulfilled' ? (r.value as any).error : r.reason);
-        }
-      });
-
-      // Step 3 — reverse pre-fund deductions for successfully updated items (best-effort)
-      await Promise.allSettled(
-        itemsToRevert.map(async (oc, i) => {
-          const updateOk = updateResults[i].status === 'fulfilled' && !(updateResults[i] as any).value?.error;
-          if (!updateOk) return;
-          const meta = metaMap[oc.id];
-          if (!meta) return;
-          try {
-            const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', oc.id);
-            if (!unlinkResult.unlinked && meta.preFundDeducted && meta.preFundId && meta.paidAmount > 0) {
-              await reverseDirectDeduction(meta.preFundId, meta.paidAmount, oc.submitted_by ?? null);
-            }
-          } catch (pfErr: any) {
-            console.warn('[Pre-Fund] Group revert cleanup failed for', oc.id, pfErr?.message);
-          }
-        })
-      );
-
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically(itemsToRevert.map(oc => oc.id), 'revert');
+      if (!result.success) throw new Error(result.message);
       toast({
         title: `Group Reverted / تم إرجاع المجموعة`,
-        description: `${successCount} payment${successCount !== 1 ? 's' : ''} reset to Approved. Proof and amounts cleared.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+        description: `${itemsToRevert.length} payment${itemsToRevert.length !== 1 ? 's' : ''} reset to Approved. Proof and amounts cleared.`,
       });
       fetchOperationalCosts();
     } catch (err: any) {
@@ -2672,7 +2549,11 @@ const CostSubmission = () => {
 
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
-        ...(isFullPayment ? { status: 'paid' } : {}),
+        // The canonical pre-fund ledger accepts only paid/reconciled or
+        // partially_paid OCS sources. Persist this state before linking the
+        // immutable payment event so the cache refresh includes the first
+        // instalment rather than treating it as an unverified approved row.
+        status: isFullPayment ? 'paid' : 'partially_paid',
         amount_paid_cents: newAmountPaidCents,
         paid_at: isFullPayment ? now : (oc.paid_at ?? null),
         paid_by: isFullPayment ? currentUser.id : (oc.paid_by ?? null),
@@ -2695,8 +2576,16 @@ const CostSubmission = () => {
         });
         // Link to pre-fund — use explicitly selected fund, or fall back to auto-detection
         try {
-          const { linkPaymentToPreFund, linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+          const { linkPaymentToPreFund, linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
           const selectedPreFundId = markAsPaidDialog.preFundId;
+          const paymentEventKey = createPreFundPaymentEventKey({
+            sourceTable: 'operational_cost_submissions',
+            sourceId: oc.id,
+            amount: payAmountCents / 100,
+            paymentDate: now,
+            reference: oc.reference_number ?? null,
+            receiptUrl: proofUrl,
+          });
           if (selectedPreFundId) {
             const selectedFundInfo = markAsPaidDialog.preFunds.find(f => f.id === selectedPreFundId);
             const pfResult = await linkPaymentToKnownFund({
@@ -2712,6 +2601,7 @@ const CostSubmission = () => {
               createdBy: currentUser.id,
               userId: oc.submitted_by ?? null,
               receiptUrl: proofUrl,
+              paymentEventKey,
             });
             if (pfResult.linked) {
               toast({ title: 'Charged to Pre-Fund', description: `${oc.currency} ${(payAmountCents / 100).toLocaleString()} deducted from "${selectedFundInfo?.name ?? selectedPreFundId}".` });
@@ -2732,6 +2622,7 @@ const CostSubmission = () => {
               paymentDate: now,
               createdBy: currentUser.id,
               userId: oc.submitted_by ?? null,
+              paymentEventKey,
             });
             if (pfResult.linked) {
               toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
@@ -2944,7 +2835,7 @@ const CostSubmission = () => {
         const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
         const isFullyPaid = newPaidCents >= sub.amount_cents;
         const { error } = await supabase.from('operational_cost_submissions').update({
-          ...(isFullyPaid ? { status: 'paid' } : {}),
+          status: isFullyPaid ? 'paid' : 'partially_paid',
           amount_paid_cents: newPaidCents,
           paid_at: now,
           paid_by: currentUser.id,
@@ -2957,7 +2848,15 @@ const CostSubmission = () => {
           successCount++;
           // Link to selected pre-fund (explicit) or auto-link to active fund (fallback)
           try {
-            const { linkPaymentToPreFund, linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+            const { linkPaymentToPreFund, linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
+            const paymentEventKey = createPreFundPaymentEventKey({
+              sourceTable: 'operational_cost_submissions',
+              sourceId: sub.id,
+              amount: payNowCents / 100,
+              paymentDate: now,
+              reference: sub.reference_number ?? null,
+              receiptUrl: proofUrl,
+            });
             let r;
             if (preFundId) {
               // User explicitly chose a fund — charge it directly (same as single Mark Paid flow)
@@ -2975,6 +2874,7 @@ const CostSubmission = () => {
                 createdBy: currentUser.id,
                 userId: sub.submitted_by ?? null,
                 receiptUrl: proofUrl,
+                paymentEventKey,
               });
             } else {
               r = await linkPaymentToPreFund({
@@ -2991,6 +2891,7 @@ const CostSubmission = () => {
                 createdBy: currentUser.id,
                 userId: sub.submitted_by ?? null,
                 receiptUrl: proofUrl,
+                paymentEventKey,
               });
             }
             if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message);
@@ -3546,48 +3447,9 @@ const CostSubmission = () => {
     if (!deleteConfirm) return;
     setActionProcessing(true);
     try {
-      // Reverse any pre-fund linkage first (restores fund balance + allocation)
-      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
-      const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', deleteConfirm.id);
-
-      // If unlink_payment_atomically_rpc is not yet deployed, fall back to
-      // reverseDirectDeduction (mirrors DownPaymentContext cancel/delete pattern)
-      if (!unlinkResult.unlinked) {
-        const { data: ocRow } = await (supabase as any)
-          .from('operational_cost_submissions')
-          .select('amount_cents, submitted_by, pre_fund_transaction_id')
-          .eq('id', deleteConfirm.id)
-          .single();
-        if (ocRow?.pre_fund_transaction_id && ocRow?.amount_cents) {
-          const { data: txn } = await (supabase as any)
-            .from('pre_fund_transactions')
-            .select('pre_fund_request_id')
-            .eq('id', ocRow.pre_fund_transaction_id)
-            .maybeSingle();
-          if (txn?.pre_fund_request_id) {
-            await reverseDirectDeduction(
-              txn.pre_fund_request_id,
-              ocRow.amount_cents / 100,
-              ocRow.submitted_by ?? null,
-            );
-          }
-        }
-      }
-
-      let query = supabase
-        .from('operational_cost_submissions')
-        .delete()
-        .eq('id', deleteConfirm.id);
-
-      if (!isSuperAdmin) {
-        query = query.eq('tier1_status', 'pending').eq('tier2_status', 'pending');
-      }
-
-      const { error } = await query;
-
-      if (error) {
-        toast({ title: "Delete Failed / فشل الحذف", description: error.message, variant: "destructive" });
-      } else {
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically([deleteConfirm.id], 'delete');
+      if (!result.success) throw new Error(result.message);
         toast({ title: "Deleted / تم الحذف", description: "The submission has been deleted. / تم حذف الطلب." });
         // Log to deletion_audit_log (non-blocking, best-effort)
         supabase.from('deletion_audit_log').insert({
@@ -3600,7 +3462,6 @@ const CostSubmission = () => {
           deletion_reason: 'Direct SuperAdmin deletion',
         }).then(() => setDeletionLog(prev => [{ ...deleteConfirm, _log_type: 'direct', deleted_at: new Date().toISOString(), deleted_by_name: (currentUser as any)?.full_name || currentUser?.email }, ...prev]));
         fetchOperationalCosts();
-      }
     } catch (err) {
       toast({ title: "Error / خطأ", description: "Failed to delete submission. / فشل في حذف الطلب.", variant: "destructive" });
     } finally {
@@ -3614,21 +3475,15 @@ const CostSubmission = () => {
     if (!groupDeleteConfirm) return;
     setActionProcessing(true);
     try {
-      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
       const deletableItems = groupDeleteConfirm.items.filter(o => getOperationalDerivedStatus(o) !== 'reconciled');
       if (deletableItems.length === 0) {
         toast({ title: 'Nothing to delete', description: 'All items in this group are reconciled and cannot be deleted.' });
         return;
       }
-      // Unlink all pre-fund payments in parallel
-      await Promise.all(deletableItems.map(item => unlinkPaymentFromPreFund('operational_cost_submissions', item.id).catch(() => {})));
-      // Single batch delete — SuperAdmin bypasses tier-status guards
       const ids = deletableItems.map(o => o.id);
-      const { error } = await supabase
-        .from('operational_cost_submissions')
-        .delete()
-        .in('id', ids);
-      if (error) throw error;
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically(ids, 'delete');
+      if (!result.success) throw new Error(result.message);
       toast({ title: 'Group Deleted / تم حذف المجموعة', description: `${ids.length} item${ids.length !== 1 ? 's' : ''} deleted.` });
       // Log all to deletion_audit_log in parallel (non-blocking)
       const groupTitle = groupDeleteConfirm.title;
@@ -3775,29 +3630,9 @@ const CostSubmission = () => {
     if (!submission) return;
     setActionProcessing(true);
     try {
-      const { unlinkPaymentFromPreFund, reverseDirectDeduction } = await import('@/utils/preFundLinkage');
-      const unlinkResult = await unlinkPaymentFromPreFund('operational_cost_submissions', submission.id);
-      if (!unlinkResult.unlinked) {
-        const { data: ocRow } = await (supabase as any)
-          .from('operational_cost_submissions')
-          .select('amount_cents, submitted_by, pre_fund_transaction_id')
-          .eq('id', submission.id)
-          .single();
-        if (ocRow?.pre_fund_transaction_id && ocRow?.amount_cents) {
-          const { data: txn } = await (supabase as any)
-            .from('pre_fund_transactions')
-            .select('pre_fund_request_id')
-            .eq('id', ocRow.pre_fund_transaction_id)
-            .maybeSingle();
-          if (txn?.pre_fund_request_id) {
-            await reverseDirectDeduction(txn.pre_fund_request_id, ocRow.amount_cents / 100, ocRow.submitted_by ?? null);
-          }
-        }
-      }
-      const { error } = await supabase.from('operational_cost_submissions').delete().eq('id', submission.id);
-      if (error) {
-        toast({ title: 'Approve Failed', description: error.message, variant: 'destructive' });
-      } else {
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically([submission.id], 'delete');
+      if (!result.success) throw new Error(result.message);
         toast({ title: 'Deletion Approved', description: 'The submission has been deleted.' });
         // Log to deletion_audit_log (non-blocking)
         const deleterName = (currentUser as any)?.full_name || (currentUser as any)?.name || currentUser?.email || 'SuperAdmin';
@@ -3825,7 +3660,6 @@ const CostSubmission = () => {
         }
         fetchOperationalCosts();
         setDeleteReviewDialog({ open: false, submission: null, notes: '', action: 'approve' });
-      }
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to approve deletion.', variant: 'destructive' });
     } finally {
@@ -6404,10 +6238,10 @@ const CostSubmission = () => {
                                   <Wallet className="h-3 w-3 mr-1" />Mark Paid ({groupPayableItems.length})
                                 </Button>
                               )}
-                              {(grpPaidCnt + grpPartialCnt) > 0 && !isCountryDirector && (isSuperAdmin || isAdmin || hasRevertPaidOverride) && (() => {
+                              {grpPaidCnt > 0 && !isCountryDirector && (isSuperAdmin || isAdmin) && (() => {
                                 const grpPaidItems = groupItems.filter(o => {
                                   const ds = getOperationalDerivedStatus(o);
-                                  return ds === 'paid' || ds === 'reconciled' || ds === 'partially_paid';
+                                  return ds === 'paid';
                                 });
                                 const revertCount = grpPaidItems.length;
                                 return (

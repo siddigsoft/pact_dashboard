@@ -726,7 +726,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         // Link to selected pre-fund (if any) — done after processPayment so the source record exists
         if (singlePayPreFundId) {
           try {
-            const { linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
+            const { linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
             const fundInfo = singlePayPreFunds.find(f => f.id === singlePayPreFundId);
             const pfResult = await linkPaymentToKnownFund({
               fundId: singlePayPreFundId,
@@ -741,6 +741,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               createdBy: currentUser.id,
               userId: selectedRequest.requestedBy ?? null,
               receiptUrl: receiptUrl ?? null,
+              paymentEventKey: createPreFundPaymentEventKey({
+                sourceTable: 'down_payment_requests',
+                sourceId: selectedRequest.id,
+                amount: paymentAmount,
+                paymentDate: new Date().toISOString(),
+                reference: selectedRequest.requestNumber ?? null,
+                receiptUrl: receiptUrl ?? null,
+              }),
             });
             if (pfResult.linked) {
               toast({ title: 'Charged to Pre-Fund', description: `SDG ${paymentAmount.toLocaleString()} deducted from "${fundInfo?.name ?? singlePayPreFundId}".` });
@@ -2142,6 +2150,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               const paidAmt = isPartial && partialPercent
                 ? Math.round(basisAmt * partialPercent / 100)
                 : basisAmt;
+              // This key identifies one payment operation, not a request or a
+              // day. Keep it stable only for the immediate transport retry below;
+              // a second legitimate instalment gets its own immutable event.
+              const paymentEventKey = `dp-batch:${req.id}:${crypto.randomUUID()}`;
 
               // Atomic: single RPC handles pre_fund_transactions insert +
               //         available_balance debit + allocation deduction in one tx.
@@ -2158,6 +2170,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   p_created_by:   currentUser?.id ?? null,
                   p_user_id:      req.requestedBy ?? null,
                   p_receipt_url:  proofUrl ?? null,
+                  p_payment_event_key: paymentEventKey,
                 }
               );
 
@@ -2177,22 +2190,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 continue;
               }
 
-              // ── RPC failed or rejected — fall back to directLinkPayment ──
+              // ── Retry only through the same event-keyed atomic RPC ─────────
               if (rpcErr) {
                 const notDeployed =
                   (rpcErr as any).code === 'PGRST202' ||
                   String(rpcErr.message).toLowerCase().includes('could not find the function') ||
                   String(rpcErr.message).toLowerCase().includes('does not exist');
-                // Mark flag but do NOT break — we still fall through to the
-                // directLinkPayment fallback for this DP and all remaining ones
+                // Mark flag but do NOT make browser-side balance writes.
                 if (notDeployed) rpcNotDeployed = true;
                 else console.warn(`[BatchPay] RPC error for ${req.id}:`, rpcErr.message);
               } else {
                 console.warn(`[BatchPay] RPC rejected for ${req.id}:`, rpcResult?.error);
               }
 
-              // directLinkPayment fallback: updates available_balance + paid_amount
-              // directly even when the pre_fund_transactions INSERT is RLS-blocked
+              // linkPaymentToKnownFund is a second call to the immutable atomic
+              // RPC, using the same event key so transport retries are idempotent.
               try {
                 const { linkPaymentToKnownFund } = await import('@/utils/preFundLinkage');
                 const fallback = await linkPaymentToKnownFund({
@@ -2207,6 +2219,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   paymentDate: today,
                   createdBy:   currentUser?.id ?? null,
                   userId:      (req as any).requestedBy ?? null,
+                  paymentEventKey,
                 });
                 if (fallback.linked) {
                   pfLinked++;
@@ -2227,7 +2240,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             } else if (rpcNotDeployed) {
               toast({
                 title: '⚠️ SQL Migration Required',
-                description: 'Run pre_funding_atomic_rpcs.sql in the Supabase SQL Editor to enable fund linking. Payments are saved — use Pre-Funding → Reconciliation → Link Now once deployed.',
+                description: 'Run 20260820e_pre_fund_ledger_reconciliation.sql in the Supabase SQL Editor to enable safe fund linking. Payments are saved — use Pre-Funding → Reconciliation → Link Now once deployed.',
                 variant: 'destructive',
               });
             } else {

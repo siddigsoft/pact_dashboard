@@ -64,54 +64,16 @@ async function computePerFundEffectivePaid(
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (fundIds.length === 0) return result;
-
-  // ONE batched transaction query for all funds (was N separate per-fund queries)
-  const allTxns: any[] = await fetchAllIn(
-    (chunk: string[]) => sb.from('pre_fund_transactions')
-      .select('id,transaction_type,amount,source_table,source_id,pre_fund_request_id')
-      .in('pre_fund_request_id', chunk)
-      .eq('transaction_type', 'payment'),
+  const rows = await fetchAllIn<any>(
+    (chunk: string[]) => sb.from('pre_fund_balance_snapshot_v')
+      .select('fund_id,verified_paid_amount')
+      .in('fund_id', chunk),
     fundIds,
   );
-
-  // Group by fund
-  const txnsByFund = new Map<string, any[]>();
-  for (const t of allTxns) {
-    const bucket = txnsByFund.get(t.pre_fund_request_id);
-    if (bucket) bucket.push(t);
-    else txnsByFund.set(t.pre_fund_request_id, [t]);
-  }
-
-  // Collect ALL DP IDs and txn IDs across every fund for two batched validation queries
-  const allDpIds  = [...new Set(allTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
-  const allTxnIds = allTxns.map((t: any) => t.id as string).filter(Boolean);
-
-  const [validDpData, backLinked] = await Promise.all([
-    allDpIds.length  ? fetchAllIn((chunk: string[]) => sb.from('down_payment_requests').select('id,status,metadata').in('id', chunk), allDpIds)                                                            : Promise.resolve([] as any[]),
-    allTxnIds.length ? fetchAllIn((chunk: string[]) => sb.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), allTxnIds) : Promise.resolve([] as any[]),
-  ]);
-
-  const paidDpSet = new Set<string>((validDpData as any[]).filter(d => !_DP_NO_DISBURSE_OV.has(d.status) && d.metadata?.deleted !== true).map(d => d.id as string));
-  const nonPaidBackIds = new Set<string>((backLinked as any[]).filter(d => _DP_NO_DISBURSE_OV.has(d.status) || d.metadata?.deleted === true).map(d => d.pre_fund_transaction_id as string));
-
-  for (const fundId of fundIds) {
-    const txns = txnsByFund.get(fundId) ?? [];
-    if (txns.length === 0) {
-      result.set(fundId, fallbacks.get(fundId) ?? 0);
-      continue;
-    }
-    let sum = 0;
-    for (const t of txns) {
-      if (t.source_table === 'down_payment_requests') {
-        if (!t.source_id || paidDpSet.has(t.source_id)) sum += Number(t.amount ?? 0);
-      } else if (!t.source_table) {
-        if (!nonPaidBackIds.has(t.id)) sum += Number(t.amount ?? 0);
-      } else {
-        sum += Number(t.amount ?? 0);
-      }
-    }
-    result.set(fundId, sum > 0 ? sum : (fallbacks.get(fundId) ?? 0));
-  }
+  rows.forEach(row => result.set(row.fund_id, Number(row.verified_paid_amount ?? 0)));
+  fundIds.forEach(id => {
+    if (!result.has(id)) result.set(id, fallbacks.get(id) ?? 0);
+  });
   return result;
 }
 
@@ -325,7 +287,11 @@ export default function PreFundingOverview() {
       const fallbacks = new Map<string, number>(loadedFunds.map((f: any) => [f.id as string, Number(f.paid_amount ?? 0)]));
       const [allocsData, rawTxns, perFundPaid] = await Promise.all([
         fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations').select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes').in('pre_fund_request_id', chunk).order('allocated_amount', { ascending: false }), fundIds),
-        fetchAllIn(chunk => (supabase as any).from('pre_fund_transactions').select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id').in('pre_fund_request_id', chunk).order('transaction_date', { ascending: false }), fundIds),
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_event_ledger_v')
+          .select('id,pre_fund_request_id,transaction_type,amount,currency,user_id,created_by,description,transaction_date,reconciled,source_table,source_id')
+          .in('pre_fund_request_id', chunk)
+          .eq('source_is_verified', true)
+          .order('transaction_date', { ascending: false }), fundIds),
         // Per-fund isolated computation — same as Reconciliation's loadTxns — avoids cross-fund
         // DP-set contamination that inflates paid-out totals in the global query.
         computePerFundEffectivePaid(fundIds, fallbacks, supabase),
@@ -578,34 +544,16 @@ export default function PreFundingOverview() {
     return m;
   }, [txns, dpUserMap, ocsUserMap, allocHoldersByFund]);
 
-  // Effective paid amount for a fund — highest (most conservative) of:
-  //   1. Raw (unfiltered) payment transaction sum — exact same source as Reconciliation page.
-  //      Stored in rawFundPaySums; populated at Phase-2 load before DP/OCS validation runs.
-  //   2. paid_amount DB column — updated by directLinkPayment even when txn insert is blocked.
-  // Falls back to 0 when Phase 2 has not completed yet (safe — transitions correctly once loaded).
+  // The ledger migration keeps the compatibility cache in sync with the
+  // source-validated event projection. Never take a browser-side MAX of raw
+  // events and cached values: it would count reversed/invalid legacy payments.
   const effectivePaid = (f: { id: string; amount: number; paid_amount?: number }) => {
-    const fromRawTxns = rawFundPaySums.get(f.id) ?? 0;
-    const fromCol     = Number(f.paid_amount ?? 0);
-    return Math.max(fromRawTxns, fromCol);
+    return Number(f.paid_amount ?? 0);
   };
 
-  // True available = amount − effectivePaid.
-  // We do NOT cap with the DB available_balance column: a stale-low DB value (e.g. 0)
-  // would incorrectly collapse a correct positive available to 0 and make the hub's
-  // "AVAILABLE BALANCE" KPI show 0 even when funds have plenty of money left.
-  // effectivePaid already takes the max of txn-derived and DB paid_amount, so it is
-  // always at least as conservative as the DB column on the paid side.
-  // Negative return value = genuinely overspent fund; aggregate totals rely on this.
+  // This field is maintained from the same source-validated projection as paid.
   const conservativeAvail = (f: { id: string; amount: number; available_balance?: number; paid_amount?: number; currency: string }) => {
-    const paid = effectivePaid(f);
-    const fromPaid = Math.max(0, f.amount - paid);
-    // Use the DB's available_balance as a ceiling so stale-high DB values don't over-report,
-    // but only when available_balance is set (non-null). If it's 0 and fromPaid is higher,
-    // the DB value is likely stale — trust fromPaid in that case.
-    if (f.available_balance != null && Number(f.available_balance) > 0) {
-      return Math.min(Number(f.available_balance), fromPaid);
-    }
-    return fromPaid;
+    return Number(f.available_balance ?? 0);
   };
 
   const filtered = funds.filter(f => statusFilter === 'all' ? true : f.status === statusFilter);

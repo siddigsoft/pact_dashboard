@@ -1,14 +1,20 @@
 import { supabase } from '@/integrations/supabase/client';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Best-effort (non-atomic) fallback used when link_payment_atomically_rpc is
-// not yet deployed. Performs the same 3 writes as the RPC but without a DB
-// transaction wrapper. The duplicate-guard is a SELECT-then-INSERT pattern
-// which is NOT race-safe under concurrent calls; a unique DB constraint on
-// (source_table, source_id) does not currently exist. This path should be
-// replaced by deploying the RPC (which wraps all writes in a transaction).
-// ─────────────────────────────────────────────────────────────────────────────
-async function directLinkPayment(params: {
+export function createPreFundPaymentEventKey(params: {
+  sourceTable: string;
+  sourceId: string;
+  amount: number;
+  paymentDate: string;
+  reference?: string | null;
+  receiptUrl?: string | null;
+}): string {
+  // A key names a single payment operation, not a source/date/amount tuple.
+  // It is persisted in pre_fund_transactions by the RPC and callers reuse it
+  // only for a transport retry of this same operation.
+  return `pf-payment:${params.sourceTable}:${params.sourceId}:${crypto.randomUUID()}`;
+}
+
+async function linkPaymentAtomically(params: {
   fundId: string;
   fundName: string;
   amount: number;
@@ -21,142 +27,44 @@ async function directLinkPayment(params: {
   createdBy: string | null;
   userId: string | null;
   receiptUrl: string | null;
+  paymentEventKey?: string | null;
 }): Promise<FundLinkResult> {
-  const { fundId, fundName, amount, currency, sourceTable, sourceId,
-    reference, description, paymentDate, createdBy, userId, receiptUrl } = params;
+  const eventKey = params.paymentEventKey ?? createPreFundPaymentEventKey(params);
+  const { data, error } = await (supabase as any).rpc('link_payment_atomically_rpc', {
+    p_fund_id: params.fundId,
+    p_amount: params.amount,
+    p_currency: params.currency,
+    p_source_table: params.sourceTable,
+    p_source_id: params.sourceId,
+    p_reference: params.reference,
+    p_description: params.description,
+    p_payment_date: params.paymentDate,
+    p_created_by: params.createdBy,
+    p_user_id: params.userId,
+    p_receipt_url: params.receiptUrl,
+    p_payment_event_key: eventKey,
+  });
 
-  // 1a. Check for existing transaction row (primary idempotency guard)
-  const { data: existing } = await (supabase as any)
-    .from('pre_fund_transactions')
-    .select('id')
-    .eq('source_table', sourceTable)
-    .eq('source_id', sourceId)
-    .maybeSingle();
-
-  if (existing?.id) {
+  if (error) {
+    const notDeployed = (error as any).code === 'PGRST202'
+      || String(error.message).toLowerCase().includes('could not find the function')
+      || String(error.message).toLowerCase().includes('does not exist');
     return {
-      linked: true,
-      fundId,
-      fundName,
-      transactionId: existing.id,
-      message: `Already linked to "${fundName}"`,
+      linked: false,
+      message: notDeployed
+        ? 'Pre-funding ledger migration is required before payments can be linked safely. Ask Finance to apply 20260820e_pre_fund_ledger_reconciliation.sql.'
+        : `Linkage RPC failed: ${error.message}`,
     };
   }
-
-  // 1b. Fetch source row metadata — needed for the secondary idempotency check below.
-  //     When the pre_fund_transactions INSERT is blocked by RLS, we store a
-  //     pre_fund_deducted marker in source metadata so retries don't double-deduct.
-  //     Only down_payment_requests has a metadata column; OCS uses pre_fund_transaction_id only.
-  const supportsMetadata = sourceTable === 'down_payment_requests';
-  let srcRow: { metadata?: Record<string, unknown> | null } | null = null;
-  if (supportsMetadata) {
-    const { data } = await (supabase as any)
-      .from(sourceTable)
-      .select('metadata')
-      .eq('id', sourceId)
-      .maybeSingle();
-    srcRow = data;
-  }
-
-  if (srcRow?.metadata?.pre_fund_deducted === true) {
-    return {
-      linked: true,
-      fundId,
-      fundName,
-      message: `Balance already deducted from "${fundName}"`,
-    };
-  }
-
-  // 2. Insert transaction row (best-effort — may be blocked by RLS until SQL deployed)
-  const { data: txnRow, error: txnErr } = await (supabase as any)
-    .from('pre_fund_transactions')
-    .insert({
-      pre_fund_request_id: fundId,
-      transaction_type: 'payment',
-      amount,
-      currency,
-      reference,
-      description: description ?? `Auto-linked from ${sourceTable}`,
-      transaction_date: paymentDate,
-      reconciled: false,
-      source_table: sourceTable,
-      source_id: sourceId,
-      created_by: createdBy,
-      user_id: userId ?? createdBy,
-      receipt_url: receiptUrl,
-    })
-    .select('id')
-    .single();
-
-  const txnId: string | null = txnErr ? null : (txnRow?.id ?? null);
-
-  // 3. Deduct from fund balance
-  const { data: fund } = await (supabase as any)
-    .from('pre_fund_requests')
-    .select('available_balance,paid_amount')
-    .eq('id', fundId)
-    .single();
-
-  const newBalance = Number(fund?.available_balance ?? 0) - amount;
-  const newPaid    = Number(fund?.paid_amount ?? 0) + amount;
-
-  const { error: balErr } = await (supabase as any)
-    .from('pre_fund_requests')
-    .update({ available_balance: newBalance, paid_amount: newPaid })
-    .eq('id', fundId);
-
-  if (balErr) {
-    // Balance update failed — clean up txn row if one was created, then fail
-    if (txnId) await (supabase as any).from('pre_fund_transactions').delete().eq('id', txnId);
-    return { linked: false, message: `Failed to deduct fund balance: ${balErr.message}` };
-  }
-
-  // 3b. Deduct from the submitter's personal allocation (if one exists for this fund).
-  //     Mirrors what link_payment_atomically_rpc does atomically — keeps the
-  //     Allocation Dashboard in sync even when the RPC is not yet deployed.
-  if (userId) {
-    const { data: alloc } = await (supabase as any)
-      .from('pre_fund_allocations')
-      .select('id,spent_amount,allocated_amount')
-      .eq('pre_fund_request_id', fundId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (alloc) {
-      await (supabase as any)
-        .from('pre_fund_allocations')
-        .update({ spent_amount: Number(alloc.spent_amount) + amount })
-        .eq('id', alloc.id);
-    }
-  }
-
-  // 4. Write idempotency marker / back-link on source row
-  if (txnId) {
-    // Full link: set pre_fund_transaction_id back-link
-    await (supabase as any)
-      .from(sourceTable)
-      .update({ pre_fund_transaction_id: txnId })
-      .eq('id', sourceId);
-  } else if (supportsMetadata) {
-    // INSERT was blocked by RLS — no txn row created.
-    // Store a metadata marker to prevent double-deduction on any retry.
-    // Note: there is still a narrow SELECT→UPDATE race window under concurrent calls;
-    // a DB unique constraint on pre_fund_transactions(source_table,source_id) would
-    // fully close it — deploy the SQL migration when possible.
-    const updatedMeta = { ...(srcRow?.metadata ?? {}), pre_fund_deducted: true, pre_fund_id: fundId };
-    await (supabase as any)
-      .from(sourceTable)
-      .update({ metadata: updatedMeta })
-      .eq('id', sourceId);
-  }
-
+  if (data?.success === false) return { linked: false, message: data.error ?? 'Linkage failed.' };
   return {
     linked: true,
-    fundId,
-    fundName,
-    transactionId: txnId ?? undefined,
-    message: txnId
-      ? `Linked to "${fundName}" (direct)`
-      : `Balance deducted from "${fundName}" (transaction log pending SQL deployment)`,
+    fundId: params.fundId,
+    fundName: params.fundName,
+    transactionId: data?.transaction_id,
+    message: data?.idempotent
+      ? `Payment event already linked to "${params.fundName}"`
+      : `Linked to "${params.fundName}"`,
   };
 }
 
@@ -174,6 +82,12 @@ export async function reverseDirectDeduction(
   amount: number,
   userId?: string | null,
 ): Promise<{ reversed: boolean; message: string }> {
+  return {
+    reversed: false,
+    message: 'Direct pre-fund balance reversal is disabled. Apply the pre-funding ledger migration and use the immutable reversal RPC.',
+  };
+
+  /*
   const { data: fund, error: fErr } = await supabase
     .from('pre_fund_requests')
     .select('paid_amount, available_balance')
@@ -208,6 +122,7 @@ export async function reverseDirectDeduction(
   }
 
   return { reversed: true, message: `Reversed ${amount} from fund — balance restored.` };
+  */
 }
 
 export interface UnlinkResult {
@@ -229,10 +144,11 @@ export interface UnlinkResult {
  * If any step fails the DB rolls back automatically — no partial-state corruption.
  * Safe to call even if no transaction was ever linked (returns unlinked:false silently).
  *
- * Requires: `unlink_payment_atomically_rpc` deployed from pre_funding_atomic_rpcs.sql
+ * This public route is intentionally limited to Down Payment cancellation. OCS
+ * reversals must use the authorised atomic source-transition helper below.
  */
 export async function unlinkPaymentFromPreFund(
-  sourceTable: 'down_payment_requests' | 'operational_cost_submissions',
+  sourceTable: 'down_payment_requests',
   sourceId: string,
 ): Promise<UnlinkResult> {
   const { data: result, error } = await (supabase as any).rpc(
@@ -310,12 +226,18 @@ export async function linkPaymentToPreFund(params: {
   createdBy?: string | null;
   userId?: string | null;
   receiptUrl?: string | null;
+  paymentEventKey?: string | null;
 }): Promise<FundLinkResult> {
   const {
     amount, currency, countryId, projectId, costCategory,
     sourceTable, sourceId, reference, description,
-    paymentDate, createdBy, userId, receiptUrl,
+    paymentDate, createdBy, userId, receiptUrl, paymentEventKey,
   } = params;
+  // Generate once per payment initiation so every automatic matching branch
+  // and immediate retry uses the same immutable operation key.
+  const operationKey = paymentEventKey ?? createPreFundPaymentEventKey({
+    sourceTable, sourceId, amount, paymentDate, reference, receiptUrl,
+  });
 
   const submitterId: string | null = userId ?? createdBy ?? null;
   const today = paymentDate.split('T')[0];
@@ -438,6 +360,7 @@ export async function linkPaymentToPreFund(params: {
           p_created_by:   createdBy ?? null,
           p_user_id:      null,
           p_receipt_url:  receiptUrl ?? null,
+          p_payment_event_key: operationKey,
         }
       );
       if (rpcFallbackErr) {
@@ -445,16 +368,12 @@ export async function linkPaymentToPreFund(params: {
           (rpcFallbackErr as any).code === 'PGRST202' ||
           String(rpcFallbackErr.message).toLowerCase().includes('could not find the function') ||
           String(rpcFallbackErr.message).toLowerCase().includes('does not exist');
-        if (notDeployed) {
-          return directLinkPayment({
-            fundId: fallbackFund.id, fundName: fallbackFund.name,
-            amount, currency, sourceTable, sourceId,
-            reference: reference ?? null, description: description ?? null,
-            paymentDate: today, createdBy: createdBy ?? null,
-            userId: submitterId, receiptUrl: receiptUrl ?? null,
-          });
-        }
-        return { linked: false, message: `Linkage RPC failed: ${rpcFallbackErr.message}` };
+        return {
+          linked: false,
+          message: notDeployed
+            ? 'Pre-funding ledger migration is required before payments can be linked safely.'
+            : `Linkage RPC failed: ${rpcFallbackErr.message}`,
+        };
       }
       if (rpcFallback && rpcFallback.success === false) {
         return { linked: false, message: rpcFallback.error ?? 'Linkage failed.' };
@@ -518,6 +437,7 @@ export async function linkPaymentToPreFund(params: {
       p_created_by:   createdBy ?? null,
       p_user_id:      rpcUserId,
       p_receipt_url:  receiptUrl ?? null,
+          p_payment_event_key: operationKey,
     }
   );
 
@@ -526,20 +446,12 @@ export async function linkPaymentToPreFund(params: {
       (rpcErr as any).code === 'PGRST202' ||
       String(rpcErr.message).toLowerCase().includes('could not find the function') ||
       String(rpcErr.message).toLowerCase().includes('does not exist');
-    if (isNotDeployed) {
-      // RPC not deployed — fall back to direct writes.
-      // Pass submitterId (not rpcUserId) because directLinkPayment step 3b uses
-      // maybeSingle() and safely no-ops when no allocation row exists — safe to
-      // always pass the real userId so allocations ARE updated when they do exist.
-      return directLinkPayment({
-        fundId: bestFund.id, fundName: bestFund.name,
-        amount, currency, sourceTable, sourceId,
-        reference: reference ?? null, description: description ?? null,
-        paymentDate: today, createdBy: createdBy ?? null,
-        userId: submitterId, receiptUrl: receiptUrl ?? null,
-      });
-    }
-    return { linked: false, message: `Linkage RPC failed: ${rpcErr.message}` };
+    return {
+      linked: false,
+      message: isNotDeployed
+        ? 'Pre-funding ledger migration is required before payments can be linked safely.'
+        : `Linkage RPC failed: ${rpcErr.message}`,
+    };
   }
   if (rpcResult && rpcResult.success === false) {
     return { linked: false, message: rpcResult.error ?? 'Linkage failed.' };
@@ -666,6 +578,41 @@ export async function linkPaymentToKnownFund(params: {
   createdBy?: string | null;
   userId?: string | null;
   receiptUrl?: string | null;
+  paymentEventKey?: string | null;
 }): Promise<FundLinkResult> {
-  return directLinkPayment(params);
+  return linkPaymentAtomically({
+    ...params,
+    reference: params.reference ?? null,
+    description: params.description ?? null,
+    createdBy: params.createdBy ?? null,
+    userId: params.userId ?? null,
+    receiptUrl: params.receiptUrl ?? null,
+  });
+}
+
+export async function revertOperationalCostPaymentsAtomically(
+  sourceIds: string[],
+  action: 'revert' | 'delete',
+): Promise<{ success: boolean; message: string }> {
+  const { data, error } = await (supabase as any).rpc(
+    'revert_operational_cost_payments_atomically_rpc',
+    { p_source_ids: sourceIds, p_action: action },
+  );
+
+  if (error) {
+    const notDeployed =
+      (error as any).code === 'PGRST202' ||
+      String(error.message).toLowerCase().includes('could not find the function') ||
+      String(error.message).toLowerCase().includes('does not exist');
+    return {
+      success: false,
+      message: notDeployed
+        ? 'Pre-funding ledger migration is required before paid submissions can be safely changed.'
+        : error.message,
+    };
+  }
+  return {
+    success: data?.success === true,
+    message: data?.success === true ? 'Payment source and ledger updated together.' : (data?.error ?? 'Source update failed.'),
+  };
 }

@@ -175,9 +175,10 @@ export default function PreFundingAllocations() {
         // Transactions: unlimited fetch, scoped to visible fund IDs
         fetchAllIn(
           chunk => (supabase as any)
-            .from('pre_fund_transactions')
+            .from('pre_fund_event_ledger_v')
             .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
             .in('pre_fund_request_id', chunk)
+            .eq('source_is_verified', true)
             .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
           fundIds,
         ),
@@ -186,52 +187,12 @@ export default function PreFundingAllocations() {
       const profileMap = new Map(profilesData.map((p: any) => [p.id as string, p]));
       const fundMap    = new Map(fundsData.map((f: any) => [f.id as string, f]));
 
-      // Validate DP/OCS-sourced transactions — exclude any whose source is deleted/cancelled
-      const dpSourceIds = [...new Set(
-        rawTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string)
-      )];
-      const ocsSourceIds = [...new Set(
-        rawTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id).map((t: any) => t.source_id as string)
-      )];
-      const [validDpData, validOcsData] = await Promise.all([
-        fetchAllIn(chunk => (supabase as any).from('down_payment_requests').select('id,status,metadata').in('id', chunk), dpSourceIds),
-        fetchAllIn(chunk => (supabase as any).from('operational_cost_submissions').select('id').in('id', chunk), ocsSourceIds),
-      ]);
-      // Use the same status exclusion set as the Balance Dashboard so both pages
-      // agree on what counts as "disbursed". pending/draft/rejected DPs have not
-      // actually been paid out and must not inflate the spent total.
-      const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
-      const validDpIds  = new Set(validDpData.filter((dp: any) => !DP_NO_DISBURSE.has(dp.status) && dp.metadata?.deleted !== true).map((dp: any) => dp.id as string));
-      const validOcsIds = new Set(validOcsData.map((o: any) => o.id as string));
+      const validTxns = rawTxns;
 
-      const validTxns = rawTxns.filter(t => {
-        if (t.source_table === 'down_payment_requests')
-          return !t.source_id || validDpIds.has(t.source_id);
-        if (t.source_table === 'operational_cost_submissions')
-          return !t.source_id || validOcsIds.has(t.source_id);
-        return true;
-      });
-
-      // Compute fund-level paid from actual payment transactions (avoids stale paid_amount column).
-      // Falls back to the DB paid_amount only when no payment txn rows exist for that fund.
-      const txnPaidMap = new Map<string, number>();
-      for (const t of validTxns) {
-        if (!t.pre_fund_request_id) continue;
-        const amt = Number(t.amount) || 0;
-        if (t.transaction_type === 'payment') {
-          txnPaidMap.set(t.pre_fund_request_id, (txnPaidMap.get(t.pre_fund_request_id) ?? 0) + amt);
-        } else if (['reversal', 'return'].includes(t.transaction_type)) {
-          txnPaidMap.set(t.pre_fund_request_id, Math.max(0, (txnPaidMap.get(t.pre_fund_request_id) ?? 0) - amt));
-        }
-      }
       const paidMap = new Map<string, number>();
       for (const f of fundsData as any[]) {
-        const txnPaid = txnPaidMap.get(f.id as string) ?? 0;
         const dbPaid  = Number(f.paid_amount ?? 0);
-        // Use whichever is higher: txn-computed or the authoritative DB column.
-        // The DB column is updated by directLinkPayment / RPC paths that may not
-        // create a pre_fund_transactions row, so it can legitimately be higher.
-        paidMap.set(f.id as string, Math.max(txnPaid, dbPaid));
+        paidMap.set(f.id as string, dbPaid);
       }
 
       // Some transactions (esp. manually added via Reconciliation, or auto-linked
@@ -297,19 +258,14 @@ export default function PreFundingAllocations() {
         const prev = spendMap.get(key) ?? 0;
         const amt  = Number(t.amount) || 0;
         const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
-        spendMap.set(key, Math.max(0, prev + delta));
+        spendMap.set(key, prev + delta);
       }
 
       const enriched: AllocRow[] = allocs.map((a: any) => {
         const p = profileMap.get(a.user_id) as any;
         const f = fundMap.get(a.pre_fund_request_id) as any;
-        // Prefer txn-computed spend (user_id-attributed rows).
-        // If no txn rows carry this user_id, use the stored spent_amount column —
-        // it is updated by the RPC when a payment is attributed to this allocation.
-        // Take the MAX so we never show less than what the allocation record says.
         const txnSpent     = spendMap.get(spendKey(a.user_id, a.pre_fund_request_id)) ?? 0;
-        const storedSpent  = Number(a.spent_amount ?? 0);
-        const spent        = Math.max(txnSpent, storedSpent);
+        const spent        = Math.max(0, txnSpent);
         return {
           ...a,
           allocated_amount: Number(a.allocated_amount),
