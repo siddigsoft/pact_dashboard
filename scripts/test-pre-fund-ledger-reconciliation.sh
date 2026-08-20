@@ -58,12 +58,14 @@ CREATE TABLE public.pre_fund_allocations (
 );
 CREATE TABLE public.down_payment_requests (
   id uuid PRIMARY KEY, status text, metadata jsonb DEFAULT '{}'::jsonb,
-  total_paid_amount numeric NOT NULL DEFAULT 0, pre_fund_transaction_id uuid
+  total_paid_amount numeric NOT NULL DEFAULT 0, pre_fund_transaction_id uuid,
+  justification text, site_name text
 );
 CREATE TABLE public.operational_cost_submissions (
   id uuid PRIMARY KEY, status text, amount_paid_cents bigint NOT NULL DEFAULT 0, pre_fund_transaction_id uuid,
   paid_at timestamptz, paid_by uuid, payment_proof_url text, payment_proof_notes text,
-  payment_proof_uploaded_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now()
+  payment_proof_uploaded_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(),
+  title text, description text
 );
 CREATE TABLE public.acct_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE);
 CREATE TABLE public.acct_journal_entries (
@@ -90,6 +92,7 @@ INSERT INTO public.pre_fund_requests (
 SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 INSERT INTO public.acct_accounts (code) VALUES ('1200'), ('2400');
@@ -566,6 +569,220 @@ BEGIN
     RAISE EXCEPTION 'missing source was accepted';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM = 'missing source was accepted' THEN RAISE; END IF;
+  END;
+END $$;
+
+-- Finance exception review queue: no-evidence decisions are append-only and
+-- cannot change a source, event, or canonical balance.
+INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, title)
+VALUES ('20000000-0000-0000-0000-000000000006', 'approved', 10000, 'Legacy approved OCS');
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, reference, description,
+  transaction_date, source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000002', 'payment', 70, 'SDG', 'legacy-ocs',
+  'Unverified historical OCS payment', CURRENT_DATE, 'operational_cost_submissions',
+  '20000000-0000-0000-0000-000000000006', auth.uid(), auth.uid(), 'legacy-ocs-event'
+);
+DO $$
+DECLARE v_key text; v_status text; v_events int; v_decisions int;
+BEGIN
+  SELECT exception_key INTO v_key
+  FROM public.pre_fund_finance_exception_queue_v
+  WHERE source_id = '20000000-0000-0000-0000-000000000006'
+    AND exception_type = 'unverified_source_payment';
+  IF v_key IS NULL THEN RAISE EXCEPTION 'unverified OCS was absent from Finance queue'; END IF;
+  PERFORM public.record_pre_fund_exception_decision_rpc(
+    v_key, 'Bank proof was not supplied; retain exclusion.', 'FIN-EXC-001'
+  );
+  SELECT status INTO v_status FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000006';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE source_id = '20000000-0000-0000-0000-000000000006';
+  SELECT count(*) INTO v_decisions FROM public.pre_fund_finance_exception_decisions
+  WHERE exception_key = v_key AND resolution = 'keep_excluded';
+  IF v_status <> 'approved' OR v_events <> 1 OR v_decisions <> 1 THEN
+    RAISE EXCEPTION 'keep-excluded changed financial data: status %, events %, decisions %',
+      v_status, v_events, v_decisions;
+  END IF;
+END $$;
+
+-- The queue itself and its resolution RPCs are Finance-only.
+UPDATE public.profiles SET role = 'viewer' WHERE id = auth.uid();
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.get_pre_fund_finance_exception_queue_rpc(
+      '10000000-0000-0000-0000-000000000002'
+    );
+    RAISE EXCEPTION 'non-finance role read Finance exception queue';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'non-finance role read Finance exception queue' THEN RAISE; END IF;
+  END;
+END $$;
+UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
+
+-- Evidence confirmation atomically changes an approved OCS to paid and posts
+-- the source-field gap as a new immutable event. A retry is idempotent.
+DO $$
+DECLARE v_key text; v_status text; v_events int; v_paid numeric; v_available numeric;
+        v_correction numeric; v_result jsonb;
+BEGIN
+  SELECT exception_key INTO v_key
+  FROM public.pre_fund_finance_exception_queue_v
+  WHERE source_id = '20000000-0000-0000-0000-000000000006'
+    AND exception_type = 'unverified_source_payment';
+  SELECT public.confirm_pre_fund_ocs_exception_with_evidence_rpc(
+    v_key, 'Matched to signed voucher.', 'VOUCHER-OCS-006', 'ocs-evidence-006'
+  ) INTO v_result;
+  SELECT public.confirm_pre_fund_ocs_exception_with_evidence_rpc(
+    v_key, 'Matched to signed voucher.', 'VOUCHER-OCS-006', 'ocs-evidence-006'
+  ) INTO v_result;
+  SELECT status INTO v_status FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000006';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE source_id = '20000000-0000-0000-0000-000000000006'
+    AND transaction_type = 'payment';
+  SELECT paid_amount, available_balance INTO v_paid, v_available
+  FROM public.pre_fund_requests WHERE id = '10000000-0000-0000-0000-000000000002';
+  SELECT amount INTO v_correction FROM public.pre_fund_transactions
+  WHERE id = (SELECT correction_transaction_id FROM public.pre_fund_finance_exception_decisions
+              WHERE idempotency_key = 'ocs-evidence-006');
+  IF v_status <> 'paid' OR v_events <> 2 OR v_correction <> 30
+     OR v_paid <> 140 OR v_available <> 360 THEN
+    RAISE EXCEPTION 'OCS evidence confirmation failed: status %, events %, correction %, fund %/%',
+      v_status, v_events, v_correction, v_paid, v_available;
+  END IF;
+END $$;
+DO $$
+DECLARE v_key text;
+BEGIN
+  SELECT 'txn:' || id::text INTO v_key
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'legacy-ocs-event';
+  BEGIN
+    PERFORM public.confirm_pre_fund_ocs_exception_with_evidence_rpc(
+      v_key, 'Different note must not reuse a decision key.', 'VOUCHER-CHANGED', 'ocs-evidence-006'
+    );
+    RAISE EXCEPTION 'idempotency key was reused for a different OCS decision';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'idempotency key was reused for a different OCS decision' THEN RAISE; END IF;
+  END;
+END $$;
+
+-- Existing Down Payments can only be restored with explicit evidence. The
+-- provided cumulative amount is reconciled through a new immutable event.
+INSERT INTO public.down_payment_requests (id, status, total_paid_amount, justification)
+VALUES ('30000000-0000-0000-0000-000000000008', 'rejected', 0, 'Historic rejected DP');
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, reference, description,
+  transaction_date, source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000003', 'payment', 40, 'SDG', 'legacy-dp',
+  'Unverified historical Down Payment', CURRENT_DATE, 'down_payment_requests',
+  '30000000-0000-0000-0000-000000000008', auth.uid(), auth.uid(), 'legacy-dp-event'
+);
+DO $$
+DECLARE v_key text; v_status text; v_total numeric; v_events int;
+BEGIN
+  SELECT exception_key INTO v_key
+  FROM public.pre_fund_finance_exception_queue_v
+  WHERE source_id = '30000000-0000-0000-0000-000000000008'
+    AND exception_type = 'unverified_source_payment';
+  PERFORM public.confirm_pre_fund_down_payment_exception_with_evidence_rpc(
+    v_key, 50, 'Receipt and signed approval verified.', 'DP-RECEIPT-007', 'dp-evidence-007'
+  );
+  SELECT status, total_paid_amount INTO v_status, v_total
+  FROM public.down_payment_requests WHERE id = '30000000-0000-0000-0000-000000000008';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE source_id = '30000000-0000-0000-0000-000000000008'
+    AND transaction_type = 'payment';
+  IF v_status <> 'fully_paid' OR v_total <> 50 OR v_events <> 2 THEN
+    RAISE EXCEPTION 'Down Payment evidence confirmation failed: status %, total %, events %',
+      v_status, v_total, v_events;
+  END IF;
+END $$;
+DO $$
+DECLARE v_key text; v_events int; v_total numeric;
+BEGIN
+  SELECT 'txn:' || id::text INTO v_key
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'legacy-dp-event';
+  BEGIN
+    PERFORM public.confirm_pre_fund_down_payment_exception_with_evidence_rpc(
+      v_key, 60, 'A different key must not add a second correction.', 'DP-RECEIPT-008', 'dp-evidence-008-second'
+    );
+    RAISE EXCEPTION 'already-confirmed Down Payment accepted a second correction';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'already-confirmed Down Payment accepted a second correction' THEN RAISE; END IF;
+  END;
+  SELECT total_paid_amount INTO v_total FROM public.down_payment_requests
+  WHERE id = '30000000-0000-0000-0000-000000000008';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE source_id = '30000000-0000-0000-0000-000000000008' AND transaction_type = 'payment';
+  IF v_total <> 50 OR v_events <> 2 THEN
+    RAISE EXCEPTION 'second Down Payment correction changed source data: total %, events %', v_total, v_events;
+  END IF;
+END $$;
+
+-- The evidence RPC is not a generic paid-source editing API. A normal paid
+-- Down Payment must be rejected even when a Finance user calls the RPC directly.
+INSERT INTO public.down_payment_requests (id, status, total_paid_amount, justification)
+VALUES ('30000000-0000-0000-0000-000000000009', 'paid', 100, 'Ordinary verified DP');
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, reference, description,
+  transaction_date, source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000003', 'payment', 40, 'SDG', 'ordinary-dp',
+  'Ordinary verified Down Payment', CURRENT_DATE, 'down_payment_requests',
+  '30000000-0000-0000-0000-000000000009', auth.uid(), auth.uid(), 'ordinary-dp-event'
+);
+DO $$
+DECLARE v_key text; v_status text; v_total numeric; v_events int;
+BEGIN
+  SELECT 'txn:' || id::text INTO v_key
+  FROM public.pre_fund_transactions WHERE idempotency_key = 'ordinary-dp-event';
+  BEGIN
+    PERFORM public.confirm_pre_fund_down_payment_exception_with_evidence_rpc(
+      v_key, 100, 'Attempted bypass', 'BYPASS-REJECT', 'ordinary-dp-bypass'
+    );
+    RAISE EXCEPTION 'ordinary verified Down Payment used the exception correction RPC';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'ordinary verified Down Payment used the exception correction RPC' THEN RAISE; END IF;
+  END;
+  SELECT status, total_paid_amount INTO v_status, v_total FROM public.down_payment_requests
+  WHERE id = '30000000-0000-0000-0000-000000000009';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE source_id = '30000000-0000-0000-0000-000000000009' AND transaction_type = 'payment';
+  IF v_status <> 'paid' OR v_total <> 100 OR v_events <> 1 THEN
+    RAISE EXCEPTION 'ordinary Down Payment bypass changed data: status %, total %, events %',
+      v_status, v_total, v_events;
+  END IF;
+END $$;
+
+-- A source that no longer exists cannot be recreated by an evidence correction.
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, reference, description,
+  transaction_date, source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000003', 'payment', 10, 'SDG', 'missing-source',
+  'Missing OCS historic event', CURRENT_DATE, 'operational_cost_submissions',
+  '20000000-0000-0000-0000-000000000099', auth.uid(), auth.uid(), 'missing-source-exception'
+);
+DO $$
+DECLARE v_key text;
+BEGIN
+  SELECT exception_key INTO v_key
+  FROM public.pre_fund_finance_exception_queue_v
+  WHERE source_id = '20000000-0000-0000-0000-000000000099'
+    AND exception_type = 'unverified_source_payment';
+  BEGIN
+    PERFORM public.confirm_pre_fund_ocs_exception_with_evidence_rpc(
+      v_key, 'Claimed evidence', 'MISSING-NEVER-RESTORE', 'missing-ocs-evidence'
+    );
+    RAISE EXCEPTION 'missing OCS was recreated by evidence correction';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'missing OCS was recreated by evidence correction' THEN RAISE; END IF;
   END;
 END $$;
 SQL

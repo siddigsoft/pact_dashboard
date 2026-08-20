@@ -83,6 +83,19 @@ interface Reconciliation {
   status: string; closed_at: string | null; pdf_url: string | null; notes: string | null;
 }
 
+interface ExceptionQueueItem {
+  exception_key: string;
+  exception_type: string;
+  source_table: string | null;
+  source_description: string | null;
+  source_status: string | null;
+  historic_amount: number | null;
+  current_paid_amount: number | null;
+  unmatched_amount: number | null;
+  resolution: string | null;
+  currency?: string | null;
+}
+
 const TXN_TYPE_CFG: Record<string, { label: string; color: string; bg: string }> = {
   receipt:       { label: 'Receipt',        color: 'text-emerald-700', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' },
   commitment:    { label: 'Commitment',     color: 'text-violet-700',  bg: 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800' },
@@ -601,6 +614,7 @@ export default function PreFundingReconciliation() {
   const { toast } = useToast();
   const isCD = hasAnyRole(['countryDirector']);
   const canAccess = hasAnyRole(['super_admin', 'admin', 'financialAdmin']) || isCD;
+  const canManageExceptions = hasAnyRole(['super_admin', 'admin', 'financialAdmin']);
 
   const [funds, setFunds]             = useState<PreFundSummary[]>([]);
   const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());
@@ -664,6 +678,18 @@ export default function PreFundingReconciliation() {
   /** True while a stale-balance reset is in progress */
   const [resettingBalance, setResettingBalance] = useState(false);
   const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
+
+  // ── Finance exception queue ──────────────────────────────────────────────
+  const [exceptionQueue, setExceptionQueue]     = useState<ExceptionQueueItem[]>([]);
+  const [loadingExceptions, setLoadingExceptions] = useState(false);
+  const [showExceptions, setShowExceptions]     = useState(false);
+  const [reviewException, setReviewException]   = useState<ExceptionQueueItem | null>(null);
+  const [exceptionNote, setExceptionNote]       = useState('');
+  const [exceptionRef, setExceptionRef]         = useState('');
+  const [exceptionConfirmedAmount, setExceptionConfirmedAmount] = useState('');
+  const [exceptionAction, setExceptionAction]   = useState<'keep_excluded' | 'confirm_evidence' | null>(null);
+  const [exceptionIdempotencyKey, setExceptionIdempotencyKey] = useState<string | null>(null);
+  const [submittingException, setSubmittingException] = useState(false);
 
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
@@ -864,6 +890,7 @@ export default function PreFundingReconciliation() {
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
       loadTxns(selectedFund.id);
       loadUnlinkedPayments(selectedFund.id);
+      loadExceptions(selectedFund.id);
       // Load allocated users for this fund (for super-admin user picker)
       (async () => {
         const { data: allocs } = await (supabase as any)
@@ -963,6 +990,100 @@ export default function PreFundingReconciliation() {
     } catch { setUnlinkedSubs({ ocs: [], dp: [], ef: [] }); }
     finally { setLoadingUnlinked(false); }
   }, []);
+
+  const loadExceptions = useCallback(async (fundId: string) => {
+    setLoadingExceptions(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('get_pre_fund_finance_exception_queue_rpc', { p_fund_id: fundId });
+      if (error) {
+        if (error.message?.includes('does not exist') || error.code === '42883') {
+          setExceptionQueue([]);
+          return;
+        }
+        throw error;
+      }
+      setExceptionQueue((data as ExceptionQueueItem[]) ?? []);
+    } catch (e: any) {
+      // Non-fatal — the RPC may not be deployed yet
+      setExceptionQueue([]);
+    } finally {
+      setLoadingExceptions(false);
+    }
+  }, []);
+
+  const handleExceptionDecision = async (action: 'keep_excluded' | 'confirm_evidence') => {
+    if (!reviewException || !selectedFund) return;
+    if (!exceptionNote.trim()) {
+      toast({ title: 'Note required', description: 'Please enter a mandatory evidence note.', variant: 'destructive' });
+      return;
+    }
+    if (action === 'confirm_evidence' && !exceptionRef.trim()) {
+      toast({ title: 'Evidence reference required', description: 'Please enter an evidence reference for Confirm Evidence.', variant: 'destructive' });
+      return;
+    }
+    setSubmittingException(true);
+    try {
+      const sourceType = reviewException.source_table?.toLowerCase();
+      if (action === 'keep_excluded') {
+        const { error } = await (supabase as any).rpc('record_pre_fund_exception_decision_rpc', {
+          p_exception_key: reviewException.exception_key,
+          p_evidence_note: exceptionNote.trim(),
+          p_evidence_reference: exceptionRef.trim() || null,
+        });
+        if (error) throw new Error(error.message);
+      } else if (sourceType === 'operational_cost_submissions') {
+        if (!exceptionIdempotencyKey) throw new Error('Unable to prepare a safe retry key. Close and reopen this review before confirming evidence.');
+        const { error } = await (supabase as any).rpc('confirm_pre_fund_ocs_exception_with_evidence_rpc', {
+          p_exception_key: reviewException.exception_key,
+          p_evidence_note: exceptionNote.trim(),
+          p_evidence_reference: exceptionRef.trim(),
+          p_idempotency_key: exceptionIdempotencyKey,
+        });
+        if (error) throw new Error(error.message);
+      } else if (sourceType === 'down_payment_requests') {
+        const confirmedAmt = parseFloat(exceptionConfirmedAmount);
+        if (isNaN(confirmedAmt) || confirmedAmt <= 0) {
+          toast({ title: 'Valid confirmed amount required', description: 'Enter the confirmed paid amount for this down payment.', variant: 'destructive' });
+          setSubmittingException(false);
+          return;
+        }
+        if (!exceptionIdempotencyKey) throw new Error('Unable to prepare a safe retry key. Close and reopen this review before confirming evidence.');
+        const { error } = await (supabase as any).rpc('confirm_pre_fund_down_payment_exception_with_evidence_rpc', {
+          p_exception_key: reviewException.exception_key,
+          p_confirmed_amount: confirmedAmt,
+          p_evidence_note: exceptionNote.trim(),
+          p_evidence_reference: exceptionRef.trim(),
+          p_idempotency_key: exceptionIdempotencyKey,
+        });
+        if (error) throw new Error(error.message);
+      } else {
+        throw new Error('This source cannot be restored automatically because it has no eligible, fund-linked payment event. Keep it excluded until Finance can reconcile it separately.');
+      }
+      toast({
+        title: action === 'keep_excluded' ? 'Exception recorded' : 'Evidence confirmed',
+        description: action === 'keep_excluded'
+          ? 'The exception remains excluded; no fund balance or payment event was changed.'
+          : 'The source and immutable payment ledger were updated together.',
+      });
+      setReviewException(null);
+      setExceptionNote('');
+      setExceptionRef('');
+      setExceptionConfirmedAmount('');
+      setExceptionAction(null);
+      setExceptionIdempotencyKey(null);
+      // Reload all relevant data
+      await Promise.all([
+        loadFunds(),
+        loadTxns(selectedFund.id),
+        loadUnlinkedPayments(selectedFund.id),
+        loadExceptions(selectedFund.id),
+      ]);
+    } catch (e: any) {
+      toast({ title: 'Failed to resolve exception', description: e.message, variant: 'destructive' });
+    } finally {
+      setSubmittingException(false);
+    }
+  };
 
   const handleRetryLink = async (sub: any) => {
     if (!selectedFund) return;
@@ -1668,7 +1789,7 @@ export default function PreFundingReconciliation() {
           <h2 className="text-xl font-bold flex items-center gap-2"><RotateCcw className="h-5 w-5 text-sky-600" />Reconciliation</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Reconcile transactions, close periods, and export reports</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { loadFunds(); if (selectedFund) { loadTxns(selectedFund.id); loadUnlinkedPayments(selectedFund.id); } }}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
+        <Button variant="outline" size="sm" onClick={() => { loadFunds(); if (selectedFund) { loadTxns(selectedFund.id); loadUnlinkedPayments(selectedFund.id); loadExceptions(selectedFund.id); } }}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
       </div>
 
       {/* ── Fund selector bar ──────────────────────────────────────────────── */}
@@ -1953,6 +2074,99 @@ export default function PreFundingReconciliation() {
                     </div>
                   )}
                 </div>
+                );
+              })()}
+
+              {/* ── Finance Exception Queue Panel ─────────────────────────────── */}
+              {(() => {
+                const hasExceptions = exceptionQueue.length > 0;
+                if (!hasExceptions && !loadingExceptions) return null;
+                const canAction = canManageExceptions;
+                return (
+                  <div className="border rounded-lg overflow-hidden" data-testid="panel-exception-queue">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-900/20 text-sm font-medium transition-colors"
+                      onClick={() => setShowExceptions(p => !p)}
+                      data-testid="button-toggle-exceptions"
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-rose-600" />
+                        <span className="text-rose-700 dark:text-rose-400">
+                          {loadingExceptions
+                            ? 'Loading finance exceptions…'
+                            : `${exceptionQueue.length} finance exception${exceptionQueue.length !== 1 ? 's' : ''} require${exceptionQueue.length === 1 ? 's' : ''} review`}
+                        </span>
+                        {!loadingExceptions && exceptionQueue.length > 0 && (
+                          <Badge className="bg-rose-500 text-white text-[10px] h-4 px-1.5">{exceptionQueue.length}</Badge>
+                        )}
+                      </div>
+                      <ChevronDown className={cn('h-4 w-4 text-rose-600 transition-transform', showExceptions ? 'rotate-180' : '')} />
+                    </button>
+                    {showExceptions && (
+                      <div className="max-h-96 overflow-y-auto">
+                        {loadingExceptions ? (
+                          <div className="space-y-2 p-4">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                        ) : exceptionQueue.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-sm text-muted-foreground">No exceptions found for this fund.</div>
+                        ) : (
+                          <div className="divide-y">
+                            {exceptionQueue.map(ex => {
+                              const sourceType = ex.source_table?.toLowerCase();
+                              const typeLabel = sourceType === 'operational_cost_submissions' ? 'OCS' : sourceType === 'down_payment_requests' ? 'Down Payment' : (ex.exception_type ?? 'Unknown');
+                              const typeColor = sourceType === 'operational_cost_submissions' ? 'text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-950/30 dark:border-sky-800' : sourceType === 'down_payment_requests' ? 'text-violet-700 bg-violet-50 border-violet-200 dark:text-violet-400 dark:bg-violet-950/30 dark:border-violet-800' : 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800';
+                              return (
+                                <div key={ex.exception_key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20 text-sm" data-testid={`row-exception-${ex.exception_key}`}>
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded border', typeColor)}>{typeLabel}</span>
+                                      {ex.source_status && (
+                                        <span className="text-[10px] text-muted-foreground">{ex.source_status}</span>
+                                      )}
+                                    </div>
+                                    {ex.source_description && (
+                                      <p className="text-xs font-medium truncate">{ex.source_description}</p>
+                                    )}
+                                    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                                      {ex.historic_amount != null && (
+                                        <span>Historic: <span className="font-mono font-medium text-foreground">{selectedFund?.currency ?? ''} {formatNumber(ex.historic_amount, 0)}</span></span>
+                                      )}
+                                      {ex.current_paid_amount != null && (
+                                        <span>Current paid: <span className="font-mono font-medium text-foreground">{selectedFund?.currency ?? ''} {formatNumber(ex.current_paid_amount, 0)}</span></span>
+                                      )}
+                                      {ex.unmatched_amount != null && (
+                                        <span>Unmatched: <span className="font-mono font-medium text-rose-600">{selectedFund?.currency ?? ''} {formatNumber(ex.unmatched_amount, 0)}</span></span>
+                                      )}
+                                    </div>
+                                    {ex.resolution && (
+                                      <p className="text-[11px] italic text-muted-foreground">{ex.resolution}</p>
+                                    )}
+                                  </div>
+                                  {canAction && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-xs shrink-0 border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                                      onClick={() => {
+                                        setReviewException(ex);
+                                        setExceptionNote('');
+                                        setExceptionRef('');
+                                        setExceptionConfirmedAmount('');
+                                        setExceptionAction(null);
+                                        setExceptionIdempotencyKey(null);
+                                      }}
+                                      data-testid={`button-review-exception-${ex.exception_key}`}
+                                    >
+                                      Review
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -3314,6 +3528,200 @@ export default function PreFundingReconciliation() {
             <Button variant="outline" onClick={() => setConfirmUnlinkTxn(null)} data-testid="button-cancel-unlink">Cancel</Button>
             <Button variant="destructive" onClick={handleUnlinkTxn} data-testid="button-confirm-unlink">
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove & Restore Balance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Finance Exception Review Dialog ─────────────────────────────────── */}
+      <Dialog
+        open={!!reviewException}
+        onOpenChange={open => {
+          if (!open) {
+            setReviewException(null);
+            setExceptionNote('');
+            setExceptionRef('');
+            setExceptionConfirmedAmount('');
+            setExceptionAction(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <AlertCircle className="h-4 w-4 text-rose-600" />
+              Review Finance Exception
+            </DialogTitle>
+          </DialogHeader>
+          {reviewException && (
+            <div className="space-y-4 py-1">
+              {/* Exception summary */}
+              <div className="rounded-lg bg-muted/40 border px-3 py-2.5 space-y-2 text-xs">
+                {(() => {
+                  const exTypeLower = reviewException.exception_type?.toLowerCase();
+                  const typeLabel = exTypeLower === 'ocs' ? 'OCS (Operational Cost Submission)' : exTypeLower === 'dp' ? 'Down Payment' : (reviewException.exception_type ?? 'Unknown');
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Type</span>
+                        <span className="font-semibold">{typeLabel}</span>
+                      </div>
+                      {reviewException.source_description && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted-foreground shrink-0">Description</span>
+                          <span className="text-right truncate font-medium">{reviewException.source_description}</span>
+                        </div>
+                      )}
+                      {reviewException.source_status && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Source Status</span>
+                          <span>{reviewException.source_status}</span>
+                        </div>
+                      )}
+                      <div className="pt-1 border-t flex flex-wrap gap-3">
+                        {reviewException.historic_amount != null && (
+                          <div>
+                            <p className="text-muted-foreground">Historic Amount</p>
+                            <p className="font-mono font-semibold">{selectedFund?.currency ?? ''} {formatNumber(reviewException.historic_amount, 0)}</p>
+                          </div>
+                        )}
+                        {reviewException.current_paid_amount != null && (
+                          <div>
+                            <p className="text-muted-foreground">Current Paid</p>
+                            <p className="font-mono font-semibold">{selectedFund?.currency ?? ''} {formatNumber(reviewException.current_paid_amount, 0)}</p>
+                          </div>
+                        )}
+                        {reviewException.unmatched_amount != null && (
+                          <div>
+                            <p className="text-muted-foreground">Unmatched</p>
+                            <p className="font-mono font-semibold text-rose-600">{selectedFund?.currency ?? ''} {formatNumber(reviewException.unmatched_amount, 0)}</p>
+                          </div>
+                        )}
+                      </div>
+                      {reviewException.resolution && (
+                        <p className="italic text-muted-foreground text-[11px] pt-1 border-t">{reviewException.resolution}</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Action selector */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Action</Label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExceptionAction('keep_excluded')}
+                    className={cn(
+                      'flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors text-left',
+                      exceptionAction === 'keep_excluded'
+                        ? 'bg-amber-50 border-amber-400 text-amber-800 dark:bg-amber-950/30 dark:border-amber-600 dark:text-amber-300'
+                        : 'bg-background border-border text-muted-foreground hover:border-amber-300 hover:text-foreground'
+                    )}
+                    data-testid="button-action-keep-excluded"
+                  >
+                    <div className="font-semibold">Keep Excluded</div>
+                    <div className="text-[10px] opacity-70 mt-0.5">Record that this exception is deliberately excluded from the fund</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExceptionAction('confirm_evidence');
+                      setExceptionIdempotencyKey(key => key ?? crypto.randomUUID());
+                    }}
+                    disabled={
+                      !reviewException.exception_key.startsWith('txn:') ||
+                      (reviewException.source_table === 'operational_cost_submissions' && reviewException.source_status !== 'approved') ||
+                      (reviewException.source_table === 'down_payment_requests' && reviewException.source_status === 'missing') ||
+                      !['operational_cost_submissions', 'down_payment_requests'].includes(reviewException.source_table ?? '')
+                    }
+                    className={cn(
+                      'flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors text-left disabled:cursor-not-allowed disabled:opacity-50',
+                      exceptionAction === 'confirm_evidence'
+                        ? 'bg-emerald-50 border-emerald-400 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-600 dark:text-emerald-300'
+                        : 'bg-background border-border text-muted-foreground hover:border-emerald-300 hover:text-foreground'
+                    )}
+                    data-testid="button-action-confirm-evidence"
+                  >
+                    <div className="font-semibold">Confirm Evidence</div>
+                    <div className="text-[10px] opacity-70 mt-0.5">Confirm payment with supporting evidence and link to the fund</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* DP confirmed amount — only for Down Payment + Confirm Evidence */}
+              {exceptionAction === 'confirm_evidence' && reviewException.source_table === 'down_payment_requests' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    Confirmed Paid Amount * <span className="text-muted-foreground font-normal">(actual disbursed)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    value={exceptionConfirmedAmount}
+                    onChange={e => setExceptionConfirmedAmount(e.target.value)}
+                    placeholder={`${selectedFund?.currency ?? ''} 0`}
+                    className="text-sm"
+                    data-testid="input-exception-confirmed-amount"
+                  />
+                </div>
+              )}
+
+              {/* Evidence note (mandatory always) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  Evidence Note * <span className="text-muted-foreground font-normal">(required)</span>
+                </Label>
+                <Textarea
+                  value={exceptionNote}
+                  onChange={e => setExceptionNote(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the evidence or reason for this decision…"
+                  className="text-sm"
+                  data-testid="textarea-exception-note"
+                />
+              </div>
+
+              {/* Evidence reference (mandatory for Confirm Evidence) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  Evidence Reference
+                  {exceptionAction === 'confirm_evidence' && <span className="text-rose-500 ml-1">*</span>}
+                  {exceptionAction !== 'confirm_evidence' && <span className="text-muted-foreground font-normal ml-1">(optional)</span>}
+                </Label>
+                <Input
+                  value={exceptionRef}
+                  onChange={e => setExceptionRef(e.target.value)}
+                  placeholder="Receipt no., bank reference, document ID…"
+                  className="text-sm"
+                  data-testid="input-exception-ref"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReviewException(null);
+                setExceptionNote('');
+                setExceptionRef('');
+                setExceptionConfirmedAmount('');
+                setExceptionAction(null);
+                setExceptionIdempotencyKey(null);
+              }}
+              disabled={submittingException}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => exceptionAction && handleExceptionDecision(exceptionAction)}
+              disabled={submittingException || !exceptionAction || !exceptionNote.trim()}
+              data-testid="button-submit-exception"
+            >
+              {submittingException
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Submitting…</>
+                : exceptionAction === 'keep_excluded' ? 'Keep Excluded'
+                : exceptionAction === 'confirm_evidence' ? 'Confirm Evidence & Link'
+                : 'Select an action'}
             </Button>
           </DialogFooter>
         </DialogContent>
