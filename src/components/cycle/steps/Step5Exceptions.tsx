@@ -7,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Info, CheckCircle2, Loader2, Download, AlertCircle, ChevronDown, ChevronUp,
   Calendar, CreditCard, User, Hash, Receipt, Building2, Plus, Trash2, Sparkles,
@@ -107,7 +106,6 @@ interface RedirectCorrectionDialog {
   confirmReverseLaterPayment: boolean;
   /** Separate immutable Finance attestation for a legacy action with no snapshot. */
   snapshotReviewKey: string;
-  confirmSnapshotReview: boolean;
   snapshotReviewSubmitting: boolean;
   snapshotReviewedAt?: string;
   periods: FiscalPeriod[];
@@ -725,7 +723,6 @@ export default function Step5Exceptions({
       reprocessedModeAvailable: true,
       confirmReverseLaterPayment: hasSavedSnapshotReview,
       snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
-      confirmSnapshotReview: false,
       snapshotReviewSubmitting: false,
       snapshotReviewedAt: decision.financeSnapshotReviewedAt,
       periods: [],
@@ -772,10 +769,7 @@ export default function Step5Exceptions({
 
   const submitSnapshotReview = async () => {
     if (!correctionDialog?.decision.actionId) return;
-    const reviewAction = getFinanceReviewRecallAction(
-      correctionDialog.snapshotReviewedAt,
-      correctionDialog.confirmSnapshotReview,
-    );
+    const reviewAction = getFinanceReviewRecallAction(correctionDialog.snapshotReviewedAt);
     // The immutable review is loaded with the action. Do not ask Finance to
     // save it again when a previous recall attempt was interrupted or failed;
     // consume the persisted attestation and retry only the protected reversal.
@@ -783,13 +777,6 @@ export default function Step5Exceptions({
       await submitRedirectCorrection(true, getFinanceReviewRecallMode());
       return;
     }
-    if (reviewAction === 'confirmation_required') {
-      updateRedirectCorrection({
-        error: 'Confirm the Finance review before recalling the payment.\nأكد مراجعة المالية قبل استدعاء الدفعة.',
-      });
-      return;
-    }
-
     updateRedirectCorrection({ snapshotReviewSubmitting: true, error: undefined });
     try {
       const { data, error } = await (supabase as any).rpc(
@@ -2329,7 +2316,6 @@ function RedirectCorrectionPanel({
   // fail-closed when the immutable legacy snapshot is incomplete.
   const showSnapshotReview = reverseReprocessed || !!correction.snapshotReviewedAt;
   const canSaveSnapshotReview = !correction.snapshotReviewSubmitting
-    && correction.confirmSnapshotReview
     && !correction.loadingPeriods
     && !!correction.periodId;
   const canRecallSavedReview = !correction.snapshotReviewSubmitting
@@ -2461,9 +2447,9 @@ function RedirectCorrectionPanel({
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-800" />
             <div className="text-xs text-blue-950 space-y-0.5">
-              <p className="font-semibold">Finance evidence review · مراجعة الأدلة المالية</p>
-              <p>Confirm once to recall the later payment and restore the original payment state. The system calculates and validates the exact amount from the locked fee and journal records.</p>
-              <p dir="rtl">أكد مرة واحدة لاستدعاء الدفعة اللاحقة وإعادة حالة الدفعة الأصلية. يحسب النظام المبلغ الدقيق ويتحقق منه من سجلات الرسوم والقيد المقفلة.</p>
+              <p className="font-semibold">Automatic Finance validation · التحقق المالي التلقائي</p>
+              <p>Click Recall once. The system automatically records the Finance review, calculates and validates the exact amount, then restores the original payment state.</p>
+              <p dir="rtl">اضغط على الاستدعاء مرة واحدة. يسجل النظام المراجعة المالية تلقائياً، ويحسب المبلغ الدقيق ويتحقق منه، ثم يعيد حالة الدفعة الأصلية.</p>
             </div>
           </div>
           <div className="grid gap-x-3 sm:grid-cols-2 text-xs">
@@ -2475,8 +2461,8 @@ function RedirectCorrectionPanel({
               <Alert className="border-green-300 bg-green-50 text-green-950">
                 <CheckCircle2 className="h-4 w-4" />
                 <AlertDescription>
-                  Finance confirmation saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The payment can now be recalled safely.
-                  <span dir="rtl" className="block">تم حفظ تأكيد المالية. يمكن الآن استدعاء الدفعة بأمان.</span>
+                  Automatic Finance validation saved at {new Date(correction.snapshotReviewedAt).toLocaleString()}. The payment can now be recalled safely.
+                  <span dir="rtl" className="block">تم حفظ التحقق المالي التلقائي. يمكن الآن استدعاء الدفعة بأمان.</span>
                 </AlertDescription>
               </Alert>
               <div className="flex justify-end">
@@ -2489,14 +2475,6 @@ function RedirectCorrectionPanel({
             </>
           ) : (
             <>
-              <label className="flex items-start gap-2 rounded border border-blue-200 bg-white/70 p-2 cursor-pointer text-xs">
-                <Checkbox
-                  checked={correction.confirmSnapshotReview}
-                  onCheckedChange={checked => onChange({ confirmSnapshotReview: checked === true, error: undefined })}
-                  disabled={correction.snapshotReviewSubmitting || correction.submitting}
-                />
-                <span>I confirm that this payment should be recalled and restored to the original pre-Redirect state.<span dir="rtl" className="block">أؤكد أنه يجب استدعاء هذه الدفعة وإعادتها إلى الحالة الأصلية قبل إعادة التوجيه.</span></span>
-              </label>
               <div className="flex justify-end">
                 <Button type="button" size="sm" className="bg-blue-700 hover:bg-blue-800" onClick={onReviewSnapshot} disabled={!canSaveSnapshotReview}>
                   {correction.snapshotReviewSubmitting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
@@ -2505,7 +2483,7 @@ function RedirectCorrectionPanel({
                 </Button>
               </div>
               {snapshotReviewRequired && (
-                <p className="text-xs font-medium text-blue-900">Confirmation is all that is needed. The system will calculate the amount and recall it safely. · التأكيد هو كل ما يلزم. سيحسب النظام المبلغ ويستدعيه بأمان.</p>
+                <p className="text-xs font-medium text-blue-900">Clicking Recall automatically completes the Finance validation and safely recalls the payment. · يؤدي الضغط على الاستدعاء إلى إكمال التحقق المالي واستدعاء الدفعة بأمان تلقائياً.</p>
               )}
             </>
           )}

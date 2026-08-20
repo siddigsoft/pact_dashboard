@@ -1,7 +1,6 @@
 export type FinanceReviewRecallAction =
   | 'recall_saved_review'
-  | 'save_review_then_recall'
-  | 'confirmation_required';
+  | 'save_review_then_recall';
 
 export type RedirectCorrectionMode =
   | 'reopen_advance'
@@ -14,12 +13,9 @@ export type RedirectCorrectionMode =
  */
 export const getFinanceReviewRecallAction = (
   snapshotReviewedAt: string | undefined,
-  confirmSnapshotReview: boolean,
 ): FinanceReviewRecallAction => {
   if (snapshotReviewedAt) return 'recall_saved_review';
-  return confirmSnapshotReview
-    ? 'save_review_then_recall'
-    : 'confirmation_required';
+  return 'save_review_then_recall';
 };
 
 /** Finance attestations are valid only for the full later-payment reversal. */
