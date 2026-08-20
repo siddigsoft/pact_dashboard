@@ -28,7 +28,11 @@ import {
   type RedirectSettlementTarget,
 } from '../redirectSettlement';
 import { exportFormattedExceptions, type ExceptionSite } from '@/utils/cycleCloseExport';
-import { getFinanceReviewRecallAction } from '@/utils/cycleRedirectFinanceReview';
+import {
+  getFinanceReviewRecallAction,
+  getFinanceReviewRecallMode,
+  getRedirectCorrectionRpcName,
+} from '@/utils/cycleRedirectFinanceReview';
 
 interface Props {
   wizardState: WizardState;
@@ -702,19 +706,23 @@ export default function Step5Exceptions({
   const openRedirectCorrection = (site: ExceptionSite, decision: ExceptionDecision) => {
     if (!decision.actionId || !canCorrectRedirect) return;
     const idempotencyKey = createCorrectionIdempotencyKey(decision.actionId);
+    const hasSavedSnapshotReview = !!decision.financeSnapshotReviewedAt;
     setCorrectionDialog({
       site,
       decision,
       reason: '',
       periodId: '',
       idempotencyKey,
-      mode: 'reopen_advance',
+      // A persisted Finance review can only authorize the full recall path.
+      mode: hasSavedSnapshotReview
+        ? getFinanceReviewRecallMode()
+        : 'reopen_advance',
       // Show all correction paths immediately. Eligibility is verified by the
       // corresponding server-side RPC; hiding the alternatives until the
       // strict path fails made the safe recovery choices look unavailable.
       historicalModeAvailable: true,
       reprocessedModeAvailable: true,
-      confirmReverseLaterPayment: false,
+      confirmReverseLaterPayment: hasSavedSnapshotReview,
       snapshotReviewKey: createCorrectionIdempotencyKey(`${decision.actionId}:finance-review`),
       confirmSnapshotReview: false,
       snapshotReviewSubmitting: false,
@@ -771,7 +779,7 @@ export default function Step5Exceptions({
     // save it again when a previous recall attempt was interrupted or failed;
     // consume the persisted attestation and retry only the protected reversal.
     if (reviewAction === 'recall_saved_review') {
-      await submitRedirectCorrection(true);
+      await submitRedirectCorrection(true, getFinanceReviewRecallMode());
       return;
     }
     if (reviewAction === 'confirmation_required') {
@@ -795,7 +803,7 @@ export default function Step5Exceptions({
       if (error) throw new Error(error.message);
       const result = data as { ok?: boolean; error?: string; reviewed_at?: string } | null;
       // A complete immutable snapshot does not need a separate review row. The
-      // same confirmation still authorizes the normal reversal path.
+      // same confirmation still authorizes the protected full recall path.
       if (
         !result?.ok
         && !result?.error?.includes('already has an immutable fee snapshot')
@@ -809,7 +817,7 @@ export default function Step5Exceptions({
         confirmReverseLaterPayment: true,
         error: undefined,
       });
-      await submitRedirectCorrection(true);
+      await submitRedirectCorrection(true, getFinanceReviewRecallMode());
     } catch (error: unknown) {
       updateRedirectCorrection({
         snapshotReviewSubmitting: false,
@@ -818,8 +826,12 @@ export default function Step5Exceptions({
     }
   };
 
-  const submitRedirectCorrection = async (confirmedFromFinanceReview = false) => {
+  const submitRedirectCorrection = async (
+    confirmedFromFinanceReview = false,
+    correctionModeOverride?: RedirectCorrectionDialog['mode'],
+  ) => {
     if (!correctionDialog?.decision.actionId) return;
+    const correctionMode = correctionModeOverride ?? correctionDialog.mode;
     const correctionReason = correctionDialog.reason.trim()
       || 'Finance confirmed recall of the reprocessed payment to restore the original payment state.';
     if (!confirmedFromFinanceReview && correctionDialog.reason.trim().length < 10) {
@@ -841,7 +853,7 @@ export default function Step5Exceptions({
       return;
     }
     if (
-      correctionDialog.mode === 'reverse_reprocessed_payment'
+      correctionMode === 'reverse_reprocessed_payment'
       && !correctionDialog.confirmReverseLaterPayment
       && !confirmedFromFinanceReview
     ) {
@@ -859,18 +871,14 @@ export default function Step5Exceptions({
       : current);
     const key = exceptionKey(correctionDialog.site);
     try {
-      const rpcName = correctionDialog.mode === 'historical_accounting_only'
-        ? 'reconcile_reprocessed_cycle_redirect'
-        : correctionDialog.mode === 'reverse_reprocessed_payment'
-          ? 'reverse_reprocessed_cycle_redirect_for_correction'
-          : 'reopen_cycle_redirect_for_correction';
+      const rpcName = getRedirectCorrectionRpcName(correctionMode);
       const rpcParams: Record<string, unknown> = {
         p_action_id: correctionDialog.decision.actionId,
         p_reason: correctionReason,
         p_period_id: correctionDialog.periodId,
         p_idempotency_key: correctionDialog.idempotencyKey,
       };
-      if (correctionDialog.mode === 'reverse_reprocessed_payment') {
+      if (correctionMode === 'reverse_reprocessed_payment') {
         rpcParams.p_confirm_reverse_later_payment = true;
       }
       const { data, error } = await (supabase as any).rpc(rpcName, rpcParams);
@@ -878,9 +886,9 @@ export default function Step5Exceptions({
       const result = data as { ok?: boolean; error?: string } | null;
       if (!result?.ok) {
         throw new Error(result?.error || (
-          correctionDialog.mode === 'historical_accounting_only'
+          correctionMode === 'historical_accounting_only'
             ? 'The server did not reconcile this historical Redirect.'
-            : correctionDialog.mode === 'reverse_reprocessed_payment'
+            : correctionMode === 'reverse_reprocessed_payment'
               ? 'The server did not reverse the reprocessed payment for this Redirect.'
               : 'The server did not reopen this Redirect.'
         ));
@@ -895,14 +903,10 @@ export default function Step5Exceptions({
       await loadExceptions();
     } catch (error: any) {
       const message = error?.message ?? 'The correction failed. Nothing was changed.';
-      const expectedRpc = correctionDialog?.mode === 'historical_accounting_only'
-        ? 'reconcile_reprocessed_cycle_redirect'
-        : correctionDialog?.mode === 'reverse_reprocessed_payment'
-          ? 'reverse_reprocessed_cycle_redirect_for_correction'
-          : 'reopen_cycle_redirect_for_correction';
+      const expectedRpc = getRedirectCorrectionRpcName(correctionMode);
       const migrationMissing = message.includes(expectedRpc)
         && message.toLowerCase().includes('schema cache');
-      const reprocessedAdvance = correctionDialog.mode === 'reopen_advance'
+      const reprocessedAdvance = correctionMode === 'reopen_advance'
         && message.toLowerCase().includes('advance changed after this redirect');
       if (migrationMissing) setMigrationRequired(true);
       setCorrectionDialog(current => current
