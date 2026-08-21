@@ -5689,6 +5689,25 @@ const CostSubmission = () => {
                       </Button>
                     </div>
                   </div>
+                  {canManagePreFundFilters && costPreFundFilter !== 'all' && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900/70 dark:bg-emerald-950/30" data-testid="cost-pre-fund-paid-total">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Total paid from: {selectedFundingName}</p>
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                          Based on {costPreFundFilter === '__unlinked__' || costPreFundFilter === '__multiple__'
+                            ? 'the matching request payment totals'
+                            : 'immutable payment events for this Pre-Fund'}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {selectedFundingPaidTotals.map(([currency, amount]) => (
+                          <p key={currency} className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                            {currency} {(amount / 100).toLocaleString()}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
@@ -10299,25 +10318,6 @@ const CostSubmission = () => {
                       )}
                     </div>
                   </div>
-                  {canManagePreFundFilters && costPreFundFilter !== 'all' && (
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900/70 dark:bg-emerald-950/30">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Total paid from: {selectedFundingName}</p>
-                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
-                          Based on {costPreFundFilter === '__unlinked__' || costPreFundFilter === '__multiple__'
-                            ? 'the matching request payment totals'
-                            : 'immutable payment events for this Pre-Fund'}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        {selectedFundingPaidTotals.map(([currency, amount]) => (
-                          <p key={currency} className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                            {currency} {(amount / 100).toLocaleString()}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {linkedProject && budgetRemaining !== null && budgetRemaining !== undefined && (
