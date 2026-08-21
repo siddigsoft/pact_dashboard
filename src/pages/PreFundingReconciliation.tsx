@@ -956,7 +956,7 @@ export default function PreFundingReconciliation() {
           .not('source_id', 'is', null)),
         fetchAll(() => supabase
           .from('operational_cost_submissions')
-          .select('id,title,description,amount_paid_cents,currency,status,submitted_at,submitted_by,paid_at,created_at')
+          .select('id,description,amount_paid_cents,currency,status,submitted_at,submitted_by,paid_at,created_at')
           .in('status', ['partially_paid', 'paid', 'reconciled'])
           .order('paid_at', { ascending: false })),
         fetchAll(() => (supabase as any)
@@ -968,9 +968,9 @@ export default function PreFundingReconciliation() {
         // Enumerator / transport fees from MMP site entries
         fetchAll(() => (supabase as any)
           .from('mmp_site_entries')
-          .select('id,site_name,visit_date,accepted_by,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
-          .eq('payment_status', 'paid')
-          .order('paid_at', { ascending: false })),
+          .select('id,site_name,visit_date,accepted_by,transport_fee,enumerator_fee,fee_paid_amount,fee_paid_status,fee_paid_at,additional_data')
+          .eq('fee_paid_status', 'paid')
+          .order('fee_paid_at', { ascending: false })),
       ]);
 
       const coveredAmounts = new Map<string, number>();
@@ -999,7 +999,7 @@ export default function PreFundingReconciliation() {
         paidAmount,
         coveredAmount: coverage.coveredAmount,
         currency: r.currency ?? 'SDG',
-        title: r.title ?? r.description ?? `Submission ${r.id.slice(0, 8)}`,
+        title: r.description ?? `Submission ${r.id.slice(0, 8)}`,
         userId: r.submitted_by ?? null,
         };
       }).filter((r: any) => r.amount > 0);
@@ -1024,18 +1024,22 @@ export default function PreFundingReconciliation() {
         }).filter((r: any) => r.amount > 0);
       // Enumerator fees: sum transport_fee + enumerator_fee per entry
       const ef = (efRows as any[]).map((r: any) => {
-        const paidAmount = Number(r.transport_fee ?? 0) + Number(r.enumerator_fee ?? 0);
+        const grossFee = Number(r.transport_fee ?? 0) + Number(r.enumerator_fee ?? 0);
+        const paidAmount = Number(r.fee_paid_amount ?? grossFee);
         const coverage = uncovered('mmp_site_entries', r, paidAmount);
+        const additionalData = r.additional_data && typeof r.additional_data === 'object' ? r.additional_data : {};
         return {
         ...r,
         _source: 'mmp_site_entries',
         _category: 'ef',
-        _date: r.paid_at ?? r.visit_date,
+        _date: r.fee_paid_at ?? r.visit_date,
         amount: coverage.uncoveredAmount,
         paidAmount,
         coveredAmount: coverage.coveredAmount,
-        currency: r.currency ?? 'SDG',
-        title: `${r.site_name ?? 'Site'} — ${r.enumerator_name ?? 'Enumerator'}`,
+        // MMP fee payment records are SDG-denominated; mmp_site_entries has
+        // no currency column and the fee bridge posts these payments as SDG.
+        currency: 'SDG',
+        title: `${r.site_name ?? 'Site'} — ${additionalData.enumerator_name ?? r.accepted_by ?? 'Enumerator'}`,
         userId: r.accepted_by ?? null,
         };
       }).filter((r: any) => r.amount > 0);
