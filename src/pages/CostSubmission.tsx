@@ -378,6 +378,7 @@ const CostSubmission = () => {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
   const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string }>>>(new Map());
+  const [costPreFundLinkError, setCostPreFundLinkError] = useState<string | null>(null);
   const [costPreFundOptions, setCostPreFundOptions] = useState<Array<{ id: string; name: string; currency: string; status: string | null }>>([]);
   // Super-admin only: filter by the current approval tier a submission is waiting at
   const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
@@ -395,13 +396,20 @@ const CostSubmission = () => {
     let active = true;
     (async () => {
       try {
+        setCostPreFundLinkError(null);
         const { fetchPreFundSourcePaymentLinks } = await import('@/utils/preFundLinkage');
         const links = await fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id));
         if (!active) return;
         const next = new Map<string, Array<{ id: string; name: string }>>();
         links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), { id: link.fundId, name: link.fundName }]));
         setCostPreFundLinks(next);
-      } catch { if (active) setCostPreFundLinks(new Map()); }
+      } catch (error: any) {
+        console.error('[CostSubmission] Failed to load Pre-Fund payment links:', error);
+        if (active) {
+          setCostPreFundLinks(new Map());
+          setCostPreFundLinkError(error?.message ?? 'The payment-link evidence could not be loaded.');
+        }
+      }
     })();
     return () => { active = false; };
   }, [operationalCosts]);
@@ -5260,6 +5268,11 @@ const CostSubmission = () => {
               </div>
             )}
           </div>
+          {costPreFundLinkError && canManagePreFundFilters && (
+            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200" data-testid="cost-pre-fund-link-error">
+              <span className="font-semibold">Pre-Fund filter unavailable:</span> {costPreFundLinkError}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
             {([
               { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },

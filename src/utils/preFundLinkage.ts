@@ -46,8 +46,11 @@ export async function fetchPreFundSourcePaymentLinks(
     .eq('source_table', sourceTable)
     .in('source_id', sourceIds);
 
-  if (error) throw new Error(error.message);
-  const canonicalLinks = ((data ?? []) as any[]).map((row) => ({
+  // The canonical view is introduced by the latest ledger migration. A database
+  // can legitimately have historic source back-links before that migration is
+  // applied, so do not let a missing view hide those proven links.
+  if (error) console.warn('[Pre-Fund] Canonical source-payment view unavailable:', error.message);
+  const canonicalLinks = error ? [] : ((data ?? []) as any[]).map((row) => ({
     paymentEventId: row.payment_event_id,
     sourceTable: row.source_table,
     sourceId: row.source_id,
@@ -67,7 +70,12 @@ export async function fetchPreFundSourcePaymentLinks(
     .select('id, pre_fund_transaction_id')
     .in('id', sourceIds)
     .not('pre_fund_transaction_id', 'is', null);
-  if (sourceError) throw new Error(sourceError.message);
+  if (sourceError) {
+    const sources = error
+      ? `The canonical ledger view and historic source back-links could not be read. View: ${error.message}. Back-links: ${sourceError.message}`
+      : sourceError.message;
+    throw new Error(sources);
+  }
 
   const sourceByTransaction = new Map<string, string>(
     ((sourceRows ?? []) as any[])
