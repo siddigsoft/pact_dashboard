@@ -377,7 +377,7 @@ const CostSubmission = () => {
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
-  const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string }>>>(new Map());
+  const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string; amount?: number; currency?: string }>>>(new Map());
   const [costPreFundLinkError, setCostPreFundLinkError] = useState<string | null>(null);
   const [costPreFundOptions, setCostPreFundOptions] = useState<Array<{ id: string; name: string; currency: string; status: string | null }>>([]);
   // Super-admin only: filter by the current approval tier a submission is waiting at
@@ -400,8 +400,13 @@ const CostSubmission = () => {
         const { fetchPreFundSourcePaymentLinks } = await import('@/utils/preFundLinkage');
         const links = await fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id));
         if (!active) return;
-        const next = new Map<string, Array<{ id: string; name: string }>>();
-        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), { id: link.fundId, name: link.fundName }]));
+        const next = new Map<string, Array<{ id: string; name: string; amount?: number; currency?: string }>>();
+        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
+          id: link.fundId,
+          name: link.fundName,
+          amount: link.paymentAmount,
+          currency: link.currency,
+        }]));
         setCostPreFundLinks(next);
       } catch (error: any) {
         console.error('[CostSubmission] Failed to load Pre-Fund payment links:', error);
@@ -5583,6 +5588,36 @@ const CostSubmission = () => {
             });
             const allPayableFiltered = searchFiltered.filter(canMarkAsPaid);
             const allPayableSelected = allPayableFiltered.length > 0 && allPayableFiltered.every(o => selectedCostIds.has(o.id));
+            const selectedFundingPaidByCurrency = new Map<string, number>();
+            if (costPreFundFilter !== 'all'
+              && costPreFundFilter !== '__unlinked__'
+              && costPreFundFilter !== '__multiple__') {
+              searchFiltered.forEach(oc => (costPreFundLinks.get(oc.id) ?? [])
+                .filter(link => link.id === costPreFundFilter)
+                .forEach(link => {
+                  const currency = link.currency || oc.currency || 'SDG';
+                  selectedFundingPaidByCurrency.set(
+                    currency,
+                    (selectedFundingPaidByCurrency.get(currency) ?? 0) + Math.round((link.amount ?? 0) * 100),
+                  );
+                }));
+            } else {
+              searchFiltered.forEach(oc => {
+                const currency = oc.currency || 'SDG';
+                selectedFundingPaidByCurrency.set(
+                  currency,
+                  (selectedFundingPaidByCurrency.get(currency) ?? 0) + (oc.amount_paid_cents ?? 0),
+                );
+              });
+            }
+            const selectedFundingPaidTotals = [...selectedFundingPaidByCurrency.entries()];
+            const selectedFundingName = costPreFundFilter === 'all'
+              ? 'All funding sources'
+              : costPreFundFilter === '__unlinked__'
+                ? 'Unlinked historical payments'
+                : costPreFundFilter === '__multiple__'
+                  ? 'Requests paid from multiple Pre-Funds'
+                  : costPreFundOptions.find(fund => fund.id === costPreFundFilter)?.name ?? 'Selected Pre-Fund';
 
             return searchFiltered.length > 0 ? (
             <Card>
@@ -10264,6 +10299,25 @@ const CostSubmission = () => {
                       )}
                     </div>
                   </div>
+                  {canManagePreFundFilters && costPreFundFilter !== 'all' && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900/70 dark:bg-emerald-950/30">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Total paid from: {selectedFundingName}</p>
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                          Based on {costPreFundFilter === '__unlinked__' || costPreFundFilter === '__multiple__'
+                            ? 'the matching request payment totals'
+                            : 'immutable payment events for this Pre-Fund'}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {selectedFundingPaidTotals.map(([currency, amount]) => (
+                          <p key={currency} className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                            {currency} {(amount / 100).toLocaleString()}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {linkedProject && budgetRemaining !== null && budgetRemaining !== undefined && (
