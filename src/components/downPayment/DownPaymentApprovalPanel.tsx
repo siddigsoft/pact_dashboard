@@ -102,6 +102,12 @@ interface DownPaymentApprovalPanelProps {
   externalRequests?: DownPaymentRequest[];
   /** Set when externalRequests already has every active page filter applied. */
   externalRequestsAreFiltered?: boolean;
+  /**
+   * A selected Pre-Fund's verified immutable payment-event amount per request.
+   * This keeps filtered summaries and exports from counting payments made from
+   * another Pre-Fund.
+   */
+  paidAmountOverrides?: ReadonlyMap<string, number>;
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -326,12 +332,17 @@ export function DownPaymentApprovalPanel({
   hideFiltersBar,
   externalRequests,
   externalRequestsAreFiltered = false,
+  paidAmountOverrides,
 }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
   const { toast } = useToast();
   const requests = externalRequests ?? contextRequests;
+  const getDisplayedPaidAmount = useCallback(
+    (request: DownPaymentRequest) => paidAmountOverrides?.get(request.id) ?? request.totalPaidAmount ?? 0,
+    [paidAmountOverrides],
+  );
 
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -506,7 +517,10 @@ export function DownPaymentApprovalPanel({
     filteredRequests.filter(r => r.status === 'approved'),
     [filteredRequests]
   );
-  const stats = useMemo(() => getDownPaymentStats(filteredRequests), [filteredRequests]);
+  const stats = useMemo(
+    () => getDownPaymentStats(filteredRequests, getDisplayedPaidAmount),
+    [filteredRequests, getDisplayedPaidAmount],
+  );
 
   // O(1) set lookup for recipient checkboxes — avoids O(n²) .includes() on every render
   const selectedRecipientSet = useMemo(
@@ -1002,7 +1016,10 @@ export function DownPaymentApprovalPanel({
     const { data, tabLabel } = getActiveTabData();
     const suffix = `down-payments-${tabLabel.toLowerCase()}`;
     if (type === 'csv') {
-      exportToCSV(data, suffix);
+      exportToCSV(
+        data.map(request => ({ ...request, totalPaidAmount: getDisplayedPaidAmount(request) })),
+        suffix,
+      );
     } else if (type === 'excel') {
       handleStatementExport('excel');
     } else {
@@ -1050,7 +1067,7 @@ export function DownPaymentApprovalPanel({
       statusAr: STATUS_AR_MAP[req.status] || '',
       requestedAmount: req.requestedAmount,
       approvedAmount: req.approvedAmount || req.requestedAmount,
-      paidAmount: req.totalPaidAmount || 0,
+      paidAmount: getDisplayedPaidAmount(req),
       t1Approver: req.supervisorApprovedByName || (t1User ? getName(t1User) : undefined),
       t1Date: req.supervisorApprovedAt || undefined,
       t1Status: req.supervisorStatus || undefined,
@@ -1070,13 +1087,17 @@ export function DownPaymentApprovalPanel({
     }
 
     const statementRows: StatementRow[] = dataToExport.map(mapRequestToStatementRow);
-    const currentStatusFilter = (filters.status && filters.status.length > 0) ? filters.status.join(', ') : 'All Statuses';
+    const currentStatusFilter = (effectiveFilters.status && effectiveFilters.status.length > 0)
+      ? effectiveFilters.status.join(', ')
+      : 'All Statuses';
     const config: StatementConfig = {
       title: 'Transportation Advance',
       titleAr: 'سلفة النقل',
       statementType: 'transport_advance',
       statusFilter: currentStatusFilter,
-      statusFilterAr: (filters.status && filters.status.length === 1) ? (STATUS_AR_MAP[filters.status[0]] || currentStatusFilter) : 'الكل',
+      statusFilterAr: (effectiveFilters.status && effectiveFilters.status.length === 1)
+        ? (STATUS_AR_MAP[effectiveFilters.status[0]] || currentStatusFilter)
+        : 'الكل',
       currency: 'SDG',
     };
 

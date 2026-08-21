@@ -751,6 +751,19 @@ export default function DownPaymentApproval() {
     return { ...req, preFundNames: links.map(link => link.name), preFundIds: links.map(link => link.id) } as DownPaymentRequest;
   }), [requests, preFundLinksByRequest]);
   const filteredRequests = useMemo(() => filterDownPayments(requestsWithFunding, filters), [requestsWithFunding, filters]);
+  const selectedFundPaidAmounts = useMemo(() => {
+    const selectedFundId = filters.preFundId;
+    if (!selectedFundId || ['__unlinked__', '__multiple__'].includes(selectedFundId)) return undefined;
+
+    const amounts = new Map<string, number>();
+    filteredRequests.forEach(request => {
+      const amount = (preFundLinksByRequest.get(request.id) ?? [])
+        .filter(link => link.id === selectedFundId)
+        .reduce((sum, link) => sum + (link.amount ?? 0), 0);
+      amounts.set(request.id, amount);
+    });
+    return amounts;
+  }, [filters.preFundId, filteredRequests, preFundLinksByRequest]);
   const selectedPreFundSummary = useMemo(() => {
     const selectedFundId = filters.preFundId;
     if (!selectedFundId) return null;
@@ -1277,6 +1290,7 @@ export default function DownPaymentApproval() {
             externalFilters={filters}
             externalRequests={filteredRequests}
             externalRequestsAreFiltered={true}
+            paidAmountOverrides={selectedFundPaidAmounts}
             hideFiltersBar={true}
           />
         </TabsContent>

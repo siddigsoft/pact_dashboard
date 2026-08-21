@@ -472,7 +472,10 @@ export function exportToPDF(
   doc.save(`${config.reportTitle?.replace(/\s+/g, '_') || 'down-payment-report'}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 }
 
-export function getDownPaymentStats(requests: DownPaymentRequest[]) {
+export function getDownPaymentStats(
+  requests: DownPaymentRequest[],
+  getPaidAmount: (request: DownPaymentRequest) => number = request => request.totalPaidAmount || 0,
+) {
   const pendingSupervisor = requests.filter(r => r.status === 'pending_supervisor').length;
   const pendingAdmin = requests.filter(r => r.status === 'pending_admin').length;
   const approved = requests.filter(r => r.status === 'approved').length;
@@ -487,7 +490,9 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
     .filter(r => APPROVED_STATUSES.includes(r.status))
     .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
   const paidStatuses = ['partially_paid', 'fully_paid', 'completed'];
-  const totalPaid = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.totalPaidAmount, 0);
+  const totalPaid = requests
+    .filter(r => paidStatuses.includes(r.status))
+    .reduce((sum, request) => sum + getPaidAmount(request), 0);
   const totalRemaining = totalApproved - totalPaid;
   const totalPendingAmount = requests
     .filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin')
