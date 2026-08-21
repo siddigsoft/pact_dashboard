@@ -39,3 +39,4 @@
 - [pre-fund-source-validity-cache](pre-fund-source-validity-cache.md) — When a payment source changes validity, refresh every linked fund cache from the event projection, including split-source payments.
 - [safe-legacy-date-rendering](safe-legacy-date-rendering.md) — date-fns parseISO throws an internal `.split` error for absent dates; guard untrusted historical values before formatting.
 - [postgres-view-column-evolution](postgres-view-column-evolution.md) — CREATE OR REPLACE VIEW cannot insert or reorder existing output columns; preserve them and append new fields.
+- [supabase-in-filter-batching](supabase-in-filter-batching.md) — Large UUID `.in()` filters can fail as browser “Failed to fetch”; batch every related lookup, including fallback paths.

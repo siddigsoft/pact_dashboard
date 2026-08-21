@@ -40,11 +40,22 @@ export async function fetchPreFundSourcePaymentLinks(
 ): Promise<PreFundSourcePaymentLink[]> {
   if (sourceIds.length === 0) return [];
 
-  const { data, error } = await (supabase as any)
+  // Keep each PostgREST URL small. A page can contain hundreds or thousands of
+  // requests, and one .in(source_id, allIds) call otherwise fails in the browser
+  // with a generic "Failed to fetch" before Supabase can return an error.
+  const QUERY_CHUNK_SIZE = 150;
+  const chunks: string[][] = [];
+  for (let i = 0; i < sourceIds.length; i += QUERY_CHUNK_SIZE) {
+    chunks.push(sourceIds.slice(i, i + QUERY_CHUNK_SIZE));
+  }
+
+  const canonicalResults = await Promise.all(chunks.map(chunk => (supabase as any)
     .from('pre_fund_source_payment_links_v')
     .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url')
     .eq('source_table', sourceTable)
-    .in('source_id', sourceIds);
+    .in('source_id', chunk)));
+  const error = canonicalResults.find(result => result.error)?.error ?? null;
+  const data = canonicalResults.flatMap(result => result.data ?? []);
 
   // The canonical view is introduced by the latest ledger migration. A database
   // can legitimately have historic source back-links before that migration is
@@ -65,11 +76,13 @@ export async function fetchPreFundSourcePaymentLinks(
   // Earlier payment workflows recorded a source-side transaction back-link
   // without populating pre_fund_transactions.source_table/source_id. Read that
   // explicit historic evidence as well; never infer a fund from a date/name.
-  const { data: sourceRows, error: sourceError } = await (supabase as any)
+  const sourceResults = await Promise.all(chunks.map(chunk => (supabase as any)
     .from(sourceTable)
     .select('id, pre_fund_transaction_id')
-    .in('id', sourceIds)
-    .not('pre_fund_transaction_id', 'is', null);
+    .in('id', chunk)
+    .not('pre_fund_transaction_id', 'is', null)));
+  const sourceError = sourceResults.find(result => result.error)?.error ?? null;
+  const sourceRows = sourceResults.flatMap(result => result.data ?? []);
   if (sourceError) {
     const sources = error
       ? `The canonical ledger view and historic source back-links could not be read. View: ${error.message}. Back-links: ${sourceError.message}`
@@ -87,21 +100,33 @@ export async function fetchPreFundSourcePaymentLinks(
     .filter(transactionId => !canonicalTransactionIds.has(transactionId));
   if (legacyTransactionIds.length === 0) return canonicalLinks;
 
-  const { data: legacyTransactions, error: legacyError } = await (supabase as any)
+  const transactionChunks: string[][] = [];
+  for (let i = 0; i < legacyTransactionIds.length; i += QUERY_CHUNK_SIZE) {
+    transactionChunks.push(legacyTransactionIds.slice(i, i + QUERY_CHUNK_SIZE));
+  }
+  const transactionResults = await Promise.all(transactionChunks.map(chunk => (supabase as any)
     .from('pre_fund_transactions')
     .select('id, pre_fund_request_id, transaction_type, amount, currency, transaction_date, receipt_url')
-    .in('id', legacyTransactionIds)
-    .eq('transaction_type', 'payment');
+    .in('id', chunk)
+    .eq('transaction_type', 'payment')));
+  const legacyError = transactionResults.find(result => result.error)?.error ?? null;
+  const legacyTransactions = transactionResults.flatMap(result => result.data ?? []);
   if (legacyError) throw new Error(legacyError.message);
 
   const fundIds = [...new Set(((legacyTransactions ?? []) as any[])
     .map(transaction => transaction.pre_fund_request_id)
     .filter(Boolean))] as string[];
   if (fundIds.length === 0) return canonicalLinks;
-  const { data: funds, error: fundsError } = await (supabase as any)
+  const fundChunks: string[][] = [];
+  for (let i = 0; i < fundIds.length; i += QUERY_CHUNK_SIZE) {
+    fundChunks.push(fundIds.slice(i, i + QUERY_CHUNK_SIZE));
+  }
+  const fundResults = await Promise.all(fundChunks.map(chunk => (supabase as any)
     .from('pre_fund_requests')
     .select('id, name')
-    .in('id', fundIds);
+    .in('id', chunk)));
+  const fundsError = fundResults.find(result => result.error)?.error ?? null;
+  const funds = fundResults.flatMap(result => result.data ?? []);
   if (fundsError) throw new Error(fundsError.message);
   const fundNameById = new Map<string, string>(
     ((funds ?? []) as any[]).map(fund => [fund.id as string, fund.name as string]),
