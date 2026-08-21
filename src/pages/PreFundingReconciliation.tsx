@@ -121,8 +121,8 @@ const SOURCE_SECTIONS: Record<string, Array<{ label: string; keys: string[] }>> 
   ],
 };
 
-function getInitials(name: string): string {
-  return name.split(' ').filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('');
+function getInitials(name: string | null | undefined): string {
+  return (name?.trim() || '?').split(' ').filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('');
 }
 
 // Hue derived from first char so each person gets a consistent colour
@@ -130,9 +130,13 @@ const AVATAR_COLORS = [
   'bg-blue-600','bg-violet-600','bg-emerald-600','bg-rose-600',
   'bg-amber-600','bg-cyan-600','bg-indigo-600','bg-pink-600',
 ];
-function avatarColor(name: string): string {
-  const c = name.charCodeAt(0) || 0;
+function avatarColor(name: string | null | undefined): string {
+  const c = (name?.trim() || '?').charCodeAt(0) || 0;
   return AVATAR_COLORS[c % AVATAR_COLORS.length];
+}
+
+function datePart(value: unknown): string {
+  return typeof value === 'string' && value ? value.split('T')[0] : '';
 }
 
 const SURPLUS_OPTIONS = [
@@ -1106,7 +1110,7 @@ export default function PreFundingReconciliation() {
 
       // The source-aware linker owns the event, source back-link, allocation, and
       // cache update in one database transaction.
-      const txnDate = sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0];
+      const txnDate = datePart(sub._date) || new Date().toISOString().split('T')[0];
       const result = await linkPaymentToKnownFund({
         fundId: selectedFund.id,
         fundName: selectedFund.name,
@@ -1697,7 +1701,7 @@ export default function PreFundingReconciliation() {
       const je = jeMap.get(l.journal_entry_id);
       return {
         event_type: l.event_type,
-        posting_date: je?.posting_date ?? l.created_at?.split('T')[0] ?? '—',
+        posting_date: je?.posting_date ?? (datePart(l.created_at) || '—'),
         description_en: je?.description_en ?? '—',
         entry_no: je?.entry_no ?? null,
         status: je?.status ?? '—',
@@ -1977,7 +1981,7 @@ export default function PreFundingReconciliation() {
 
                 const filterSub = (sub: any) => {
                   if (!sub._date) return true;
-                  const d = sub._date.split('T')[0];
+                  const d = datePart(sub._date);
                   if (unlinkedFrom && d < unlinkedFrom) return false;
                   if (unlinkedTo   && d > unlinkedTo)   return false;
                   return true;
@@ -2008,7 +2012,7 @@ export default function PreFundingReconciliation() {
                             <>
                               <Input
                                 type="date"
-                                defaultValue={sub._date ? sub._date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                                defaultValue={datePart(sub._date) || new Date().toISOString().split('T')[0]}
                                 className="h-6 text-xs w-28 px-1.5 shrink-0"
                                 id={`link-date-${sub.id}`}
                                 data-testid={`input-link-date-${sub.id}`}
@@ -2232,7 +2236,7 @@ export default function PreFundingReconciliation() {
                   const uniqueCollectors = [...new Map(
                     transactions.filter(t => t.user_id).map(t => [t.user_id!, profileMap.get(t.user_id!) ?? t.user_id!.slice(0, 8)])
                   ).entries()];
-                  const uniqueDates = [...new Set(transactions.map(t => t.transaction_date.split('T')[0]))].sort().reverse();
+                  const uniqueDates = [...new Set(transactions.map(t => datePart(t.transaction_date)).filter(Boolean))].sort().reverse();
 
                   // Cycle indicator: none → some → all
                   const cycleState: 'none' | 'some' | 'all' = allSelected ? 'all' : someSelected ? 'some' : 'none';
