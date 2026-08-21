@@ -764,6 +764,10 @@ export default function PreFundingReconciliation() {
       if (e && !e.message.includes('does not exist')) throw e;
       const loaded: PreFundSummary[] = (data as any) ?? [];
       setFunds(loaded);
+      // The selector only needs the primary fund list. Do not keep the whole
+      // page blocked while the optional cross-fund balance validation queries
+      // below scan historical transactions and Down Payments.
+      setLoading(false);
 
       // Compute accurate available balance per fund using 3 global batched queries
       // (was N per-fund queries — one transaction fetch + two DP validation queries per fund).
