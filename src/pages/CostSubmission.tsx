@@ -5199,7 +5199,7 @@ const CostSubmission = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">💰 All funding sources</SelectItem>
-                  <SelectItem value="__unlinked__">⚠ Unlinked historical payment</SelectItem>
+                  <SelectItem value="__unlinked__">⚠ Paid without Pre-Fund</SelectItem>
                   <SelectItem value="__multiple__">🔀 Multiple Pre-Funds</SelectItem>
                   {costPreFundOptions.map(fund => (
                     <SelectItem key={fund.id} value={fund.id}>
@@ -5255,8 +5255,8 @@ const CostSubmission = () => {
                 )}
                 {costPreFundFilter !== 'all' && (
                   <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 rounded-full px-2 py-0.5 font-medium">
-                    Funding: {costPreFundFilter === '__unlinked__'
-                      ? 'Unlinked historical payment'
+                     Funding: {costPreFundFilter === '__unlinked__'
+                       ? 'Paid without Pre-Fund'
                       : costPreFundFilter === '__multiple__'
                         ? 'Multiple Pre-Funds'
                         : costPreFundOptions.find(f => f.id === costPreFundFilter)?.name ?? costPreFundFilter.slice(0, 12)}
@@ -5614,7 +5614,7 @@ const CostSubmission = () => {
             const selectedFundingName = costPreFundFilter === 'all'
               ? 'All funding sources'
               : costPreFundFilter === '__unlinked__'
-                ? 'Unlinked historical payments'
+                ? 'Paid without Pre-Fund'
                 : costPreFundFilter === '__multiple__'
                   ? 'Requests paid from multiple Pre-Funds'
                   : costPreFundOptions.find(fund => fund.id === costPreFundFilter)?.name ?? 'Selected Pre-Fund';

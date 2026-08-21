@@ -768,7 +768,7 @@ export default function DownPaymentApproval() {
     const selectedFundId = filters.preFundId;
     if (!selectedFundId) return null;
     const label = selectedFundId === '__unlinked__'
-      ? 'Unlinked historical payments'
+       ? 'Paid without Pre-Fund'
       : selectedFundId === '__multiple__'
         ? 'Requests paid from multiple Pre-Funds'
         : preFundFilterOptions.find(fund => fund.id === selectedFundId)?.name ?? 'Selected Pre-Fund';
@@ -1168,7 +1168,7 @@ export default function DownPaymentApproval() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All funding sources</SelectItem>
-                        <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
+                        <SelectItem value="__unlinked__">Paid without Pre-Fund</SelectItem>
                         <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
                         {preFundFilterOptions.map(fund => (
                           <SelectItem key={fund.id} value={fund.id}>
