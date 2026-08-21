@@ -764,6 +764,13 @@ export default function PreFundingReconciliation() {
       if (e && !e.message.includes('does not exist')) throw e;
       const loaded: PreFundSummary[] = (data as any) ?? [];
       setFunds(loaded);
+      // Open the reconciliation view with the newest available fund instead
+      // of leaving the page in an empty "Select a fund" state. Preserve an
+      // existing selection when refreshing, and fall back if it disappeared.
+      setSelected(current => {
+        if (current && loaded.some(fund => fund.id === current.id)) return current;
+        return loaded[0] ?? null;
+      });
       // The selector only needs the primary fund list. Do not keep the whole
       // page blocked while the optional cross-fund balance validation queries
       // below scan historical transactions and Down Payments.
