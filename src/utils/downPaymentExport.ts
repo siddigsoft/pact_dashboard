@@ -48,8 +48,12 @@ export function filterDownPayments(
     if (filters.amountMax && req.requestedAmount > filters.amountMax) {
       return false;
     }
-    if (filters.preFundId === '__unlinked__' && (req.preFundNames?.length ?? 0) > 0) {
-      return false;
+    if (filters.preFundId === '__unlinked__') {
+      const hasPaidAmount = (req.totalPaidAmount ?? 0) > 0;
+      const hasPaidStatus = ['partially_paid', 'fully_paid', 'paid', 'reconciled'].includes(req.status);
+      if (!hasPaidAmount || !hasPaidStatus || (req.preFundNames?.length ?? 0) > 0) {
+        return false;
+      }
     }
     if (filters.preFundId === '__multiple__' && (req.preFundNames?.length ?? 0) < 2) {
       return false;

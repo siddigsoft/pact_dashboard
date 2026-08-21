@@ -94,6 +94,12 @@ interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
   externalFilters?: DownPaymentFilter;
   hideFiltersBar?: boolean;
+  /**
+   * The parent page resolves immutable Pre-Fund links before applying its
+   * shared filters. Accept that enriched collection so this panel does not
+   * apply a selected Pre-Fund filter against raw requests with no link IDs.
+   */
+  externalRequests?: DownPaymentRequest[];
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -312,11 +318,12 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   );
 });
 
-export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar }: DownPaymentApprovalPanelProps) {
+export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar, externalRequests }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
+  const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
   const { toast } = useToast();
+  const requests = externalRequests ?? contextRequests;
 
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -2995,7 +3002,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               </>
             )}
 
-            {userRole === 'admin' && (request.status === 'rejected' || request.status === 'cancelled') && (
+            {userRole === 'admin' && request.status === 'rejected' && (
               <Button
                 size="sm"
                 variant="outline"

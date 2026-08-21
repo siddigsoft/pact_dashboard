@@ -25,7 +25,7 @@ import {
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { EmailNotificationService } from '@/services/email-notification.service';
-import { unlinkPaymentFromPreFund } from '@/utils/preFundLinkage';
+import { cancelPaidDownPaymentRequest, recordDownPaymentWithWallet, reopenDownPaymentAfterReversal } from '@/utils/preFundLinkage';
 import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 
 interface RevertToPendingData {
@@ -1089,121 +1089,17 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
 
-      // Use a SECURITY DEFINER RPC so financial admins can create/read wallets for
-      // any user without hitting RLS on the wallets table.  The RPC ensures the
-      // profile row exists, creates the wallet if missing, and returns the wallet
-      // id + current balances — all in one round-trip.
-      const { data: walletInfo, error: walletRpcError } = await supabase
-        .rpc('get_or_create_wallet_for_payment', { p_user_id: request.requestedBy });
-      if (walletRpcError) throw new Error(`Could not load wallet: ${walletRpcError.message}`);
-      if (!walletInfo?.wallet_id) throw new Error('Could not load wallet for this user');
-
-      const walletData = {
-        id: walletInfo.wallet_id as string,
-        balances: (walletInfo.balances ?? { SDG: 0 }) as Record<string, number>,
-      };
-
-      // Balance is unchanged — advance is a pre-payment deducted from the site visit fee
-      const currentBalance = Number(walletData.balances?.['SDG'] ?? 0);
-
-      const advanceMetadata: Record<string, any> = {
-        type: 'transportation_advance',
-        down_payment_request_id: data.requestId,
-        site_name: request.siteName,
-        state: request.stateName,
-        locality: request.localityName,
-        project: request.projectName,
-        activity_type: request.activityType,
-        hub: request.hubName,
-        requested_amount: request.requestedAmount,
-        approved_amount: request.approvedAmount,
-        advance_from_total: true,
-      };
-      if (request.mmpSiteEntryId) advanceMetadata.mmp_site_entry_id = request.mmpSiteEntryId;
-
-      const projectLabel = request.projectName || 'WFP TPM';
-      // Use .select() without .single() — a DB trigger on wallet_transactions may produce
-      // extra rows, which causes PGRST100 ("Cannot coerce the result to a single JSON object").
-      const { data: transactionRows, error: transactionError } = await supabase
-        .from('wallet_transactions')
-        .insert({
-          wallet_id: walletData.id,
-          user_id: request.requestedBy,
-          type: 'down_payment',
-          amount: data.amount,
-          amount_cents: Math.round(data.amount * 100),
-          currency: 'SDG',
-          description: `Transport advance (deducted from site fee): ${request.siteName}${request.stateName ? ' - ' + request.stateName : ''} | Project: ${projectLabel}${data.notes ? ' | ' + data.notes : ''}`,
-          balance_before: currentBalance,
-          balance_after: currentBalance,
-          created_by: data.processedBy,
-          metadata: advanceMetadata,
-        })
-        .select();
-
-      if (transactionError) throw transactionError;
-      const transactionData = Array.isArray(transactionRows) ? transactionRows[0] : transactionRows;
-      if (!transactionData) throw new Error('Failed to record wallet transaction');
-
-      const transactionIds = [...request.walletTransactionIds, transactionData.id];
-
-      let updatedInstallmentPlan = request.installmentPlan;
-      if (data.installmentIndex !== undefined && request.paymentType === 'installments') {
-        updatedInstallmentPlan = request.installmentPlan.map((inst, idx) =>
-          idx === data.installmentIndex
-            ? { ...inst, paid: true, paid_at: new Date().toISOString(), transaction_id: transactionData.id }
-            : inst
-        );
-      }
-
-      const processedAt = new Date().toISOString();
-
       const eventKey = data.paymentEventKey ?? `source-payment:down_payment_requests:${data.requestId}:${crypto.randomUUID()}`;
-      const { data: paymentResult, error: paymentError } = await (supabase as any).rpc(
-        'record_required_pre_fund_payment_rpc',
-        {
-          p_source_table: 'down_payment_requests',
-          p_source_id: data.requestId,
-          p_fund_id: data.preFundId,
-          p_amount: data.amount,
-          p_currency: request.currency || 'SDG',
-          p_payment_date: new Date().toISOString().slice(0, 10),
-          p_created_by: data.processedBy,
-          p_receipt_url: data.receiptUrl,
-          p_notes: data.notes?.trim() || null,
-          p_payment_event_key: eventKey,
-        },
-      );
-      if (paymentError || paymentResult?.success !== true) {
-        // Compensate the wallet evidence created immediately above. The source
-        // and Pre-Fund transaction have not changed when this RPC rejects.
-        const { error: walletRollbackError } = await supabase
-          .from('wallet_transactions')
-          .delete()
-          .eq('id', transactionData.id);
-        if (walletRollbackError) {
-          console.error('Failed to compensate wallet transaction after payment rejection:', walletRollbackError);
-        }
-        throw new Error(paymentError?.message || paymentResult?.error || 'Pre-Fund payment could not be recorded');
-      }
-
-      // The controlled RPC owns paid amount and status. This follow-up only
-      // preserves non-financial wallet/installment metadata.
-      const { error: requestUpdateError } = await supabase
-        .from('down_payment_requests')
-        .update({
-          wallet_transaction_ids: transactionIds,
-          installment_plan: updatedInstallmentPlan,
-          updated_at: processedAt,
-        } as any)
-        .eq('id', data.requestId);
-
-      if (requestUpdateError) {
-        // Financial state has already committed atomically in the server RPC;
-        // do not present it as a failed payment because optional wallet metadata
-        // could not be persisted.
-        console.error('Could not save wallet/installment metadata after payment:', requestUpdateError);
-      }
+       await recordDownPaymentWithWallet({
+         requestId: data.requestId,
+         fundId: data.preFundId,
+         amount: data.amount,
+         currency: request.currency || 'SDG',
+         receiptUrl: data.receiptUrl,
+         notes: data.notes?.trim() || null,
+         paymentEventKey: eventKey,
+         installmentIndex: data.installmentIndex,
+       });
 
       const dueAmount = request.approvedAmount || request.requestedAmount;
       const resultingRemainingAmount = Math.max(0, dueAmount - (request.totalPaidAmount + data.amount));
@@ -1313,33 +1209,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const cancelRequest = async (requestId: string): Promise<boolean> => {
     try {
-      // Fetch before updating so we can reverse any pre-fund deduction
-      const { data: dp } = await supabase
-        .from('down_payment_requests')
-        .select('total_paid_amount, pre_fund_transaction_id, metadata')
-        .eq('id', requestId)
-        .single();
-
-      if (dp) {
-        const meta = (dp.metadata ?? {}) as any;
-        if (dp.pre_fund_transaction_id) {
-          // Linked via a real txn row — use the full unlink path
-          const result = await unlinkPaymentFromPreFund('down_payment_requests', requestId);
-          if (!result.unlinked) throw new Error(result.message);
-        } else if (meta.pre_fund_deducted === true && meta.pre_fund_id && Number(dp.total_paid_amount) > 0) {
-          throw new Error('This request has a legacy pre-fund balance marker without an immutable event. Finance must review it in Pre-Funding → Reconciliation before cancellation.');
-        }
-      }
-
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'cancelled',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', requestId);
-
-      if (error) throw error;
+      await cancelPaidDownPaymentRequest(requestId);
 
       toast({
         title: 'Request Cancelled',
@@ -1796,65 +1666,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       return { success: 0, failed: data.requestIds.length };
     }
     try {
-      const now = new Date().toISOString();
-      let commonFields: Record<string, any> = { updated_at: now };
-
-      if (data.targetStatus === 'pending_supervisor') {
-        commonFields = {
-          ...commonFields,
-          status: 'pending_supervisor',
-          supervisor_status: 'pending',
-          supervisor_approved_by: null,
-          supervisor_approved_at: null,
-          supervisor_notes: null,
-          supervisor_rejection_reason: null,
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          total_paid_amount: 0,
-          payment_proof_url: null,
-        };
-      } else if (data.targetStatus === 'pending_admin') {
-        commonFields = {
-          ...commonFields,
-          status: 'pending_admin',
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          total_paid_amount: 0,
-          payment_proof_url: null,
-        };
-      } else {
-        commonFields = {
-          ...commonFields,
-          status: 'approved',
-          total_paid_amount: 0,
-          payment_proof_url: null,
-          payment_proof_uploaded_at: null,
-        };
-      }
-
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update(commonFields)
-        .in('id', data.requestIds);
-
-      if (error) throw error;
-
-      if (data.targetStatus === 'approved') {
-        const relevant = requests.filter(r => data.requestIds.includes(r.id));
-        await Promise.all(
-          relevant.map(req =>
-            supabase
-              .from('down_payment_requests')
-              .update({ remaining_amount: req.approvedAmount || req.requestedAmount })
-              .eq('id', req.id)
-          )
-        );
+      const results = await Promise.allSettled(
+        data.requestIds.map(requestId => reopenDownPaymentAfterReversal({
+          requestId,
+          targetStatus: data.targetStatus,
+          reason: data.reason,
+        })),
+      );
+      const failed = results.filter(result => result.status === 'rejected').length;
+      const success = data.requestIds.length - failed;
+      if (failed > 0 && success === 0) {
+        const firstFailure = results.find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
+        throw firstFailure?.reason ?? new Error('No requests could be reverted.');
       }
 
       const targetLabel =
@@ -1864,11 +1687,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       toastRef.current({
         title: 'Bulk Revert Complete / اكتمال الإرجاع الجماعي',
-        description: `${data.requestIds.length} request(s) reverted to ${targetLabel}`,
+        description: `${success} request(s) reverted to ${targetLabel}${failed > 0 ? `; ${failed} could not be reverted` : ''}`,
       });
 
       await refreshRequests();
-      return { success: data.requestIds.length, failed: 0 };
+      return { success, failed };
     } catch (error: any) {
       console.error('Bulk revert failed:', error);
       toastRef.current({
@@ -1893,101 +1716,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     try {
       return await withTimeout(
         (async () => {
-      const request = requests.find(r => r.id === data.requestId);
-      if (!request) {
-        toastRef.current({
-          title: 'Error',
-          description: 'Request not found',
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      // Build update data based on target status
-      let updateData: Record<string, any> = {
-        status: data.targetStatus,
-        updated_at: new Date().toISOString(),
-      };
-
-      const auditEntry: ApprovalAuditEntry = {
-        id: crypto.randomUUID(),
-        action: 'restored',
-        performedBy: data.revertedBy,
-        performedByName: data.revertedByName,
-        performedByRole: 'admin',
-        timestamp: new Date().toISOString(),
-        previousValue: request.status,
-        newValue: data.targetStatus,
-        notes: data.reason || `Reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
-      };
-      const updatedAuditLog = [...(request.auditLog || []), auditEntry];
-      const updatedMetadata: Record<string, any> = { ...request.metadata, audit_log: updatedAuditLog };
-
-      // Detect if request was in a paid state — need to also reset payment fields
-      const wasPaid = ['partially_paid', 'fully_paid'].includes(request.status);
-
-      if (data.targetStatus === 'pending_supervisor') {
-        updatedMetadata.supervisor_approved_amount = null;
-        updatedMetadata.admin_approved_amount = null;
-        updatedMetadata.approved_amount = null;
-        updatedMetadata.approval_type = null;
-        updatedMetadata.approval_percentage = null;
-        if (wasPaid) {
-          // Also clear payment reconciliation metadata when rolling back from a paid state
-          updatedMetadata.advance_reconciled_at = null;
-          updatedMetadata.payment_processed_at = null;
-          updatedMetadata.receipt_confirmation = null;
-        }
-        updateData = {
-          ...updateData,
-          supervisor_status: 'pending',
-          supervisor_approved_by: null,
-          supervisor_approved_at: null,
-          supervisor_notes: null,
-          supervisor_rejection_reason: null,
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          ...(wasPaid ? { total_paid_amount: 0 } : {}),
-          metadata: updatedMetadata,
-        };
-      } else if (data.targetStatus === 'pending_admin') {
-        updatedMetadata.admin_approved_amount = null;
-        if (wasPaid) {
-          updatedMetadata.advance_reconciled_at = null;
-          updatedMetadata.payment_processed_at = null;
-          updatedMetadata.receipt_confirmation = null;
-        }
-        updateData = {
-          ...updateData,
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          ...(wasPaid ? { total_paid_amount: 0 } : {}),
-          metadata: updatedMetadata,
-        };
-      } else if (data.targetStatus === 'approved') {
-        updatedMetadata.advance_reconciled_at = null;
-        updatedMetadata.payment_processed_at = null;
-        updatedMetadata.receipt_confirmation = null;
-        updateData = {
-          ...updateData,
-          total_paid_amount: 0,
-          remaining_amount: request.approvedAmount || request.requestedAmount,
-          metadata: updatedMetadata,
-        };
-      }
-
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update(updateData)
-        .eq('id', data.requestId);
-
-      if (error) throw error;
+      await reopenDownPaymentAfterReversal({
+        requestId: data.requestId,
+        targetStatus: data.targetStatus,
+        reason: data.reason,
+      });
 
       const targetLabel =
         data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' :

@@ -793,105 +793,11 @@ const MobileCostSubmission = () => {
   };
 
   const handleMarkAsPaid = async (oc: OperationalCostSubmission) => {
-    if (!currentUser?.id) return;
-    const session = await ensureValidSession();
-    if (!session.success) return;
-    setActionProcessing(true);
-    try {
-      const now = new Date().toISOString();
-      const updatePayload: Record<string, unknown> = {
-        status: 'paid',
-        amount_paid_cents: oc.amount_cents,
-        paid_at: now,
-        updated_at: now,
-      };
-      try { updatePayload.paid_by = currentUser.id; } catch { /* field may not exist */ }
-      let { error } = await supabase.from('operational_cost_submissions').update(updatePayload).eq('id', oc.id);
-      if (error?.message?.includes('paid_by')) {
-        const { paid_by, ...safePayload } = updatePayload as any;
-        const fallback = await supabase.from('operational_cost_submissions').update({ ...safePayload, description: `${oc.description || ''}\n[Paid by: ${currentUser.id}]` }).eq('id', oc.id);
-        error = fallback.error;
-      }
-      if (error) {
-        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "Payment recorded. / تم تسجيل الدفع." });
-        fetchOperationalCosts();
-        // Auto-link to active pre-fund (non-blocking — payment already recorded)
-        import('@/utils/preFundLinkage').then(({ linkPaymentToPreFund, createPreFundPaymentEventKey }) => {
-          // Extract first receipt URL from supporting_documents for GL audit trail
-          const firstReceipt = (() => {
-            const docs = (oc as any).supporting_documents;
-            if (!docs) return null;
-            const arr = Array.isArray(docs) ? docs : (typeof docs === 'string' ? JSON.parse(docs) : null);
-            return arr?.[0]?.url ?? arr?.[0] ?? null;
-          })();
-          linkPaymentToPreFund({
-            amount: oc.amount_cents / 100,
-            currency: oc.currency,
-            countryId: (oc as any).country_id ?? null,
-            projectId: (oc as any).project_id ?? null,
-            costCategory: (oc as any).expense_category ?? null,
-            sourceTable: 'operational_cost_submissions',
-            sourceId: oc.id,
-            reference: oc.reference_number ?? null,
-            description: (oc as any).title ?? oc.description ?? null,
-            paymentDate: now,
-            createdBy: currentUser.id,
-            userId: oc.submitted_by ?? null,
-            receiptUrl: typeof firstReceipt === 'string' ? firstReceipt : null,
-            paymentEventKey: createPreFundPaymentEventKey({
-              sourceTable: 'operational_cost_submissions',
-              sourceId: oc.id,
-              amount: oc.amount_cents / 100,
-              paymentDate: now,
-              reference: oc.reference_number ?? null,
-              receiptUrl: typeof firstReceipt === 'string' ? firstReceipt : null,
-            }),
-          }).then(r => {
-            if (r.linked) {
-              toast({ title: '✅ Linked to Pre-Fund', description: r.message });
-            } else {
-              toast({
-                title: '⚠️ Pre-Fund Link Failed',
-                description: r.message + ' — Use Reconciliation → Link Now to link manually.',
-                variant: 'destructive',
-              });
-            }
-          }).catch((err: Error) => toast({
-            title: '⚠️ Pre-Fund Link Error',
-            description: (err?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
-            variant: 'destructive',
-          }));
-        });
-        // Fire in-app + email notifications to submitter and management (non-blocking)
-        const paidSubmitter = users.find(u => u.id === oc.submitted_by);
-        const paidSubmitterName = paidSubmitter?.name || paidSubmitter?.email || 'Unknown';
-        const paidRefNum = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
-        const paidAmountStr = `${oc.currency} ${(oc.amount_cents / 100).toLocaleString()}`;
-        const paidCatLabels: Record<string, string> = { permits: 'Permits & Licenses', incentives: 'Incentives & Allowances', communications: 'Internet & Comms', training: 'Training', transport: 'Transportation', general_transport: 'Transportation', equipment: 'Equipment & Supplies', printing: 'Printing & Stationery', meetings: 'Meetings', office_admin: 'Office Admin', other: 'Other' };
-        const paidCatLabel = paidCatLabels[oc.expense_category] || oc.expense_category;
-        const paidTitleMobile = (oc as any).request_title || oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '').trim() || '';
-        const paidByNameMobile = (currentUser as any)?.fullName || (currentUser as any)?.name || 'Finance';
-        const paidExpDateMobile = oc.expense_date ? new Date(oc.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined;
-        void notifySubmitterOfCostStatus(oc.submitted_by, 'cost_paid', {
-          refNum: paidRefNum, amountStr: paidAmountStr,
-          category: paidCatLabel, title: paidTitleMobile,
-          expenseDate: paidExpDateMobile, vendor: oc.vendor || undefined,
-          disbursedBy: paidByNameMobile,
-        });
-        void notifyManagementTeam('cost_paid', {
-          submitterName: paidSubmitterName, refNum: paidRefNum, amountStr: paidAmountStr,
-          category: paidCatLabel, title: paidTitleMobile,
-          expenseDate: paidExpDateMobile, vendor: oc.vendor || undefined,
-          disbursedBy: paidByNameMobile,
-        }, currentUser?.id);
-      }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid.", variant: "destructive" });
-    } finally {
-      setActionProcessing(false);
-    }
+    toast({
+      title: 'Payment must be recorded on the web workspace',
+      description: 'Mobile payments are disabled until this screen can require a receipt and an explicit Pre-Fund selection.',
+      variant: 'destructive',
+    });
   };
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);

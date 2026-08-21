@@ -82,6 +82,29 @@ interface Reconciliation {
   status: string; closed_at: string | null; pdf_url: string | null; notes: string | null;
 }
 
+interface PaidOutBreakdown {
+  downPayments: number;
+  costSubmissions: number;
+  other: number;
+  total: number;
+}
+
+function getPaidOutBreakdown(transactions: PreFundTransaction[]): PaidOutBreakdown {
+  const paidEvents = transactions.filter(t => ['payment', 'reversal', 'return'].includes(t.transaction_type));
+  const signedAmount = (transaction: PreFundTransaction) =>
+    ['reversal', 'return'].includes(transaction.transaction_type) ? -transaction.amount : transaction.amount;
+  const downPayments = paidEvents
+    .filter(t => t.source_table === 'down_payment_requests')
+    .reduce((sum, t) => sum + signedAmount(t), 0);
+  const costSubmissions = paidEvents
+    .filter(t => t.source_table === 'operational_cost_submissions')
+    .reduce((sum, t) => sum + signedAmount(t), 0);
+  const other = paidEvents
+    .filter(t => !t.source_table || !['down_payment_requests', 'operational_cost_submissions'].includes(t.source_table))
+    .reduce((sum, t) => sum + signedAmount(t), 0);
+  return { downPayments, costSubmissions, other, total: downPayments + costSubmissions + other };
+}
+
 interface ExceptionQueueItem {
   exception_key: string;
   exception_type: string;
@@ -532,7 +555,7 @@ async function generateDonorStatementPDF(
 }
 
 // ── Excel Reconciliation Export ───────────────────────────────────────────
-function handleExportReconciliationExcel(
+async function handleExportReconciliationExcel(
   fund: PreFundSummary,
   transactions: PreFundTransaction[],
   profileMap: Map<string, string>,
@@ -541,8 +564,18 @@ function handleExportReconciliationExcel(
   const period = fund.start_date && fund.end_date
     ? `${formatIsoDate(fund.start_date, 'MMM d, yyyy')} – ${formatIsoDate(fund.end_date, 'MMM d, yyyy')}`
     : '—';
+  const paidOutBreakdown = getPaidOutBreakdown(transactions);
+  const breakdownRows: (string | number)[][] = [
+    ['Category', `Total Paid Out (${fund.currency})`],
+    ['Down Payments', paidOutBreakdown.downPayments],
+    ['Cost Submissions', paidOutBreakdown.costSubmissions],
+    ...(paidOutBreakdown.other !== 0
+      ? [['Other', paidOutBreakdown.other] as (string | number)[]]
+      : []),
+    ['Total Paid Out by Category', paidOutBreakdown.total],
+  ];
 
-  exportStandardExcel({
+  await exportStandardExcel({
     reportTitle: 'PACT Command Center - Pre-Fund Reconciliation Report',
     subtitleLine: `Fund: ${fund.name} | Donor: ${fund.source ?? '—'} | Period: ${period} | Generated: ${format(new Date(), 'PPP p')}`,
     metaLine: `Total Funded: ${fund.currency} ${formatNumber(fund.amount, 0)} | Available: ${fund.currency} ${formatNumber(fund.available_balance, 0)}`,
@@ -590,6 +623,9 @@ function handleExportReconciliationExcel(
         ['Total Paid Out', fund.paid_amount],
         ['Total Committed', fund.committed_amount],
         ['Available Balance', fund.available_balance],
+         [],
+         ['PAID-OUT BREAKDOWN'],
+         ...breakdownRows,
       ]
     },
     breakdownSheets: reconciliations.length > 0 ? [
@@ -708,6 +744,10 @@ export default function PreFundingReconciliation() {
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
   const [unlinkingId, setUnlinkingId]           = useState<string | null>(null);
+  const [correctionTxn, setCorrectionTxn]       = useState<PreFundTransaction | null>(null);
+  const [correctionFundId, setCorrectionFundId] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctingTxn, setCorrectingTxn]       = useState(false);
   // ── Bulk-select state ────────────────────────────────────────────────────
   const [selectedTxnIds, setSelectedTxnIds]   = useState<Set<string>>(new Set());
   const [showOnlySelected, setShowOnlySelected] = useState(false);
@@ -1171,11 +1211,13 @@ export default function PreFundingReconciliation() {
       if (txn.transaction_type !== 'payment' || !txn.source_table || !txn.source_id) {
         throw new Error('Only source-linked payment events can be reversed here. Use a Finance correction with evidence for manual entries.');
       }
-      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
-      const result = await unlinkPaymentFromPreFund(txn.source_table, txn.source_id);
-      if (!result.unlinked) throw new Error(result.message);
+      if (txn.source_table !== 'down_payment_requests') {
+        throw new Error('Do not remove a paid source from the ledger. Use the Finance correction workflow to move it to another Pre-Fund.');
+      }
+      const { cancelPaidDownPaymentRequest } = await import('@/utils/preFundLinkage');
+      await cancelPaidDownPaymentRequest(txn.source_id);
 
-      toast({ title: 'Reversed', description: `A compensating event restored ${selectedFund.currency} ${formatNumber(txn.amount, 0)} to the fund.` });
+      toast({ title: 'Down Payment cancelled', description: `The request was cancelled and its compensating event restored ${selectedFund.currency} ${formatNumber(txn.amount, 0)} to the fund.` });
       loadFunds();
       loadTxns(selectedFund.id);
       loadUnlinkedPayments();
@@ -1186,6 +1228,40 @@ export default function PreFundingReconciliation() {
     }
   };
 
+  const handleCorrectFund = async () => {
+    const txn = correctionTxn;
+    if (!txn || !selectedFund) return;
+    if (!correctionFundId) {
+      toast({ title: 'Replacement Pre-Fund required', description: 'Select the Pre-Fund that actually paid this request.', variant: 'destructive' });
+      return;
+    }
+    if (!correctionReason.trim()) {
+      toast({ title: 'Correction reason required', description: 'Explain why the original funding source was incorrect.', variant: 'destructive' });
+      return;
+    }
+    setCorrectingTxn(true);
+    try {
+      const { correctRequiredPreFundPaymentLink } = await import('@/utils/preFundLinkage');
+      await correctRequiredPreFundPaymentLink({
+        originalPaymentEventId: txn.id,
+        replacementFundId: correctionFundId,
+        reason: correctionReason.trim(),
+      });
+      toast({
+        title: 'Pre-Fund corrected',
+        description: 'The original event was reversed and a new immutable event was recorded against the replacement Pre-Fund.',
+      });
+      setCorrectionTxn(null);
+      setCorrectionFundId('');
+      setCorrectionReason('');
+      await Promise.all([loadFunds(), loadTxns(selectedFund.id), loadUnlinkedPayments()]);
+    } catch (error: any) {
+      toast({ title: 'Correction failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setCorrectingTxn(false);
+    }
+  };
+
   // ── Bulk delete handler ─────────────────────────────────────────────────
   const handleBulkUnlink = async () => {
     if (!selectedFund || selectedTxnIds.size === 0) return;
@@ -1193,20 +1269,19 @@ export default function PreFundingReconciliation() {
     setConfirmBulkDelete(false);
     const toDelete = transactions.filter(t => selectedTxnIds.has(t.id));
     try {
-      if (toDelete.some(t => t.transaction_type !== 'payment' || !t.source_table || !t.source_id)) {
-        throw new Error('Bulk reversal only supports source-linked payment events. Finance corrections must retain their immutable audit trail.');
+      if (toDelete.some(t => t.transaction_type !== 'payment' || t.source_table !== 'down_payment_requests' || !t.source_id)) {
+        throw new Error('Bulk cancellation only supports Down Payment events. Finance corrections must retain their immutable audit trail.');
       }
       const uniqueSources = new Map(toDelete.map(t => [`${t.source_table}:${t.source_id}`, t]));
-      const { unlinkPaymentFromPreFund } = await import('@/utils/preFundLinkage');
+      const { cancelPaidDownPaymentRequest } = await import('@/utils/preFundLinkage');
       for (const txn of uniqueSources.values()) {
-        const result = await unlinkPaymentFromPreFund(txn.source_table!, txn.source_id!);
-        if (!result.unlinked) throw new Error(result.message);
+        await cancelPaidDownPaymentRequest(txn.source_id!);
       }
 
       setSelectedTxnIds(new Set());
       loadFunds();
       loadTxns(selectedFund.id);
-      toast({ title: `${uniqueSources.size} payment source${uniqueSources.size !== 1 ? 's' : ''} reversed`, description: 'Compensating events restored their fund balances.' });
+      toast({ title: `${uniqueSources.size} Down Payment${uniqueSources.size !== 1 ? 's' : ''} cancelled`, description: 'Compensating events restored their fund balances.' });
     } catch (err) {
       console.error('[BULK_UNLINK] Error:', err);
       toast({ title: 'Removal failed', description: 'Could not complete removal. Please try again.', variant: 'destructive' });
@@ -1795,7 +1870,7 @@ export default function PreFundingReconciliation() {
     if (!selectedFund) return;
     setExportingExcel(true);
     try {
-      handleExportReconciliationExcel(selectedFund, transactions, profileMap, reconciliations);
+       await handleExportReconciliationExcel(selectedFund, transactions, profileMap, reconciliations);
       toast({ title: 'Excel exported', description: `${transactions.length} transactions included` });
     } catch (e: any) {
       toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
@@ -1936,13 +2011,7 @@ export default function PreFundingReconciliation() {
 
                   {/* ── Category Breakdown ─────────────────────────────────────── */}
                   {transactions.length > 0 && (() => {
-                    const paidEvents = transactions.filter(t => ['payment', 'reversal', 'return'].includes(t.transaction_type));
-                    const signedAmount = (t: PreFundTransaction) =>
-                      ['reversal', 'return'].includes(t.transaction_type) ? -t.amount : t.amount;
-                    const dpTotal  = paidEvents.filter(t => t.source_table === 'down_payment_requests').reduce((s, t) => s + signedAmount(t), 0);
-                    const ocsTotal = paidEvents.filter(t => t.source_table === 'operational_cost_submissions').reduce((s, t) => s + signedAmount(t), 0);
-                    const otherTotal = paidEvents.filter(t => !t.source_table || (t.source_table !== 'down_payment_requests' && t.source_table !== 'operational_cost_submissions')).reduce((s, t) => s + signedAmount(t), 0);
-                    const grandTotal = dpTotal + ocsTotal + otherTotal;
+                    const { downPayments: dpTotal, costSubmissions: ocsTotal, other: otherTotal, total: grandTotal } = getPaidOutBreakdown(transactions);
                     if (grandTotal === 0) return null;
                     return (
                       <div className="mt-3 pt-3 border-t border-border/60">
@@ -2672,15 +2741,34 @@ export default function PreFundingReconciliation() {
                             </TableCell>
                             {!isCD && (
                               <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                                <button
-                                  onClick={() => setConfirmUnlinkTxn(t)}
-                                  disabled={unlinkingId === t.id}
-                                  title="Unlink — removes this transaction and restores the fund balance"
-                                  className="h-6 w-6 flex items-center justify-center mx-auto rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-40"
-                                  data-testid={`button-unlink-${t.id}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                <div className="flex items-center justify-center gap-1">
+                                  {t.transaction_type === 'payment' && t.source_table && t.source_id && (
+                                    <button
+                                      onClick={() => {
+                                        setCorrectionTxn(t);
+                                        setCorrectionFundId('');
+                                        setCorrectionReason('');
+                                      }}
+                                      disabled={correctingTxn}
+                                      title="Correct the selected Pre-Fund without editing payment history"
+                                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-sky-50 dark:hover:bg-sky-950/30 text-muted-foreground hover:text-sky-600 transition-colors disabled:opacity-40"
+                                      data-testid={`button-correct-fund-${t.id}`}
+                                    >
+                                      <Shuffle className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  {t.source_table === 'down_payment_requests' && (
+                                    <button
+                                      onClick={() => setConfirmUnlinkTxn(t)}
+                                      disabled={unlinkingId === t.id}
+                                      title="Cancel Down Payment — reverses its payment and restores the fund balance"
+                                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-40"
+                                      data-testid={`button-unlink-${t.id}`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               </TableCell>
                             )}
                           </TableRow>
@@ -3512,13 +3600,13 @@ export default function PreFundingReconciliation() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-600">
-              <Trash2 className="h-4 w-4" /> Remove Linked Transaction
+              <Trash2 className="h-4 w-4" /> Cancel Paid Down Payment
             </DialogTitle>
           </DialogHeader>
           {confirmUnlinkTxn && (
             <div className="space-y-3 py-1">
               <p className="text-sm text-muted-foreground">
-                This will permanently remove this transaction from the fund and restore the balance.
+                This will cancel the underlying Down Payment and add a compensating reversal that restores the fund balance.
               </p>
               <div className="rounded-lg border p-3 space-y-1 bg-muted/30 text-sm">
                 <div className="flex justify-between">
@@ -3543,7 +3631,7 @@ export default function PreFundingReconciliation() {
               <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
-                  Balance will be restored by {confirmUnlinkTxn.currency} {formatNumber(confirmUnlinkTxn.amount, 0)}. The original payment record is not deleted.
+                  Balance will be restored by {confirmUnlinkTxn.currency} {formatNumber(confirmUnlinkTxn.amount, 0)}. The original payment event remains immutable for audit.
                 </AlertDescription>
               </Alert>
             </div>
@@ -3551,7 +3639,66 @@ export default function PreFundingReconciliation() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmUnlinkTxn(null)} data-testid="button-cancel-unlink">Cancel</Button>
             <Button variant="destructive" onClick={handleUnlinkTxn} data-testid="button-confirm-unlink">
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove & Restore Balance
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Cancel & Restore Balance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!correctionTxn} onOpenChange={open => {
+        if (!open && !correctingTxn) {
+          setCorrectionTxn(null);
+          setCorrectionFundId('');
+          setCorrectionReason('');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sky-700">
+              <Shuffle className="h-4 w-4" /> Correct Pre-Fund
+            </DialogTitle>
+          </DialogHeader>
+          {correctionTxn && (
+            <div className="space-y-4 py-1">
+              <Alert className="border-sky-200 bg-sky-50 dark:bg-sky-950/20">
+                <Info className="h-4 w-4 text-sky-700" />
+                <AlertDescription className="text-xs text-sky-800 dark:text-sky-200">
+                  This does not edit history. Finance will create a compensating reversal on the original fund and a new payment event on the replacement fund.
+                </AlertDescription>
+              </Alert>
+              <div className="space-y-1.5">
+                <Label>Replacement Pre-Fund</Label>
+                <Select value={correctionFundId} onValueChange={setCorrectionFundId} disabled={correctingTxn}>
+                  <SelectTrigger data-testid="select-correction-pre-fund">
+                    <SelectValue placeholder="Select the actual funding source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {funds
+                      .filter(fund => fund.id !== correctionTxn.pre_fund_request_id && ['active', 'low_balance'].includes(fund.status))
+                      .map(fund => (
+                        <SelectItem key={fund.id} value={fund.id}>
+                          {fund.name} — {fund.currency} {formatNumber(fund.available_balance, 0)} available
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reason</Label>
+                <Textarea
+                  value={correctionReason}
+                  onChange={event => setCorrectionReason(event.target.value)}
+                  placeholder="Explain the evidence for the correct funding source"
+                  disabled={correctingTxn}
+                  data-testid="input-correction-reason"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectionTxn(null)} disabled={correctingTxn}>Cancel</Button>
+            <Button onClick={handleCorrectFund} disabled={correctingTxn || !correctionFundId || !correctionReason.trim()} data-testid="button-confirm-correct-fund">
+              {correctingTxn ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Correcting…</> : <><Shuffle className="h-3.5 w-3.5 mr-1.5" />Reverse & Relink</>}
             </Button>
           </DialogFooter>
         </DialogContent>

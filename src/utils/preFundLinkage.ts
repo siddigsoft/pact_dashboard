@@ -54,50 +54,69 @@ export async function fetchPreFundSourcePaymentLinks(
     .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url')
     .eq('source_table', sourceTable)
     .in('source_id', chunk)));
-  const error = canonicalResults.find(result => result.error)?.error ?? null;
-  const data = canonicalResults.flatMap(result => result.data ?? []);
+  const canonicalError = canonicalResults.find(result => result.error)?.error ?? null;
+  const canonicalRows = canonicalResults.flatMap(result => result.data ?? []);
 
-  // The canonical view is introduced by the latest ledger migration. A database
-  // can legitimately have historic source back-links before that migration is
-  // applied, so do not let a missing view hide those proven links.
-  if (error) console.warn('[Pre-Fund] Canonical source-payment view unavailable:', error.message);
-  const canonicalLinks = error ? [] : ((data ?? []) as any[]).map((row) => ({
-    paymentEventId: row.payment_event_id,
-    sourceTable: row.source_table,
-    sourceId: row.source_id,
-    fundId: row.fund_id,
-    fundName: row.fund_name,
-    currency: row.currency,
-    paymentAmount: Number(row.payment_amount ?? 0),
-    paymentDate: row.payment_date ?? null,
-    receiptUrl: row.receipt_url ?? null,
-  }));
-
-  // Earlier payment workflows recorded a source-side transaction back-link
-  // without populating pre_fund_transactions.source_table/source_id. Read that
-  // explicit historic evidence as well; never infer a fund from a date/name.
+  // Verify every source before using its event. The ledger's reconciliation
+  // totals reject payments whose Down Payment or Cost Submission was later
+  // cancelled/rejected/unpaid; the source pages must use the same rule.
+  const sourceSelect = sourceTable === 'down_payment_requests'
+    ? 'id, pre_fund_transaction_id, status, metadata'
+    : 'id, pre_fund_transaction_id, status';
   const sourceResults = await Promise.all(chunks.map(chunk => (supabase as any)
     .from(sourceTable)
-    .select('id, pre_fund_transaction_id')
-    .in('id', chunk)
-    .not('pre_fund_transaction_id', 'is', null)));
+    .select(sourceSelect)
+    .in('id', chunk)));
   const sourceError = sourceResults.find(result => result.error)?.error ?? null;
   const sourceRows = sourceResults.flatMap(result => result.data ?? []);
   if (sourceError) {
-    const sources = error
-      ? `The canonical ledger view and historic source back-links could not be read. View: ${error.message}. Back-links: ${sourceError.message}`
+    const sources = canonicalError
+      ? `The canonical ledger view and source verification records could not be read. View: ${canonicalError.message}. Sources: ${sourceError.message}`
       : sourceError.message;
     throw new Error(sources);
   }
 
+  const verifiedSourceIds = new Set<string>(
+    ((sourceRows ?? []) as any[])
+      .filter(row => {
+        const isPaid = sourceTable === 'down_payment_requests'
+          ? ['partially_paid', 'fully_paid', 'paid', 'reconciled'].includes(row.status)
+          : ['partially_paid', 'paid', 'reconciled'].includes(row.status);
+        return isPaid && row.metadata?.deleted !== true;
+      })
+      .map(row => row.id as string),
+  );
+  const canonicalLinks = canonicalError ? [] : ((canonicalRows ?? []) as any[])
+    .filter(row => verifiedSourceIds.has(row.source_id))
+    .map((row) => ({
+      paymentEventId: row.payment_event_id,
+      sourceTable: row.source_table,
+      sourceId: row.source_id,
+      fundId: row.fund_id,
+      fundName: row.fund_name,
+      currency: row.currency,
+      paymentAmount: Number(row.payment_amount ?? 0),
+      paymentDate: row.payment_date ?? null,
+      receiptUrl: row.receipt_url ?? null,
+    }));
+
+  // The canonical view is the authority when it is available. Older
+  // source-side back-links are only a compatibility path for databases that
+  // have not yet installed that view; otherwise they can re-introduce payment
+  // rows that the reversal-aware ledger correctly excludes.
+  if (!canonicalError) return canonicalLinks;
+  console.warn('[Pre-Fund] Canonical source-payment view unavailable:', canonicalError.message);
+
+  // Earlier payment workflows recorded a source-side transaction back-link
+  // without populating pre_fund_transactions.source_table/source_id. Read that
+  // explicit historic evidence only as a migration-compatibility fallback;
+  // never infer a fund from a date or request name.
   const sourceByTransaction = new Map<string, string>(
     ((sourceRows ?? []) as any[])
-      .filter(row => row.pre_fund_transaction_id)
+      .filter(row => row.pre_fund_transaction_id && verifiedSourceIds.has(row.id))
       .map(row => [row.pre_fund_transaction_id as string, row.id as string]),
   );
-  const canonicalTransactionIds = new Set(canonicalLinks.map(link => link.paymentEventId));
-  const legacyTransactionIds = [...sourceByTransaction.keys()]
-    .filter(transactionId => !canonicalTransactionIds.has(transactionId));
+  const legacyTransactionIds = [...sourceByTransaction.keys()];
   if (legacyTransactionIds.length === 0) return canonicalLinks;
 
   const transactionChunks: string[][] = [];
@@ -189,6 +208,85 @@ export async function recordRequiredPreFundPayment(params: {
     idempotent: data?.idempotent === true,
     transactionId: data?.transaction_id,
   };
+}
+
+export async function recordDownPaymentWithWallet(params: {
+  requestId: string;
+  fundId: string;
+  amount: number;
+  currency: string;
+  receiptUrl: string;
+  notes?: string | null;
+  paymentEventKey: string;
+  installmentIndex?: number;
+}): Promise<{ success: boolean; idempotent?: boolean; transactionId?: string; walletTransactionId?: string }> {
+  const { data, error } = await (supabase as any).rpc('record_down_payment_with_wallet_rpc', {
+    p_request_id: params.requestId,
+    p_fund_id: params.fundId,
+    p_amount: params.amount,
+    p_currency: params.currency,
+    p_receipt_url: params.receiptUrl,
+    p_notes: params.notes ?? null,
+    p_payment_event_key: params.paymentEventKey,
+    p_installment_index: params.installmentIndex ?? null,
+  });
+  if (error) {
+    const notDeployed = (error as any).code === 'PGRST202'
+      || String(error.message).toLowerCase().includes('could not find the function')
+      || String(error.message).toLowerCase().includes('does not exist');
+    throw new Error(
+      notDeployed
+        ? 'Apply 20260821d_atomic_down_payment_payment_workflow.sql before recording Down Payment payments.'
+        : error.message,
+    );
+  }
+  if (data?.success !== true) throw new Error(data?.error ?? 'Down Payment could not be recorded.');
+  return {
+    success: true,
+    idempotent: data?.idempotent === true,
+    transactionId: data?.transaction_id,
+    walletTransactionId: data?.wallet_transaction_id,
+  };
+}
+
+export async function cancelPaidDownPaymentRequest(requestId: string): Promise<void> {
+  const { data, error } = await (supabase as any).rpc('cancel_paid_down_payment_request_rpc', {
+    p_request_id: requestId,
+  });
+  if (error) {
+    const notDeployed = (error as any).code === 'PGRST202'
+      || String(error.message).toLowerCase().includes('could not find the function')
+      || String(error.message).toLowerCase().includes('does not exist');
+    throw new Error(
+      notDeployed
+        ? 'Apply 20260821d_atomic_down_payment_payment_workflow.sql before cancelling paid Down Payment requests.'
+        : error.message,
+    );
+  }
+  if (data?.success !== true) throw new Error(data?.error ?? 'Down Payment could not be cancelled.');
+}
+
+export async function reopenDownPaymentAfterReversal(params: {
+  requestId: string;
+  targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved';
+  reason?: string;
+}): Promise<void> {
+  const { data, error } = await (supabase as any).rpc('reopen_down_payment_after_reversal_rpc', {
+    p_request_id: params.requestId,
+    p_target_status: params.targetStatus,
+    p_reason: params.reason ?? null,
+  });
+  if (error) {
+    const notDeployed = (error as any).code === 'PGRST202'
+      || String(error.message).toLowerCase().includes('could not find the function')
+      || String(error.message).toLowerCase().includes('does not exist');
+    throw new Error(
+      notDeployed
+        ? 'Apply 20260821e_atomic_paid_down_payment_reopen.sql before reverting a paid Down Payment.'
+        : error.message,
+    );
+  }
+  if (data?.success !== true) throw new Error(data?.error ?? 'Down Payment could not be reopened.');
 }
 
 export async function correctRequiredPreFundPaymentLink(params: {

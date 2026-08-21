@@ -34,6 +34,7 @@
 - [local-postgres-harness-supabase-roles](local-postgres-harness-supabase-roles.md) — Bare local PostgreSQL needs an authenticated role stub; connect as the initdb OS user.
 - [cycle-redirect-allocation-ledger](cycle-redirect-allocation-ledger.md) — Redirect fee offsets come from a per-target ledger; later payments must reconcile exactly and never repost the advance.
 - [cycle-redirect-correction-safety](cycle-redirect-correction-safety.md) — Correct legacy Redirects only from proven snapshots; preserve bridge rows and make posting guards reversal-aware.
+- [paid-down-payment-reopen-integrity](paid-down-payment-reopen-integrity.md) — Paid Down Payments may only return to approval states through atomic reversal of ledger and wallet evidence.
 - [immutable-gl-line-identifiers](immutable-gl-line-identifiers.md) — Add a final journal UUID in a line BEFORE INSERT; never rewrite immutable posted accounting lines.
 - [automatic-redirect-recall-authority](automatic-redirect-recall-authority.md) — Automatic legacy Redirect recall uses the original balanced journal and paid advance, not mutable later fee values.
 - [pre-fund-source-validity-cache](pre-fund-source-validity-cache.md) — When a payment source changes validity, refresh every linked fund cache from the event projection, including split-source payments.

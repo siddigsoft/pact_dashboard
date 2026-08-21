@@ -925,52 +925,12 @@ function AdvanceRequestsReportContent() {
   };
 
   const handleConfirmMarkAsPaid = async () => {
-    const req = confirmMarkPaidDialog.req;
-    if (!req || !currentUser?.id) return;
-    setMarkPaidProcessing(true);
-    try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'fully_paid',
-          total_paid_amount: req.approvedAmount || req.requestedAmount,
-          remaining_amount: 0,
-          updated_at: now,
-          ...(confirmMarkPaidDialog.notes.trim() ? { payment_proof_notes: confirmMarkPaidDialog.notes.trim() } : {}),
-        } as any)
-        .eq('id', req.id);
-      if (error) {
-        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        // H7 — bilingual notification to the requester confirming payout
-        if (req.requestedBy) {
-          try {
-            await NotificationTriggerService.send({
-              userId: req.requestedBy,
-              title: 'Advance disbursed',
-              titleAr: 'تم صرف السلفة',
-              message: `Your transport advance of ${(req.approvedAmount || req.requestedAmount).toLocaleString()} ${req.currency || 'SDG'} has been disbursed.`,
-              messageAr: `تم صرف سلفة المواصلات بمبلغ ${(req.approvedAmount || req.requestedAmount).toLocaleString()} ${req.currency || 'جنيه'}.`,
-              type: 'success',
-              category: 'financial',
-              priority: 'high',
-              link: '/wallet',
-              relatedEntityId: req.id,
-              relatedEntityType: 'downPayment',
-              sendEmail: true,
-            });
-          } catch (e) { console.error('NotificationTriggerService (mark-paid) failed', e); }
-        }
-        toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل." });
-        setConfirmMarkPaidDialog({ open: false, req: null, notes: '' });
-        refreshRequests();
-      }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
-    } finally {
-      setMarkPaidProcessing(false);
-    }
+    setConfirmMarkPaidDialog({ open: false, req: null, notes: '' });
+    toast({
+      title: 'Use the payment workspace',
+      description: 'This report cannot record a payment. Open Down Payment Approval and select the Pre-Fund there.',
+      variant: 'destructive',
+    });
   };
 
   const getStatusBadge = (status: string, metadata?: any) => {

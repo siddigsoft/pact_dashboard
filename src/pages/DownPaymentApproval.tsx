@@ -1272,7 +1272,12 @@ export default function DownPaymentApproval() {
               )}
             </AlertDescription>
           </Alert>
-          <DownPaymentApprovalPanel userRole={approvalRole} externalFilters={filters} hideFiltersBar={true} />
+          <DownPaymentApprovalPanel
+            userRole={approvalRole}
+            externalFilters={filters}
+            externalRequests={requestsWithFunding}
+            hideFiltersBar={true}
+          />
         </TabsContent>
 
         {/* ─── By State ─── */}

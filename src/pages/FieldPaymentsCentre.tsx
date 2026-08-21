@@ -32,6 +32,7 @@ import {
 } from '@/utils/fieldPaymentsEnumerator';
 import { resolveFeeAdvanceDeduction } from '@/components/cycle/redirectSettlement';
 import { isSoftDeletedDownPayment } from '@/utils/downPaymentVoid';
+import { cancelPaidDownPaymentRequest } from '@/utils/preFundLinkage';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -1101,7 +1102,24 @@ export default function FieldPaymentsCentre() {
       }
 
       if (action.decision === 'writeoff' && action.advanceId) {
-        await supabase.from('down_payment_requests').update({ status: 'cancelled' }).eq('id', action.advanceId);
+        const { data: advance, error: advanceError } = await supabase
+          .from('down_payment_requests')
+          .select('status, total_paid_amount')
+          .eq('id', action.advanceId)
+          .single();
+        if (advanceError) throw advanceError;
+
+        const isPaidAdvance = ['partially_paid', 'fully_paid', 'paid', 'reconciled'].includes(advance.status)
+          || Number(advance.total_paid_amount ?? 0) > 0;
+        if (isPaidAdvance) {
+          await cancelPaidDownPaymentRequest(action.advanceId);
+        } else {
+          const { error: cancelError } = await supabase
+            .from('down_payment_requests')
+            .update({ status: 'cancelled' })
+            .eq('id', action.advanceId);
+          if (cancelError) throw cancelError;
+        }
       }
 
       const { error: updErr } = await supabase
