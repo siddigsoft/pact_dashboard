@@ -961,10 +961,12 @@ export default function PreFundingReconciliation() {
           .order('paid_at', { ascending: false })),
         fetchAll(() => (supabase as any)
           .from('down_payment_requests')
-          .select('id,justification,requested_amount,approved_amount,total_paid_amount,status,metadata,created_at,requested_by,fully_paid_at,pre_fund_transaction_id')
+          // Keep this query to the original Down Payment schema. Some deployed
+          // databases do not yet have fully_paid_at or the later linkage fields.
+          .select('id,justification,requested_amount,total_paid_amount,status,metadata,created_at,requested_by')
           .in('status', ['partially_paid', 'fully_paid', 'paid', 'reconciled'])
           .gt('total_paid_amount', 0)
-          .order('fully_paid_at', { ascending: false })),
+          .order('created_at', { ascending: false })),
         // Enumerator / transport fees from MMP site entries
         fetchAll(() => (supabase as any)
           .from('mmp_site_entries')
@@ -1013,7 +1015,7 @@ export default function PreFundingReconciliation() {
           ...r,
           _source: 'down_payment_requests',
           _category: 'dp',
-          _date: r.fully_paid_at ?? r.created_at,
+          _date: r.metadata?.paid_at ?? r.created_at,
           amount: coverage.uncoveredAmount,
           paidAmount,
           coveredAmount: coverage.coveredAmount,
