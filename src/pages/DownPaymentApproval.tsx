@@ -532,11 +532,13 @@ export default function DownPaymentApproval() {
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
   }>({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
   const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string; amount?: number; currency?: string }[]>>(new Map());
+  const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
   const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
 
   useEffect(() => {
     let active = true;
+    setPreFundLinkError(null);
     void fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id))
       .then(links => {
         if (!active) return;
@@ -549,7 +551,13 @@ export default function DownPaymentApproval() {
         }]));
         setPreFundLinksByRequest(next);
       })
-      .catch(() => { if (active) setPreFundLinksByRequest(new Map()); });
+      .catch((error: any) => {
+        console.error('[DownPaymentApproval] Failed to load Pre-Fund payment links:', error);
+        if (active) {
+          setPreFundLinksByRequest(new Map());
+          setPreFundLinkError(error?.message ?? 'The payment-link evidence could not be loaded.');
+        }
+      });
     return () => { active = false; };
   }, [requests]);
 
@@ -1191,10 +1199,14 @@ export default function DownPaymentApproval() {
         <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/70 dark:bg-emerald-950/30" data-testid="down-payment-pre-fund-paid-total">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-              Total paid from: {selectedPreFundSummary.label}
+              Down Payments paid from: {selectedPreFundSummary.label}
             </p>
             <p className="text-xs text-emerald-700 dark:text-emerald-300">
-              {filters.preFundId === '__unlinked__' || filters.preFundId === '__multiple__'
+              {preFundLinkError
+                ? 'Pre-Fund payment-link evidence could not be loaded; see the message below.'
+                : selectedPreFundSummary.totals.length === 0
+                  ? 'No verified Down Payment payment event is linked to this Pre-Fund. Cost Submission payments are tracked separately.'
+                  : filters.preFundId === '__unlinked__' || filters.preFundId === '__multiple__'
                 ? 'Based on the matching advance payment totals'
                 : 'Based on immutable payment events for this Pre-Fund'}
             </p>
@@ -1208,6 +1220,11 @@ export default function DownPaymentApproval() {
               ))
               : <p className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">SDG 0</p>}
           </div>
+        </div>
+      )}
+      {canManagePreFundFilters && preFundLinkError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200" data-testid="down-payment-pre-fund-link-error">
+          <span className="font-semibold">Pre-Fund filter unavailable:</span> {preFundLinkError}
         </div>
       )}
 
