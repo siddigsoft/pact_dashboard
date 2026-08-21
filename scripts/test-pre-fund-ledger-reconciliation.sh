@@ -66,7 +66,7 @@ CREATE TABLE public.operational_cost_submissions (
   id uuid PRIMARY KEY, status text, amount_paid_cents bigint NOT NULL DEFAULT 0, pre_fund_transaction_id uuid,
   paid_at timestamptz, paid_by uuid, payment_proof_url text, payment_proof_notes text,
   payment_proof_uploaded_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(),
-  title text, description text
+  description text
 );
 CREATE TABLE public.acct_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE);
 CREATE TABLE public.acct_journal_entries (
@@ -81,6 +81,42 @@ CREATE TABLE public.acct_journal_lines (
 CREATE TABLE public.acct_gl_bridge_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_table text, source_id uuid, event_type text, status text, journal_entry_id uuid
 );
+-- Simulate the older deployed ledger view. Its idempotency_key occupies the
+-- position now followed by newly appended audit fields; a compatible migration
+-- must not try to rename it to created_at during CREATE OR REPLACE VIEW.
+ALTER TABLE public.pre_fund_transactions
+  ADD COLUMN idempotency_key text,
+  ADD COLUMN reversal_of_id uuid,
+  ADD COLUMN event_actor_id uuid,
+  ADD COLUMN event_reason text,
+  ADD COLUMN event_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN occurred_at timestamptz NOT NULL DEFAULT now();
+CREATE VIEW public.pre_fund_event_ledger_v AS
+SELECT
+  t.id,
+  t.pre_fund_request_id,
+  t.transaction_type,
+  t.amount,
+  t.currency,
+  t.transaction_date,
+  t.source_table,
+  t.source_id,
+  t.reference,
+  t.description,
+  t.user_id,
+  t.created_by,
+  t.idempotency_key,
+  t.reversal_of_id,
+  t.event_reason,
+  t.event_metadata,
+  t.occurred_at,
+  true AS source_is_verified,
+  CASE
+    WHEN t.transaction_type = 'payment' THEN t.amount
+    WHEN t.transaction_type IN ('reversal', 'return') THEN -t.amount
+    ELSE 0
+  END AS signed_paid_amount
+FROM public.pre_fund_transactions t;
 -- This row exists before the migration so its initial canonical cache refresh
 -- proves commitments remain reserved instead of being released.
 INSERT INTO public.pre_fund_requests (
@@ -97,6 +133,22 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
+DO $$
+DECLARE v_legacy_column text; v_appended_column text;
+BEGIN
+  SELECT column_name INTO v_legacy_column
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'pre_fund_event_ledger_v'
+    AND ordinal_position = 13;
+  SELECT column_name INTO v_appended_column
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'pre_fund_event_ledger_v'
+    AND ordinal_position = 20;
+  IF v_legacy_column <> 'idempotency_key' OR v_appended_column <> 'created_at' THEN
+    RAISE EXCEPTION 'ledger view migration reordered existing columns: #13 %, #20 %',
+      v_legacy_column, v_appended_column;
+  END IF;
+END $$;
 INSERT INTO public.acct_accounts (code) VALUES ('1200'), ('2400');
 INSERT INTO public.pre_fund_requests (
   id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
@@ -576,7 +628,7 @@ END $$;
 
 -- Finance exception review queue: no-evidence decisions are append-only and
 -- cannot change a source, event, or canonical balance.
-INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, title)
+INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, description)
 VALUES ('20000000-0000-0000-0000-000000000006', 'approved', 10000, 'Legacy approved OCS');
 INSERT INTO public.pre_fund_transactions (
   pre_fund_request_id, transaction_type, amount, currency, reference, description,
@@ -633,7 +685,7 @@ INSERT INTO public.pre_fund_requests (
 ) VALUES (
   '10000000-0000-0000-0000-000000000006', 'USD Country Director Exclusion Fund', 'USD', 100, 100, 0, '2400', '1200'
 );
-INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, title)
+INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, description)
 VALUES ('20000000-0000-0000-0000-000000000007', 'approved', 1000, 'Other fund OCS exception');
 INSERT INTO public.pre_fund_transactions (
   pre_fund_request_id, transaction_type, amount, currency, reference, description,

@@ -226,10 +226,9 @@ SELECT
   t.description,
   t.user_id,
   t.created_by,
-  t.created_at,
-  t.receipt_url,
-  t.reconciled,
-  t.reconciled_at,
+  -- Keep the original view column order stable. PostgreSQL permits appended
+  -- columns in CREATE OR REPLACE VIEW, but rejects inserting created_at before
+  -- this legacy idempotency_key column on databases that already have the view.
   t.idempotency_key,
   t.reversal_of_id,
   t.event_reason,
@@ -250,7 +249,12 @@ SELECT
     WHEN t.transaction_type = 'payment' THEN t.amount
     WHEN t.transaction_type IN ('reversal', 'return') THEN -t.amount
     ELSE 0
-  END AS signed_paid_amount
+  END AS signed_paid_amount,
+  -- New audit/display fields are deliberately appended for migration safety.
+  t.created_at,
+  t.receipt_url,
+  t.reconciled,
+  t.reconciled_at
 FROM public.pre_fund_transactions t
 LEFT JOIN public.down_payment_requests dp
   ON t.source_table = 'down_payment_requests' AND dp.id = t.source_id

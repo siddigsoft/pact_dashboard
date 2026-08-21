@@ -112,7 +112,7 @@ base AS (
     END AS current_paid_amount,
     CASE
       WHEN h.source_table = 'operational_cost_submissions' THEN
-        COALESCE(ocs.title, ocs.description, 'Cost submission ' || h.source_id::text)
+        COALESCE(ocs.description, 'Cost submission ' || h.source_id::text)
       WHEN h.source_table = 'down_payment_requests' THEN
         COALESCE(dp.justification, dp.site_name, 'Down-payment request ' || h.source_id::text)
       ELSE COALESCE(h.description, h.source_id::text, 'Historic ledger exception')
