@@ -139,6 +139,17 @@ function datePart(value: unknown): string {
   return typeof value === 'string' && value ? value.split('T')[0] : '';
 }
 
+function formatIsoDate(value: unknown, pattern: string, fallback = '—'): string {
+  if (typeof value !== 'string' || !value) return fallback;
+
+  try {
+    const parsed = parseISO(value);
+    return Number.isNaN(parsed.getTime()) ? fallback : format(parsed, pattern);
+  } catch {
+    return fallback;
+  }
+}
+
 const SURPLUS_OPTIONS = [
   { value: 'carry_forward',    label: 'Carry Full Surplus to Next Period' },
   { value: 'return',           label: 'Return to Donor' },
@@ -214,7 +225,7 @@ async function generateReconciliationPDF(
 ): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const period = fund.start_date && fund.end_date
-    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    ? `${formatIsoDate(fund.start_date, 'MMM d, yyyy')} – ${formatIsoDate(fund.end_date, 'MMM d, yyyy')}`
     : '—';
 
   addPdfHeader(doc, 'Pre-Fund Reconciliation Report', `${fund.name}  ·  ${period}`);
@@ -263,7 +274,7 @@ async function generateReconciliationPDF(
     startY: y,
     head: [['Date', 'Type', 'Reference', 'Description', `Amount (${fund.currency})`, 'Reconciled']],
     body: transactions.map(t => [
-      format(parseISO(t.transaction_date), 'MMM d, yyyy'),
+      formatIsoDate(t.transaction_date, 'MMM d, yyyy'),
       TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
       t.reference ?? '—',
       t.description ?? '—',
@@ -310,7 +321,7 @@ async function generateReconciliationPDF(
         s.label,
         s.assigned_name,
         s.status.replace(/\b\w/g, c => c.toUpperCase()),
-        s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy HH:mm') : '—',
+        s.decided_at ? formatIsoDate(s.decided_at, 'MMM d, yyyy HH:mm') : '—',
       ]),
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
@@ -340,7 +351,7 @@ async function generateDonorStatementPDF(
 ): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const period = fund.start_date && fund.end_date
-    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    ? `${formatIsoDate(fund.start_date, 'MMM d, yyyy')} – ${formatIsoDate(fund.end_date, 'MMM d, yyyy')}`
     : '—';
 
   addPdfHeader(doc, 'Donor Pre-Fund Statement', `${fund.name}  ·  ${period}`);
@@ -400,7 +411,7 @@ async function generateDonorStatementPDF(
       startY: y,
       head: [['Date', 'Reference', 'Description', `Amount (${fund.currency})`]],
       body: group.map(t => [
-        format(parseISO(t.transaction_date), 'MMM d, yyyy'),
+        formatIsoDate(t.transaction_date, 'MMM d, yyyy'),
         t.reference ?? '—',
         t.description ?? '—',
         formatNumber(t.amount, 0),
@@ -484,7 +495,7 @@ async function generateDonorStatementPDF(
         s.label,
         s.assigned_name,
         'Approved',
-        s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy') : '—',
+        s.decided_at ? formatIsoDate(s.decided_at, 'MMM d, yyyy') : '—',
       ]),
       styles: { fontSize: 9, cellPadding: 2.5 },
       headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold' },
@@ -509,7 +520,7 @@ async function generateDonorStatementPDF(
       doc.text(s.assigned_name, x, y + 18);
       doc.setFont('helvetica', 'normal');
       doc.text(s.label, x, y + 22);
-      doc.text(s.decided_at ? format(parseISO(s.decided_at), 'MMM d, yyyy') : '—', x, y + 26);
+      doc.text(s.decided_at ? formatIsoDate(s.decided_at, 'MMM d, yyyy') : '—', x, y + 26);
     });
     y += 34;
   }
@@ -528,7 +539,7 @@ function handleExportReconciliationExcel(
   reconciliations: Reconciliation[],
 ) {
   const period = fund.start_date && fund.end_date
-    ? `${format(parseISO(fund.start_date), 'MMM d, yyyy')} – ${format(parseISO(fund.end_date), 'MMM d, yyyy')}`
+    ? `${formatIsoDate(fund.start_date, 'MMM d, yyyy')} – ${formatIsoDate(fund.end_date, 'MMM d, yyyy')}`
     : '—';
 
   exportStandardExcel({
@@ -547,7 +558,7 @@ function handleExportReconciliationExcel(
       ],
       rows: transactions.map(t => [
         t.transaction_date,
-        t.created_at ? format(parseISO(t.created_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+        t.created_at ? formatIsoDate(t.created_at, 'yyyy-MM-dd HH:mm:ss') : '—',
         TXN_TYPE_CFG[t.transaction_type]?.label ?? t.transaction_type,
         t.reference ?? '—',
         t.description ?? '—',
@@ -555,7 +566,7 @@ function handleExportReconciliationExcel(
         t.source_id ?? '—',
         t.amount,
         t.reconciled ? 'Yes' : 'No',
-        t.reconciled_at ? format(parseISO(t.reconciled_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+        t.reconciled_at ? formatIsoDate(t.reconciled_at, 'yyyy-MM-dd HH:mm:ss') : '—',
         t.user_id ? (profileMap.get(t.user_id) ?? t.user_id) : '—',
         t.created_by ? (profileMap.get(t.created_by) ?? t.created_by) : '—',
         t.receipt_url ?? '—',
@@ -589,7 +600,7 @@ function handleExportReconciliationExcel(
         rows: reconciliations.map(r => [
           r.period_start ?? '—',
           r.period_end ?? '—',
-          r.closed_at ? format(parseISO(r.closed_at), 'yyyy-MM-dd HH:mm:ss') : '—',
+          r.closed_at ? formatIsoDate(r.closed_at, 'yyyy-MM-dd HH:mm:ss') : '—',
           r.total_funded ?? 0,
           r.total_paid ?? 0,
           r.total_committed ?? 0,
@@ -2005,7 +2016,7 @@ export default function PreFundingReconciliation() {
                         <div key={sub.id} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-muted/30 border-t border-muted/40" data-testid={`row-unlinked-${sub.id}`}>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium truncate text-xs">{sub.title ?? sub.id}</p>
-                            <p className="text-[11px] text-muted-foreground">{sub._date ? format(parseISO(sub._date), 'MMM d, yyyy') : '—'}</p>
+                            <p className="text-[11px] text-muted-foreground">{formatIsoDate(sub._date, 'MMM d, yyyy')}</p>
                           </div>
                           <span className="font-mono text-xs shrink-0 text-muted-foreground">{sub.currency} {formatNumber(sub.amount, 0)}</span>
                           {!isCD && (
@@ -2344,7 +2355,7 @@ export default function PreFundingReconciliation() {
                             setGroupByDate('');
                             setSelectedTxnIds(prev => {
                               const next = new Set(prev);
-                              transactions.filter(t => t.transaction_date.startsWith(val)).forEach(t => next.add(t.id));
+                              transactions.filter(t => datePart(t.transaction_date).startsWith(val)).forEach(t => next.add(t.id));
                               return next;
                             });
                           }}>
@@ -2359,8 +2370,8 @@ export default function PreFundingReconciliation() {
                             <SelectContent>
                               {uniqueDates.map(d => (
                                 <SelectItem key={d} value={d} className="text-xs">
-                                  {format(parseISO(d), 'MMM d, yyyy')}
-                                  <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.transaction_date.startsWith(d)).length} txns</span>
+                                  {formatIsoDate(d, 'MMM d, yyyy')}
+                                  <span className="text-muted-foreground ml-1">· {transactions.filter(t => datePart(t.transaction_date).startsWith(d)).length} txns</span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -2563,8 +2574,8 @@ export default function PreFundingReconciliation() {
                               </button>
                             </TableCell>
                             <TableCell className="whitespace-nowrap">
-                              <div>{format(parseISO(t.transaction_date), 'MMM d, yyyy')}</div>
-                              <div className="text-[10px] text-muted-foreground/70">{format(parseISO(t.created_at), 'HH:mm')}</div>
+                              <div>{formatIsoDate(t.transaction_date, 'MMM d, yyyy')}</div>
+                              <div className="text-[10px] text-muted-foreground/70">{formatIsoDate(t.created_at, 'HH:mm')}</div>
                             </TableCell>
                             <TableCell>
                               <span className={cn('font-medium', TXN_TYPE_CFG[t.transaction_type]?.color)}>
@@ -2605,7 +2616,7 @@ export default function PreFundingReconciliation() {
                                   <span className="text-muted-foreground">{profileMap.get(t.created_by) ?? t.created_by.slice(0, 8)}</span>
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-muted-foreground/50">{format(parseISO(t.created_at), 'MMM d HH:mm')}</span>
+                                <span className="text-[10px] text-muted-foreground/50">{formatIsoDate(t.created_at, 'MMM d HH:mm')}</span>
                               )}
                             </TableCell>
                             <TableCell className="text-right font-mono">{t.currency} {formatNumber(t.amount, 0)}</TableCell>
@@ -2714,12 +2725,12 @@ export default function PreFundingReconciliation() {
                             <div>
                               <span className="font-semibold">
                                 {r.period_start && r.period_end
-                                  ? `${format(parseISO(r.period_start), 'MMM d')} – ${format(parseISO(r.period_end), 'MMM d, yyyy')}`
+                                  ? `${formatIsoDate(r.period_start, 'MMM d')} – ${formatIsoDate(r.period_end, 'MMM d, yyyy')}`
                                   : `Reconciliation #${idx + 1}`}
                               </span>
                               {r.closed_at && (
                                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                                  Closed {format(parseISO(r.closed_at), 'MMM d, yyyy HH:mm')}
+                                  Closed {formatIsoDate(r.closed_at, 'MMM d, yyyy HH:mm')}
                                 </p>
                               )}
                             </div>
@@ -2887,7 +2898,7 @@ export default function PreFundingReconciliation() {
               <div className="rounded-lg bg-muted/40 border px-3 py-2.5 space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date</span>
-                  <span className="font-medium">{format(parseISO(assignTxn.transaction_date), 'MMM d, yyyy')}</span>
+                  <span className="font-medium">{formatIsoDate(assignTxn.transaction_date, 'MMM d, yyyy')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount</span>
@@ -3038,15 +3049,15 @@ export default function PreFundingReconciliation() {
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 mb-1">
                     <Calendar className="h-2.5 w-2.5" /> Payment Date
                   </p>
-                  <p className="text-sm font-semibold">{format(parseISO(drillTxn.transaction_date), 'MMM d, yyyy')}</p>
-                  <p className="text-[11px] text-muted-foreground">{format(parseISO(drillTxn.transaction_date), 'EEEE')}</p>
+                  <p className="text-sm font-semibold">{formatIsoDate(drillTxn.transaction_date, 'MMM d, yyyy')}</p>
+                  <p className="text-[11px] text-muted-foreground">{formatIsoDate(drillTxn.transaction_date, 'EEEE')}</p>
                 </div>
                 <div className="bg-muted/30 border rounded-xl px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 mb-1">
                     <Clock className="h-2.5 w-2.5" /> Recorded At
                   </p>
-                  <p className="text-sm font-semibold">{format(parseISO(drillTxn.created_at), 'MMM d, yyyy')}</p>
-                  <p className="text-[11px] text-muted-foreground">{format(parseISO(drillTxn.created_at), 'HH:mm')}</p>
+                  <p className="text-sm font-semibold">{formatIsoDate(drillTxn.created_at, 'MMM d, yyyy')}</p>
+                  <p className="text-[11px] text-muted-foreground">{formatIsoDate(drillTxn.created_at, 'HH:mm')}</p>
                 </div>
               </div>
 
@@ -3092,7 +3103,7 @@ export default function PreFundingReconciliation() {
                       : 'Manual Entry'],
                     ['GL Journal',     drillTxn.gl_journal_entry_id ?? null],
                     ['Reconciled At',  drillTxn.reconciled && drillTxn.reconciled_at
-                      ? format(parseISO(drillTxn.reconciled_at), 'MMM d, yyyy HH:mm')
+                      ? formatIsoDate(drillTxn.reconciled_at, 'MMM d, yyyy HH:mm')
                       : null],
                     ['Transaction ID', drillTxn.id],
                   ] as [string, string | null][])
@@ -3518,7 +3529,7 @@ export default function PreFundingReconciliation() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date</span>
-                  <span className="font-medium">{format(parseISO(confirmUnlinkTxn.transaction_date), 'MMM d, yyyy')}</span>
+                  <span className="font-medium">{formatIsoDate(confirmUnlinkTxn.transaction_date, 'MMM d, yyyy')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount</span>
