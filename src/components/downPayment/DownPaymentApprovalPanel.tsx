@@ -2362,6 +2362,8 @@ export function DownPaymentApprovalPanel({
     const dupKey = request.mmpSiteEntryId ?? `${request.mmpName ?? ''}::${request.siteName}`;
     const isDuplicate = duplicateSiteNames.has(dupKey);
     const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
+    const preFundNames = [...new Set(request.preFundNames ?? [])];
+    const hasRecordedPayment = (request.totalPaidAmount ?? 0) > 0;
 
     // All OTHER active requests for the same site entry (siblings).
     // Match by mmpSiteEntryId when available so cross-MMP same-name sites are not confused.
@@ -2549,6 +2551,27 @@ export function DownPaymentApprovalPanel({
                     <span className="text-xs text-muted-foreground font-normal">{request.projectName}</span>
                   )}
                 </h4>
+                {preFundNames.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="w-fit gap-1 border-teal-200 bg-teal-50 text-[10px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300"
+                    title={preFundNames.join(', ')}
+                    data-testid={`badge-pre-fund-${request.id}`}
+                  >
+                    <Wallet className="h-3 w-3" />
+                    Pre-Fund: {preFundNames[0]}{preFundNames.length > 1 ? ` +${preFundNames.length - 1}` : ''}
+                  </Badge>
+                )}
+                {hasRecordedPayment && preFundNames.length === 0 && (
+                  <Badge
+                    variant="outline"
+                    className="w-fit gap-1 border-amber-200 bg-amber-50 text-[10px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                    data-testid={`badge-no-pre-fund-${request.id}`}
+                  >
+                    <Wallet className="h-3 w-3" />
+                    No Pre-Fund
+                  </Badge>
+                )}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1 font-mono" data-testid={`text-request-id-${request.id}`}>
                     <Hash className="h-3 w-3" />

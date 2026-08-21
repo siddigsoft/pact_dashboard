@@ -6060,6 +6060,11 @@ const CostSubmission = () => {
                        const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                        const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
                        const linkedMmpName = groupItems[0].mmp_file_id ? mmpNameMap.get(groupItems[0].mmp_file_id) || null : null;
+                        const groupPreFundNames = [...new Map(
+                          groupItems
+                            .flatMap(item => costPreFundLinks.get(item.id) ?? [])
+                            .map(link => [link.id, link.name]),
+                        ).values()];
                        const projPalette = getProjectPalette(groupItems[0].project_id);
                       const groupApprovableTier = grpApprovableTier;
                       const isExpanded = expandedGroupIds.has(groupId!);
@@ -6144,6 +6149,16 @@ const CostSubmission = () => {
                                         <ClipboardCheck className="h-3 w-3" />{linkedMmpName}
                                       </span>
                                     )}
+                                     {groupPreFundNames.length > 0 && (
+                                       <span
+                                         className="flex items-center gap-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 text-[11px] font-semibold"
+                                         title={groupPreFundNames.join(', ')}
+                                         data-testid={`badge-group-pre-fund-${groupId}`}
+                                       >
+                                         <Wallet className="h-3 w-3" />
+                                         Pre-Fund: {groupPreFundNames[0]}{groupPreFundNames.length > 1 ? ` +${groupPreFundNames.length - 1}` : ''}
+                                       </span>
+                                     )}
                                     {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
                                     <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy h:mm a')}</span>
                                   </div>
@@ -6399,6 +6414,9 @@ const CostSubmission = () => {
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
                     const linkedProjectName = oc.project_id ? allProjects.find(p => p.id === oc.project_id)?.name : null;
                     const requestId = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
+                    const preFundLinks = costPreFundLinks.get(oc.id) ?? [];
+                    const preFundNames = [...new Map(preFundLinks.map(link => [link.id, link.name])).values()];
+                    const hasRecordedPayment = (oc.amount_paid_cents ?? 0) > 0;
 
                     const cleanTier1Notes = oc.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const cleanTier2Notes = oc.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
@@ -6482,6 +6500,20 @@ const CostSubmission = () => {
                                     <Building2 className="h-2.5 w-2.5" />{oc.vendor}
                                   </span>
                                 )}
+                                 {preFundNames.length > 0 && (
+                                   <span
+                                     className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300"
+                                     title={preFundNames.join(', ')}
+                                     data-testid={`badge-pre-fund-${oc.id}`}
+                                   >
+                                     <Wallet className="h-2.5 w-2.5" />Pre-Fund: {preFundNames[0]}{preFundNames.length > 1 ? ` +${preFundNames.length - 1}` : ''}
+                                   </span>
+                                 )}
+                                 {hasRecordedPayment && preFundNames.length === 0 && (
+                                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300" data-testid={`badge-no-pre-fund-${oc.id}`}>
+                                     <Wallet className="h-2.5 w-2.5" />No Pre-Fund
+                                   </span>
+                                 )}
                                 <span className="text-[10px] text-gray-400/70 tabular-nums">#{requestId}</span>
                               </div>
                               {isRejected && oc.rejection_reason && (
@@ -7365,6 +7397,20 @@ const CostSubmission = () => {
                                     <Building2 className="h-2.5 w-2.5" />{oc.vendor}
                                   </span>
                                 )}
+                                 {preFundNames.length > 0 && (
+                                   <span
+                                     className="inline-flex items-center gap-0.5 rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[9px] font-medium text-teal-700 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300"
+                                     title={preFundNames.join(', ')}
+                                     data-testid={`badge-pre-fund-${oc.id}`}
+                                   >
+                                     <Wallet className="h-2.5 w-2.5" />Pre-Fund: {preFundNames[0]}{preFundNames.length > 1 ? ` +${preFundNames.length - 1}` : ''}
+                                   </span>
+                                 )}
+                                 {hasRecordedPayment && preFundNames.length === 0 && (
+                                   <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300" data-testid={`badge-no-pre-fund-${oc.id}`}>
+                                     <Wallet className="h-2.5 w-2.5" />No Pre-Fund
+                                   </span>
+                                 )}
                                 <span className="text-[9px] text-gray-400/60 tabular-nums">#{requestId}</span>
                               </div>
                             </div>
