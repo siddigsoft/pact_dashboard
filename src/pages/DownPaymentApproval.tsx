@@ -1065,24 +1065,6 @@ export default function DownPaymentApproval() {
             Filters
             {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1.5">{activeFilterCount} active</Badge>}
           </Button>
-          {canManagePreFundFilters && (
-            <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
-              <SelectTrigger className="h-9 w-[230px] text-xs" data-testid="select-page-pre-fund-filter">
-                <Wallet className="h-3.5 w-3.5 mr-1.5 shrink-0" />
-                <SelectValue placeholder="Paid from Pre-Fund" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All funding sources</SelectItem>
-                <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
-                <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
-                {preFundFilterOptions.map(fund => (
-                  <SelectItem key={fund.id} value={fund.id}>
-                    {fund.name} ({fund.currency})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           <Badge variant="secondary" className="text-xs">{filteredRequests.length} of {requests.length} requests</Badge>
         </div>
 
@@ -1163,6 +1145,27 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>
+                {canManagePreFundFilters && (
+                  <div>
+                    <Label className="text-xs">Paid from Pre-Fund</Label>
+                    <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
+                      <SelectTrigger data-testid="select-page-filter-pre-fund">
+                        <Wallet className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+                        <SelectValue placeholder="All funding sources" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All funding sources</SelectItem>
+                        <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
+                        <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
+                        {preFundFilterOptions.map(fund => (
+                          <SelectItem key={fund.id} value={fund.id}>
+                            {fund.name} ({fund.currency})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className="text-xs">Date From</Label>
                   <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))} data-testid="input-page-filter-date-from" />
