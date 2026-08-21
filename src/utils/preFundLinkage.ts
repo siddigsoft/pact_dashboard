@@ -14,6 +14,109 @@ export function createPreFundPaymentEventKey(params: {
   return `pf-payment:${params.sourceTable}:${params.sourceId}:${crypto.randomUUID()}`;
 }
 
+export type PreFundSourcePaymentLink = {
+  paymentEventId: string;
+  sourceTable: 'down_payment_requests' | 'operational_cost_submissions';
+  sourceId: string;
+  fundId: string;
+  fundName: string;
+  currency: string;
+  paymentAmount: number;
+  paymentDate: string | null;
+  receiptUrl: string | null;
+};
+
+/**
+ * Names one controlled source-payment operation. Reuse it only if the same
+ * submit action is retried after a transport error.
+ */
+export function createRequiredPreFundPaymentEventKey(sourceTable: string, sourceId: string): string {
+  return `source-payment:${sourceTable}:${sourceId}:${crypto.randomUUID()}`;
+}
+
+export async function fetchPreFundSourcePaymentLinks(
+  sourceTable: PreFundSourcePaymentLink['sourceTable'],
+  sourceIds: string[],
+): Promise<PreFundSourcePaymentLink[]> {
+  if (sourceIds.length === 0) return [];
+
+  const { data, error } = await (supabase as any)
+    .from('pre_fund_source_payment_links_v')
+    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url')
+    .eq('source_table', sourceTable)
+    .in('source_id', sourceIds);
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as any[]).map((row) => ({
+    paymentEventId: row.payment_event_id,
+    sourceTable: row.source_table,
+    sourceId: row.source_id,
+    fundId: row.fund_id,
+    fundName: row.fund_name,
+    currency: row.currency,
+    paymentAmount: Number(row.payment_amount ?? 0),
+    paymentDate: row.payment_date ?? null,
+    receiptUrl: row.receipt_url ?? null,
+  }));
+}
+
+export async function recordRequiredPreFundPayment(params: {
+  sourceTable: PreFundSourcePaymentLink['sourceTable'];
+  sourceId: string;
+  fundId: string;
+  amount: number;
+  currency: string;
+  paymentDate: string;
+  createdBy: string | null;
+  receiptUrl?: string | null;
+  notes?: string | null;
+  paymentEventKey: string;
+}): Promise<{ success: boolean; idempotent?: boolean; transactionId?: string; message?: string }> {
+  const { data, error } = await (supabase as any).rpc('record_required_pre_fund_payment_rpc', {
+    p_source_table: params.sourceTable,
+    p_source_id: params.sourceId,
+    p_fund_id: params.fundId,
+    p_amount: params.amount,
+    p_currency: params.currency,
+    p_payment_date: params.paymentDate.slice(0, 10),
+    p_created_by: params.createdBy,
+    p_receipt_url: params.receiptUrl ?? null,
+    p_notes: params.notes ?? null,
+    p_payment_event_key: params.paymentEventKey,
+  });
+
+  if (error) {
+    const notDeployed = (error as any).code === 'PGRST202'
+      || String(error.message).toLowerCase().includes('could not find the function')
+      || String(error.message).toLowerCase().includes('does not exist');
+    throw new Error(
+      notDeployed
+        ? 'Apply 20260821b_required_pre_fund_payment_links.sql before recording new payments.'
+        : error.message,
+    );
+  }
+  if (data?.success !== true) throw new Error(data?.error ?? 'Pre-Fund payment was not recorded.');
+  return {
+    success: true,
+    idempotent: data?.idempotent === true,
+    transactionId: data?.transaction_id,
+  };
+}
+
+export async function correctRequiredPreFundPaymentLink(params: {
+  originalPaymentEventId: string;
+  replacementFundId: string;
+  reason: string;
+}): Promise<void> {
+  const { data, error } = await (supabase as any).rpc('correct_required_pre_fund_payment_link_rpc', {
+    p_original_payment_event_id: params.originalPaymentEventId,
+    p_new_fund_id: params.replacementFundId,
+    p_reason: params.reason,
+  });
+  if (error) throw new Error(error.message);
+  if (data?.success !== true) throw new Error(data?.error ?? 'Fund correction was not recorded.');
+}
+
 async function linkPaymentAtomically(params: {
   fundId: string;
   fundName: string;

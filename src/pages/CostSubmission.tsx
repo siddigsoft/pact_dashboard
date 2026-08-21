@@ -375,6 +375,8 @@ const CostSubmission = () => {
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
+  const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string }>>>(new Map());
   // Super-admin only: filter by the current approval tier a submission is waiting at
   const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
@@ -387,6 +389,20 @@ const CostSubmission = () => {
 
   // Maps pre_fund_transaction_id → fund name for the reports tab (lazy — only when Reports is open)
   const [txnToFundMap, setTxnToFundMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { fetchPreFundSourcePaymentLinks } = await import('@/utils/preFundLinkage');
+        const links = await fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id));
+        if (!active) return;
+        const next = new Map<string, Array<{ id: string; name: string }>>();
+        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), { id: link.fundId, name: link.fundName }]));
+        setCostPreFundLinks(next);
+      } catch { if (active) setCostPreFundLinks(new Map()); }
+    })();
+    return () => { active = false; };
+  }, [operationalCosts]);
   useEffect(() => {
     if (activeTab !== 'reports') return;
     const txnIds = [...new Set(
@@ -681,6 +697,7 @@ const CostSubmission = () => {
     preFundId: string | null;
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
     payAmountStr: string;
+    paymentEventKey?: string;
   }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
@@ -2451,7 +2468,10 @@ const CostSubmission = () => {
     const alreadyPaidCents = oc.amount_paid_cents ?? 0;
     const remainingCents = oc.amount_cents - alreadyPaidCents;
     const remainingAmount = (remainingCents / 100).toFixed(2);
-    setMarkAsPaidDialog({ open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: remainingAmount });
+    setMarkAsPaidDialog({
+      open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: remainingAmount,
+      paymentEventKey: `source-payment:operational_cost_submissions:${oc.id}:${crypto.randomUUID()}`,
+    });
     // Async: load pre-funds and update dialog state once available
     (async () => {
       let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
@@ -2504,7 +2524,7 @@ const CostSubmission = () => {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach at least one payment receipt before confirming. / يرجى إرفاق إيصال دفع واحد على الأقل قبل التأكيد.", variant: "destructive" });
       return;
     }
-    if (markAsPaidDialog.preFunds.length > 0 && !markAsPaidDialog.preFundId) {
+    if (!markAsPaidDialog.preFundId) {
       toast({ title: "Pre-Fund Required / التمويل المسبق مطلوب", description: "Please select a pre-fund to charge this payment to. / يرجى اختيار التمويل المسبق لخصم هذه الدفعة منه.", variant: "destructive" });
       return;
     }
@@ -2548,97 +2568,24 @@ const CostSubmission = () => {
         : uploadedUrls.length > 1 ? JSON.stringify(uploadedUrls) : null;
 
       const now = new Date().toISOString();
-      const updatePayload: Record<string, unknown> = {
-        // The canonical pre-fund ledger accepts only paid/reconciled or
-        // partially_paid OCS sources. Persist this state before linking the
-        // immutable payment event so the cache refresh includes the first
-        // instalment rather than treating it as an unverified approved row.
-        status: isFullPayment ? 'paid' : 'partially_paid',
-        amount_paid_cents: newAmountPaidCents,
-        paid_at: isFullPayment ? now : (oc.paid_at ?? null),
-        paid_by: isFullPayment ? currentUser.id : (oc.paid_by ?? null),
-        updated_at: now,
-        ...(proofUrl ? { payment_proof_url: proofUrl, payment_proof_uploaded_at: now } : {}),
-        ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-      };
-
-      const { error } = await supabase
-        .from('operational_cost_submissions')
-        .update(updatePayload)
-        .eq('id', oc.id);
-
-      if (error) {
-        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        toast({
-          title: "Payment Sent / تم إرسال الدفعة",
-          description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
-        });
-        // Link to pre-fund — use explicitly selected fund, or fall back to auto-detection
-        try {
-          const { linkPaymentToPreFund, linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-          const selectedPreFundId = markAsPaidDialog.preFundId;
-          const paymentEventKey = createPreFundPaymentEventKey({
-            sourceTable: 'operational_cost_submissions',
-            sourceId: oc.id,
-            amount: payAmountCents / 100,
-            paymentDate: now,
-            reference: oc.reference_number ?? null,
-            receiptUrl: proofUrl,
-          });
-          if (selectedPreFundId) {
-            const selectedFundInfo = markAsPaidDialog.preFunds.find(f => f.id === selectedPreFundId);
-            const pfResult = await linkPaymentToKnownFund({
-              fundId: selectedPreFundId,
-              fundName: selectedFundInfo?.name ?? selectedPreFundId,
-              amount: payAmountCents / 100,
-              currency: oc.currency,
-              sourceTable: 'operational_cost_submissions',
-              sourceId: oc.id,
-              reference: oc.reference_number ?? null,
-              description: (oc as any).title ?? (oc as any).description ?? null,
-              paymentDate: now,
-              createdBy: currentUser.id,
-              userId: oc.submitted_by ?? null,
-              receiptUrl: proofUrl,
-              paymentEventKey,
-            });
-            if (pfResult.linked) {
-              toast({ title: 'Charged to Pre-Fund', description: `${oc.currency} ${(payAmountCents / 100).toLocaleString()} deducted from "${selectedFundInfo?.name ?? selectedPreFundId}".` });
-            } else {
-              toast({ title: 'Pre-Fund link failed', description: pfResult.message, variant: 'destructive' });
-            }
-          } else {
-            const pfResult = await linkPaymentToPreFund({
-              amount: payAmountCents / 100,
-              currency: oc.currency,
-              countryId: (oc as any).country_id ?? null,
-              projectId: (oc as any).project_id ?? null,
-              costCategory: (oc as any).expense_category ?? null,
-              sourceTable: 'operational_cost_submissions',
-              sourceId: oc.id,
-              reference: oc.reference_number ?? null,
-              description: (oc as any).title ?? (oc as any).description ?? null,
-              paymentDate: now,
-              createdBy: currentUser.id,
-              userId: oc.submitted_by ?? null,
-              paymentEventKey,
-            });
-            if (pfResult.linked) {
-              toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
-            } else if (pfResult.needsManualSelection) {
-              toast({
-                title: 'Manual Fund Link Required',
-                description: `${pfResult.message} Candidates: ${(pfResult.candidates ?? []).map(c => c.name).join(', ')}.`,
-                variant: 'destructive',
-              });
-            } else {
-              console.warn('[Pre-Fund] Auto-link skipped:', pfResult.message);
-            }
-          }
-        } catch (pfErr: any) {
-          console.warn('[Pre-Fund] Linkage error (payment still marked paid):', pfErr?.message);
-        }
+      const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
+      await recordRequiredPreFundPayment({
+        sourceTable: 'operational_cost_submissions',
+        sourceId: oc.id,
+        fundId: markAsPaidDialog.preFundId,
+        amount: payAmountCents / 100,
+        currency: oc.currency,
+        paymentDate: now,
+        createdBy: currentUser.id,
+        receiptUrl: proofUrl,
+        notes: notes.trim() || null,
+        paymentEventKey: markAsPaidDialog.paymentEventKey ?? createRequiredPreFundPaymentEventKey('operational_cost_submissions', oc.id),
+      });
+      toast({
+        title: "Payment Sent / تم إرسال الدفعة",
+        description: "The payment and its selected Pre-Fund ledger event were saved together."
+      });
+      {
         // Notify the submitter
         const paidNowAmount = (payAmountCents / 100).toLocaleString();
         const totalAmount = (oc.amount_cents / 100).toLocaleString();
@@ -2777,7 +2724,7 @@ const CostSubmission = () => {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt that covers all selected payments.", variant: "destructive" });
       return;
     }
-    if (batchCostPayDialog.preFunds.length > 0 && !preFundId) {
+    if (!preFundId) {
       toast({ title: "Pre-Fund Required / التمويل المسبق مطلوب", description: "Please select a pre-fund to charge these payments to. / يرجى اختيار التمويل المسبق لخصم هذه الدفعات منه.", variant: "destructive" });
       return;
     }
@@ -2832,72 +2779,24 @@ const CostSubmission = () => {
         }
         // Guard: skip if computed pay amount is still zero (e.g. rounding down)
         if (payNowCents <= 0) { failCount++; continue; }
-        const newPaidCents = (sub.amount_paid_cents ?? 0) + payNowCents;
-        const isFullyPaid = newPaidCents >= sub.amount_cents;
-        const { error } = await supabase.from('operational_cost_submissions').update({
-          status: isFullyPaid ? 'paid' : 'partially_paid',
-          amount_paid_cents: newPaidCents,
-          paid_at: now,
-          paid_by: currentUser.id,
-          updated_at: now,
-          payment_proof_url: proofUrl,
-          payment_proof_uploaded_at: now,
-          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-        }).eq('id', sub.id);
-        if (error) { failCount++; } else {
+        try {
+          const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
+          await recordRequiredPreFundPayment({
+            sourceTable: 'operational_cost_submissions',
+            sourceId: sub.id,
+            fundId: preFundId,
+            amount: payNowCents / 100,
+            currency: sub.currency,
+            paymentDate: now,
+            createdBy: currentUser.id,
+            receiptUrl: proofUrl,
+            notes: notes.trim() || null,
+            paymentEventKey: createRequiredPreFundPaymentEventKey('operational_cost_submissions', sub.id),
+          });
           successCount++;
-          // Link to selected pre-fund (explicit) or auto-link to active fund (fallback)
-          try {
-            const { linkPaymentToPreFund, linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-            const paymentEventKey = createPreFundPaymentEventKey({
-              sourceTable: 'operational_cost_submissions',
-              sourceId: sub.id,
-              amount: payNowCents / 100,
-              paymentDate: now,
-              reference: sub.reference_number ?? null,
-              receiptUrl: proofUrl,
-            });
-            let r;
-            if (preFundId) {
-              // User explicitly chose a fund — charge it directly (same as single Mark Paid flow)
-              const selectedFundInfo = batchCostPayDialog.preFunds.find(f => f.id === preFundId);
-              r = await linkPaymentToKnownFund({
-                fundId: preFundId,
-                fundName: selectedFundInfo?.name ?? preFundId,
-                amount: payNowCents / 100,
-                currency: sub.currency,
-                sourceTable: 'operational_cost_submissions',
-                sourceId: sub.id,
-                reference: sub.reference_number ?? null,
-                description: (sub as any).title ?? null,
-                paymentDate: now,
-                createdBy: currentUser.id,
-                userId: sub.submitted_by ?? null,
-                receiptUrl: proofUrl,
-                paymentEventKey,
-              });
-            } else {
-              r = await linkPaymentToPreFund({
-                amount: payNowCents / 100,
-                currency: sub.currency,
-                countryId: (sub as any).country_id ?? null,
-                projectId: (sub as any).project_id ?? null,
-                costCategory: (sub as any).expense_category ?? null,
-                sourceTable: 'operational_cost_submissions',
-                sourceId: sub.id,
-                reference: sub.reference_number ?? null,
-                description: (sub as any).title ?? null,
-                paymentDate: now,
-                createdBy: currentUser.id,
-                userId: sub.submitted_by ?? null,
-                receiptUrl: proofUrl,
-                paymentEventKey,
-              });
-            }
-            if (!r.linked) console.warn('[Pre-Fund] Bulk link skipped:', r.message);
-          } catch (pfErr: any) {
-            console.warn('[Pre-Fund] Bulk link error:', pfErr?.message);
-          }
+        } catch (error) {
+          console.warn('[Pre-Fund] Bulk payment failed:', error);
+          failCount++;
         }
       }
 
@@ -5251,6 +5150,22 @@ const CostSubmission = () => {
               </Select>
             )}
 
+            {(isAdminOrSuperUser || isSuperAdmin) && (
+              <Select value={costPreFundFilter} onValueChange={setCostPreFundFilter} data-testid="select-cost-pre-fund-filter">
+                <SelectTrigger className="h-8 text-xs w-[210px]">
+                  <SelectValue placeholder="Paid from Pre-Fund" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">💰 All funding sources</SelectItem>
+                  <SelectItem value="__unlinked__">⚠ Unlinked historical payment</SelectItem>
+                  <SelectItem value="__multiple__">🔀 Multiple Pre-Funds</SelectItem>
+                  {[...new Map([...costPreFundLinks.values()].flat().map(link => [link.id, link.name])).entries()]
+                    .sort(([, a], [, b]) => String(a).localeCompare(String(b)))
+                    .map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Approval-tier filter — Super Admin only */}
             {isSuperAdmin && (
               <Select value={tierFilter} onValueChange={v => setTierFilter(v as typeof tierFilter)} data-testid="select-tier-filter">
@@ -5542,6 +5457,14 @@ const CostSubmission = () => {
               if (showMyActionOnly) result = result.filter(oc =>
                 canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc) || canTier4Approve(oc)
               );
+              if (costPreFundFilter !== 'all') {
+                result = result.filter(oc => {
+                  const links = costPreFundLinks.get(oc.id) ?? [];
+                  if (costPreFundFilter === '__unlinked__') return links.length === 0 && (oc.amount_paid_cents ?? 0) > 0;
+                  if (costPreFundFilter === '__multiple__') return links.length > 1;
+                  return links.some(link => link.id === costPreFundFilter);
+                });
+              }
               return result;
             })();
 

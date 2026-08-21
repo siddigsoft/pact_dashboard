@@ -697,6 +697,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       toast({ title: 'Receipt Required / الإيصال مطلوب', description: 'Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.', variant: 'destructive' });
       return;
     }
+    if (!singlePayPreFundId) {
+      toast({ title: 'Pre-Fund Required / التمويل المسبق مطلوب', description: 'Select the Pre-Fund to charge before recording payment.', variant: 'destructive' });
+      return;
+    }
 
     setProcessing(true);
     let receiptUrl: string | null = null;
@@ -713,52 +717,20 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         receiptUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
       }
 
-      const success = await processPayment({
-        requestId: selectedRequest.id,
+      const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
+      await recordRequiredPreFundPayment({
+        sourceTable: 'down_payment_requests',
+        sourceId: selectedRequest.id,
+        fundId: singlePayPreFundId,
         amount: paymentAmount,
-        processedBy: currentUser.id,
-        processedByName: currentUser.fullName || currentUser.email,
-        notes,
+        currency: selectedRequest.currency || 'SDG',
+        paymentDate: new Date().toISOString(),
+        createdBy: currentUser.id,
         receiptUrl,
+        notes: notes.trim() || null,
+        paymentEventKey: createRequiredPreFundPaymentEventKey('down_payment_requests', selectedRequest.id),
       });
-
-      if (success) {
-        // Link to selected pre-fund (if any) — done after processPayment so the source record exists
-        if (singlePayPreFundId) {
-          try {
-            const { linkPaymentToKnownFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-            const fundInfo = singlePayPreFunds.find(f => f.id === singlePayPreFundId);
-            const pfResult = await linkPaymentToKnownFund({
-              fundId: singlePayPreFundId,
-              fundName: fundInfo?.name ?? singlePayPreFundId,
-              amount: paymentAmount,
-              currency: selectedRequest.currency || 'SDG',
-              sourceTable: 'down_payment_requests',
-              sourceId: selectedRequest.id,
-              reference: selectedRequest.requestNumber ?? null,
-              description: selectedRequest.siteName ?? null,
-              paymentDate: new Date().toISOString(),
-              createdBy: currentUser.id,
-              userId: selectedRequest.requestedBy ?? null,
-              receiptUrl: receiptUrl ?? null,
-              paymentEventKey: createPreFundPaymentEventKey({
-                sourceTable: 'down_payment_requests',
-                sourceId: selectedRequest.id,
-                amount: paymentAmount,
-                paymentDate: new Date().toISOString(),
-                reference: selectedRequest.requestNumber ?? null,
-                receiptUrl: receiptUrl ?? null,
-              }),
-            });
-            if (pfResult.linked) {
-              toast({ title: 'Charged to Pre-Fund', description: `SDG ${paymentAmount.toLocaleString()} deducted from "${fundInfo?.name ?? singlePayPreFundId}".` });
-            } else {
-              toast({ title: 'Pre-Fund link failed', description: pfResult.message, variant: 'destructive' });
-            }
-          } catch (pfErr: any) {
-            console.warn('[Pre-Fund] Linkage error (payment still processed):', pfErr?.message);
-          }
-        }
+      {
         closeDialog();
       }
     } finally {
@@ -1800,60 +1772,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const handleConfirmAdvanceMarkAsPaid = async () => {
-    const { request: req, proofFile, notes } = markAsPaidDialog;
-    if (!req || !currentUser?.id) return;
-    if (!proofFile) {
-      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
-      return;
-    }
-    setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
-    setMarkPaidProcessing(true);
-    try {
-      let proofUrl: string | null = null;
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
-      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
-      const filePath = `payment-proofs/advance_${timestamp}_${random}.${extension}`;
-      const { error: uploadErr } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
-      if (uploadErr) throw new Error(uploadErr.message);
-      proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
-
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'fully_paid',
-          total_paid_amount: req.approvedAmount || req.requestedAmount,
-          remaining_amount: 0,
-          updated_at: now,
-          payment_proof_url: proofUrl,
-          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-          payment_proof_uploaded_at: now,
-        } as any)
-        .eq('id', req.id);
-
-      if (error) {
-        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        toast({
-          title: "Marked as Paid / تم التحديد كمدفوع",
-          description: "The advance has been marked as fully paid with receipt. / تم تحديد السلفة كمدفوعة بالكامل مع الإيصال.",
-        });
-        setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
-        refreshRequests();
-      }
-    } catch (err: any) {
-      toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
-    } finally {
-      setMarkAsPaidDialog(prev => ({ ...prev, uploading: false }));
-      setMarkPaidProcessing(false);
-    }
+    const req = markAsPaidDialog.request;
+    if (!req) return;
+    setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    await openActionDialog(req, 'pay');
   };
 
   const handleMarkAsPaid = (req: DownPaymentRequest) => {
-    setMarkAsPaidDialog({ open: true, request: req, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    // Route legacy full-pay affordances through the required-fund payment
+    // dialog instead of directly updating a paid source row.
+    void openActionDialog(req, 'pay');
   };
 
   const handleOpenBatchPay = async (reqs: DownPaymentRequest[]) => {
@@ -1957,10 +1885,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const handleConfirmBatchPay = async () => {
-    const { requests: reqs, proofFiles, notes, partialPercent } = batchPayDialog;
+    const { requests: reqs, proofFiles, notes, partialPercent, preFundId } = batchPayDialog;
     if (!currentUser?.id || reqs.length === 0) return;
     if (proofFiles.length === 0) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt before confirming.", variant: "destructive" });
+      return;
+    }
+    if (!preFundId) {
+      toast({ title: 'Pre-Fund Required / التمويل المسبق مطلوب', description: 'Select the Pre-Fund to charge before recording this batch.', variant: 'destructive' });
       return;
     }
     setBatchPayDialog(prev => ({ ...prev, uploading: true }));
@@ -1979,6 +1911,46 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const now = new Date().toISOString();
       const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
+      // Source status and immutable fund events must be written together.
+      // Do not call the legacy batch RPC: it updates source rows first and
+      // attempted to link the selected fund afterwards.
+      const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
+      const results = await Promise.allSettled(reqs.map(async (req) => {
+        const basis = getBatchPayBasis(req);
+        const amount = isPartial && partialPercent
+          ? Math.round(basis * partialPercent) / 100
+          : basis;
+        return recordRequiredPreFundPayment({
+          sourceTable: 'down_payment_requests',
+          sourceId: req.id,
+          fundId: preFundId,
+          amount,
+          currency: req.currency || 'SDG',
+          paymentDate: now,
+          createdBy: currentUser.id,
+          receiptUrl: proofUrl,
+          notes: notes.trim() || null,
+          paymentEventKey: createRequiredPreFundPaymentEventKey('down_payment_requests', req.id),
+        });
+      }));
+      const successCount = results.filter(result => result.status === 'fulfilled').length;
+      const failures = results
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
+      if (successCount === 0) throw new Error(failures.join(' | ') || 'No advance payments were recorded.');
+      toast({
+        title: failures.length ? 'Batch partly recorded' : 'Batch recorded',
+        description: failures.length
+          ? `${successCount} payment(s) recorded. ${failures.length} failed without changing their source rows.`
+          : `${successCount} payment(s) recorded with the selected Pre-Fund.`,
+        variant: failures.length ? 'destructive' : 'default',
+      });
+      setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
+      clearSelection();
+      await refreshRequests();
+      return;
+
+      {
       // ── Try SECURITY DEFINER RPC first (bypasses RLS / trigger issues) ─────
       const { data: rpcData, error: rpcError } = await supabase.rpc('batch_mark_advances_paid', {
         p_request_ids: reqs.map(r => r.id),
@@ -2011,24 +1983,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           const remaining      = isPartial && partialPercent ? basisAmt - paidThisRound : 0;
           const newTotalPaid   = (req.totalPaidAmount || 0) + paidThisRound;
           const newStatus      = isPartial && partialPercent && partialPercent < 100 ? 'partially_paid' : 'fully_paid';
-          const { error: rowErr } = await (supabase as any)
-            .from('down_payment_requests')
-            .update({
-              status:                    newStatus,
-              total_paid_amount:         newTotalPaid,
-              remaining_amount:          remaining,
-              payment_proof_url:         proofUrl,
-              payment_proof_notes:       notes.trim() || null,
-              payment_proof_uploaded_at: fallbackNow,
-              updated_at:                fallbackNow,
-            })
-            .eq('id', req.id);
-          if (rowErr) {
-            failCount++;
-            console.error('[BatchPay] Fallback row update failed:', req.id, rowErr.message, rowErr.code);
-          } else {
-            successCount++;
-          }
+          // Direct paid-status writes are deliberately prohibited. The
+          // controlled batch path above is required so a source cannot become
+          // paid without its immutable selected Pre-Fund event.
+          throw new Error(`Legacy batch payment fallback is disabled for ${req.id}; refresh and use the controlled Pre-Fund payment flow.`);
         }
         if (failCount > 0 && successCount === 0) {
           throw new Error(`Payment blocked by database permissions. Please ask your admin to apply the batch_mark_advances_paid SQL in Supabase SQL Editor.`);
@@ -2268,6 +2226,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       });
       setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
       clearSelection();
+      }
     } catch (err: any) {
       toast({ title: "Error / خطأ", description: err.message || "Batch payment failed.", variant: "destructive" });
     } finally {

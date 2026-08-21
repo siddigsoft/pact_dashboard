@@ -1075,6 +1075,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       });
       return false;
     }
+    if (!data.preFundId) {
+      toastRef.current({
+        title: 'Pre-Fund Required / التمويل المسبق مطلوب',
+        description: 'Select the Pre-Fund before recording this payment.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
       return await withTimeout(
         (async () => {
@@ -1137,15 +1145,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const transactionData = Array.isArray(transactionRows) ? transactionRows[0] : transactionRows;
       if (!transactionData) throw new Error('Failed to record wallet transaction');
 
-      const newPaidAmount = request.totalPaidAmount + data.amount;
-      const effectiveApprovedAmount = request.approvedAmount || request.requestedAmount;
-      const newRemainingAmount = effectiveApprovedAmount - newPaidAmount;
       const transactionIds = [...request.walletTransactionIds, transactionData.id];
-
-      let newStatus: DownPaymentStatus = 'partially_paid';
-      if (newRemainingAmount <= 0) {
-        newStatus = 'fully_paid';
-      }
 
       let updatedInstallmentPlan = request.installmentPlan;
       if (data.installmentIndex !== undefined && request.paymentType === 'installments') {
@@ -1158,24 +1158,56 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       const processedAt = new Date().toISOString();
 
+      const eventKey = data.paymentEventKey ?? `source-payment:down_payment_requests:${data.requestId}:${crypto.randomUUID()}`;
+      const { data: paymentResult, error: paymentError } = await (supabase as any).rpc(
+        'record_required_pre_fund_payment_rpc',
+        {
+          p_source_table: 'down_payment_requests',
+          p_source_id: data.requestId,
+          p_fund_id: data.preFundId,
+          p_amount: data.amount,
+          p_currency: request.currency || 'SDG',
+          p_payment_date: new Date().toISOString().slice(0, 10),
+          p_created_by: data.processedBy,
+          p_receipt_url: data.receiptUrl,
+          p_notes: data.notes?.trim() || null,
+          p_payment_event_key: eventKey,
+        },
+      );
+      if (paymentError || paymentResult?.success !== true) {
+        // Compensate the wallet evidence created immediately above. The source
+        // and Pre-Fund transaction have not changed when this RPC rejects.
+        const { error: walletRollbackError } = await supabase
+          .from('wallet_transactions')
+          .delete()
+          .eq('id', transactionData.id);
+        if (walletRollbackError) {
+          console.error('Failed to compensate wallet transaction after payment rejection:', walletRollbackError);
+        }
+        throw new Error(paymentError?.message || paymentResult?.error || 'Pre-Fund payment could not be recorded');
+      }
+
+      // The controlled RPC owns paid amount and status. This follow-up only
+      // preserves non-financial wallet/installment metadata.
       const { error: requestUpdateError } = await supabase
         .from('down_payment_requests')
         .update({
-          total_paid_amount: newPaidAmount,
-          remaining_amount: newRemainingAmount,
-          status: newStatus,
           wallet_transaction_ids: transactionIds,
           installment_plan: updatedInstallmentPlan,
           updated_at: processedAt,
-          ...(data.receiptUrl ? {
-            payment_proof_url: data.receiptUrl,
-            payment_proof_uploaded_at: processedAt,
-            ...(data.notes?.trim() ? { payment_proof_notes: data.notes.trim() } : {}),
-          } : {}),
         } as any)
         .eq('id', data.requestId);
 
-      if (requestUpdateError) throw requestUpdateError;
+      if (requestUpdateError) {
+        // Financial state has already committed atomically in the server RPC;
+        // do not present it as a failed payment because optional wallet metadata
+        // could not be persisted.
+        console.error('Could not save wallet/installment metadata after payment:', requestUpdateError);
+      }
+
+      const dueAmount = request.approvedAmount || request.requestedAmount;
+      const resultingRemainingAmount = Math.max(0, dueAmount - (request.totalPaidAmount + data.amount));
+      const resultingStatus = resultingRemainingAmount === 0 ? 'fully_paid' : 'partially_paid';
 
       toastRef.current({
         title: 'Advance Recorded',
@@ -1221,9 +1253,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const dpEmailDetails: Array<{ label: string; value: string }> = [
         { label: 'Request Type',    value: 'Transport Advance (Down Payment)' },
         { label: 'Site / Location', value: request.siteName || 'Unknown Site' },
-        { label: newStatus === 'fully_paid' ? 'Amount Disbursed' : 'Partial Amount Paid', value: `${data.amount.toLocaleString()} SDG` },
-        ...(newStatus !== 'fully_paid' ? [
-          { label: 'Remaining Balance', value: `${newRemainingAmount.toLocaleString()} SDG` },
+        { label: resultingStatus === 'fully_paid' ? 'Amount Disbursed' : 'Partial Amount Paid', value: `${data.amount.toLocaleString()} SDG` },
+        ...(resultingStatus !== 'fully_paid' ? [
+          { label: 'Remaining Balance', value: `${resultingRemainingAmount.toLocaleString()} SDG` },
         ] : []),
         { label: 'Disbursed By',    value: dpDisbursedByName },
         { label: 'Payment Date',    value: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) },
@@ -1231,12 +1263,12 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       ];
       NotificationTriggerService.send({
         userId: request.requestedBy,
-        title: newStatus === 'fully_paid'
+        title: resultingStatus === 'fully_paid'
           ? 'Advance Fully Disbursed ✅ / تم صرف السلفة بالكامل'
           : 'Advance Partially Disbursed 💰 / تم صرف جزء من السلفة',
-        message: newStatus === 'fully_paid'
+        message: resultingStatus === 'fully_paid'
           ? `Your full transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Please confirm receipt.`
-          : `A partial transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Remaining: ${newRemainingAmount.toLocaleString()} SDG.`,
+          : `A partial transport advance of ${data.amount.toLocaleString()} SDG for "${request.siteName}" has been paid. Remaining: ${resultingRemainingAmount.toLocaleString()} SDG.`,
         type: 'success',
         category: 'financial',
         priority: 'high',

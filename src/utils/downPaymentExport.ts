@@ -48,6 +48,17 @@ export function filterDownPayments(
     if (filters.amountMax && req.requestedAmount > filters.amountMax) {
       return false;
     }
+    if (filters.preFundId === '__unlinked__' && (req.preFundNames?.length ?? 0) > 0) {
+      return false;
+    }
+    if (filters.preFundId === '__multiple__' && (req.preFundNames?.length ?? 0) < 2) {
+      return false;
+    }
+    if (filters.preFundId && !['__unlinked__', '__multiple__'].includes(filters.preFundId)) {
+      // The list receives resolved names for display. The page applies the
+      // precise UUID filter before this shared export predicate.
+      if (!(req as any).preFundIds?.includes(filters.preFundId)) return false;
+    }
     if (filters.searchTerm) {
       const term = filters.searchTerm.toLowerCase();
       const searchFields = [

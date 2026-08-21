@@ -31,6 +31,7 @@ import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
 import { dispatchNotification } from '@/lib/notify';
+import { createRequiredPreFundPaymentEventKey, fetchPreFundSourcePaymentLinks } from '@/utils/preFundLinkage';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -526,7 +527,24 @@ export default function DownPaymentApproval() {
     req: DownPaymentRequest | null;
     partialAmount: string;
     saving: boolean;
-  }>({ open: false, req: null, partialAmount: '', saving: false });
+    paymentEventKey?: string;
+    preFundId: string;
+    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+  }>({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
+  const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string }[]>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+    void fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id))
+      .then(links => {
+        if (!active) return;
+        const next = new Map<string, { id: string; name: string }[]>();
+        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), { id: link.fundId, name: link.fundName }]));
+        setPreFundLinksByRequest(next);
+      })
+      .catch(() => { if (active) setPreFundLinksByRequest(new Map()); });
+    return () => { active = false; };
+  }, [requests]);
 
   // Fetch GL bridge log for fully_paid down_payment_requests
   useEffect(() => {
@@ -547,96 +565,25 @@ export default function DownPaymentApproval() {
       });
   }, [requests]);
 
-  const handleMarkFullyPaid = useCallback(async (req: DownPaymentRequest) => {
-    if (!window.confirm(`Mark "${req.requestedByName || 'this advance'}" (${(req.approvedAmount ?? req.requestedAmount).toLocaleString()} SDG) as Fully Paid?\n\nThis will unblock the cycle close gate.`)) return;
-    setMarkingPaidId(req.id);
+  const openPreFundPaymentDialog = useCallback(async (req: DownPaymentRequest, amount: number) => {
+    setPartialPayDialog({
+      open: true, req, partialAmount: amount.toFixed(2), saving: false, preFundId: '', preFunds: [],
+      paymentEventKey: createRequiredPreFundPaymentEventKey('down_payment_requests', req.id),
+    });
     try {
-      const now = new Date().toISOString();
-      const paidAmount = req.approvedAmount ?? req.requestedAmount;
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'fully_paid',
-          total_paid_amount: paidAmount,
-          remaining_amount: 0,
-          updated_at: now,
-        })
-        .eq('id', req.id);
+      const { data, error } = await supabase.from('pre_fund_requests' as any)
+        .select('id, name, currency, available_balance').in('status', ['active', 'low_balance']).eq('currency', 'SDG').order('name');
       if (error) throw error;
-      // Auto-link to active pre-fund — awaited so result is shown before UI refreshes
-      try {
-        const { linkPaymentToPreFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-        // payment_proof_url may be stored as a JSON array string e.g. ["url"] — extract first URL
-        let receiptUrl: string | null = req.paymentProofUrl ?? null;
-        if (receiptUrl) {
-          try { const p = JSON.parse(receiptUrl); receiptUrl = Array.isArray(p) ? (p[0] ?? null) : receiptUrl; } catch { /* keep raw */ }
-        }
-        const pfResult = await linkPaymentToPreFund({
-          amount: paidAmount,
-          currency: 'SDG',
-          countryId: (req as any).country_id ?? null,
-          projectId: null,
-          costCategory: null,
-          sourceTable: 'down_payment_requests',
-          sourceId: req.id,
-          reference: null,
-          description: req.justification ?? `Down-payment: ${req.siteName ?? req.id}`,
-          paymentDate: (req as any).fully_paid_at ?? now,
-          createdBy: currentUser?.id ?? null,
-          userId: (req as any).requestedBy ?? null,
-          receiptUrl,
-          paymentEventKey: createPreFundPaymentEventKey({
-            sourceTable: 'down_payment_requests',
-            sourceId: req.id,
-            amount: paidAmount,
-            paymentDate: now,
-            receiptUrl,
-          }),
-        });
-        if (pfResult.linked) {
-          toast({ title: 'Linked to Pre-Fund', description: pfResult.message });
-        } else if (!pfResult.needsManualSelection) {
-          toast({
-            title: '⚠️ Pre-Fund Link Failed',
-            description: pfResult.message + ' — Use Reconciliation → Link Now to link manually.',
-            variant: 'destructive',
-          });
-        }
-      } catch (pfErr: any) {
-        toast({
-          title: '⚠️ Pre-Fund Link Error',
-          description: (pfErr?.message ?? 'Unknown error') + ' — Link manually in Reconciliation.',
-          variant: 'destructive',
-        });
-      }
-      // Notify the advance requester via in-app + WhatsApp (fire-and-forget)
-      const requestedBy = (req as any).requestedBy ?? null;
-      if (requestedBy) {
-        const paidAmount = (req.approvedAmount ?? req.requestedAmount).toLocaleString();
-        dispatchNotification({
-          event: 'payment_processed',
-          recipientIds: [requestedBy],
-          titleEn: 'Transport Advance Paid ✅',
-          titleAr: 'تم صرف السلفة ✅',
-          messageEn: `Your transport advance of ${paidAmount} SDG has been marked as fully paid. Please confirm receipt in your wallet.`,
-          messageAr: `تم تحديد سلفتك البالغة ${paidAmount} جنيه كمدفوعة بالكامل. يرجى تأكيد الاستلام في محفظتك.`,
-          priority: 'high',
-          entityType: 'downPayment',
-          entityId: req.id,
-          actionUrl: '/wallet',
-          sendEmail: true,
-          sendWhatsApp: true,
-        }).catch(console.warn);
-      }
-      // Force a page refresh of the down payment context
-      window.location.reload();
-    } catch (err) {
-      console.error('Error marking advance as fully paid:', err);
-      alert('Failed to update status. Please try again.');
-    } finally {
-      setMarkingPaidId(null);
+      setPartialPayDialog(p => p.open && p.req?.id === req.id ? { ...p, preFunds: (data ?? []) as any[] } : p);
+    } catch (error: any) {
+      toast({ title: 'Could not load Pre-Funds', description: error.message, variant: 'destructive' });
     }
-  }, [currentUser, toast]);
+  }, [toast]);
+
+  const handleMarkFullyPaid = useCallback((req: DownPaymentRequest) => {
+    const remaining = Math.max(0, (req.approvedAmount ?? req.requestedAmount) - (req.totalPaidAmount ?? 0));
+    void openPreFundPaymentDialog(req, remaining);
+  }, [openPreFundPaymentDialog]);
 
   // ── Partial payment: deduct only what was actually paid now ───────────────
   const handleConfirmPartialPay = useCallback(async () => {
@@ -654,73 +601,31 @@ export default function DownPaymentApproval() {
       toast({ title: 'Amount too large', description: `Cannot exceed the remaining amount (${remainingAmount.toLocaleString()} SDG).`, variant: 'destructive' });
       return;
     }
+    if (!partialPayDialog.preFundId) {
+      toast({ title: 'Pre-Fund required', description: 'Select the Pre-Fund to charge before recording this payment.', variant: 'destructive' });
+      return;
+    }
     setPartialPayDialog(p => ({ ...p, saving: true }));
     try {
       const now = new Date().toISOString();
-      const newTotalPaid = alreadyPaid + partialAmt;
-      const isFullyPaid = newTotalPaid >= maxAmt;
-      const newStatus = isFullyPaid ? 'fully_paid' : 'partially_paid';
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: newStatus,
-          total_paid_amount: newTotalPaid,
-          remaining_amount: Math.max(0, maxAmt - newTotalPaid),
-          updated_at: now,
-        })
-        .eq('id', req.id);
-      if (error) throw error;
-
-      toast({ title: isFullyPaid ? 'Marked as Fully Paid' : 'Partial Payment Recorded', description: `${partialAmt.toLocaleString()} SDG saved.` });
-
-      // Auto-link the partial amount to an active pre-fund
-      try {
-        const { linkPaymentToPreFund, createPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-        let receiptUrlPartial: string | null = req.paymentProofUrl ?? null;
-        if (receiptUrlPartial) {
-          try { const p = JSON.parse(receiptUrlPartial); receiptUrlPartial = Array.isArray(p) ? (p[0] ?? null) : receiptUrlPartial; } catch { /* keep raw */ }
-        }
-        const pfResult = await linkPaymentToPreFund({
-          amount: partialAmt,
-          currency: 'SDG',
-          countryId: (req as any).country_id ?? null,
-          projectId: (req as any).project_id ?? null,
-          costCategory: null,
-          sourceTable: 'down_payment_requests',
-          sourceId: req.id,
-          reference: null,
-          description: `${isFullyPaid ? 'Full' : 'Partial'} payment: ${req.siteName ?? req.id}`,
-          paymentDate: now,
-          createdBy: currentUser.id,
-          userId: (req as any).requestedBy ?? currentUser.id,
-          receiptUrl: receiptUrlPartial,
-          paymentEventKey: createPreFundPaymentEventKey({
-            sourceTable: 'down_payment_requests',
-            sourceId: req.id,
-            amount: partialAmt,
-            paymentDate: now,
-            receiptUrl: receiptUrlPartial,
-          }),
-        });
-        if (pfResult.linked) {
-          toast({ title: 'Pre-Fund Deducted ✓', description: pfResult.message });
-        } else {
-          toast({
-            title: '⚠ Pre-Fund Balance NOT Deducted',
-            description: pfResult.message + ' — Go to Pre-Funding → Reconciliation to link manually.',
-            variant: 'destructive',
-          });
-        }
-      } catch (pfErr: any) {
-        console.warn('[PartialPay] Pre-fund link error:', pfErr?.message);
-        toast({
-          title: '⚠ Pre-Fund Balance NOT Deducted',
-          description: (pfErr?.message ?? 'Unknown error') + ' — Go to Pre-Funding → Reconciliation to link manually.',
-          variant: 'destructive',
-        });
+      const { recordRequiredPreFundPayment } = await import('@/utils/preFundLinkage');
+      let receiptUrl = req.paymentProofUrl ?? null;
+      if (receiptUrl) {
+        try { const parsed = JSON.parse(receiptUrl); receiptUrl = Array.isArray(parsed) ? (parsed[0] ?? null) : receiptUrl; } catch { /* raw URL */ }
       }
-
-      setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false });
+      await recordRequiredPreFundPayment({
+        sourceTable: 'down_payment_requests',
+        sourceId: req.id,
+        fundId: partialPayDialog.preFundId,
+        amount: partialAmt,
+        currency: 'SDG',
+        paymentDate: now,
+        createdBy: currentUser.id,
+        receiptUrl,
+        paymentEventKey: partialPayDialog.paymentEventKey ?? createRequiredPreFundPaymentEventKey('down_payment_requests', req.id),
+      });
+      toast({ title: 'Payment recorded', description: `${partialAmt.toLocaleString()} SDG was recorded with its selected Pre-Fund.` });
+      setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
       window.location.reload();
     } catch (err: any) {
       toast({ title: 'Failed', description: err.message || 'Could not save partial payment.', variant: 'destructive' });
@@ -799,7 +704,16 @@ export default function DownPaymentApproval() {
   }, [uniqueRequesters, filters.dataCollectorId]);
 
   // Filtered requests shared across all analytics tabs
-  const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
+  const requestsWithFunding = useMemo(() => requests.map(req => {
+    const links = preFundLinksByRequest.get(req.id) ?? [];
+    return { ...req, preFundNames: links.map(link => link.name), preFundIds: links.map(link => link.id) } as DownPaymentRequest;
+  }), [requests, preFundLinksByRequest]);
+  const filteredRequests = useMemo(() => filterDownPayments(requestsWithFunding, filters), [requestsWithFunding, filters]);
+  const preFundFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    preFundLinksByRequest.forEach(links => links.forEach(link => map.set(link.id, link.name)));
+    return [...map.entries()].sort(([, a], [, b]) => a.localeCompare(b));
+  }, [preFundLinksByRequest]);
 
   // Group helper
   function buildGroups(keyFn: (r: DownPaymentRequest) => string): GroupRow[] {
@@ -1392,7 +1306,8 @@ export default function DownPaymentApproval() {
                     {req.remainingAmount > 0 ? req.remainingAmount.toLocaleString() : '—'}
                   </TableCell>
                   <TableCell>
-                    {req.status === 'fully_paid' ? (
+                     <div className="space-y-1">
+                     {req.status === 'fully_paid' ? (
                       <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1 text-[10px]">
                         <CheckCircle2 className="h-3 w-3" />Paid
                       </Badge>
@@ -1405,6 +1320,14 @@ export default function DownPaymentApproval() {
                         <DollarSign className="h-3 w-3" />Approved
                       </Badge>
                     )}
+                     {(req.status === 'fully_paid' || req.status === 'partially_paid') && (
+                       <p className={`text-[10px] max-w-[150px] truncate ${(req.preFundNames?.length ?? 0) === 0 ? 'text-amber-700' : 'text-teal-700'}`} title={req.preFundNames?.join(', ')}>
+                         {(req.preFundNames?.length ?? 0) === 0
+                           ? 'Pre-Fund: unlinked historical'
+                           : `From: ${req.preFundNames!.join(', ')}`}
+                       </p>
+                     )}
+                     </div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                     {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yy') : '—'}
@@ -1436,7 +1359,7 @@ export default function DownPaymentApproval() {
                           variant="outline"
                           className="h-7 text-[10px] px-2 border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950 whitespace-nowrap"
                           disabled={markingPaidId === req.id || partialPayDialog.saving}
-                          onClick={() => setPartialPayDialog({ open: true, req, partialAmount: '', saving: false })}
+                          onClick={() => void openPreFundPaymentDialog(req, 0)}
                           data-testid={`button-mark-partial-${req.id}`}
                         >
                           ½ Partial
@@ -1567,6 +1490,19 @@ export default function DownPaymentApproval() {
                           {uMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                         </SelectContent>
                       </Select>
+
+                       <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
+                         <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-disb-pre-fund">
+                           <Wallet className="h-3 w-3 mr-1 shrink-0" />
+                           <SelectValue placeholder="Paid from Pre-Fund" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="all">All funding sources</SelectItem>
+                           <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
+                           <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
+                           {preFundFilterOptions.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                         </SelectContent>
+                       </Select>
 
                       <div className="flex items-center gap-1 ml-auto">
                         <span className="text-xs text-muted-foreground whitespace-nowrap">Group by:</span>
@@ -1869,7 +1805,7 @@ export default function DownPaymentApproval() {
                   data-testid="input-partial-amount"
                   autoFocus
                 />
-                {partialPayDialog.partialAmount && (() => {
+                 {partialPayDialog.partialAmount && (() => {
                   const max = partialPayDialog.req!.approvedAmount ?? partialPayDialog.req!.requestedAmount;
                   const val = parseFloat(partialPayDialog.partialAmount);
                   if (!isNaN(val) && val > 0 && val < max) {
@@ -1885,16 +1821,28 @@ export default function DownPaymentApproval() {
                   return null;
                 })()}
               </div>
+               <div className="space-y-1.5">
+                 <Label>Pre-Fund to charge <span className="text-destructive">*</span></Label>
+                 <Select value={partialPayDialog.preFundId} onValueChange={v => setPartialPayDialog(p => ({ ...p, preFundId: v }))} disabled={partialPayDialog.saving}>
+                   <SelectTrigger data-testid="select-down-payment-pre-fund">
+                     <SelectValue placeholder={partialPayDialog.preFunds.length ? 'Select a Pre-Fund' : 'No eligible Pre-Fund available'} />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {partialPayDialog.preFunds.map(f => <SelectItem key={f.id} value={f.id}>{f.name} · SDG {Number(f.available_balance ?? 0).toLocaleString()} available</SelectItem>)}
+                   </SelectContent>
+                 </Select>
+                 <p className="text-xs text-muted-foreground">The payment and fund ledger entry are recorded together.</p>
+               </div>
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false })} disabled={partialPayDialog.saving}>
+            <Button variant="outline" size="sm" onClick={() => setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] })} disabled={partialPayDialog.saving}>
               Cancel
             </Button>
             <Button
               size="sm"
               onClick={handleConfirmPartialPay}
-              disabled={partialPayDialog.saving || !partialPayDialog.partialAmount}
+              disabled={partialPayDialog.saving || !partialPayDialog.partialAmount || !partialPayDialog.preFundId}
               data-testid="button-confirm-partial-pay"
             >
               {partialPayDialog.saving ? 'Saving…' : 'Confirm & Deduct from Fund'}

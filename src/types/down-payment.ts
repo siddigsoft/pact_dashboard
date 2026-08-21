@@ -100,6 +100,8 @@ export interface DownPaymentRequest {
   approvalType?: ApprovalType;
   approvalPercentage?: number;
   paymentType: PaymentType;
+  /** Active immutable Pre-Fund payment events; legacy records may have none. */
+  preFundNames?: string[];
   
   // Installment details
   installmentPlan: InstallmentPlan[];
@@ -206,6 +208,9 @@ export interface ProcessPayment {
   processedByName?: string;
   notes?: string;
   receiptUrl?: string | null;
+  /** Required for a new payment; the server records source + ledger together. */
+  preFundId?: string;
+  paymentEventKey?: string;
 }
 
 export interface DownPaymentFilter {
@@ -223,6 +228,8 @@ export interface DownPaymentFilter {
   amountMin?: number;
   amountMax?: number;
   searchTerm?: string;
+  /** fund UUID, '__unlinked__' for historical gaps, or '__multiple__'. */
+  preFundId?: string;
 }
 
 export interface DownPaymentReportConfig {

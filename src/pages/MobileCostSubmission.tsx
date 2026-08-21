@@ -781,9 +781,9 @@ const MobileCostSubmission = () => {
   };
 
   const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
-    const ds = getOperationalDerivedStatus(oc);
-    if (ds !== 'approved') return false;
-    return isSuperAdmin || isAdmin || isFinanceAdmin;
+    // Mobile does not yet expose the required explicit fund selector. Keep
+    // this legacy action unavailable rather than permit an unlinked payment.
+    return false;
   };
 
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {

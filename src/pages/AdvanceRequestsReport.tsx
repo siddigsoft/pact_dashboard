@@ -917,7 +917,11 @@ function AdvanceRequestsReportContent() {
   };
 
   const handleMarkAsPaid = (req: DownPaymentRequest) => {
-    setConfirmMarkPaidDialog({ open: true, req, notes: '' });
+    toast({
+      title: 'Use the payment workspace',
+      description: 'Record this advance from Down Payment Approval, where a Pre-Fund must be selected.',
+      variant: 'destructive',
+    });
   };
 
   const handleConfirmMarkAsPaid = async () => {
