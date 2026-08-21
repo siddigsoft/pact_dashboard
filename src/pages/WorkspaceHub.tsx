@@ -2681,7 +2681,7 @@ export default function WorkspaceHub() {
 
   async function bulkDeleteFolders() {
     const ids = [...selectedFolderIds];
-    const toDelete = currentSubFolders.filter(f => ids.includes(f.id) && (isSuperAdmin || f.created_by === userId));
+    const toDelete = currentSubFolders.filter(f => ids.includes(f.id) && (isAdmin || f.created_by === userId));
     const skipped = ids.length - toDelete.length;
     if (toDelete.length === 0) {
       toast({ title: 'Nothing to delete', description: 'You do not have permission to delete the selected folders.', variant: 'destructive' });
@@ -3322,7 +3322,7 @@ export default function WorkspaceHub() {
                 {isAdmin && <DropdownMenuSeparator />}
                 {isAdmin && <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />}
                 <DropdownMenuSeparator />
-                {isSuperAdmin ? (
+                {isAdmin ? (
                   <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(folder)}>
                     <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder
                   </DropdownMenuItem>
@@ -3640,7 +3640,7 @@ export default function WorkspaceHub() {
                     ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                     : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                 </DropdownMenuItem>
-                {isSuperAdmin
+                {isAdmin
                   ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
                   : <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>}
               </>}
@@ -3783,7 +3783,7 @@ export default function WorkspaceHub() {
                       ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                       : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                   </DropdownMenuItem>
-                  {isSuperAdmin
+                  {isAdmin
                     ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
                     : (file.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
                 </>}
@@ -4872,7 +4872,7 @@ export default function WorkspaceHub() {
                                           )}
                                           <DropdownMenuItem onClick={() => { setMoveTarget(f); setMoveFolderId(f.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          {isSuperAdmin
+                                          {isAdmin
                                             ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
                                             : (f.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(f)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
                                         </>}
@@ -5290,7 +5290,7 @@ export default function WorkspaceHub() {
                     ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
                     : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
                 </DropdownMenuItem>
-                {isSuperAdmin
+                {isAdmin
                   ? <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete File</DropdownMenuItem>
                   : (ctxMenuFile.created_by === userId && <DropdownMenuItem className="text-amber-600" onClick={() => requestDeleteFile(ctxMenuFile)}><Trash2 className="h-3.5 w-3.5 mr-2" />Request Delete</DropdownMenuItem>)}
               </>}
@@ -5336,7 +5336,7 @@ export default function WorkspaceHub() {
               <DialogDescription>
                 {selectedFolderIds.size > 0
                   ? `Folders and all their contents will be permanently deleted. Files will be moved to the Recycle Bin.`
-                  : isSuperAdmin
+                  : isAdmin
                     ? `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} will be moved to the Recycle Bin.`
                     : `${selectedFileIds.size} file${selectedFileIds.size !== 1 ? 's' : ''} you own will be moved to trash. Files you don't own will be skipped.`}
               </DialogDescription>
@@ -5510,7 +5510,7 @@ export default function WorkspaceHub() {
               {isAdmin && <DropdownMenuSeparator />}
               {isAdmin && <SecuritySubMenu current={ctxMenuFolder.security_level} onSelect={l => changeFolderSecurity(ctxMenuFolder.id, ctxMenuFolder.name, l)} />}
               <DropdownMenuSeparator />
-              {isSuperAdmin ? (
+              {isAdmin ? (
                 <DropdownMenuItem className="text-red-600" onClick={() => directDeleteFolder(ctxMenuFolder)}>
                   <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder
                 </DropdownMenuItem>

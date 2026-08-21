@@ -64,10 +64,12 @@ describe('workspace hub buttons — role matrix', () => {
     expect(canRenameWorkspaceFolder(OWNER, { created_by: 'u-owner' })).toBe(true);
   });
 
-  it('Delete: super admin direct; others request; only admins approve', () => {
+  it('Delete: admin and super admin direct; staff request; only admins approve', () => {
     expect(canDirectDelete(SUPER)).toBe(true);
-    expect(canDirectDelete(ADMIN)).toBe(false);
+    expect(canDirectDelete(ADMIN)).toBe(true);
+    expect(canDirectDelete(STAFF)).toBe(false);
     expect(canRequestDelete(OWNER, 'u-owner')).toBe(true);
+    expect(canRequestDelete(ADMIN, 'u-owner')).toBe(false);
     expect(canRequestDelete(SUPER, 'u-owner')).toBe(false);
     expect(canApproveDeleteRequest(STAFF)).toBe(false);
     expect(canApproveDeleteRequest(ADMIN)).toBe(true);

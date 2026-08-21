@@ -239,14 +239,15 @@ export function canRenameWorkspaceFolder(
 export function canDirectDelete(
   actor: WorkspaceActor,
 ): boolean {
-  return actor.isSuperAdmin;
+  return actor.isAdmin || actor.isSuperAdmin;
 }
 
 export function canRequestDelete(
   actor: WorkspaceActor,
   createdBy: string | null,
 ): boolean {
-  if (actor.isSuperAdmin) return false; // super admin deletes directly
+  // Admins / super admins delete immediately — no approval queue.
+  if (actor.isAdmin || actor.isSuperAdmin) return false;
   return canManageWorkspaceItem(actor, createdBy);
 }
 
