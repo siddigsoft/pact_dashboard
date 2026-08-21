@@ -66,6 +66,7 @@ import { notificationDigestService } from '@/services/notification-digest.servic
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { cancelPaidDownPaymentRequest } from '@/utils/preFundLinkage';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -849,6 +850,8 @@ function AdvanceRequestsReportContent() {
     if (!req || !reason || !currentUser?.id) return;
     setWriteOffDialog(prev => ({ ...prev, processing: true }));
     try {
+      const cancellationReason = `Write-off: ${reason}${notes.trim() ? ` — ${notes.trim()}` : ''}`;
+      await cancelPaidDownPaymentRequest(req.id, cancellationReason);
       const updatedMeta = {
         ...(req.metadata as any || {}),
         written_off: true,
@@ -860,7 +863,7 @@ function AdvanceRequestsReportContent() {
       };
       const { error } = await supabase
         .from('down_payment_requests')
-        .update({ status: 'cancelled', metadata: updatedMeta })
+        .update({ metadata: updatedMeta })
         .eq('id', req.id);
       if (error) throw error;
       // H7 — bilingual notification to the requester

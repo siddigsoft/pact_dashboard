@@ -249,9 +249,10 @@ export async function recordDownPaymentWithWallet(params: {
   };
 }
 
-export async function cancelPaidDownPaymentRequest(requestId: string): Promise<void> {
+export async function cancelPaidDownPaymentRequest(requestId: string, reason?: string): Promise<void> {
   const { data, error } = await (supabase as any).rpc('cancel_paid_down_payment_request_rpc', {
     p_request_id: requestId,
+    p_reason: reason ?? null,
   });
   if (error) {
     const notDeployed = (error as any).code === 'PGRST202'

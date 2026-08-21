@@ -34,6 +34,20 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 CREATE TABLE public.profiles (id uuid PRIMARY KEY, role text);
 INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000001');
 INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000001', 'super_admin');
+CREATE TABLE public.wallets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES public.profiles(id),
+  currency text NOT NULL DEFAULT 'SDG', balance_cents bigint NOT NULL DEFAULT 0,
+  total_earned_cents bigint NOT NULL DEFAULT 0, total_paid_out_cents bigint NOT NULL DEFAULT 0,
+  pending_payout_cents bigint NOT NULL DEFAULT 0, balances jsonb NOT NULL DEFAULT '{"SDG": 0}'::jsonb,
+  total_earned numeric NOT NULL DEFAULT 0
+);
+CREATE TABLE public.wallet_transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), wallet_id uuid REFERENCES public.wallets(id),
+  user_id uuid NOT NULL REFERENCES public.profiles(id), type text NOT NULL, amount numeric,
+  amount_cents bigint NOT NULL, currency text NOT NULL, description text, balance_before numeric,
+  balance_after numeric, created_by uuid REFERENCES public.profiles(id), metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'pending', created_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE public.pre_fund_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, currency text NOT NULL,
@@ -60,13 +74,20 @@ CREATE TABLE public.pre_fund_allocations (
 CREATE TABLE public.down_payment_requests (
   id uuid PRIMARY KEY, status text, metadata jsonb DEFAULT '{}'::jsonb,
   total_paid_amount numeric NOT NULL DEFAULT 0, pre_fund_transaction_id uuid,
-  justification text, site_name text
+  justification text, site_name text, approved_amount numeric, requested_amount numeric,
+  remaining_amount numeric, requested_by uuid REFERENCES auth.users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(), wallet_transaction_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  installment_plan jsonb NOT NULL DEFAULT '[]'::jsonb, paid_installments jsonb NOT NULL DEFAULT '[]'::jsonb,
+  payment_type text, supervisor_status text, supervisor_approved_by uuid, supervisor_approved_at timestamptz,
+  supervisor_notes text, supervisor_rejection_reason text, admin_status text, admin_processed_by uuid,
+  admin_processed_at timestamptz, admin_notes text, admin_rejection_reason text
 );
 CREATE TABLE public.operational_cost_submissions (
   id uuid PRIMARY KEY, status text, amount_paid_cents bigint NOT NULL DEFAULT 0, pre_fund_transaction_id uuid,
   paid_at timestamptz, paid_by uuid, payment_proof_url text, payment_proof_notes text,
   payment_proof_uploaded_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(),
-  description text
+  description text, amount_cents bigint NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'SDG',
+  submitted_by uuid REFERENCES auth.users(id), reference_number text
 );
 CREATE TABLE public.acct_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE);
 CREATE TABLE public.acct_journal_entries (
@@ -920,6 +941,348 @@ BEGIN
     RAISE EXCEPTION 'missing OCS was recreated by evidence correction';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM = 'missing OCS was recreated by evidence correction' THEN RAISE; END IF;
+  END;
+ END $$;
+
+SQL
+
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821b_required_pre_fund_payment_links.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821c_align_pre_fund_source_payment_links.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821d_atomic_down_payment_payment_workflow.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821e_atomic_paid_down_payment_reopen.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821f_wallet_payment_idempotency_identity.sql" >/dev/null
+
+"${PSQL[@]}" <<'SQL'
+-- Wallet-backed cancellation: paid source state, wallet evidence, and immutable
+-- fund events must reverse together before a write-off can cancel the request.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
+) VALUES
+  ('10000000-0000-0000-0000-000000000011', 'Wallet Cancellation Fund', 'SDG', 100, 100, 0, '2400', '1200'),
+  ('10000000-0000-0000-0000-000000000012', 'Paid Reopen Fund', 'SDG', 50, 50, 0, '2400', '1200');
+
+INSERT INTO public.down_payment_requests (
+  id, status, approved_amount, requested_amount, remaining_amount, total_paid_amount,
+  requested_by, justification, site_name, payment_type
+) VALUES
+  ('30000000-0000-0000-0000-000000000012', 'approved', 80, 80, 80, 0, auth.uid(),
+    'Wallet-backed write-off fixture', 'Wallet cancellation site', 'full_advance'),
+  ('30000000-0000-0000-0000-000000000013', 'approved', 50, 50, 50, 0, auth.uid(),
+    'Paid reopen fixture', 'Paid reopen site', 'full_advance');
+
+DO $$
+DECLARE v_first jsonb; v_retry jsonb; v_cancel jsonb; v_source_status text; v_source_paid numeric;
+        v_fund_paid numeric; v_fund_available numeric; v_wallet_count int; v_wallet_status text;
+        v_reversals int; v_reason text;
+BEGIN
+  SELECT public.record_down_payment_with_wallet_rpc(
+    '30000000-0000-0000-0000-000000000012',
+    '10000000-0000-0000-0000-000000000011',
+    80, 'SDG', 'https://receipt.test/write-off', 'Initial disbursement', 'source-payment:wallet-cancel-one'
+  ) INTO v_first;
+  SELECT public.record_down_payment_with_wallet_rpc(
+    '30000000-0000-0000-0000-000000000012',
+    '10000000-0000-0000-0000-000000000011',
+    80, 'SDG', 'https://receipt.test/write-off', 'Transport retry', 'source-payment:wallet-cancel-one'
+  ) INTO v_retry;
+  BEGIN
+    UPDATE public.down_payment_requests
+    SET status = 'approved', total_paid_amount = 0
+    WHERE id = '30000000-0000-0000-0000-000000000012';
+    RAISE EXCEPTION 'direct paid reopen was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'direct paid reopen was accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'A paid Down Payment must be reopened through the controlled financial reversal workflow%' THEN RAISE; END IF;
+  END;
+  SELECT public.cancel_paid_down_payment_request_rpc(
+    '30000000-0000-0000-0000-000000000012', 'Write-off regression coverage'
+  ) INTO v_cancel;
+  SELECT status, total_paid_amount, metadata ->> 'cancellation_reason'
+  INTO v_source_status, v_source_paid, v_reason
+  FROM public.down_payment_requests WHERE id = '30000000-0000-0000-0000-000000000012';
+  SELECT paid_amount, available_balance INTO v_fund_paid, v_fund_available
+  FROM public.pre_fund_requests WHERE id = '10000000-0000-0000-0000-000000000011';
+  SELECT count(*), max(status) INTO v_wallet_count, v_wallet_status
+  FROM public.wallet_transactions
+  WHERE metadata ->> 'down_payment_request_id' = '30000000-0000-0000-0000-000000000012';
+  SELECT count(*) INTO v_reversals
+  FROM public.pre_fund_transactions r
+  WHERE r.reversal_of_id IS NOT NULL
+    AND r.source_id = '30000000-0000-0000-0000-000000000012';
+  IF (v_first ->> 'success')::boolean IS DISTINCT FROM true
+     OR (v_retry ->> 'idempotent')::boolean IS DISTINCT FROM true
+     OR (v_retry ->> 'transaction_id') IS DISTINCT FROM (v_first ->> 'transaction_id')
+     OR (v_cancel ->> 'success')::boolean IS DISTINCT FROM true
+     OR v_source_status <> 'cancelled'
+     OR v_source_paid <> 80
+     OR v_fund_paid <> 0
+     OR v_fund_available <> 100
+     OR v_wallet_count <> 1
+     OR v_wallet_status <> 'reversed'
+     OR v_reversals <> 1
+     OR v_reason <> 'Write-off regression coverage' THEN
+    RAISE EXCEPTION 'wallet-backed cancellation assertion failed: payment %, retry %, cancellation %, source %/%, fund %/%, wallet %/%, reversals %, reason %',
+      v_first, v_retry, v_cancel, v_source_status, v_source_paid, v_fund_paid, v_fund_available,
+      v_wallet_count, v_wallet_status, v_reversals, v_reason;
+  END IF;
+END $$;
+
+-- Controlled reopen compensates all evidence and restores the amount to pay.
+DO $$
+DECLARE v_payment jsonb; v_reopen jsonb; v_status text; v_paid numeric; v_remaining numeric;
+        v_fund_paid numeric; v_fund_available numeric; v_wallet_status text; v_reversals int;
+BEGIN
+  SELECT public.record_down_payment_with_wallet_rpc(
+    '30000000-0000-0000-0000-000000000013',
+    '10000000-0000-0000-0000-000000000012',
+    50, 'SDG', 'https://receipt.test/reopen', 'Paid before approved reopen', 'source-payment:wallet-reopen-one'
+  ) INTO v_payment;
+  SELECT public.reopen_down_payment_after_reversal_rpc(
+    '30000000-0000-0000-0000-000000000013', 'approved', 'Correction requires a new approval'
+  ) INTO v_reopen;
+  SELECT status, total_paid_amount, remaining_amount INTO v_status, v_paid, v_remaining
+  FROM public.down_payment_requests WHERE id = '30000000-0000-0000-0000-000000000013';
+  SELECT paid_amount, available_balance INTO v_fund_paid, v_fund_available
+  FROM public.pre_fund_requests WHERE id = '10000000-0000-0000-0000-000000000012';
+  SELECT max(status) INTO v_wallet_status FROM public.wallet_transactions
+  WHERE metadata ->> 'down_payment_request_id' = '30000000-0000-0000-0000-000000000013';
+  SELECT count(*) INTO v_reversals
+  FROM public.pre_fund_transactions r
+  WHERE r.reversal_of_id IS NOT NULL
+    AND r.source_id = '30000000-0000-0000-0000-000000000013';
+  IF (v_payment ->> 'success')::boolean IS DISTINCT FROM true
+     OR (v_reopen ->> 'success')::boolean IS DISTINCT FROM true
+     OR v_status <> 'approved'
+     OR v_paid <> 0
+     OR v_remaining <> 50
+     OR v_fund_paid <> 0
+     OR v_fund_available <> 50
+     OR v_wallet_status <> 'reversed'
+     OR v_reversals <> 1 THEN
+    RAISE EXCEPTION 'controlled paid reopen assertion failed: payment %, reopen %, source %/%/%, fund %/%, wallet %, reversals %',
+      v_payment, v_reopen, v_status, v_paid, v_remaining, v_fund_paid, v_fund_available, v_wallet_status, v_reversals;
+  END IF;
+END $$;
+SQL
+
+"${PSQL[@]}" <<'SQL'
+-- Required Pre-Fund payment links: each protected source update and its
+-- immutable event share one transaction. These fixtures intentionally run after
+-- the reconciliation checks above so the legacy test setup can retain its
+-- historical unlinked-source cases.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
+) VALUES
+  ('10000000-0000-0000-0000-000000000007', 'Protected OCS Payment Fund', 'SDG', 200, 200, 0, '2400', '1200'),
+  ('10000000-0000-0000-0000-000000000008', 'Protected Split Payment Fund', 'SDG', 200, 200, 0, '2400', '1200'),
+  ('10000000-0000-0000-0000-000000000009', 'Protected Insufficient Fund', 'SDG', 25, 25, 0, '2400', '1200'),
+  ('10000000-0000-0000-0000-000000000010', 'Protected Allocation Fund', 'SDG', 100, 100, 0, '2400', '1200');
+
+INSERT INTO public.pre_fund_allocations (
+  pre_fund_request_id, user_id, allocated_amount, currency
+) VALUES (
+  '10000000-0000-0000-0000-000000000010',
+  auth.uid(), 30, 'SDG'
+);
+
+INSERT INTO public.operational_cost_submissions (
+  id, status, amount_cents, amount_paid_cents, currency, submitted_by, description, reference_number
+) VALUES
+  ('20000000-0000-0000-0000-000000000010', 'approved', 10000, 0, 'SDG', auth.uid(), 'Protected retry fixture', 'PF-OCS-010'),
+  ('20000000-0000-0000-0000-000000000011', 'approved', 10000, 0, 'SDG', auth.uid(), 'Insufficient fund fixture', 'PF-OCS-011'),
+  ('20000000-0000-0000-0000-000000000012', 'approved', 5000, 0, 'SDG', auth.uid(), 'Allocation ceiling fixture', 'PF-OCS-012'),
+  ('20000000-0000-0000-0000-000000000013', 'approved', 10000, 0, 'SDG', auth.uid(), 'Unlinked direct update fixture', 'PF-OCS-013');
+
+INSERT INTO public.down_payment_requests (
+  id, status, approved_amount, requested_amount, remaining_amount, total_paid_amount,
+  requested_by, justification
+) VALUES (
+  '30000000-0000-0000-0000-000000000011',
+  'approved', 100, 100, 100, 0, auth.uid(), 'Protected split Pre-Fund payment'
+);
+
+-- A direct paid-state update must fail before it can create an unlinked source
+-- payment that would otherwise appear in balance and reconciliation screens.
+DO $$
+DECLARE v_status text; v_paid bigint;
+BEGIN
+  BEGIN
+    UPDATE public.operational_cost_submissions
+    SET status = 'paid', amount_paid_cents = 10000
+    WHERE id = '20000000-0000-0000-0000-000000000013';
+    RAISE EXCEPTION 'direct paid update was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'direct paid update was accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'A Pre-Fund must be selected before recording this payment%' THEN RAISE; END IF;
+  END;
+  SELECT status, amount_paid_cents INTO v_status, v_paid
+  FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000013';
+  IF v_status <> 'approved' OR v_paid <> 0 THEN
+    RAISE EXCEPTION 'rejected direct update changed the source: status %, paid cents %', v_status, v_paid;
+  END IF;
+END $$;
+
+-- The controlled operation updates the source and ledger once. A transport
+-- retry with the same key must return that same immutable ledger event.
+DO $$
+DECLARE v_first jsonb; v_retry jsonb; v_event_id uuid; v_event_count int;
+        v_status text; v_paid_cents bigint;
+BEGIN
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'operational_cost_submissions',
+    '20000000-0000-0000-0000-000000000010',
+    '10000000-0000-0000-0000-000000000007',
+    40, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'First protected instalment', 'protected-ocs-retry'
+  ) INTO v_first;
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'operational_cost_submissions',
+    '20000000-0000-0000-0000-000000000010',
+    '10000000-0000-0000-0000-000000000007',
+    40, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Transport retry', 'protected-ocs-retry'
+  ) INTO v_retry;
+  v_event_id := (v_first ->> 'transaction_id')::uuid;
+  SELECT count(*) INTO v_event_count
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'protected-ocs-retry';
+  SELECT status, amount_paid_cents INTO v_status, v_paid_cents
+  FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000010';
+  IF (v_first ->> 'success')::boolean IS DISTINCT FROM true
+     OR (v_retry ->> 'idempotent')::boolean IS DISTINCT FROM true
+     OR (v_retry ->> 'transaction_id')::uuid IS DISTINCT FROM v_event_id
+     OR v_event_count <> 1
+     OR v_status <> 'partially_paid'
+     OR v_paid_cents <> 4000 THEN
+    RAISE EXCEPTION 'protected retry did not return its original event: first %, retry %, events %, source %/%',
+      v_first, v_retry, v_event_count, v_status, v_paid_cents;
+  END IF;
+END $$;
+
+-- If linking fails after the controlled source update begins, all source,
+-- ledger, and balance changes must roll back together.
+DO $$
+DECLARE v_status text; v_paid_cents bigint; v_events int; v_available numeric;
+BEGIN
+  BEGIN
+    PERFORM public.record_required_pre_fund_payment_rpc(
+      'operational_cost_submissions',
+      '20000000-0000-0000-0000-000000000011',
+      '10000000-0000-0000-0000-000000000009',
+      50, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Must exhaust no rows', 'protected-insufficient-fund'
+    );
+    RAISE EXCEPTION 'insufficient Pre-Fund payment was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'insufficient Pre-Fund payment was accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Pre-Fund link failed: Insufficient pre-fund balance%' THEN RAISE; END IF;
+  END;
+  SELECT status, amount_paid_cents INTO v_status, v_paid_cents
+  FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000011';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'protected-insufficient-fund';
+  SELECT available_balance INTO v_available FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000009';
+  IF v_status <> 'approved' OR v_paid_cents <> 0 OR v_events <> 0 OR v_available <> 25 THEN
+    RAISE EXCEPTION 'insufficient-fund rollback failed: source %/%, events %, balance %',
+      v_status, v_paid_cents, v_events, v_available;
+  END IF;
+END $$;
+
+DO $$
+DECLARE v_status text; v_paid_cents bigint; v_events int; v_spent numeric;
+BEGIN
+  BEGIN
+    PERFORM public.record_required_pre_fund_payment_rpc(
+      'operational_cost_submissions',
+      '20000000-0000-0000-0000-000000000012',
+      '10000000-0000-0000-0000-000000000010',
+      50, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Must respect personal allocation', 'protected-insufficient-allocation'
+    );
+    RAISE EXCEPTION 'insufficient personal allocation was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'insufficient personal allocation was accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Insufficient personal allocation%' THEN RAISE; END IF;
+  END;
+  SELECT status, amount_paid_cents INTO v_status, v_paid_cents
+  FROM public.operational_cost_submissions
+  WHERE id = '20000000-0000-0000-0000-000000000012';
+  SELECT count(*) INTO v_events FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'protected-insufficient-allocation';
+  SELECT spent_amount INTO v_spent FROM public.pre_fund_allocations
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000010'
+    AND user_id = auth.uid();
+  IF v_status <> 'approved' OR v_paid_cents <> 0 OR v_events <> 0 OR v_spent <> 0 THEN
+    RAISE EXCEPTION 'allocation rollback failed: source %/%, events %, spent %',
+      v_status, v_paid_cents, v_events, v_spent;
+  END IF;
+END $$;
+
+-- A partial advance may be paid from two funds. Relinking one immutable event
+-- creates a reversal plus replacement event; it never mutates or deletes history.
+DO $$
+DECLARE v_first jsonb; v_second jsonb; v_correction jsonb; v_retry jsonb;
+        v_original_id uuid; v_original_amount numeric; v_reversals int; v_active_links int;
+        v_source_status text; v_source_paid numeric; v_first_paid numeric; v_first_available numeric;
+        v_second_paid numeric; v_second_available numeric;
+BEGIN
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'down_payment_requests',
+    '30000000-0000-0000-0000-000000000011',
+    '10000000-0000-0000-0000-000000000007',
+    60, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'First split payment', 'source-payment:protected-split-one'
+  ) INTO v_first;
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'down_payment_requests',
+    '30000000-0000-0000-0000-000000000011',
+    '10000000-0000-0000-0000-000000000008',
+    40, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Second split payment', 'source-payment:protected-split-two'
+  ) INTO v_second;
+  v_original_id := (v_first ->> 'transaction_id')::uuid;
+  SELECT public.correct_required_pre_fund_payment_link_rpc(
+    v_original_id,
+    '10000000-0000-0000-0000-000000000008',
+    'Initial fund selection corrected',
+    'protected-split-correction'
+  ) INTO v_correction;
+  SELECT public.correct_required_pre_fund_payment_link_rpc(
+    v_original_id,
+    '10000000-0000-0000-0000-000000000008',
+    'Initial fund selection corrected',
+    'protected-split-correction'
+  ) INTO v_retry;
+  SELECT amount INTO v_original_amount FROM public.pre_fund_transactions WHERE id = v_original_id;
+  SELECT count(*) INTO v_reversals FROM public.pre_fund_transactions WHERE reversal_of_id = v_original_id;
+  SELECT count(*) INTO v_active_links FROM public.pre_fund_source_payment_links_v
+  WHERE source_table = 'down_payment_requests'
+    AND source_id = '30000000-0000-0000-0000-000000000011';
+  SELECT status, total_paid_amount INTO v_source_status, v_source_paid
+  FROM public.down_payment_requests WHERE id = '30000000-0000-0000-0000-000000000011';
+  SELECT paid_amount, available_balance INTO v_first_paid, v_first_available
+  FROM public.pre_fund_requests WHERE id = '10000000-0000-0000-0000-000000000007';
+  SELECT paid_amount, available_balance INTO v_second_paid, v_second_available
+  FROM public.pre_fund_requests WHERE id = '10000000-0000-0000-0000-000000000008';
+  IF (v_correction ->> 'success')::boolean IS DISTINCT FROM true
+     OR (v_retry ->> 'idempotent')::boolean IS DISTINCT FROM true
+     OR v_original_amount <> 60
+     OR v_reversals <> 1
+     OR v_active_links <> 2
+     OR v_source_status <> 'fully_paid'
+     OR v_source_paid <> 100
+     OR v_first_paid <> 40
+     OR v_first_available <> 160
+     OR v_second_paid <> 100
+     OR v_second_available <> 100 THEN
+    RAISE EXCEPTION 'immutable split/relink assertion failed: correction %, retry %, reversals %, links %, source %/%, funds %/%, %/%',
+      v_correction, v_retry, v_reversals, v_active_links, v_source_status, v_source_paid,
+      v_first_paid, v_first_available, v_second_paid, v_second_available;
+  END IF;
+  BEGIN
+    UPDATE public.pre_fund_transactions SET amount = 61 WHERE id = v_original_id;
+    RAISE EXCEPTION 'immutable original payment was updated';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'immutable original payment was updated' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Pre-fund payment events are immutable%' THEN RAISE; END IF;
   END;
 END $$;
 SQL

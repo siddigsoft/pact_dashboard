@@ -31,6 +31,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { format, parseISO } from 'date-fns';
+import { cancelPaidDownPaymentRequest } from '@/utils/preFundLinkage';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -297,26 +298,30 @@ export default function CycleExceptionResolution() {
       // ── 1. Mutate the down_payment_requests row ──────────────────────────
       if (action.advance_id) {
         if (action.decision === 'writeoff') {
-          // Cancel + mark written off
+          // Reverse paid financial evidence before applying write-off metadata.
           const existingMeta = await fetchMeta(action.advance_id);
-          await (supabase as any)
+          const writeOffReason = note.trim() || action.justification || 'Written off at cycle close';
+          await cancelPaidDownPaymentRequest(action.advance_id, `Cycle write-off: ${writeOffReason}`);
+          const { data: writeOffRows, error: writeOffError } = await (supabase as any)
             .from('down_payment_requests')
             .update({
-              status: 'cancelled',
               metadata: {
                 ...existingMeta,
                 written_off: true,
-                write_off_note: note.trim() || action.justification || 'Written off at cycle close',
+                write_off_note: writeOffReason,
                 write_off_by: currentUser.full_name ?? currentUser.id,
                 write_off_at: now,
               },
             })
-            .eq('id', action.advance_id);
+            .eq('id', action.advance_id)
+            .select('id');
+          if (writeOffError) throw writeOffError;
+          if (writeOffRows?.length !== 1) throw new Error('Write-off metadata was not saved. Verify your access and try again.');
 
         } else if (action.decision === 'return') {
           // Flag for return collection — advance stays approved/paid
           const existingMeta = await fetchMeta(action.advance_id);
-          await (supabase as any)
+          const { data: returnRows, error: returnError } = await (supabase as any)
             .from('down_payment_requests')
             .update({
               metadata: {
@@ -327,12 +332,15 @@ export default function CycleExceptionResolution() {
                 return_collection_note: note.trim() || null,
               },
             })
-            .eq('id', action.advance_id);
+            .eq('id', action.advance_id)
+            .select('id');
+          if (returnError) throw returnError;
+          if (returnRows?.length !== 1) throw new Error('Return instruction was not saved. Verify your access and try again.');
 
         } else if (action.decision === 'redirect') {
           // Record redirect destination; update hub_name if provided
           const existingMeta = await fetchMeta(action.advance_id);
-          await (supabase as any)
+          const { data: redirectRows, error: redirectError } = await (supabase as any)
             .from('down_payment_requests')
             .update({
               ...(redirectHub.trim() ? { hub_name: redirectHub.trim() } : {}),
@@ -345,12 +353,15 @@ export default function CycleExceptionResolution() {
                 redirect_at: now,
               },
             })
-            .eq('id', action.advance_id);
+            .eq('id', action.advance_id)
+            .select('id');
+          if (redirectError) throw redirectError;
+          if (redirectRows?.length !== 1) throw new Error('Redirect was not saved. Verify your access and try again.');
         }
       }
 
       // ── 2. Mark cycle_exception_actions as executed ──────────────────────
-      await (supabase as any)
+      const { data: executedRows, error: actionError } = await (supabase as any)
         .from('cycle_exception_actions')
         .update({
           executed: true,
@@ -362,7 +373,10 @@ export default function CycleExceptionResolution() {
             action.decision === 'return'   ? (note.trim() || 'Return flagged') :
             `Redirected to: ${redirectHub.trim() || note.trim()}`,
         })
-        .eq('id', action.id);
+        .eq('id', action.id)
+        .select('id');
+      if (actionError) throw actionError;
+      if (executedRows?.length !== 1) throw new Error('Cycle action was not marked as executed. Verify your access and try again.');
 
       // Remove from local state
       setActions(prev => prev.filter(a => a.id !== action.id));
@@ -377,11 +391,12 @@ export default function CycleExceptionResolution() {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   async function fetchMeta(advanceId: string): Promise<Record<string, any>> {
-    const { data } = await (supabase as any)
+    const { data, error: metaError } = await (supabase as any)
       .from('down_payment_requests')
       .select('metadata')
       .eq('id', advanceId)
       .maybeSingle();
+    if (metaError) throw metaError;
     return (data?.metadata as Record<string, any>) ?? {};
   }
 

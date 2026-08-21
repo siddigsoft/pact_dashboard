@@ -148,6 +148,7 @@ DECLARE
   v_source_user_id UUID;
   v_reference TEXT;
   v_description TEXT;
+  v_existing_transaction_id UUID;
 BEGIN
   PERFORM public._assert_finance_role();
 
@@ -168,16 +169,21 @@ BEGIN
 
   -- A transport retry for the same immutable event returns the already-created
   -- result rather than creating a second source payment.
+  SELECT t.id
+  INTO v_existing_transaction_id
+  FROM public.pre_fund_transactions t
+  WHERE t.idempotency_key = v_event_key
+    AND t.pre_fund_request_id = p_fund_id
+    AND t.source_table = p_source_table
+    AND t.source_id = p_source_id;
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'idempotent', true,
+      'transaction_id', v_existing_transaction_id
+    );
+  END IF;
   IF EXISTS (SELECT 1 FROM public.pre_fund_transactions t WHERE t.idempotency_key = v_event_key) THEN
-    IF EXISTS (
-      SELECT 1 FROM public.pre_fund_transactions t
-      WHERE t.idempotency_key = v_event_key
-        AND t.pre_fund_request_id = p_fund_id
-        AND t.source_table = p_source_table
-        AND t.source_id = p_source_id
-    ) THEN
-      RETURN jsonb_build_object('success', true, 'idempotent', true);
-    END IF;
     RAISE EXCEPTION 'This payment operation key was already used for a different source or Pre-Fund.';
   END IF;
 
