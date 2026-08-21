@@ -531,20 +531,54 @@ export default function DownPaymentApproval() {
     preFundId: string;
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
   }>({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
-  const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string }[]>>(new Map());
+  const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string; amount?: number; currency?: string }[]>>(new Map());
+  const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
+  const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
 
   useEffect(() => {
     let active = true;
     void fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id))
       .then(links => {
         if (!active) return;
-        const next = new Map<string, { id: string; name: string }[]>();
-        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), { id: link.fundId, name: link.fundName }]));
+        const next = new Map<string, { id: string; name: string; amount?: number; currency?: string }[]>();
+        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
+          id: link.fundId,
+          name: link.fundName,
+          amount: link.paymentAmount,
+          currency: link.currency,
+        }]));
         setPreFundLinksByRequest(next);
       })
       .catch(() => { if (active) setPreFundLinksByRequest(new Map()); });
     return () => { active = false; };
   }, [requests]);
+
+  useEffect(() => {
+    if (!canManagePreFundFilters) {
+      setPreFundFilterOptions([]);
+      setFilters(current => current.preFundId ? { ...current, preFundId: undefined } : current);
+      return;
+    }
+    let active = true;
+    void (supabase as any)
+      .from('pre_fund_requests')
+      .select('id, name, currency')
+      .order('name', { ascending: true })
+      .then(({ data, error }: { data: any[] | null; error: any }) => {
+        if (!active) return;
+        if (error) {
+          console.error('[DownPaymentApproval] Failed to load Pre-Fund filter options:', error);
+          setPreFundFilterOptions([]);
+          return;
+        }
+        setPreFundFilterOptions((data ?? []).map(fund => ({
+          id: fund.id,
+          name: fund.name || fund.id,
+          currency: fund.currency || 'SDG',
+        })));
+      });
+    return () => { active = false; };
+  }, [canManagePreFundFilters]);
 
   // Fetch GL bridge log for fully_paid down_payment_requests
   useEffect(() => {
@@ -709,11 +743,30 @@ export default function DownPaymentApproval() {
     return { ...req, preFundNames: links.map(link => link.name), preFundIds: links.map(link => link.id) } as DownPaymentRequest;
   }), [requests, preFundLinksByRequest]);
   const filteredRequests = useMemo(() => filterDownPayments(requestsWithFunding, filters), [requestsWithFunding, filters]);
-  const preFundFilterOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    preFundLinksByRequest.forEach(links => links.forEach(link => map.set(link.id, link.name)));
-    return [...map.entries()].sort(([, a], [, b]) => a.localeCompare(b));
-  }, [preFundLinksByRequest]);
+  const selectedPreFundSummary = useMemo(() => {
+    const selectedFundId = filters.preFundId;
+    if (!selectedFundId) return null;
+    const label = selectedFundId === '__unlinked__'
+      ? 'Unlinked historical payments'
+      : selectedFundId === '__multiple__'
+        ? 'Requests paid from multiple Pre-Funds'
+        : preFundFilterOptions.find(fund => fund.id === selectedFundId)?.name ?? 'Selected Pre-Fund';
+    const totals = new Map<string, number>();
+    const add = (currency: string, amount: number) => {
+      totals.set(currency, (totals.get(currency) ?? 0) + amount);
+    };
+
+    if (selectedFundId === '__unlinked__' || selectedFundId === '__multiple__') {
+      filteredRequests.forEach(request => add('SDG', request.totalPaidAmount ?? 0));
+    } else {
+      filteredRequests.forEach(request => {
+        (preFundLinksByRequest.get(request.id) ?? [])
+          .filter(link => link.id === selectedFundId)
+          .forEach(link => add(link.currency || 'SDG', link.amount ?? 0));
+      });
+    }
+    return { label, totals: [...totals.entries()] };
+  }, [filters.preFundId, filteredRequests, preFundFilterOptions, preFundLinksByRequest]);
 
   // Group helper
   function buildGroups(keyFn: (r: DownPaymentRequest) => string): GroupRow[] {
@@ -1084,6 +1137,26 @@ export default function DownPaymentApproval() {
                     </SelectContent>
                   </Select>
                 </div>
+                {canManagePreFundFilters && (
+                  <div>
+                    <Label className="text-xs">Paid from Pre-Fund</Label>
+                    <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
+                      <SelectTrigger data-testid="select-page-filter-pre-fund">
+                        <SelectValue placeholder="All funding sources" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All funding sources</SelectItem>
+                        <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
+                        <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
+                        {preFundFilterOptions.map(fund => (
+                          <SelectItem key={fund.id} value={fund.id}>
+                            {fund.name} ({fund.currency})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className="text-xs">Date From</Label>
                   <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))} data-testid="input-page-filter-date-from" />
@@ -1116,6 +1189,29 @@ export default function DownPaymentApproval() {
           </Card>
         )}
       </div>
+      {canManagePreFundFilters && selectedPreFundSummary && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/70 dark:bg-emerald-950/30" data-testid="down-payment-pre-fund-paid-total">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+              Total paid from: {selectedPreFundSummary.label}
+            </p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+              {filters.preFundId === '__unlinked__' || filters.preFundId === '__multiple__'
+                ? 'Based on the matching advance payment totals'
+                : 'Based on immutable payment events for this Pre-Fund'}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            {selectedPreFundSummary.totals.length > 0
+              ? selectedPreFundSummary.totals.map(([currency, amount]) => (
+                <p key={currency} className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                  {currency} {amount.toLocaleString()}
+                </p>
+              ))
+              : <p className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">SDG 0</p>}
+          </div>
+        </div>
+      )}
 
       {/* ── View tabs ── */}
       <Tabs value={viewTab} onValueChange={setViewTab} className="space-y-4">
@@ -1490,19 +1586,6 @@ export default function DownPaymentApproval() {
                           {uMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                         </SelectContent>
                       </Select>
-
-                       <Select value={filters.preFundId || 'all'} onValueChange={v => setFilters(f => ({ ...f, preFundId: v === 'all' ? undefined : v }))}>
-                         <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-disb-pre-fund">
-                           <Wallet className="h-3 w-3 mr-1 shrink-0" />
-                           <SelectValue placeholder="Paid from Pre-Fund" />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="all">All funding sources</SelectItem>
-                           <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
-                           <SelectItem value="__multiple__">Multiple Pre-Funds</SelectItem>
-                           {preFundFilterOptions.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
-                         </SelectContent>
-                       </Select>
 
                       <div className="flex items-center gap-1 ml-auto">
                         <span className="text-xs text-muted-foreground whitespace-nowrap">Group by:</span>
