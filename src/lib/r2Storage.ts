@@ -10,8 +10,20 @@ async function sign(action: string, payload: Record<string, unknown>): Promise<a
   const { data, error } = await supabase.functions.invoke('r2-sign', {
     body: { action, ...payload },
   });
-  if (error) throw new Error(error.message || 'R2 signing failed');
   if (data?.error) throw new Error(data.error);
+  if (error) {
+    // supabase-js often masks the function body as a generic non-2xx message.
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const body = await ctx.json();
+        if (body?.error) throw new Error(body.error);
+      } catch (e) {
+        if (e instanceof Error && e.message !== error.message) throw e;
+      }
+    }
+    throw new Error(error.message || 'R2 signing failed');
+  }
   return data;
 }
 
@@ -73,6 +85,7 @@ export async function r2Move(fromKey: string, toKey: string): Promise<string> {
 }
 
 export async function r2MoveToTrash(key: string): Promise<string> {
+  if (isR2TrashKey(key)) return key;
   return r2Move(key, toR2TrashKey(key));
 }
 

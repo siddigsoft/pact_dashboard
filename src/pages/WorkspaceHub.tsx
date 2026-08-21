@@ -37,7 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { r2Upload, r2SignedUrl, r2Delete, r2MoveToTrash, r2RestoreFromTrash, isZipFile, r2ExtractZip, MAX_ZIP_BYTES, openStoredFile } from '@/lib/r2Storage';
+import { r2Upload, r2SignedUrl, r2Delete, r2MoveToTrash, r2RestoreFromTrash, isR2TrashKey, isZipFile, r2ExtractZip, MAX_ZIP_BYTES, openStoredFile } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -1845,6 +1845,7 @@ export default function WorkspaceHub() {
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [bulkMoveFolderId, setBulkMoveFolderId] = useState<string>('__root__');
   const [bulkMoving, setBulkMoving] = useState(false);
+  const [approvingDeleteId, setApprovingDeleteId] = useState<string | null>(null);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
   const [bulkShareGranteeType, setBulkShareGranteeType] = useState<GranteeType>('user');
@@ -2753,8 +2754,18 @@ export default function WorkspaceHub() {
   // ── Internal archive helper (called only from approveDeleteRequest / direct delete) ──
   // R2 bytes are moved under trash/<original-key>; DB row stays and is marked archived.
   async function _archiveFile(file: WFile) {
-    let storagePath = file.storage_path;
-    if (file.storage_provider === 'r2' && storagePath) {
+    // Re-read path so retries / double-clicks use the latest key (may already be in trash/).
+    const { data: latest } = await supabase
+      .from('workspace_files')
+      .select('storage_path, storage_provider, archived')
+      .eq('id', file.id)
+      .maybeSingle();
+    let storagePath = latest?.storage_path ?? file.storage_path;
+    const provider = latest?.storage_provider ?? file.storage_provider;
+    if (latest?.archived && provider === 'r2' && storagePath && isR2TrashKey(storagePath)) {
+      return;
+    }
+    if (provider === 'r2' && storagePath) {
       storagePath = await r2MoveToTrash(storagePath);
     }
     const { error } = await supabase.from('workspace_files').update({
@@ -2763,7 +2774,7 @@ export default function WorkspaceHub() {
       updated_at: new Date().toISOString(),
     }).eq('id', file.id);
     if (error) throw error;
-    await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: { r2_trash: file.storage_provider === 'r2' } });
+    await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: { r2_trash: provider === 'r2' } });
     if (selectedFile?.id === file.id) setSelectedFile(null);
     refetchFiles();
   }
@@ -2837,6 +2848,8 @@ export default function WorkspaceHub() {
       toast({ title: 'Not allowed', description: 'Only admins can approve delete requests.', variant: 'destructive' });
       return;
     }
+    if (approvingDeleteId) return;
+    setApprovingDeleteId(req.id);
     try {
       if (req.type === 'file') {
         const file = allFiles.find(f => f.id === req.target_id);
@@ -2867,6 +2880,8 @@ export default function WorkspaceHub() {
       toast({ title: `"${req.target_name}" deleted`, description: 'Delete request approved.' });
     } catch (e: any) {
       toast({ title: 'Failed to approve deletion', description: e.message, variant: 'destructive' });
+    } finally {
+      setApprovingDeleteId(null);
     }
   }
 
@@ -5773,9 +5788,11 @@ export default function WorkspaceHub() {
                     <Button
                       size="sm"
                       className="h-7 text-[11px] bg-red-600 hover:bg-red-700 text-white flex-1"
+                      disabled={approvingDeleteId === req.id}
                       onClick={() => { approveDeleteRequest(req); }}
                     >
-                      <CheckCircle2 className="h-3 w-3 mr-1" />Approve & Delete
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {approvingDeleteId === req.id ? 'Deleting…' : 'Approve & Delete'}
                     </Button>
                     <Button
                       size="sm"

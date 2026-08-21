@@ -27,4 +27,10 @@ describe('R2 trash key helpers', () => {
   it('uses the trash/ prefix constant', () => {
     expect(R2_TRASH_PREFIX).toBe('trash/');
   });
+
+  it('treats an already-trashed key as a no-op for toR2TrashKey', () => {
+    const trashed = toR2TrashKey('a/b.pdf');
+    expect(toR2TrashKey(trashed)).toBe(trashed);
+    expect(isR2TrashKey(trashed)).toBe(true);
+  });
 });

@@ -166,6 +166,21 @@ serve(async (req) => {
     if (key === toKey) return json({ ok: true, key })
     if (!(await callerMayTouchKey(key))) return json({ error: 'Forbidden' }, 403)
 
+    async function objectExists(objectKey: string): Promise<boolean> {
+      const headSigned = await r2.sign(new Request(r2ObjectUrl(endpoint, objectKey), { method: 'HEAD' }))
+      const headRes = await fetch(headSigned)
+      return headRes.ok
+    }
+
+    // Idempotent: already parked at destination (double-click / retry).
+    if (await objectExists(toKey)) {
+      if (await objectExists(key)) {
+        const delUrl = await presign(key, 'DELETE', 60)
+        await fetch(delUrl, { method: 'DELETE' }).catch(() => {})
+      }
+      return json({ ok: true, key: toKey })
+    }
+
     const copySource = `/${BUCKET}/${key.split('/').map(encodeURIComponent).join('/')}`
     const destUrl = r2ObjectUrl(endpoint, toKey)
     const copySigned = await r2.sign(new Request(destUrl, {
@@ -175,6 +190,8 @@ serve(async (req) => {
     const copyRes = await fetch(copySigned)
     if (!copyRes.ok) {
       const detail = await copyRes.text().catch(() => '')
+      // Race: another request already moved the object.
+      if (await objectExists(toKey)) return json({ ok: true, key: toKey })
       return json({
         error: `R2 copy failed (${copyRes.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`,
       }, 502)
