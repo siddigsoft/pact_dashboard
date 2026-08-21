@@ -1275,7 +1275,8 @@ export default function DownPaymentApproval() {
           <DownPaymentApprovalPanel
             userRole={approvalRole}
             externalFilters={filters}
-            externalRequests={requestsWithFunding}
+            externalRequests={filteredRequests}
+            externalRequestsAreFiltered={true}
             hideFiltersBar={true}
           />
         </TabsContent>

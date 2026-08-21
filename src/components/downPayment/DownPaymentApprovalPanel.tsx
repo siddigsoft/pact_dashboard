@@ -96,10 +96,12 @@ interface DownPaymentApprovalPanelProps {
   hideFiltersBar?: boolean;
   /**
    * The parent page resolves immutable Pre-Fund links before applying its
-   * shared filters. Accept that enriched collection so this panel does not
-   * apply a selected Pre-Fund filter against raw requests with no link IDs.
+   * shared filters. Accept that collection so this panel can use the exact
+   * same records as the page-level banner and reporting views.
    */
   externalRequests?: DownPaymentRequest[];
+  /** Set when externalRequests already has every active page filter applied. */
+  externalRequestsAreFiltered?: boolean;
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -318,7 +320,13 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   );
 });
 
-export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar, externalRequests }: DownPaymentApprovalPanelProps) {
+export function DownPaymentApprovalPanel({
+  userRole,
+  externalFilters,
+  hideFiltersBar,
+  externalRequests,
+  externalRequestsAreFiltered = false,
+}: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
@@ -489,7 +497,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   }, [requests, users]);
 
   const effectiveFilters = externalFilters ?? filters;
-  const filteredRequests = useMemo(() => filterDownPayments(requests, effectiveFilters), [requests, effectiveFilters]);
+  const filteredRequests = useMemo(
+    () => externalRequestsAreFiltered ? requests : filterDownPayments(requests, effectiveFilters),
+    [requests, effectiveFilters, externalRequestsAreFiltered],
+  );
 
   const approvedForPayment = useMemo(() =>
     filteredRequests.filter(r => r.status === 'approved'),
