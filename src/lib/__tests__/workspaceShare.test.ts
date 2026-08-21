@@ -21,4 +21,10 @@ describe('sanitizeShareCode', () => {
   it('rejects codes that are too long to be a share id', () => {
     expect(sanitizeShareCode('a'.repeat(80))).toBeNull();
   });
+
+  it('accepts a UUID share id', () => {
+    expect(sanitizeShareCode('550e8400-e29b-41d4-a716-446655440000')).toBe(
+      '550e8400-e29b-41d4-a716-446655440000',
+    );
+  });
 });

@@ -109,7 +109,7 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('id')
-        .eq('role', 'SuperAdmin');
+        .in('role', ['superAdmin', 'SuperAdmin', 'super_admin', 'superadmin']);
       if (superAdmins?.length) {
         const messageEn = `${currentUser.name ?? 'A user'} (${currentUser.role ?? ''}) has requested access to the Workspace Hub.${reason.trim() ? ` Reason: ${reason.trim()}` : ''}`;
         const messageAr = `${currentUser.name ?? 'مستخدم'} (${currentUser.role ?? ''}) طلب الوصول إلى مركز مساحة العمل.${reason.trim() ? ` السبب: ${reason.trim()}` : ''}`;

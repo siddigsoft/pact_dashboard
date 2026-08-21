@@ -18,6 +18,9 @@
  *                    Requires auth. Allowed for legacy user-id prefixes,
  *                    unregistered snapshot keys (orphan cleanup), or keys
  *                    whose workspace_files row is visible under RLS.
+ *  - move          { key, toKey }      → { ok: true, key }
+ *                    Server-side CopyObject + delete. Used to park soft-deleted
+ *                    files under trash/<original-key>. Same auth as delete.
  *
  * Secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
@@ -48,7 +51,7 @@ serve(async (req) => {
     return json({ error: 'R2 storage is not configured on the server' }, 500)
   }
 
-  let body: { action?: string; key?: string; fileName?: string; filename?: string; folderPath?: string }
+  let body: { action?: string; key?: string; toKey?: string; fileName?: string; filename?: string; folderPath?: string }
   try {
     body = await req.json()
   } catch {
@@ -67,6 +70,21 @@ serve(async (req) => {
   })
   // Anon key passes the gateway but getUser() fails for it → user stays null.
   const { data: { user } } = await userClient.auth.getUser()
+
+  async function callerMayTouchKey(key: string): Promise<boolean> {
+    if (!user) return false
+    if (keyOwnedByUser(key, user.id)) return true
+    // Soft-delete parks objects under trash/<original-key>; allow either twin.
+    const alt = key.startsWith('trash/') ? key.slice('trash/'.length) : `trash/${key}`
+    const { data: row } = await userClient
+      .from('workspace_files')
+      .select('id')
+      .eq('storage_provider', 'r2')
+      .in('storage_path', [key, alt])
+      .limit(1)
+      .maybeSingle()
+    return !!row
+  }
 
   const r2 = new AwsClient({
     accessKeyId: ACCESS_KEY,
@@ -129,17 +147,7 @@ serve(async (req) => {
     if (!user) return json({ error: 'Unauthorized' }, 401)
     const key = body.key
     if (!validR2Key(key)) return json({ error: 'Invalid key' }, 400)
-
-    let allowed = keyOwnedByUser(key, user.id)
-    if (!allowed) {
-      const { data: row } = await userClient
-        .from('workspace_files')
-        .select('id')
-        .eq('storage_path', key)
-        .maybeSingle()
-      allowed = !!row
-    }
-    if (!allowed) return json({ error: 'Forbidden' }, 403)
+    if (!(await callerMayTouchKey(key))) return json({ error: 'Forbidden' }, 403)
 
     const url = await presign(key, 'DELETE', 60)
     const res = await fetch(url, { method: 'DELETE' })
@@ -147,6 +155,54 @@ serve(async (req) => {
       return json({ error: `R2 delete failed (${res.status})` }, 502)
     }
     return json({ ok: true })
+  }
+
+  // ── move (copy + delete) ────────────────────────────────────────────────────
+  if (action === 'move') {
+    if (!user) return json({ error: 'Unauthorized' }, 401)
+    const key = body.key
+    const toKey = body.toKey
+    if (!validR2Key(key) || !validR2Key(toKey)) return json({ error: 'Invalid key' }, 400)
+    if (key === toKey) return json({ ok: true, key })
+    if (!(await callerMayTouchKey(key))) return json({ error: 'Forbidden' }, 403)
+
+    async function objectExists(objectKey: string): Promise<boolean> {
+      const headSigned = await r2.sign(new Request(r2ObjectUrl(endpoint, objectKey), { method: 'HEAD' }))
+      const headRes = await fetch(headSigned)
+      return headRes.ok
+    }
+
+    // Idempotent: already parked at destination (double-click / retry).
+    if (await objectExists(toKey)) {
+      if (await objectExists(key)) {
+        const delUrl = await presign(key, 'DELETE', 60)
+        await fetch(delUrl, { method: 'DELETE' }).catch(() => {})
+      }
+      return json({ ok: true, key: toKey })
+    }
+
+    const copySource = `/${BUCKET}/${key.split('/').map(encodeURIComponent).join('/')}`
+    const destUrl = r2ObjectUrl(endpoint, toKey)
+    const copySigned = await r2.sign(new Request(destUrl, {
+      method: 'PUT',
+      headers: { 'x-amz-copy-source': copySource },
+    }))
+    const copyRes = await fetch(copySigned)
+    if (!copyRes.ok) {
+      const detail = await copyRes.text().catch(() => '')
+      // Race: another request already moved the object.
+      if (await objectExists(toKey)) return json({ ok: true, key: toKey })
+      return json({
+        error: `R2 copy failed (${copyRes.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+      }, 502)
+    }
+
+    const delUrl = await presign(key, 'DELETE', 60)
+    const delRes = await fetch(delUrl, { method: 'DELETE' })
+    if (!delRes.ok && delRes.status !== 404) {
+      return json({ error: `R2 delete-after-copy failed (${delRes.status})` }, 502)
+    }
+    return json({ ok: true, key: toKey })
   }
 
   return json({ error: `Unknown action: ${action}` }, 400)

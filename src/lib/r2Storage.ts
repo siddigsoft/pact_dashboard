@@ -10,8 +10,20 @@ async function sign(action: string, payload: Record<string, unknown>): Promise<a
   const { data, error } = await supabase.functions.invoke('r2-sign', {
     body: { action, ...payload },
   });
-  if (error) throw new Error(error.message || 'R2 signing failed');
   if (data?.error) throw new Error(data.error);
+  if (error) {
+    // supabase-js often masks the function body as a generic non-2xx message.
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const body = await ctx.json();
+        if (body?.error) throw new Error(body.error);
+      } catch (e) {
+        if (e instanceof Error && e.message !== error.message) throw e;
+      }
+    }
+    throw new Error(error.message || 'R2 signing failed');
+  }
   return data;
 }
 
@@ -48,6 +60,37 @@ export async function r2SignedUrl(key: string, filename?: string): Promise<strin
 export async function r2Delete(keys: string | string[]): Promise<void> {
   const list = Array.isArray(keys) ? keys : [keys];
   await Promise.all(list.map(key => sign('delete', { key })));
+}
+
+/** Soft-deleted workspace objects live under this R2 prefix. */
+export const R2_TRASH_PREFIX = 'trash/';
+
+export function isR2TrashKey(key: string): boolean {
+  return key.startsWith(R2_TRASH_PREFIX);
+}
+
+export function toR2TrashKey(key: string): string {
+  return isR2TrashKey(key) ? key : `${R2_TRASH_PREFIX}${key}`;
+}
+
+export function fromR2TrashKey(key: string): string {
+  return isR2TrashKey(key) ? key.slice(R2_TRASH_PREFIX.length) : key;
+}
+
+/** Server-side copy+delete in R2. Returns the destination key. */
+export async function r2Move(fromKey: string, toKey: string): Promise<string> {
+  if (fromKey === toKey) return toKey;
+  const data = await sign('move', { key: fromKey, toKey });
+  return (data.key as string) || toKey;
+}
+
+export async function r2MoveToTrash(key: string): Promise<string> {
+  if (isR2TrashKey(key)) return key;
+  return r2Move(key, toR2TrashKey(key));
+}
+
+export async function r2RestoreFromTrash(key: string): Promise<string> {
+  return r2Move(key, fromR2TrashKey(key));
 }
 
 /** Stored on task JSON so we can tell R2 keys from old Supabase public URLs. */
