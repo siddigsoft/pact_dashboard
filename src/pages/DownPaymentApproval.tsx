@@ -88,28 +88,6 @@ type GroupRow = {
   items: DownPaymentRequest[];
 };
 
-type PreFundPaymentEvent = {
-  id: string;
-  amount: number;
-  currency: string;
-  paymentDate: string | null;
-  sourceTable: string | null;
-  sourceId: string | null;
-  reference: string | null;
-  description: string | null;
-  reconciled: boolean;
-};
-
-function paymentSourceLabel(sourceTable: string | null): string {
-  switch (sourceTable) {
-    case 'down_payment_requests': return 'Down Payment / Advance';
-    case 'operational_cost_submissions': return 'Cost Submission';
-    case 'mmp_site_entries': return 'Enumerator Fee';
-    case null: return 'Legacy payment';
-    default: return sourceTable.replace(/_/g, ' ');
-  }
-}
-
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function RequestDetailsDialog({ req, onClose, getProfileName }: { req: DownPaymentRequest | null; onClose: () => void; getProfileName: (id: string) => string }) {
@@ -556,9 +534,6 @@ export default function DownPaymentApproval() {
   const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string; amount?: number; currency?: string }[]>>(new Map());
   const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
-  const [fundPaymentEvents, setFundPaymentEvents] = useState<PreFundPaymentEvent[]>([]);
-  const [fundPaymentEventsLoading, setFundPaymentEventsLoading] = useState(false);
-  const [fundPaymentEventsError, setFundPaymentEventsError] = useState<string | null>(null);
   const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
 
   useEffect(() => {
@@ -612,79 +587,6 @@ export default function DownPaymentApproval() {
       });
     return () => { active = false; };
   }, [canManagePreFundFilters]);
-
-  useEffect(() => {
-    const selectedFundId = filters.preFundId;
-    if (!selectedFundId || ['__unlinked__', '__multiple__'].includes(selectedFundId)) {
-      setFundPaymentEvents([]);
-      setFundPaymentEventsError(null);
-      setFundPaymentEventsLoading(false);
-      return;
-    }
-
-    let active = true;
-    setFundPaymentEventsLoading(true);
-    setFundPaymentEventsError(null);
-    void (async () => {
-      const { data, error } = await (supabase as any)
-        .from('pre_fund_event_ledger_v')
-        .select('id, amount, currency, transaction_date, source_table, source_id, reference, description, reconciled')
-        .eq('pre_fund_request_id', selectedFundId)
-        .eq('transaction_type', 'payment')
-        .eq('source_is_verified', true)
-        .order('transaction_date', { ascending: false });
-      if (!active) return;
-      if (error) {
-        const { data: fallbackData, error: fallbackError } = await (supabase as any)
-          .from('pre_fund_transactions')
-          .select('id, amount, currency, transaction_date, source_table, source_id, reference, description, reconciled, transaction_type, reversal_of_id')
-          .eq('pre_fund_request_id', selectedFundId)
-          .in('transaction_type', ['payment', 'reversal', 'return'])
-          .order('transaction_date', { ascending: false });
-        if (!active) return;
-        if (fallbackError) {
-          setFundPaymentEvents([]);
-          setFundPaymentEventsError(`Ledger view: ${error.message}. Direct payment records: ${fallbackError.message}`);
-          setFundPaymentEventsLoading(false);
-          return;
-        }
-        const reversalTargets = new Set(
-          ((fallbackData ?? []) as any[])
-            .filter(event => event.transaction_type === 'reversal' || event.transaction_type === 'return')
-            .map(event => event.reversal_of_id)
-            .filter(Boolean),
-        );
-        setFundPaymentEvents(((fallbackData ?? []) as any[])
-          .filter(event => event.transaction_type === 'payment' && !reversalTargets.has(event.id))
-          .map(event => ({
-            id: event.id,
-            amount: Number(event.amount ?? 0),
-            currency: event.currency || 'SDG',
-            paymentDate: event.transaction_date ?? null,
-            sourceTable: event.source_table ?? null,
-            sourceId: event.source_id ?? null,
-            reference: event.reference ?? null,
-            description: event.description ?? null,
-            reconciled: event.reconciled === true,
-          })));
-        setFundPaymentEventsLoading(false);
-        return;
-      }
-      setFundPaymentEvents(((data ?? []) as any[]).map(event => ({
-        id: event.id,
-        amount: Number(event.amount ?? 0),
-        currency: event.currency || 'SDG',
-        paymentDate: event.transaction_date ?? null,
-        sourceTable: event.source_table ?? null,
-        sourceId: event.source_id ?? null,
-        reference: event.reference ?? null,
-        description: event.description ?? null,
-        reconciled: event.reconciled === true,
-      })));
-      setFundPaymentEventsLoading(false);
-    })();
-    return () => { active = false; };
-  }, [filters.preFundId]);
 
   // Fetch GL bridge log for fully_paid down_payment_requests
   useEffect(() => {
@@ -873,13 +775,6 @@ export default function DownPaymentApproval() {
     }
     return { label, totals: [...totals.entries()] };
   }, [filters.preFundId, filteredRequests, preFundFilterOptions, preFundLinksByRequest]);
-  const unifiedFundPaymentTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    fundPaymentEvents.forEach(event => {
-      totals.set(event.currency, (totals.get(event.currency) ?? 0) + event.amount);
-    });
-    return [...totals.entries()];
-  }, [fundPaymentEvents]);
 
   // Group helper
   function buildGroups(keyFn: (r: DownPaymentRequest) => string): GroupRow[] {
@@ -1332,93 +1227,6 @@ export default function DownPaymentApproval() {
           <span className="font-semibold">Pre-Fund filter unavailable:</span> {preFundLinkError}
         </div>
       )}
-      {canManagePreFundFilters
-        && filters.preFundId
-        && !['__unlinked__', '__multiple__'].includes(filters.preFundId)
-        && (
-          <Card className="border-teal-200 dark:border-teal-900/70" data-testid="card-unified-pre-fund-payments">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Wallet className="h-4 w-4 text-teal-700 dark:text-teal-300" />
-                    All payments from {selectedPreFundSummary?.label ?? 'selected Pre-Fund'}
-                  </CardTitle>
-                  <CardDescription>
-                    Unified verified payment ledger — includes Cost Submissions, Down Payments, and other linked payment sources.
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  {unifiedFundPaymentTotals.map(([currency, amount]) => (
-                    <p key={currency} className="font-bold tabular-nums text-teal-700 dark:text-teal-300">
-                      {currency} {amount.toLocaleString()}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {fundPaymentEventsLoading ? (
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                </div>
-              ) : fundPaymentEventsError ? (
-                <div className="p-4 text-sm text-rose-700 dark:text-rose-300">
-                  Could not load this fund’s payment ledger: {fundPaymentEventsError}
-                </div>
-              ) : fundPaymentEvents.length === 0 ? (
-                <div className="p-5 text-sm text-muted-foreground">
-                  No verified payment events are recorded for this Pre-Fund.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Payment source</TableHead>
-                        <TableHead>Reference / description</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {fundPaymentEvents.map(event => (
-                        <TableRow key={event.id} data-testid={`row-pre-fund-payment-${event.id}`}>
-                          <TableCell className="whitespace-nowrap text-xs">
-                            {event.paymentDate ? fmtDate(event.paymentDate) : '—'}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-[10px] capitalize">
-                              {paymentSourceLabel(event.sourceTable)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[400px]">
-                            <p className="truncate text-sm" title={event.description ?? event.reference ?? undefined}>
-                              {event.description || event.reference || (event.sourceId ? `Payment ${event.sourceId.slice(0, 8)}` : 'Ledger payment')}
-                            </p>
-                            {event.reference && event.description && (
-                              <p className="text-[10px] text-muted-foreground truncate">{event.reference}</p>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-[10px]">
-                              {event.reconciled ? 'Reconciled' : 'Recorded'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-teal-700 dark:text-teal-300">
-                            {event.currency} {event.amount.toLocaleString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
       {/* ── View tabs ── */}
       <Tabs value={viewTab} onValueChange={setViewTab} className="space-y-4">
