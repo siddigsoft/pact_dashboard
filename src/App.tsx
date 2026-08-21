@@ -260,7 +260,6 @@ import { NotificationStack } from './components/NotificationStack';
 import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ChunkLoadRecoveryUI } from './components/ChunkLoadRecoveryUI';
 import { useFCM } from './hooks/useFCM';
 import { useAuthorization } from './hooks/use-authorization';
 import { canSeePage, canSeePageWithOverrides, resolveSlug, getPageLabel } from './lib/page-roles';
@@ -279,11 +278,8 @@ const PageLoader = () => (
   </div>
 );
 
-// Per-page error boundary so a single page crash doesn't take down the whole app
-const PageCrashFallback = () => <ChunkLoadRecoveryUI />;
-
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
-  <ErrorBoundary fallback={<PageCrashFallback />}>
+  <ErrorBoundary>
     {children}
   </ErrorBoundary>
 );

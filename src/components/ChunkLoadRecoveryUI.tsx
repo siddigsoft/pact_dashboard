@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { reloadForStaleChunk } from '@/lib/chunk-load-recovery';
 
 interface ChunkLoadRecoveryUIProps {
@@ -11,9 +11,11 @@ interface ChunkLoadRecoveryUIProps {
  * Replaces raw "Failed to fetch dynamically imported module" error screens.
  */
 export function ChunkLoadRecoveryUI({ autoReload = true }: ChunkLoadRecoveryUIProps) {
+  const [reloading, setReloading] = useState(false);
+
   useEffect(() => {
     if (!autoReload) return;
-    reloadForStaleChunk();
+    setReloading(reloadForStaleChunk());
   }, [autoReload]);
 
   return (
@@ -24,9 +26,13 @@ export function ChunkLoadRecoveryUI({ autoReload = true }: ChunkLoadRecoveryUIPr
           aria-hidden
         />
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-foreground">Updating application</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            {reloading ? 'Updating application' : 'Unable to load this page'}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            A new version was deployed. Refreshing to load the latest files…
+            {reloading
+              ? 'A new version was deployed. Refreshing to load the latest files…'
+              : 'The latest page file could not be loaded. Try refreshing once more.'}
           </p>
         </div>
         <button
@@ -34,7 +40,7 @@ export function ChunkLoadRecoveryUI({ autoReload = true }: ChunkLoadRecoveryUIPr
           onClick={() => window.location.reload()}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
         >
-          Refresh now
+          Try again
         </button>
       </div>
     </div>

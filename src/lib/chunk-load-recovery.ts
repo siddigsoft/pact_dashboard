@@ -1,7 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
 const CHUNK_RELOAD_KEY = 'pact_chunk_reload_ts';
-const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
 
 const CHUNK_ERROR_PATTERN =
   /loading chunk|failed to fetch dynamically imported module|importing a module script failed|chunkloaderror/i;
@@ -12,17 +11,17 @@ export function isChunkLoadError(error: unknown): boolean {
 }
 
 /**
- * Reload once per cooldown window so stale post-deploy chunks pick up the new manifest.
+ * Reload once per browser session so stale post-deploy chunks pick up the new
+ * manifest without trapping users in a refresh loop when the underlying issue
+ * is not a stale chunk.
  * Returns true when a reload was triggered.
  */
 export function reloadForStaleChunk(): boolean {
   if (typeof window === 'undefined') return false;
 
-  const last = parseInt(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? '0', 10);
-  const now = Date.now();
-  if (now - last <= CHUNK_RELOAD_COOLDOWN_MS) return false;
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return false;
 
-  sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, 'attempted');
   window.location.reload();
   return true;
 }
