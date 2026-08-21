@@ -39,7 +39,8 @@ CREATE TABLE public.pre_fund_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, currency text NOT NULL,
   amount numeric NOT NULL, available_balance numeric NOT NULL DEFAULT 0, paid_amount numeric NOT NULL DEFAULT 0,
   committed_amount numeric NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'active',
-  gl_liability_account text, gl_receipt_account text, updated_at timestamptz NOT NULL DEFAULT now()
+  gl_liability_account text, gl_receipt_account text, holder_user_id uuid REFERENCES auth.users(id),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.pre_fund_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), pre_fund_request_id uuid NOT NULL REFERENCES public.pre_fund_requests(id),
@@ -93,6 +94,7 @@ SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 INSERT INTO public.acct_accounts (code) VALUES ('1200'), ('2400');
@@ -621,6 +623,84 @@ BEGIN
   END;
 END $$;
 UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
+
+-- Country Directors can see only exceptions for funds they hold. Unassigned
+-- source-payment gaps remain Finance-only because their fund is unknown.
+INSERT INTO public.down_payment_requests (id, status, total_paid_amount, justification)
+VALUES ('30000000-0000-0000-0000-000000000010', 'paid', 25, 'Unassigned payment gap');
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000006', 'USD Country Director Exclusion Fund', 'USD', 100, 100, 0, '2400', '1200'
+);
+INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, title)
+VALUES ('20000000-0000-0000-0000-000000000007', 'approved', 1000, 'Other fund OCS exception');
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, reference, description,
+  transaction_date, source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000006', 'payment', 10, 'USD', 'country-director-scope',
+  'Country Director must not read another fund exception', CURRENT_DATE, 'operational_cost_submissions',
+  '20000000-0000-0000-0000-000000000007', auth.uid(), auth.uid(), 'country-director-scope-event'
+);
+UPDATE public.pre_fund_requests
+SET holder_user_id = auth.uid()
+WHERE id = '10000000-0000-0000-0000-000000000002';
+UPDATE public.profiles SET role = 'country director' WHERE id = auth.uid();
+DO $$
+DECLARE v_visible int; v_unassigned int; v_other_fund int;
+BEGIN
+  SELECT count(*) INTO v_visible
+  FROM public.get_pre_fund_finance_exception_queue_rpc(NULL)
+  WHERE fund_id = '10000000-0000-0000-0000-000000000002';
+  SELECT count(*) INTO v_unassigned
+  FROM public.get_pre_fund_finance_exception_queue_rpc(NULL)
+  WHERE fund_id IS NULL;
+  SELECT count(*) INTO v_other_fund
+  FROM public.get_pre_fund_finance_exception_queue_rpc('10000000-0000-0000-0000-000000000006');
+  IF v_visible = 0 OR v_unassigned <> 0 OR v_other_fund <> 0 THEN
+    RAISE EXCEPTION 'Country Director queue scope failed: held %, unassigned %, other fund %', v_visible, v_unassigned, v_other_fund;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.record_pre_fund_exception_decision_rpc(
+      'txn:00000000-0000-0000-0000-000000000000', 'Country Director must not decide exceptions.', 'NO-AUTH'
+    );
+    RAISE EXCEPTION 'Country Director resolved a Finance exception';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Country Director resolved a Finance exception' THEN RAISE; END IF;
+  END;
+END $$;
+UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
+DO $$
+DECLARE v_unassigned int; v_cross_fund_currency text; v_unassigned_key text; v_unassigned_decisions int;
+BEGIN
+  SELECT count(*) INTO v_unassigned
+  FROM public.get_pre_fund_finance_exception_queue_rpc(NULL)
+  WHERE fund_id IS NULL;
+  SELECT currency INTO v_cross_fund_currency
+  FROM public.get_pre_fund_finance_exception_queue_rpc(NULL)
+  WHERE source_id = '20000000-0000-0000-0000-000000000007';
+  IF v_unassigned = 0 OR v_cross_fund_currency <> 'USD' THEN
+    RAISE EXCEPTION 'Finance global exception queue omitted an unassigned source-payment gap';
+  END IF;
+  -- An unassigned gap has no selected fund. Finance can still record the
+  -- review outcome without inventing a fund or altering an event.
+  SELECT exception_key INTO v_unassigned_key
+  FROM public.get_pre_fund_finance_exception_queue_rpc(NULL)
+  WHERE source_id = '30000000-0000-0000-0000-000000000010';
+  PERFORM public.record_pre_fund_exception_decision_rpc(
+    v_unassigned_key, 'No supporting evidence identifies a fund; retain exclusion.', 'UNASSIGNED-GAP-001'
+  );
+  SELECT count(*) INTO v_unassigned_decisions
+  FROM public.pre_fund_finance_exception_decisions
+  WHERE exception_key = v_unassigned_key AND fund_id IS NULL AND resolution = 'keep_excluded';
+  IF v_unassigned_decisions <> 1 THEN
+    RAISE EXCEPTION 'Finance could not review an unassigned gap without a selected fund';
+  END IF;
+END $$;
 
 -- Evidence confirmation atomically changes an approved OCS to paid and posts
 -- the source-field gap as a new immutable event. A retry is idempotent.

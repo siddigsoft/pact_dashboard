@@ -19,8 +19,8 @@ import { Separator } from '@/components/ui/separator';
 import {
   RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, Lock,
   Download, FileText, ChevronRight, DollarSign, ArrowRight,
-  Calendar, Plus, Banknote, Shuffle, Link2, Upload, X,
-  ExternalLink, ChevronDown, History, Trash2, Filter, AlertCircle,
+  Calendar, Plus, Banknote, Shuffle, Upload, X,
+  ExternalLink, ChevronDown, History, Trash2, AlertCircle,
   Info, Receipt, User, Clock, FileSpreadsheet, Hash, Loader2,
   UserPlus,
 } from 'lucide-react';
@@ -54,7 +54,6 @@ async function fetchAllIn<T = any>(queryFn: (chunk: string[]) => any, ids: strin
   }
   return (await Promise.all(batches)).flat();
 }
-import { createPreFundPaymentEventKey, linkPaymentToKnownFund } from '@/utils/preFundLinkage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -86,6 +85,7 @@ interface Reconciliation {
 interface ExceptionQueueItem {
   exception_key: string;
   exception_type: string;
+  fund_id?: string | null;
   source_table: string | null;
   source_description: string | null;
   source_status: string | null;
@@ -681,15 +681,11 @@ export default function PreFundingReconciliation() {
     });
   };
 
-  // Auto-link retry
+  // Paid source coverage review. This is deliberately read-only: a missing
+  // Pre-Fund link is not proof of which fund should have covered a payment.
   const [unlinkedSubs, setUnlinkedSubs]       = useState<{ ocs: any[]; dp: any[]; ef: any[] }>({ ocs: [], dp: [], ef: [] });
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
   const [showUnlinked, setShowUnlinked]       = useState(false);
-  const [retryingId, setRetryingId]           = useState<string | null>(null);
-  const [unlinkedFrom, setUnlinkedFrom]       = useState('');
-  const [unlinkedTo, setUnlinkedTo]           = useState('');
-  /** True when the link RPC is missing from the DB — prompts Finance to run the SQL migration */
-  const [rpcMissing, setRpcMissing]           = useState(false);
   /** True while a stale-balance reset is in progress */
   const [resettingBalance, setResettingBalance] = useState(false);
   const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
@@ -697,6 +693,8 @@ export default function PreFundingReconciliation() {
   // ── Finance exception queue ──────────────────────────────────────────────
   const [exceptionQueue, setExceptionQueue]     = useState<ExceptionQueueItem[]>([]);
   const [loadingExceptions, setLoadingExceptions] = useState(false);
+  const [exceptionQueueStatus, setExceptionQueueStatus] = useState<'ready' | 'migration_required' | 'unavailable'>('ready');
+  const [exceptionQueueMessage, setExceptionQueueMessage] = useState<string | null>(null);
   const [showExceptions, setShowExceptions]     = useState(false);
   const [reviewException, setReviewException]   = useState<ExceptionQueueItem | null>(null);
   const [exceptionNote, setExceptionNote]       = useState('');
@@ -705,6 +703,7 @@ export default function PreFundingReconciliation() {
   const [exceptionAction, setExceptionAction]   = useState<'keep_excluded' | 'confirm_evidence' | null>(null);
   const [exceptionIdempotencyKey, setExceptionIdempotencyKey] = useState<string | null>(null);
   const [submittingException, setSubmittingException] = useState(false);
+  const reviewCurrency = reviewException?.currency?.trim() || null;
 
   // Unlink / remove a linked transaction
   const [confirmUnlinkTxn, setConfirmUnlinkTxn] = useState<PreFundTransaction | null>(null);
@@ -899,7 +898,7 @@ export default function PreFundingReconciliation() {
 
   useEffect(() => { loadFunds(); }, [loadFunds]);
   // Keep selectedFund fresh whenever the funds list is refreshed (loadFunds,
-  // handleResetBalance, handleRetryLink, etc.) — without this, selectedFund
+  // handleResetBalance and other fund refreshes — without this, selectedFund
   // holds a stale object and computed values like effectivePaidAmount lag behind
   useEffect(() => {
     if (!selectedFund) return;
@@ -915,8 +914,8 @@ export default function PreFundingReconciliation() {
       setSelectedTxnIds(new Set());
       setTxnForm(p => ({ ...p, currency: selectedFund.currency }));
       loadTxns(selectedFund.id);
-      loadUnlinkedPayments(selectedFund.id);
-      loadExceptions(selectedFund.id);
+       if (canManageExceptions) loadUnlinkedPayments();
+       else setUnlinkedSubs({ ocs: [], dp: [], ef: [] });
       // Load allocated users for this fund (for super-admin user picker)
       (async () => {
         const { data: allocs } = await (supabase as any)
@@ -936,109 +935,154 @@ export default function PreFundingReconciliation() {
         })));
       })();
     }
-  }, [selectedFund, loadTxns]);
+   }, [selectedFund, loadTxns, canManageExceptions]);
 
-  // ── Auto-link retry ──────────────────────────────────────────────────────
-  const loadUnlinkedPayments = useCallback(async (fundId: string) => {
+  // ── Paid sources without active Pre-Fund coverage ─────────────────────────
+  const loadUnlinkedPayments = useCallback(async () => {
+    // The coverage report intentionally aggregates every fund. It is limited to
+    // Finance/Admin users so a Country Director never receives unrelated source
+    // payment data in the browser; their queue remains holder-scoped by RPC.
+    if (!canManageExceptions) {
+      setUnlinkedSubs({ ocs: [], dp: [], ef: [] });
+      return;
+    }
     setLoadingUnlinked(true);
     try {
-      const { data: linked } = await supabase
-        .from('pre_fund_transactions')
-        .select('source_id')
-        .eq('pre_fund_request_id', fundId)
-        .not('source_id', 'is', null);
-      const linkedIds = (linked ?? []).map((r: any) => r.source_id).filter(Boolean);
-
-      const excludeClause = (ids: string[]) =>
-        ids.length ? `(${ids.join(',')})` : '(00000000-0000-0000-0000-000000000000)';
-
-      const [ocsRes, dpRes, efRes] = await Promise.all([
-        supabase
+      const [coverageRows, ocsRows, dpRows, efRows] = await Promise.all([
+        fetchAll(() => supabase
+          .from('pre_fund_transactions')
+          .select('source_table,source_id,transaction_type,amount')
+          .in('transaction_type', ['payment', 'reversal', 'return'])
+          .not('source_id', 'is', null)),
+        fetchAll(() => supabase
           .from('operational_cost_submissions')
-          .select('id,title,description,amount_cents,currency,status,submitted_at,submitted_by')
-          .eq('status', 'paid')
-          .not('id', 'in', excludeClause(linkedIds))
-          .order('submitted_at', { ascending: false }),
-        (supabase as any)
+          .select('id,title,description,amount_paid_cents,currency,status,submitted_at,submitted_by,paid_at,created_at')
+          .in('status', ['partially_paid', 'paid', 'reconciled'])
+          .order('paid_at', { ascending: false })),
+        fetchAll(() => (supabase as any)
           .from('down_payment_requests')
           .select('id,justification,requested_amount,approved_amount,total_paid_amount,status,metadata,created_at,requested_by,fully_paid_at,pre_fund_transaction_id')
-          .not('status', 'in', '(pending,pending_supervisor,pending_admin,draft,rejected,cancelled)')
+          .in('status', ['partially_paid', 'fully_paid', 'paid', 'reconciled'])
           .gt('total_paid_amount', 0)
-          .is('pre_fund_transaction_id', null)
-          .not('id', 'in', excludeClause(linkedIds))
-          .order('created_at', { ascending: false }),
+          .order('fully_paid_at', { ascending: false })),
         // Enumerator / transport fees from MMP site entries
-        (supabase as any)
+        fetchAll(() => (supabase as any)
           .from('mmp_site_entries')
           .select('id,site_name,visit_date,accepted_by,transport_fee,enumerator_fee,currency,payment_status,paid_at,enumerator_name')
           .eq('payment_status', 'paid')
-          .not('id', 'in', excludeClause(linkedIds))
-          .order('visit_date', { ascending: false }),
+          .order('paid_at', { ascending: false })),
       ]);
 
-      const ocs = (ocsRes.data ?? []).map((r: any) => ({
+      const coveredAmounts = new Map<string, number>();
+      for (const event of coverageRows as any[]) {
+        if (!event.source_table || !event.source_id) continue;
+        const key = `${event.source_table}:${event.source_id}`;
+        const signedAmount = event.transaction_type === 'payment'
+          ? Number(event.amount ?? 0)
+          : -Number(event.amount ?? 0);
+        coveredAmounts.set(key, (coveredAmounts.get(key) ?? 0) + signedAmount);
+      }
+      const uncovered = (sourceTable: string, record: any, paidAmount: number) => {
+        const coveredAmount = Math.max(0, coveredAmounts.get(`${sourceTable}:${record.id}`) ?? 0);
+        return { coveredAmount, uncoveredAmount: Math.max(0, paidAmount - coveredAmount) };
+      };
+
+      const ocs = (ocsRows as any[]).map((r: any) => {
+        const paidAmount = Number(r.amount_paid_cents ?? 0) / 100;
+        const coverage = uncovered('operational_cost_submissions', r, paidAmount);
+        return {
         ...r,
         _source: 'operational_cost_submissions',
         _category: 'ocs',
-        _date: r.submitted_at ?? r.created_at,
-        amount: (r.amount_cents ?? 0) / 100,
+        _date: r.paid_at ?? r.submitted_at ?? r.created_at,
+        amount: coverage.uncoveredAmount,
+        paidAmount,
+        coveredAmount: coverage.coveredAmount,
         currency: r.currency ?? 'SDG',
         title: r.title ?? r.description ?? `Submission ${r.id.slice(0, 8)}`,
         userId: r.submitted_by ?? null,
-      }));
-      const dp = (dpRes.data ?? [])
-        // Exclude DPs whose balance was already deducted via the metadata marker
-        // (directLinkPayment sets pre_fund_deducted:true when the INSERT is RLS-blocked)
-        .filter((r: any) => r.metadata?.pre_fund_deducted !== true)
-        .map((r: any) => ({
+        };
+      }).filter((r: any) => r.amount > 0);
+      const dp = (dpRows as any[])
+        // A legacy marker does not prove current event coverage; the net ledger
+        // total above remains the source of truth.
+        .map((r: any) => {
+          const paidAmount = Number(r.total_paid_amount ?? 0);
+          const coverage = uncovered('down_payment_requests', r, paidAmount);
+          return {
           ...r,
           _source: 'down_payment_requests',
           _category: 'dp',
           _date: r.fully_paid_at ?? r.created_at,
-          // Use total_paid_amount (actual disbursed), not approved_amount (full requested)
-          amount: Number(r.total_paid_amount ?? r.approved_amount ?? r.requested_amount ?? 0),
+          amount: coverage.uncoveredAmount,
+          paidAmount,
+          coveredAmount: coverage.coveredAmount,
           currency: 'SDG',
           title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
           userId: r.requested_by ?? null,
-        }));
+          };
+        }).filter((r: any) => r.amount > 0);
       // Enumerator fees: sum transport_fee + enumerator_fee per entry
-      const ef = (efRes.data ?? []).map((r: any) => ({
+      const ef = (efRows as any[]).map((r: any) => {
+        const paidAmount = Number(r.transport_fee ?? 0) + Number(r.enumerator_fee ?? 0);
+        const coverage = uncovered('mmp_site_entries', r, paidAmount);
+        return {
         ...r,
         _source: 'mmp_site_entries',
         _category: 'ef',
         _date: r.paid_at ?? r.visit_date,
-        amount: (r.transport_fee ?? 0) + (r.enumerator_fee ?? 0),
+        amount: coverage.uncoveredAmount,
+        paidAmount,
+        coveredAmount: coverage.coveredAmount,
         currency: r.currency ?? 'SDG',
         title: `${r.site_name ?? 'Site'} — ${r.enumerator_name ?? 'Enumerator'}`,
         userId: r.accepted_by ?? null,
-      })).filter((r: any) => r.amount > 0);
+        };
+      }).filter((r: any) => r.amount > 0);
       setUnlinkedSubs({ ocs, dp, ef });
-    } catch { setUnlinkedSubs({ ocs: [], dp: [], ef: [] }); }
+    } catch (e: any) {
+      setUnlinkedSubs({ ocs: [], dp: [], ef: [] });
+      toast({ title: 'Could not check Pre-Fund coverage', description: e.message, variant: 'destructive' });
+    }
     finally { setLoadingUnlinked(false); }
-  }, []);
+  }, [toast, canManageExceptions]);
 
-  const loadExceptions = useCallback(async (fundId: string) => {
+  const loadExceptions = useCallback(async (fundId?: string) => {
     setLoadingExceptions(true);
+    setExceptionQueueStatus('ready');
+    setExceptionQueueMessage(null);
     try {
-      const { data, error } = await (supabase as any).rpc('get_pre_fund_finance_exception_queue_rpc', { p_fund_id: fundId });
+      // Finance sees the global exception queue. Country Directors pass their
+      // selected fund and the database enforces that they can only read funds
+      // they hold; unassigned records are never exposed to them.
+      const { data, error } = await (supabase as any).rpc('get_pre_fund_finance_exception_queue_rpc', {
+        p_fund_id: canManageExceptions ? null : (fundId ?? null),
+      });
       if (error) {
         if (error.message?.includes('does not exist') || error.code === '42883') {
           setExceptionQueue([]);
+          setExceptionQueueStatus('migration_required');
+          setExceptionQueueMessage('Apply the Pre-Fund ledger and Finance exception migrations, including 20260820f_pre_fund_finance_exception_reviews.sql and 20260821a_pre_fund_exception_visibility.sql, in Supabase before reviewing exceptions.');
           return;
         }
         throw error;
       }
       setExceptionQueue((data as ExceptionQueueItem[]) ?? []);
     } catch (e: any) {
-      // Non-fatal — the RPC may not be deployed yet
       setExceptionQueue([]);
+      setExceptionQueueStatus('unavailable');
+      setExceptionQueueMessage(e?.message ?? 'The Finance exception queue could not be loaded.');
     } finally {
       setLoadingExceptions(false);
     }
-  }, []);
+  }, [canManageExceptions]);
+
+  useEffect(() => {
+    if (canAccess) loadExceptions(selectedFund?.id);
+  }, [canAccess, loadExceptions, selectedFund?.id]);
 
   const handleExceptionDecision = async (action: 'keep_excluded' | 'confirm_evidence') => {
-    if (!reviewException || !selectedFund) return;
+    if (!reviewException) return;
     if (!exceptionNote.trim()) {
       toast({ title: 'Note required', description: 'Please enter a mandatory evidence note.', variant: 'destructive' });
       return;
@@ -1100,56 +1144,15 @@ export default function PreFundingReconciliation() {
       // Reload all relevant data
       await Promise.all([
         loadFunds(),
-        loadTxns(selectedFund.id),
-        loadUnlinkedPayments(selectedFund.id),
-        loadExceptions(selectedFund.id),
+        selectedFund ? loadTxns(selectedFund.id) : Promise.resolve(),
+        loadUnlinkedPayments(),
+        loadExceptions(selectedFund?.id),
       ]);
     } catch (e: any) {
       toast({ title: 'Failed to resolve exception', description: e.message, variant: 'destructive' });
     } finally {
       setSubmittingException(false);
     }
-  };
-
-  const handleRetryLink = async (sub: any) => {
-    if (!selectedFund) return;
-    setRetryingId(sub.id);
-    try {
-      if (sub._source !== 'down_payment_requests' && sub._source !== 'operational_cost_submissions') {
-        throw new Error('This legacy source cannot be linked automatically. Add it to the Finance exceptions queue with its payment evidence.');
-      }
-
-      // The source-aware linker owns the event, source back-link, allocation, and
-      // cache update in one database transaction.
-      const txnDate = datePart(sub._date) || new Date().toISOString().split('T')[0];
-      const result = await linkPaymentToKnownFund({
-        fundId: selectedFund.id,
-        fundName: selectedFund.name,
-        amount: sub.amount,
-        currency: sub.currency ?? selectedFund.currency,
-        sourceTable: sub._source,
-        sourceId: sub.id,
-        reference: sub.reference ?? sub.id,
-        description: sub.title ?? 'Linked payment',
-        paymentDate: txnDate,
-        createdBy: currentUser?.id ?? null,
-        userId: sub.userId ?? null,
-        paymentEventKey: createPreFundPaymentEventKey({
-          sourceTable: sub._source,
-          sourceId: sub.id,
-          amount: sub.amount,
-          paymentDate: txnDate,
-          reference: sub.reference ?? null,
-        }),
-      });
-      if (!result.linked) throw new Error(result.message ?? 'Link failed.');
-
-      toast({ title: 'Linked', description: `${sub.title ?? sub.id} linked to ${selectedFund.name}` });
-      await loadFunds();
-      loadTxns(selectedFund.id);
-      loadUnlinkedPayments(selectedFund.id);
-    } catch (e: any) { toast({ title: 'Link failed', description: e.message, variant: 'destructive' }); }
-    finally { setRetryingId(null); }
   };
 
   // ── Unlink / remove a linked transaction ────────────────────────────────
@@ -1169,7 +1172,7 @@ export default function PreFundingReconciliation() {
       toast({ title: 'Reversed', description: `A compensating event restored ${selectedFund.currency} ${formatNumber(txn.amount, 0)} to the fund.` });
       loadFunds();
       loadTxns(selectedFund.id);
-      loadUnlinkedPayments(selectedFund.id);
+      loadUnlinkedPayments();
     } catch (e: any) {
       toast({ title: 'Unlink failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -1815,7 +1818,7 @@ export default function PreFundingReconciliation() {
           <h2 className="text-xl font-bold flex items-center gap-2"><RotateCcw className="h-5 w-5 text-sky-600" />Reconciliation</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Reconcile transactions, close periods, and export reports</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { loadFunds(); if (selectedFund) { loadTxns(selectedFund.id); loadUnlinkedPayments(selectedFund.id); loadExceptions(selectedFund.id); } }}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
+        <Button variant="outline" size="sm" onClick={() => { loadFunds(); if (canManageExceptions) loadUnlinkedPayments(); loadExceptions(selectedFund?.id); if (selectedFund) loadTxns(selectedFund.id); }}><RefreshCw className="h-4 w-4 mr-1.5" />Refresh</Button>
       </div>
 
       {/* ── Fund selector bar ──────────────────────────────────────────────── */}
@@ -1985,22 +1988,16 @@ export default function PreFundingReconciliation() {
                 </div>
               )}
 
-              {/* ── Auto-Link Retry Panel ──────────────────────────────────────── */}
-              {(() => {
+              {/* ── Paid outside Pre-Funding coverage ───────────────────────────── */}
+              {canManageExceptions && (() => {
                 const totalUnlinked = unlinkedSubs.ocs.length + unlinkedSubs.dp.length + unlinkedSubs.ef.length;
-                if (!totalUnlinked && !loadingUnlinked) return null;
-
-                const filterSub = (sub: any) => {
-                  if (!sub._date) return true;
-                  const d = datePart(sub._date);
-                  if (unlinkedFrom && d < unlinkedFrom) return false;
-                  if (unlinkedTo   && d > unlinkedTo)   return false;
-                  return true;
-                };
+                const currencyTotals = new Map<string, number>();
+                Object.values(unlinkedSubs).flat().forEach((sub: any) => {
+                  currencyTotals.set(sub.currency ?? 'SDG', (currencyTotals.get(sub.currency ?? 'SDG') ?? 0) + Number(sub.amount ?? 0));
+                });
 
                 const CategorySection = ({ catKey, label, items, color }: { catKey: string; label: string; items: any[]; color: string }) => {
-                  const filtered = items.filter(filterSub);
-                  if (!filtered.length) return null;
+                  if (!items.length) return null;
                   const open = openCategories[catKey] !== false;
                   return (
                     <div className="border-b last:border-b-0">
@@ -2009,40 +2006,21 @@ export default function PreFundingReconciliation() {
                         onClick={() => setOpenCategories(p => ({ ...p, [catKey]: !open }))}
                         data-testid={`button-cat-${catKey}`}
                       >
-                        <span>{label} <span className="font-normal normal-case tracking-normal opacity-70">({filtered.length})</span></span>
+                        <span>{label} <span className="font-normal normal-case tracking-normal opacity-70">({items.length})</span></span>
                         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? 'rotate-180' : '')} />
                       </button>
-                      {open && filtered.map(sub => (
+                      {open && items.map(sub => (
                         <div key={sub.id} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-muted/30 border-t border-muted/40" data-testid={`row-unlinked-${sub.id}`}>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium truncate text-xs">{sub.title ?? sub.id}</p>
-                            <p className="text-[11px] text-muted-foreground">{formatIsoDate(sub._date, 'MMM d, yyyy')}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {formatIsoDate(sub._date, 'MMM d, yyyy')} · Paid {sub.currency} {formatNumber(sub.paidAmount ?? sub.amount, 0)}
+                              {Number(sub.coveredAmount ?? 0) > 0 && ` · Covered by Pre-Funding ${sub.currency} ${formatNumber(sub.coveredAmount, 0)}`}
+                            </p>
                           </div>
-                          <span className="font-mono text-xs shrink-0 text-muted-foreground">{sub.currency} {formatNumber(sub.amount, 0)}</span>
-                          {!isCD && (
-                            <>
-                              <Input
-                                type="date"
-                                defaultValue={datePart(sub._date) || new Date().toISOString().split('T')[0]}
-                                className="h-6 text-xs w-28 px-1.5 shrink-0"
-                                id={`link-date-${sub.id}`}
-                                data-testid={`input-link-date-${sub.id}`}
-                                title="Override the transaction date for this link"
-                              />
-                              <Button
-                                size="sm" variant="outline"
-                                className="h-6 text-xs shrink-0 px-2"
-                                onClick={() => {
-                                  const dateEl = document.getElementById(`link-date-${sub.id}`) as HTMLInputElement | null;
-                                  handleRetryLink({ ...sub, _date: dateEl?.value ?? sub._date });
-                                }}
-                                disabled={retryingId === sub.id}
-                                data-testid={`button-link-${sub.id}`}
-                              >
-                                <Link2 className="h-3 w-3 mr-1" />{retryingId === sub.id ? 'Linking…' : 'Link Now'}
-                              </Button>
-                            </>
-                          )}
+                          <span className="font-mono text-xs shrink-0 text-amber-700 dark:text-amber-400">
+                            Uncovered: {sub.currency} {formatNumber(sub.amount, 0)}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -2057,9 +2035,9 @@ export default function PreFundingReconciliation() {
                     data-testid="button-toggle-unlinked"
                   >
                     <div className="flex items-center gap-2">
-                      <Link2 className="h-4 w-4 text-amber-600" />
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
                       <span className="text-amber-700 dark:text-amber-400">
-                        {loadingUnlinked ? 'Checking unlinked payments…' : `${totalUnlinked} paid payment${totalUnlinked !== 1 ? 's' : ''} not linked to this fund`}
+                        {loadingUnlinked ? 'Checking Pre-Fund coverage…' : `${totalUnlinked} paid source record${totalUnlinked !== 1 ? 's' : ''} outside Pre-Funding coverage`}
                       </span>
                       {!loadingUnlinked && totalUnlinked > 0 && (
                         <Badge className="bg-amber-500 text-white text-[10px] h-4 px-1.5">{totalUnlinked}</Badge>
@@ -2069,34 +2047,26 @@ export default function PreFundingReconciliation() {
                   </button>
                   {showUnlinked && (
                     <div>
-                      {/* SQL migration required banner */}
-                      {rpcMissing && (
-                        <div className="flex items-start gap-2 px-4 py-3 bg-rose-50 dark:bg-rose-950/30 border-b border-rose-200 dark:border-rose-800">
-                          <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-                          <div className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
-                            <strong>SQL migration required</strong> — the pre-funding database functions are not yet deployed.
-                            Run <code className="font-mono bg-rose-100 dark:bg-rose-900/40 px-1 rounded">pre_funding_atomic_rpcs.sql</code> in the{' '}
-                            <strong>Supabase SQL Editor</strong> to enable linking. Payments shown below are waiting to be linked.
+                      <div className="px-4 py-3 bg-amber-50/50 dark:bg-amber-950/10 border-b text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                        <strong>Review only.</strong> An amount appears here only when the paid source amount exceeds its net linked Pre-Fund events across <em>all</em> funds.
+                        The app will not guess which fund should cover it or create a payment event automatically. Use Finance evidence review to resolve eligible records.
+                        {!loadingUnlinked && currencyTotals.size > 0 && (
+                          <div className="mt-1.5 font-mono text-[11px]">
+                            Uncovered totals: {[...currencyTotals.entries()].map(([currency, amount]) => `${currency} ${formatNumber(amount, 0)}`).join(' · ')}
                           </div>
-                        </div>
-                      )}
-                      {/* Date range filter */}
-                      <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b flex-wrap">
-                        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs text-muted-foreground shrink-0">Filter by date:</span>
-                        <Input type="date" value={unlinkedFrom} onChange={e => setUnlinkedFrom(e.target.value)} className="h-6 text-xs w-36 px-2" data-testid="input-unlinked-from" />
-                        <span className="text-xs text-muted-foreground">→</span>
-                        <Input type="date" value={unlinkedTo} onChange={e => setUnlinkedTo(e.target.value)} className="h-6 text-xs w-36 px-2" data-testid="input-unlinked-to" />
-                        {(unlinkedFrom || unlinkedTo) && (
-                          <button onClick={() => { setUnlinkedFrom(''); setUnlinkedTo(''); }} className="text-xs text-muted-foreground hover:text-foreground underline" data-testid="button-clear-date-filter">Clear</button>
                         )}
                       </div>
-                      {/* Category sections */}
-                      <div className="max-h-80 overflow-y-auto">
-                        <CategorySection catKey="ocs" label="Cost Submissions" items={unlinkedSubs.ocs} color="text-sky-700 dark:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20" />
-                        <CategorySection catKey="dp"  label="Down Payments"    items={unlinkedSubs.dp}  color="text-violet-700 dark:text-violet-400 bg-violet-50/60 dark:bg-violet-950/20" />
-                        <CategorySection catKey="ef"  label="Enumerator / Transport Fees" items={unlinkedSubs.ef} color="text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20" />
-                      </div>
+                      {loadingUnlinked ? (
+                        <div className="space-y-2 p-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                      ) : totalUnlinked === 0 ? (
+                        <div className="px-4 py-6 text-center text-sm text-muted-foreground">No paid source amount is currently outside net Pre-Fund coverage.</div>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto">
+                          <CategorySection catKey="ocs" label="Cost Submissions" items={unlinkedSubs.ocs} color="text-sky-700 dark:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20" />
+                          <CategorySection catKey="dp"  label="Down Payments"    items={unlinkedSubs.dp}  color="text-violet-700 dark:text-violet-400 bg-violet-50/60 dark:bg-violet-950/20" />
+                          <CategorySection catKey="ef"  label="Enumerator / Transport Fees" items={unlinkedSubs.ef} color="text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2105,8 +2075,6 @@ export default function PreFundingReconciliation() {
 
               {/* ── Finance Exception Queue Panel ─────────────────────────────── */}
               {(() => {
-                const hasExceptions = exceptionQueue.length > 0;
-                if (!hasExceptions && !loadingExceptions) return null;
                 const canAction = canManageExceptions;
                 return (
                   <div className="border rounded-lg overflow-hidden" data-testid="panel-exception-queue">
@@ -2120,7 +2088,11 @@ export default function PreFundingReconciliation() {
                         <span className="text-rose-700 dark:text-rose-400">
                           {loadingExceptions
                             ? 'Loading finance exceptions…'
-                            : `${exceptionQueue.length} finance exception${exceptionQueue.length !== 1 ? 's' : ''} require${exceptionQueue.length === 1 ? 's' : ''} review`}
+                            : exceptionQueueStatus === 'migration_required'
+                              ? 'Finance exception review needs its database migration'
+                              : exceptionQueueStatus === 'unavailable'
+                                ? 'Finance exception review is temporarily unavailable'
+                                : `${exceptionQueue.length} finance exception${exceptionQueue.length !== 1 ? 's' : ''} require${exceptionQueue.length === 1 ? 's' : ''} review`}
                         </span>
                         {!loadingExceptions && exceptionQueue.length > 0 && (
                           <Badge className="bg-rose-500 text-white text-[10px] h-4 px-1.5">{exceptionQueue.length}</Badge>
@@ -2132,62 +2104,82 @@ export default function PreFundingReconciliation() {
                       <div className="max-h-96 overflow-y-auto">
                         {loadingExceptions ? (
                           <div className="space-y-2 p-4">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-                        ) : exceptionQueue.length === 0 ? (
-                          <div className="px-4 py-6 text-center text-sm text-muted-foreground">No exceptions found for this fund.</div>
+                        ) : exceptionQueueStatus !== 'ready' ? (
+                          <div className="flex items-start gap-2 px-4 py-4 text-sm text-rose-700 dark:text-rose-300">
+                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                            <p>{exceptionQueueMessage}</p>
+                          </div>
                         ) : (
-                          <div className="divide-y">
-                            {exceptionQueue.map(ex => {
-                              const sourceType = ex.source_table?.toLowerCase();
-                              const typeLabel = sourceType === 'operational_cost_submissions' ? 'OCS' : sourceType === 'down_payment_requests' ? 'Down Payment' : (ex.exception_type ?? 'Unknown');
-                              const typeColor = sourceType === 'operational_cost_submissions' ? 'text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-950/30 dark:border-sky-800' : sourceType === 'down_payment_requests' ? 'text-violet-700 bg-violet-50 border-violet-200 dark:text-violet-400 dark:bg-violet-950/30 dark:border-violet-800' : 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800';
-                              return (
-                                <div key={ex.exception_key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20 text-sm" data-testid={`row-exception-${ex.exception_key}`}>
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded border', typeColor)}>{typeLabel}</span>
-                                      {ex.source_status && (
-                                        <span className="text-[10px] text-muted-foreground">{ex.source_status}</span>
+                          <div>
+                            <div className="flex items-start gap-2 px-4 py-3 border-b bg-muted/30 text-xs text-muted-foreground leading-relaxed">
+                              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                              <p>
+                                These records are excluded from verified Paid Out until Finance reviews evidence. Missing, deleted, rejected, pending, or unassigned sources cannot be restored automatically because the app would have to guess the fund. Finance may keep an exception excluded, or confirm evidence only for an eligible source-linked event.
+                              </p>
+                            </div>
+                            {exceptionQueue.length === 0 ? (
+                              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                                {isCD ? 'No exceptions are assigned to funds you hold.' : 'No open or previously reviewed Finance exceptions were found across accessible funds.'}
+                              </div>
+                            ) : (
+                              <div className="divide-y">
+                                {exceptionQueue.map(ex => {
+                                  const sourceType = ex.source_table?.toLowerCase();
+                                  const typeLabel = sourceType === 'operational_cost_submissions' ? 'OCS' : sourceType === 'down_payment_requests' ? 'Down Payment' : (ex.exception_type ?? 'Unknown');
+                                  const typeColor = sourceType === 'operational_cost_submissions' ? 'text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-950/30 dark:border-sky-800' : sourceType === 'down_payment_requests' ? 'text-violet-700 bg-violet-50 border-violet-200 dark:text-violet-400 dark:bg-violet-950/30 dark:border-violet-800' : 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800';
+                                  return (
+                                    <div key={ex.exception_key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20 text-sm" data-testid={`row-exception-${ex.exception_key}`}>
+                                      <div className="flex-1 min-w-0 space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded border', typeColor)}>{typeLabel}</span>
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {ex.fund_id ? (funds.find(f => f.id === ex.fund_id)?.name ?? 'Fund') : 'Unassigned source'}
+                                          </span>
+                                          {ex.source_status && (
+                                            <span className="text-[10px] text-muted-foreground">{ex.source_status}</span>
+                                          )}
+                                        </div>
+                                        {ex.source_description && (
+                                          <p className="text-xs font-medium truncate">{ex.source_description}</p>
+                                        )}
+                                        <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                                          {ex.historic_amount != null && (
+                                            <span>Historic: <span className="font-mono font-medium text-foreground">{ex.currency ?? selectedFund?.currency ?? ''} {formatNumber(ex.historic_amount, 0)}</span></span>
+                                          )}
+                                          {ex.current_paid_amount != null && (
+                                            <span>Current paid: <span className="font-mono font-medium text-foreground">{ex.currency ?? selectedFund?.currency ?? ''} {formatNumber(ex.current_paid_amount, 0)}</span></span>
+                                          )}
+                                          {ex.unmatched_amount != null && (
+                                            <span>Unmatched: <span className="font-mono font-medium text-rose-600">{ex.currency ?? selectedFund?.currency ?? ''} {formatNumber(ex.unmatched_amount, 0)}</span></span>
+                                          )}
+                                        </div>
+                                        {ex.resolution && (
+                                          <p className="text-[11px] italic text-muted-foreground">{ex.resolution}</p>
+                                        )}
+                                      </div>
+                                      {canAction && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs shrink-0 border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                                          onClick={() => {
+                                            setReviewException(ex);
+                                            setExceptionNote('');
+                                            setExceptionRef('');
+                                            setExceptionConfirmedAmount('');
+                                            setExceptionAction(null);
+                                            setExceptionIdempotencyKey(null);
+                                          }}
+                                          data-testid={`button-review-exception-${ex.exception_key}`}
+                                        >
+                                          Review
+                                        </Button>
                                       )}
                                     </div>
-                                    {ex.source_description && (
-                                      <p className="text-xs font-medium truncate">{ex.source_description}</p>
-                                    )}
-                                    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                                      {ex.historic_amount != null && (
-                                        <span>Historic: <span className="font-mono font-medium text-foreground">{selectedFund?.currency ?? ''} {formatNumber(ex.historic_amount, 0)}</span></span>
-                                      )}
-                                      {ex.current_paid_amount != null && (
-                                        <span>Current paid: <span className="font-mono font-medium text-foreground">{selectedFund?.currency ?? ''} {formatNumber(ex.current_paid_amount, 0)}</span></span>
-                                      )}
-                                      {ex.unmatched_amount != null && (
-                                        <span>Unmatched: <span className="font-mono font-medium text-rose-600">{selectedFund?.currency ?? ''} {formatNumber(ex.unmatched_amount, 0)}</span></span>
-                                      )}
-                                    </div>
-                                    {ex.resolution && (
-                                      <p className="text-[11px] italic text-muted-foreground">{ex.resolution}</p>
-                                    )}
-                                  </div>
-                                  {canAction && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs shrink-0 border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
-                                      onClick={() => {
-                                        setReviewException(ex);
-                                        setExceptionNote('');
-                                        setExceptionRef('');
-                                        setExceptionConfirmedAmount('');
-                                        setExceptionAction(null);
-                                        setExceptionIdempotencyKey(null);
-                                      }}
-                                      data-testid={`button-review-exception-${ex.exception_key}`}
-                                    >
-                                      Review
-                                    </Button>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3608,19 +3600,19 @@ export default function PreFundingReconciliation() {
                         {reviewException.historic_amount != null && (
                           <div>
                             <p className="text-muted-foreground">Historic Amount</p>
-                            <p className="font-mono font-semibold">{selectedFund?.currency ?? ''} {formatNumber(reviewException.historic_amount, 0)}</p>
+                            <p className="font-mono font-semibold">{reviewCurrency ?? '—'} {formatNumber(reviewException.historic_amount, 0)}</p>
                           </div>
                         )}
                         {reviewException.current_paid_amount != null && (
                           <div>
                             <p className="text-muted-foreground">Current Paid</p>
-                            <p className="font-mono font-semibold">{selectedFund?.currency ?? ''} {formatNumber(reviewException.current_paid_amount, 0)}</p>
+                            <p className="font-mono font-semibold">{reviewCurrency ?? '—'} {formatNumber(reviewException.current_paid_amount, 0)}</p>
                           </div>
                         )}
                         {reviewException.unmatched_amount != null && (
                           <div>
                             <p className="text-muted-foreground">Unmatched</p>
-                            <p className="font-mono font-semibold text-rose-600">{selectedFund?.currency ?? ''} {formatNumber(reviewException.unmatched_amount, 0)}</p>
+                            <p className="font-mono font-semibold text-rose-600">{reviewCurrency ?? '—'} {formatNumber(reviewException.unmatched_amount, 0)}</p>
                           </div>
                         )}
                       </div>
@@ -3656,6 +3648,7 @@ export default function PreFundingReconciliation() {
                     }}
                     disabled={
                       !reviewException.exception_key.startsWith('txn:') ||
+                      !reviewCurrency ||
                       (reviewException.source_table === 'operational_cost_submissions' && reviewException.source_status !== 'approved') ||
                       (reviewException.source_table === 'down_payment_requests' && reviewException.source_status === 'missing') ||
                       !['operational_cost_submissions', 'down_payment_requests'].includes(reviewException.source_table ?? '')
@@ -3678,14 +3671,15 @@ export default function PreFundingReconciliation() {
               {exceptionAction === 'confirm_evidence' && reviewException.source_table === 'down_payment_requests' && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold">
-                    Confirmed Paid Amount * <span className="text-muted-foreground font-normal">(actual disbursed)</span>
+                    Confirmed Paid Amount * <span className="text-muted-foreground font-normal">({reviewCurrency ?? 'currency unavailable'} actual disbursed)</span>
                   </Label>
                   <Input
                     type="number"
                     value={exceptionConfirmedAmount}
                     onChange={e => setExceptionConfirmedAmount(e.target.value)}
-                    placeholder={`${selectedFund?.currency ?? ''} 0`}
+                    placeholder={reviewCurrency ? `${reviewCurrency} 0` : 'Currency unavailable'}
                     className="text-sm"
+                    disabled={!reviewCurrency}
                     data-testid="input-exception-confirmed-amount"
                   />
                 </div>
