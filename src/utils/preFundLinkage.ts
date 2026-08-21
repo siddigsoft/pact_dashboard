@@ -47,7 +47,7 @@ export async function fetchPreFundSourcePaymentLinks(
     .in('source_id', sourceIds);
 
   if (error) throw new Error(error.message);
-  return ((data ?? []) as any[]).map((row) => ({
+  const canonicalLinks = ((data ?? []) as any[]).map((row) => ({
     paymentEventId: row.payment_event_id,
     sourceTable: row.source_table,
     sourceId: row.source_id,
@@ -58,6 +58,61 @@ export async function fetchPreFundSourcePaymentLinks(
     paymentDate: row.payment_date ?? null,
     receiptUrl: row.receipt_url ?? null,
   }));
+
+  // Earlier payment workflows recorded a source-side transaction back-link
+  // without populating pre_fund_transactions.source_table/source_id. Read that
+  // explicit historic evidence as well; never infer a fund from a date/name.
+  const { data: sourceRows, error: sourceError } = await (supabase as any)
+    .from(sourceTable)
+    .select('id, pre_fund_transaction_id')
+    .in('id', sourceIds)
+    .not('pre_fund_transaction_id', 'is', null);
+  if (sourceError) throw new Error(sourceError.message);
+
+  const sourceByTransaction = new Map<string, string>(
+    ((sourceRows ?? []) as any[])
+      .filter(row => row.pre_fund_transaction_id)
+      .map(row => [row.pre_fund_transaction_id as string, row.id as string]),
+  );
+  const canonicalTransactionIds = new Set(canonicalLinks.map(link => link.paymentEventId));
+  const legacyTransactionIds = [...sourceByTransaction.keys()]
+    .filter(transactionId => !canonicalTransactionIds.has(transactionId));
+  if (legacyTransactionIds.length === 0) return canonicalLinks;
+
+  const { data: legacyTransactions, error: legacyError } = await (supabase as any)
+    .from('pre_fund_transactions')
+    .select('id, pre_fund_request_id, transaction_type, amount, currency, transaction_date, receipt_url')
+    .in('id', legacyTransactionIds)
+    .eq('transaction_type', 'payment');
+  if (legacyError) throw new Error(legacyError.message);
+
+  const fundIds = [...new Set(((legacyTransactions ?? []) as any[])
+    .map(transaction => transaction.pre_fund_request_id)
+    .filter(Boolean))] as string[];
+  if (fundIds.length === 0) return canonicalLinks;
+  const { data: funds, error: fundsError } = await (supabase as any)
+    .from('pre_fund_requests')
+    .select('id, name')
+    .in('id', fundIds);
+  if (fundsError) throw new Error(fundsError.message);
+  const fundNameById = new Map<string, string>(
+    ((funds ?? []) as any[]).map(fund => [fund.id as string, fund.name as string]),
+  );
+
+  const historicBackLinks: PreFundSourcePaymentLink[] = ((legacyTransactions ?? []) as any[])
+    .filter(transaction => sourceByTransaction.has(transaction.id) && fundNameById.has(transaction.pre_fund_request_id))
+    .map(transaction => ({
+      paymentEventId: transaction.id,
+      sourceTable,
+      sourceId: sourceByTransaction.get(transaction.id)!,
+      fundId: transaction.pre_fund_request_id,
+      fundName: fundNameById.get(transaction.pre_fund_request_id)!,
+      currency: transaction.currency,
+      paymentAmount: Number(transaction.amount ?? 0),
+      paymentDate: transaction.transaction_date ?? null,
+      receiptUrl: transaction.receipt_url ?? null,
+    }));
+  return [...canonicalLinks, ...historicBackLinks];
 }
 
 export async function recordRequiredPreFundPayment(params: {
