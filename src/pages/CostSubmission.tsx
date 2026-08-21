@@ -6509,6 +6509,11 @@ const CostSubmission = () => {
                                       <p className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400 mt-0.5" data-testid={`text-paid-amount-${oc.id}`}>
                                         Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
                                       </p>
+                                       <p className={`text-[9px] max-w-[180px] truncate ${((costPreFundLinks.get(oc.id) ?? []).length > 0) ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}>
+                                         {(costPreFundLinks.get(oc.id) ?? []).length > 0
+                                           ? `From: ${(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}`
+                                           : 'Pre-Fund: unlinked historical'}
+                                       </p>
                                       {(oc.amount_paid_cents || 0) < oc.amount_cents && (
                                         <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
                                           Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}
@@ -7306,6 +7311,11 @@ const CostSubmission = () => {
                                   <span className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400" data-testid={`text-paid-amount-${oc.id}`}>
                                     Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
                                   </span>
+                                   <span className={`text-[9px] max-w-[180px] truncate ${((costPreFundLinks.get(oc.id) ?? []).length > 0) ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}>
+                                     {(costPreFundLinks.get(oc.id) ?? []).length > 0
+                                       ? `From: ${(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}`
+                                       : 'Pre-Fund: unlinked historical'}
+                                   </span>
                                   {(oc.amount_paid_cents || 0) < oc.amount_cents && (
                                     <span className="text-[10px] text-muted-foreground/70">
                                       Rem: {oc.currency} {((oc.amount_cents - (oc.amount_paid_cents || 0)) / 100).toLocaleString()}

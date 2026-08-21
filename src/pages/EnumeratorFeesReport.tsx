@@ -47,6 +47,8 @@ interface FeeRow {
   feePaidAt: string | null;
   feePaymentMethod: string | null;
   feePaymentNotes: string | null;
+  feePreFundId: string | null;
+  feeFundingSource: string | null;
   advanceStatus: 'none' | 'pending' | 'partially_paid' | 'fully_paid' | 'rejected' | 'other';
   advanceRequestedAmount: number | null;
   advancePaidAmount: number | null;
@@ -158,6 +160,7 @@ export default function EnumeratorFeesReport() {
 
   const userRole = currentUser?.role?.toLowerCase();
   const isFinance = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || isSuperAdmin;
+  const canManagePreFundSources = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
 
   // ── state ──────────────────────────────────────────────────────────────────
   const [rows, setRows] = useState<FeeRow[]>([]);
@@ -172,6 +175,7 @@ export default function EnumeratorFeesReport() {
   const [filterCycle, setFilterCycle] = useState('all');
   const [filterSiteStatus, setFilterSiteStatus] = useState('all');
   const [filterPaid, setFilterPaid] = useState('all');
+  const [filterPreFund, setFilterPreFund] = useState('all');
   const [filterAdvance, setFilterAdvance] = useState('all');
 
   // ── payment tracking state ────────────────────────────────────────────────
@@ -195,7 +199,7 @@ export default function EnumeratorFeesReport() {
         const to = from + PAGE_SIZE - 1;
         const { data: entryPage, error: entErr } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, accepted_by, forwarded_to_user_id, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes')
+          .select('id, site_name, site_code, state, locality, status, accepted_by, forwarded_to_user_id, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged, mmp_file_id, fee_paid_status, fee_paid_amount, fee_paid_at, fee_payment_method, fee_payment_notes, fee_pre_fund_id')
           .order('site_name')
           .range(from, to);
         if (entErr) throw entErr;
@@ -287,6 +291,19 @@ export default function EnumeratorFeesReport() {
         applyDp(byVisit.data);
       }
 
+      // 6. Explicit fee-payment Pre-Fund links. This is evidence stored on the
+      // fee record, not a date-based guess.
+      const feeFundIds = [...new Set(entryList.map((e: any) => e.fee_pre_fund_id).filter(Boolean))] as string[];
+      const feeFundNameMap: Record<string, string> = {};
+      if (feeFundIds.length > 0) {
+        const { data: funds, error: fundsError } = await (supabase as any)
+          .from('pre_fund_requests')
+          .select('id, name')
+          .in('id', feeFundIds);
+        if (fundsError) throw fundsError;
+        (funds ?? []).forEach((fund: any) => { feeFundNameMap[fund.id] = fund.name || 'Pre-Fund'; });
+      }
+
       const mapped: FeeRow[] = entryList.map((e: any) => {
         const dp = dpMap[e.id];
         let advanceStatus: FeeRow['advanceStatus'] = 'none';
@@ -326,6 +343,8 @@ export default function EnumeratorFeesReport() {
           feePaidAt: e.fee_paid_at || null,
           feePaymentMethod: e.fee_payment_method || null,
           feePaymentNotes: e.fee_payment_notes || null,
+          feePreFundId: e.fee_pre_fund_id || null,
+          feeFundingSource: e.fee_pre_fund_id ? feeFundNameMap[e.fee_pre_fund_id] || 'Pre-Fund' : null,
           advanceStatus,
           advanceRequestedAmount: dp?.requested_amount ?? null,
           advancePaidAmount: dp?.total_paid_amount ?? null,
@@ -362,6 +381,10 @@ export default function EnumeratorFeesReport() {
     return [...new Set(base.map(r => r.enumeratorName))].filter(n => n && n !== 'Unassigned').sort();
   }, [rows, filterHub, filterState, filterLocality]);
   const siteStatuses = useMemo(() => [...new Set(rows.map(r => r.siteStatus))].filter(Boolean).sort(), [rows]);
+  const feeFundOptions = useMemo(() => [...new Map(
+    rows.filter(r => r.feePreFundId && r.feeFundingSource)
+      .map(r => [r.feePreFundId!, r.feeFundingSource!]),
+  ).entries()].sort(([, a], [, b]) => a.localeCompare(b)), [rows]);
 
   // ── filtered rows ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -380,6 +403,8 @@ export default function EnumeratorFeesReport() {
       if (filterAck === 'has_fee' && r.totalFee === null) return false;
       if (filterPaid === 'paid' && r.feePaidStatus !== 'paid') return false;
       if (filterPaid === 'unpaid' && r.feePaidStatus !== 'unpaid') return false;
+      if (filterPreFund === '__unlinked__' && !(r.feePaidStatus === 'paid' && !r.feePreFundId)) return false;
+      if (filterPreFund !== 'all' && filterPreFund !== '__unlinked__' && r.feePreFundId !== filterPreFund) return false;
       if (filterAdvance === 'none' && r.advanceStatus !== 'none') return false;
       if (filterAdvance === 'requested' && r.advanceStatus === 'none') return false;
       if (filterAdvance === 'fully_paid' && r.advanceStatus !== 'fully_paid') return false;
@@ -389,7 +414,7 @@ export default function EnumeratorFeesReport() {
       }
       return true;
     });
-  }, [rows, search, filterMmp, filterHub, filterState, filterLocality, filterEnumerator, filterCycle, filterSiteStatus, filterAck, filterPaid, filterAdvance]);
+  }, [rows, search, filterMmp, filterHub, filterState, filterLocality, filterEnumerator, filterCycle, filterSiteStatus, filterAck, filterPaid, filterPreFund, filterAdvance]);
 
   // ── KPI totals ────────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
@@ -737,6 +762,19 @@ export default function EnumeratorFeesReport() {
                 <SelectItem value="unpaid">⏳ Unpaid</SelectItem>
               </SelectContent>
             </Select>
+            {canManagePreFundSources && (
+              <Select value={filterPreFund} onValueChange={setFilterPreFund}>
+                <SelectTrigger className="w-[200px] h-8 text-xs" data-testid="select-fee-pre-fund">
+                  <Wallet className="h-3 w-3 mr-1.5 shrink-0" />
+                  <SelectValue placeholder="Paid from Pre-Fund" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All funding sources</SelectItem>
+                  <SelectItem value="__unlinked__">Unlinked historical payment</SelectItem>
+                  {feeFundOptions.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={filterAdvance} onValueChange={setFilterAdvance}>
               <SelectTrigger className="w-[170px] h-8 text-xs" data-testid="select-fee-advance"><SelectValue placeholder="Transport Advance" /></SelectTrigger>
               <SelectContent>
@@ -821,7 +859,7 @@ export default function EnumeratorFeesReport() {
                     <TableHead className="text-center">Site Status</TableHead>
                     <TableHead className="text-center">Cycle</TableHead>
                     <TableHead className="text-center">Ack.</TableHead>
-                    <TableHead className="text-center">Fee Payment</TableHead>
+                    <TableHead className="text-center">Fee Payment / Pre-Fund</TableHead>
                     <TableHead className="text-center">Transport Advance</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -882,6 +920,9 @@ export default function EnumeratorFeesReport() {
                           <div className="flex flex-col items-center gap-0.5">
                             <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">💰 Paid</Badge>
                             <span className="text-[9px] text-muted-foreground">{r.feePaidAt ? fmtDate(r.feePaidAt) : ''}{r.feePaymentMethod ? ` · ${r.feePaymentMethod}` : ''}</span>
+                             <span className={`text-[9px] max-w-[150px] truncate ${r.feeFundingSource ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={r.feeFundingSource ?? undefined}>
+                               {r.feeFundingSource ? `From: ${r.feeFundingSource}` : 'Pre-Fund: unlinked historical'}
+                             </span>
                             {isFinance && (
                               <button
                                 type="button"
