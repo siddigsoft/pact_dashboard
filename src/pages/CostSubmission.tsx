@@ -270,6 +270,7 @@ const CostSubmission = () => {
   const isSuperAdmin      = isAdminOrSuperUser || isSuperAdminFn();
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
   const isDataTeam        = hasAnyRole(['dataTeam']);
+  const canManagePreFundFilters = isAdmin || isSuperAdminFn();
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
@@ -377,6 +378,7 @@ const CostSubmission = () => {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
   const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string }>>>(new Map());
+  const [costPreFundOptions, setCostPreFundOptions] = useState<Array<{ id: string; name: string; currency: string; status: string | null }>>([]);
   // Super-admin only: filter by the current approval tier a submission is waiting at
   const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
@@ -403,6 +405,33 @@ const CostSubmission = () => {
     })();
     return () => { active = false; };
   }, [operationalCosts]);
+  useEffect(() => {
+    let active = true;
+    if (!canManagePreFundFilters) {
+      setCostPreFundOptions([]);
+      setCostPreFundFilter('all');
+      return () => { active = false; };
+    }
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from('pre_fund_requests')
+        .select('id, name, currency, status')
+        .order('name', { ascending: true });
+      if (!active) return;
+      if (error) {
+        console.error('[CostSubmission] Failed to load Pre-Fund sources:', error);
+        setCostPreFundOptions([]);
+        return;
+      }
+      setCostPreFundOptions((data ?? []).map((fund: any) => ({
+        id: fund.id,
+        name: fund.name || fund.id,
+        currency: fund.currency || '—',
+        status: fund.status ?? null,
+      })));
+    })();
+    return () => { active = false; };
+  }, [canManagePreFundFilters]);
   useEffect(() => {
     if (activeTab !== 'reports') return;
     const txnIds = [...new Set(
@@ -5150,7 +5179,7 @@ const CostSubmission = () => {
               </Select>
             )}
 
-            {(isAdminOrSuperUser || isSuperAdmin) && (
+            {canManagePreFundFilters && (
               <Select value={costPreFundFilter} onValueChange={setCostPreFundFilter} data-testid="select-cost-pre-fund-filter">
                 <SelectTrigger className="h-8 text-xs w-[210px]">
                   <SelectValue placeholder="Paid from Pre-Fund" />
@@ -5159,9 +5188,11 @@ const CostSubmission = () => {
                   <SelectItem value="all">💰 All funding sources</SelectItem>
                   <SelectItem value="__unlinked__">⚠ Unlinked historical payment</SelectItem>
                   <SelectItem value="__multiple__">🔀 Multiple Pre-Funds</SelectItem>
-                  {[...new Map([...costPreFundLinks.values()].flat().map(link => [link.id, link.name])).entries()]
-                    .sort(([, a], [, b]) => String(a).localeCompare(String(b)))
-                    .map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                  {costPreFundOptions.map(fund => (
+                    <SelectItem key={fund.id} value={fund.id}>
+                      {fund.name} {fund.currency !== '—' ? `(${fund.currency})` : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -5183,7 +5214,7 @@ const CostSubmission = () => {
             )}
 
             {/* Active filter pills + clear */}
-            {(mmpFilter !== 'all' || userFilter !== 'all' || stateFilter !== 'all' || tierFilter !== 'all') && (
+            {(mmpFilter !== 'all' || userFilter !== 'all' || stateFilter !== 'all' || tierFilter !== 'all' || costPreFundFilter !== 'all') && (
               <div className="flex items-center gap-1 flex-wrap">
                 {mmpFilter !== 'all' && (
                   <span className="inline-flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 py-0.5 font-medium">
@@ -5209,8 +5240,18 @@ const CostSubmission = () => {
                     <button onClick={() => setTierFilter('all')} className="ml-0.5 hover:text-orange-900" data-testid="button-clear-tier-filter">✕</button>
                   </span>
                 )}
+                {costPreFundFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 rounded-full px-2 py-0.5 font-medium">
+                    Funding: {costPreFundFilter === '__unlinked__'
+                      ? 'Unlinked historical payment'
+                      : costPreFundFilter === '__multiple__'
+                        ? 'Multiple Pre-Funds'
+                        : costPreFundOptions.find(f => f.id === costPreFundFilter)?.name ?? costPreFundFilter.slice(0, 12)}
+                    <button onClick={() => setCostPreFundFilter('all')} className="ml-0.5 hover:text-amber-900" data-testid="button-clear-cost-pre-fund-filter">✕</button>
+                  </span>
+                )}
                 <button
-                  onClick={() => { setMmpFilter('all'); setUserFilter('all'); setStateFilter('all'); setTierFilter('all'); }}
+                  onClick={() => { setMmpFilter('all'); setUserFilter('all'); setStateFilter('all'); setTierFilter('all'); setCostPreFundFilter('all'); }}
                   className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
                   data-testid="button-clear-all-filters"
                 >
