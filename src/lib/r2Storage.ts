@@ -50,6 +50,36 @@ export async function r2Delete(keys: string | string[]): Promise<void> {
   await Promise.all(list.map(key => sign('delete', { key })));
 }
 
+/** Soft-deleted workspace objects live under this R2 prefix. */
+export const R2_TRASH_PREFIX = 'trash/';
+
+export function isR2TrashKey(key: string): boolean {
+  return key.startsWith(R2_TRASH_PREFIX);
+}
+
+export function toR2TrashKey(key: string): string {
+  return isR2TrashKey(key) ? key : `${R2_TRASH_PREFIX}${key}`;
+}
+
+export function fromR2TrashKey(key: string): string {
+  return isR2TrashKey(key) ? key.slice(R2_TRASH_PREFIX.length) : key;
+}
+
+/** Server-side copy+delete in R2. Returns the destination key. */
+export async function r2Move(fromKey: string, toKey: string): Promise<string> {
+  if (fromKey === toKey) return toKey;
+  const data = await sign('move', { key: fromKey, toKey });
+  return (data.key as string) || toKey;
+}
+
+export async function r2MoveToTrash(key: string): Promise<string> {
+  return r2Move(key, toR2TrashKey(key));
+}
+
+export async function r2RestoreFromTrash(key: string): Promise<string> {
+  return r2Move(key, fromR2TrashKey(key));
+}
+
 /** Stored on task JSON so we can tell R2 keys from old Supabase public URLs. */
 export const R2_REF_PREFIX = 'r2:';
 

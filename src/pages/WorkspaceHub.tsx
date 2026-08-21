@@ -37,7 +37,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { r2Upload, r2SignedUrl, r2Delete, isZipFile, r2ExtractZip, MAX_ZIP_BYTES, openStoredFile } from '@/lib/r2Storage';
+import { r2Upload, r2SignedUrl, r2Delete, r2MoveToTrash, r2RestoreFromTrash, isZipFile, r2ExtractZip, MAX_ZIP_BYTES, openStoredFile } from '@/lib/r2Storage';
 import { insertNotificationsToDb } from '@/services/notification-insert';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -47,10 +47,19 @@ import Navbar from '@/components/Navbar';
 import { WorkspaceAccessGate } from '@/components/workspace/WorkspaceAccessGate';
 import { WorkspaceAccessManager } from '@/components/workspace/WorkspaceAccessManager';
 import { startWorkspaceTour, hasCompletedWorkspaceTour, markWorkspaceTourCompleted } from '@/components/onboarding/workspaceTour';
+import {
+  CLEARANCE_ORDER,
+  VIRTUAL_FOLDER_NAMES,
+  VIRTUAL_VIEWS,
+  collectDescendantFolderIds,
+  computeWorkspaceStats,
+  filterDisplayedFiles,
+  filterVisibleFolders,
+  fmtSize,
+  type SecurityLevel,
+} from '@/lib/workspaceHubLogic';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type SecurityLevel = 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
 type AccessLevel = 'owner' | 'editor' | 'commenter' | 'viewer' | 'no_access';
 type GranteeType = 'user' | 'role' | 'department' | 'hub' | 'all_staff';
 
@@ -147,10 +156,6 @@ interface ProfileOption { id: string; full_name: string | null; role: string | n
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const CLEARANCE_ORDER: Record<SecurityLevel, number> = {
-  public: 0, internal: 1, confidential: 2, restricted: 3, top_secret: 4,
-};
-
 const SEC_CFG: Record<SecurityLevel, {
   label: string; icon: React.ElementType; bg: string; text: string; border: string; desc: string;
 }> = {
@@ -181,11 +186,6 @@ function getFileIcon(mime: string | null): React.ElementType {
   if (!mime) return File;
   for (const [k, v] of Object.entries(ICON_MAP)) if (mime.startsWith(k) || mime === k) return v;
   return File;
-}
-function fmtSize(bytes: number): string {
-  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
 }
 function fmtDate(s: string | null | undefined) {
   if (!s) return '—';
@@ -2457,13 +2457,8 @@ export default function WorkspaceHub() {
   // even if the user's clearance is below the folder's security_level.
   // Denials always win — allDeniedFolderIds is checked first.
   const visibleFolders = useMemo(() =>
-    folders.filter(f => {
-      // Deny if the folder itself or any ancestor is explicitly blocked.
-      // allDeniedFolderIds already contains the transitive closure of denials.
-      if (allDeniedFolderIds.has(f.id)) return false;
-      return isSuperAdmin || f.created_by === userId ||
-        CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
-        grantedFolderIds.has(f.id); // explicit positive grant overrides clearance requirement
+    filterVisibleFolders(folders, {
+      isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds,
     }),
   [folders, isSuperAdmin, userId, effectiveClearance, allDeniedFolderIds, grantedFolderIds]);
 
@@ -2475,7 +2470,6 @@ export default function WorkspaceHub() {
   }, [visibleFolders]);
 
   // Sub-folders visible in the main content area for the current folder
-  const VIRTUAL_VIEWS = new Set(['__recent__', '__pinned__', '__mine__', '__all__', '__task_docs__', '__trash__']);
   const currentSubFolders = useMemo<WFolder[]>(() => {
     if (selectedFolderId && VIRTUAL_VIEWS.has(selectedFolderId)) return [];
     if (selectedFolderId === null) return rootFolders; // root — show top-level folders
@@ -2497,80 +2491,31 @@ export default function WorkspaceHub() {
   // Must be declared BEFORE displayedFiles / filteredFiles that reference it.
   // ── All descendant folder IDs for the selected folder (recursive) ─────────
   // Used to expand file search to cover the full subtree, not just direct children.
-  const descendantFolderIds = useMemo(() => {
-    if (!selectedFolderId || VIRTUAL_VIEWS.has(selectedFolderId)) return new Set<string>();
-    const result = new Set<string>();
-    const queue = [selectedFolderId];
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      result.add(id);
-      for (const child of (childMap[id] ?? [])) queue.push(child.id);
-    }
-    return result;
-  }, [selectedFolderId, childMap]);
+  const descendantFolderIds = useMemo(
+    () => collectDescendantFolderIds(selectedFolderId, childMap),
+    [selectedFolderId, childMap],
+  );
 
   const lockedFolderIdSet = useMemo(() =>
     new Set(folders.filter(f => f.password_hash && !unlockedFolderIds.has(f.id)).map(f => f.id)),
   [folders, unlockedFolderIds]);
 
-  const displayedFiles = useMemo(() => {
-    let files = allFiles;
-    // The uploader (created_by === userId) ALWAYS keeps access to their file
-    // unless ownership has been transferred. Admins and superadmins also bypass.
-    const isOwnerOrAdmin = (f: WFile) => isSuperAdmin || f.created_by === userId;
-    // Explicit no_access denials on the file itself always win (except super admin)
-    files = files.filter(f => !deniedFileIds.has(f.id));
-    // Also exclude files whose containing folder (or any ancestor) is denied.
-    // allDeniedFolderIds carries the transitive closure — no BFS needed here.
-    if (!isSuperAdmin) {
-      files = files.filter(f => !f.folder_id || !allDeniedFolderIds.has(f.folder_id));
-    }
-    // Enforce security clearance — hide files above user's clearance level.
-    // Uploader/admin bypass clearance entirely.
-    // An explicit positive file-level grant also overrides clearance so a user
-    // can see a specific shared file even if they lack the security level.
-    // Denials (deniedFileIds) are already filtered above and always win.
-    files = files.filter(f =>
-      isOwnerOrAdmin(f) ||
-      CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance] ||
-      grantedFileIds.has(f.id)
-    );
-    if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
-    else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
-    else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
-    else if (selectedFolderId === '__all__') { /* no-op: show every visible file */ }
-    else if (selectedFolderId) {
-      // When a search query is active, expand to include ALL descendant folders so
-      // files nested inside subfolders are discoverable. Without a query (normal
-      // browsing) only direct children of the selected folder are shown.
-      files = searchQuery.trim() && descendantFolderIds.size > 1
-        ? files.filter(f => f.folder_id && descendantFolderIds.has(f.folder_id))
-        : files.filter(f => f.folder_id === selectedFolderId);
-    }
-    else files = files.filter(f => !f.folder_id); // null = root only (no folder)
-    // Hide files that belong to locked folders (uploader/admin bypass)
-    files = files.filter(f => isOwnerOrAdmin(f) || !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
-    if (secFilter !== 'all') files = files.filter(f => f.security_level === secFilter);
-    if (typeFilter !== 'all') {
-      files = files.filter(f => {
-        const mime = f.mime_type ?? '';
-        const ext  = (f.extension ?? '').toLowerCase();
-        if (typeFilter === 'image') return mime.startsWith('image/');
-        if (typeFilter === 'pdf')   return mime === 'application/pdf' || ext === 'pdf';
-        if (typeFilter === 'excel') return mime.includes('spreadsheet') || mime.includes('excel') || ['xlsx','xls','csv'].includes(ext);
-        if (typeFilter === 'word')  return mime.includes('word') || mime.includes('document') || ['docx','doc'].includes(ext);
-        if (typeFilter === 'zip')   return mime.includes('zip') || mime.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(ext);
-        // 'other' = anything not in the above
-        return !mime.startsWith('image/') && mime !== 'application/pdf' && !mime.includes('spreadsheet') && !mime.includes('excel') && !mime.includes('word') && !mime.includes('document') && !mime.includes('zip') && !['pdf','xlsx','xls','csv','docx','doc','zip','rar','7z','tar','gz'].includes(ext);
-      });
-    }
-    if (searchQuery.trim()) { const q = searchQuery.toLowerCase(); files = files.filter(f => f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q) || f.tags.some(t => t.toLowerCase().includes(q)) || (f._uploaderName ?? '').toLowerCase().includes(q)); }
-    return [...files].sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'size') return b.file_size - a.file_size;
-      return b.updated_at.localeCompare(a.updated_at);
-    });
-  }, [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
+  const displayedFiles = useMemo(() => filterDisplayedFiles({
+    files: allFiles,
+    selectedFolderId,
+    userId,
+    isSuperAdmin,
+    effectiveClearance,
+    deniedFileIds,
+    grantedFileIds,
+    allDeniedFolderIds,
+    lockedFolderIdSet,
+    descendantFolderIds,
+    secFilter,
+    typeFilter,
+    searchQuery,
+    sortBy,
+  }), [allFiles, selectedFolderId, secFilter, typeFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance, deniedFileIds, grantedFileIds, allDeniedFolderIds, descendantFolderIds, isSuperAdmin]);
 
   // ── Folder search results ────────────────────────────────────────────────
   const folderSearchResults = useMemo(() => {
@@ -2653,7 +2598,20 @@ export default function WorkspaceHub() {
   }
 
   async function restoreFile(file: WFile) {
-    const { error } = await supabase.from('workspace_files').update({ archived: false, updated_at: new Date().toISOString() }).eq('id', file.id);
+    let storagePath = file.storage_path;
+    if (file.storage_provider === 'r2' && storagePath) {
+      try {
+        storagePath = await r2RestoreFromTrash(storagePath);
+      } catch (e: any) {
+        toast({ title: 'Failed to restore file from R2 trash', description: e.message, variant: 'destructive' });
+        return;
+      }
+    }
+    const { error } = await supabase.from('workspace_files').update({
+      archived: false,
+      storage_path: storagePath,
+      updated_at: new Date().toISOString(),
+    }).eq('id', file.id);
     if (error) { toast({ title: 'Failed to restore file', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'restored', metadata: {} });
     refetchArchived(); refetchFiles();
@@ -2684,11 +2642,15 @@ export default function WorkspaceHub() {
     const toDelete = allFiles.filter(f => ids.includes(f.id) && canManageFile(f));
     const skipped = ids.length - toDelete.length;
     if (toDelete.length === 0) { toast({ title: 'Nothing to delete', description: 'You do not have permission to delete the selected files.', variant: 'destructive' }); return; }
-    const results = await Promise.all(toDelete.map(f => supabase.from('workspace_files').update({ archived: true }).eq('id', f.id)));
-    const failed = results.filter(r => r.error);
-    if (failed.length > 0) { toast({ title: 'Some files could not be moved to trash', description: failed[0].error?.message, variant: 'destructive' }); return; }
+    try {
+      for (const f of toDelete) await _archiveFile(f);
+    } catch (e: any) {
+      toast({ title: 'Some files could not be moved to trash', description: e.message, variant: 'destructive' });
+      refetchFiles(); refetchArchived();
+      return;
+    }
     setSelectedFileIds(new Set());
-    refetchFiles();
+    refetchFiles(); refetchArchived();
     const movedCount = toDelete.length;
     toast({ title: `${movedCount} file${movedCount !== 1 ? 's' : ''} moved to trash${skipped > 0 ? ` (${skipped} skipped — no permission)` : ''}` });
   }
@@ -2788,11 +2750,20 @@ export default function WorkspaceHub() {
     toast({ title: next ? 'File pinned' : 'File unpinned', description: file.name });
   }
 
-  // ── Internal archive helper (called only from approveDeleteRequest) ──────────
+  // ── Internal archive helper (called only from approveDeleteRequest / direct delete) ──
+  // R2 bytes are moved under trash/<original-key>; DB row stays and is marked archived.
   async function _archiveFile(file: WFile) {
-    const { error } = await supabase.from('workspace_files').update({ archived: true }).eq('id', file.id);
+    let storagePath = file.storage_path;
+    if (file.storage_provider === 'r2' && storagePath) {
+      storagePath = await r2MoveToTrash(storagePath);
+    }
+    const { error } = await supabase.from('workspace_files').update({
+      archived: true,
+      storage_path: storagePath,
+      updated_at: new Date().toISOString(),
+    }).eq('id', file.id);
     if (error) throw error;
-    await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: {} });
+    await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'deleted', metadata: { r2_trash: file.storage_provider === 'r2' } });
     if (selectedFile?.id === file.id) setSelectedFile(null);
     refetchFiles();
   }
@@ -2810,8 +2781,12 @@ export default function WorkspaceHub() {
 
   async function directDeleteFile(file: WFile) {
     if (!window.confirm(`Move "${file.name}" to trash? You can restore it from the Trash folder.`)) return;
-    await _archiveFile(file);
-    toast({ title: `"${file.name}" removed` });
+    try {
+      await _archiveFile(file);
+      toast({ title: `"${file.name}" moved to trash` });
+    } catch (e: any) {
+      toast({ title: 'Failed to move file to trash', description: e.message, variant: 'destructive' });
+    }
   }
 
   // ── Delete request system ─────────────────────────────────────────────────
@@ -2867,8 +2842,17 @@ export default function WorkspaceHub() {
         const file = allFiles.find(f => f.id === req.target_id);
         if (file) await _archiveFile(file);
         else {
-          // File may already be gone — mark approved anyway
-          await supabase.from('workspace_files').update({ archived: true }).eq('id', req.target_id);
+          // File may already be gone from the live list — still try to park R2 bytes.
+          const { data: orphan } = await supabase
+            .from('workspace_files')
+            .select('id, storage_path, storage_provider, name')
+            .eq('id', req.target_id)
+            .maybeSingle();
+          if (orphan) {
+            await _archiveFile(orphan as WFile);
+          } else {
+            await supabase.from('workspace_files').update({ archived: true }).eq('id', req.target_id);
+          }
         }
       } else {
         await supabase.from('workspace_folders').delete().eq('id', req.target_id);
@@ -3822,18 +3806,10 @@ export default function WorkspaceHub() {
 
   // ── Summary stats ──────────────────────────────────────────────────────────
 
-  const stats = useMemo(() => {
-    const visibleFiles = allFiles.filter(f => !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
-    const totalSize = visibleFiles.reduce((s, f) => s + f.file_size, 0);
-    const byLevel: Record<SecurityLevel, number> = { public: 0, internal: 0, confidential: 0, restricted: 0, top_secret: 0 };
-    visibleFiles.forEach(f => { byLevel[f.security_level]++; });
-    return { total: visibleFiles.length, totalSize, byLevel, pinned: visibleFiles.filter(f => f.is_pinned).length, mine: visibleFiles.filter(f => f.created_by === userId).length, root: visibleFiles.filter(f => !f.folder_id).length };
-  }, [allFiles, userId, lockedFolderIdSet]);
-
-  const VIRTUAL_FOLDER_NAMES: Record<string, string> = {
-    '__pinned__': 'Pinned Files', '__recent__': 'Recent Files', '__mine__': 'My Files',
-    '__task_docs__': 'Task Documents', '__all__': 'All Files', '__trash__': 'Recycle Bin',
-  };
+  const stats = useMemo(
+    () => computeWorkspaceStats(allFiles, userId, lockedFolderIdSet),
+    [allFiles, userId, lockedFolderIdSet],
+  );
   const currentFolderName = selectedFolderId && VIRTUAL_FOLDER_NAMES[selectedFolderId]
     ? VIRTUAL_FOLDER_NAMES[selectedFolderId]
     : selectedFolder?.name ?? 'All Files';
