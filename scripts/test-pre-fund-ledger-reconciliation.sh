@@ -131,6 +131,11 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
+# Supabase Studio may have committed early idempotent statements before a later
+# view or RPC-definition error. The repaired scripts must be safe to rerun in order.
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$

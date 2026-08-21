@@ -456,7 +456,7 @@ WHERE b.fund_id = f.id
 DROP FUNCTION IF EXISTS public.link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID,UUID,TEXT);
 DROP FUNCTION IF EXISTS public.link_payment_atomically_rpc(UUID,NUMERIC,TEXT,TEXT,UUID,TEXT,TEXT,DATE,UUID);
 
-CREATE FUNCTION public.link_payment_atomically_rpc(
+CREATE OR REPLACE FUNCTION public.link_payment_atomically_rpc(
   p_fund_id TEXT,
   p_amount NUMERIC,
   p_currency TEXT,
@@ -679,7 +679,7 @@ GRANT EXECUTE ON FUNCTION public.link_payment_atomically_rpc(TEXT,NUMERIC,TEXT,T
 DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT);
 DROP FUNCTION IF EXISTS public.add_pre_fund_transaction_rpc(UUID,TEXT,TEXT,NUMERIC,TEXT,TEXT,TEXT,DATE,UUID,TEXT,TEXT,UUID);
 
-CREATE FUNCTION public.add_pre_fund_transaction_rpc(
+CREATE OR REPLACE FUNCTION public.add_pre_fund_transaction_rpc(
   p_fund_id UUID,
   p_fund_name TEXT,
   p_transaction_type TEXT,
