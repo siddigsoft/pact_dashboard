@@ -15,3 +15,4 @@ Supervisor visibility and T1-approve permission for Coordinator submissions must
 1. `filteredOperationalCosts` Supervisor branch: use `o.hub_id === currentUser?.hubId` for Coordinator/Enumerator/DataCollector role subs. Falls back to allow if either hub_id is absent. Replace `tier1_status === 'pending'` catch-all with `tier1_approved_by === currentUser?.id` (history).
 2. `canTier1Approve`: when `hasFourTiers(oc)` is true, check `oc.hub_id === currentUser?.hubId` in addition to `isSupervisor`. Fall back to `true` when hub data is missing.
 3. `currentUser` hub property is `hubId` (camelCase); submission DB column is `hub_id` (snake_case).
+4. Pending Tier 1 approver names must resolve the submission's effective hub (`oc.hub_id` or submitter hub) through `normalizeHubId` and `getHubAccessInfo`, never compare raw hub labels. Otherwise a correctly authorized Forchana supervisor can be omitted from the displayed name list.
