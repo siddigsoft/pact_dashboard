@@ -6657,17 +6657,25 @@ const CostSubmission = () => {
                             const submitterUser2 = users.find(u => u.id === oc.submitted_by);
                             const submitterRoleDisplay2 = fmtRoleC(submitterUser2?.role) || 'Staff';
 
-                            const getExpectedC = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) =>
-                              users.filter(u => {
+                            const getExpectedC = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) => {
+                              // Match the same effective hub used by the T1 authorization check.
+                              // A request may not carry hub_id, while a user may be assigned a
+                              // state name such as "West Darfur"; both resolve to Forchana Hub.
+                              const submitterHubId = users.find(u => u.id === oc.submitted_by)?.hubId;
+                              const effectiveHubId = oc.hub_id || submitterHubId || null;
+                              const normalizedRequestHubId = normalizeHubId(effectiveHubId);
+
+                              return users.filter(u => {
                                 if (!u.role) return false;
                                 const roleNorm = nr(u.role);
                                 if (!rolePredicate(roleNorm)) return false;
-                                if (hubMatch && oc.hub_id) {
-                                  const uHub = u.hubId || (u as any).hub_id;
-                                  if (uHub && uHub !== oc.hub_id) return false;
+                                if (hubMatch) {
+                                  if (!normalizedRequestHubId) return false;
+                                  return getHubAccessInfo(u as any).hubIds.includes(normalizedRequestHubId);
                                 }
                                 return true;
                               }).slice(0, 5);
+                            };
 
                             const isSupervisorRolePredC  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
                             const isFomRolePredC         = (r: string) => r === 'fom' || r.includes('fieldoperationmanager') || r.includes('fieldopmanager');
@@ -7608,17 +7616,24 @@ const CostSubmission = () => {
                             const submitterRoleDisplay = fmtRole(submitterUser?.role) || 'Staff';
 
                             // ── Resolve expected pending-step approvers from loaded users list ──
-                            const getExpected = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) =>
-                              users.filter(u => {
+                            const getExpected = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) => {
+                              // Use the exact hub normalization applied by the T1 permission
+                              // check so the pending approver names match who can approve.
+                              const submitterHubId = users.find(u => u.id === oc.submitted_by)?.hubId;
+                              const effectiveHubId = oc.hub_id || submitterHubId || null;
+                              const normalizedRequestHubId = normalizeHubId(effectiveHubId);
+
+                              return users.filter(u => {
                                 if (!u.role) return false;
                                 const roleNorm = nr(u.role);
                                 if (!rolePredicate(roleNorm)) return false;
-                                if (hubMatch && oc.hub_id) {
-                                  const uHub = u.hubId || (u as any).hub_id;
-                                  if (uHub && uHub !== oc.hub_id) return false;
+                                if (hubMatch) {
+                                  if (!normalizedRequestHubId) return false;
+                                  return getHubAccessInfo(u as any).hubIds.includes(normalizedRequestHubId);
                                 }
                                 return true;
                               }).slice(0, 5);
+                            };
 
                             const isSupervisorRolePred  = (r: string) => r.includes('supervisor') || r.includes('hubsupervisor');
                             const isFomRolePred         = (r: string) => r === 'fom' || r.includes('fieldoperationmanager') || r.includes('fieldopmanager');
