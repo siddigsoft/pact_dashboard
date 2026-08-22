@@ -6711,8 +6711,12 @@ const CostSubmission = () => {
 
                             const t1NameC = tier1Approver?.name || tier1Approver?.email || nameListC(t1ExpectedC) || 'Tier 1 approver';
                             const t2NameC = tier2Approver?.name || tier2Approver?.email || nameListC(t2ExpectedC) || 'Tier 2 approver';
-                            const t3NameC = tier3Approver?.name || tier3Approver?.email || nameListC(t3ExpectedC) || 'Tier 3 approver';
-                            const t4NameC = tier4Approver?.name || tier4Approver?.email || nameListC(t4ExpectedC) || 'Admin';
+                            // Keep Admin/Super Admin identities private in the final approval
+                            // steps; the tier label is enough to identify the responsible role.
+                            const t3NameC = fourTier
+                              ? tier3Approver?.name || tier3Approver?.email || nameListC(t3ExpectedC) || 'Tier 3 approver'
+                              : 'Admin / Super Admin';
+                            const t4NameC = 'Admin / Super Admin';
 
                             const stepsC: FlowStepC[] = [];
 
@@ -6780,8 +6784,8 @@ const CostSubmission = () => {
                               stepsC.push({
                                 label: fourTier ? 'Tier 3 — Country Director' : 'Tier 3 — Admin',
                                 stepNum: '④',
-                                person: tier3Approver?.name || tier3Approver?.email || '',
-                                role: fmtRoleC((tier3Approver as any)?.role) || (fourTier ? 'Country Director' : 'Admin / Super Admin'),
+                                person: fourTier ? tier3Approver?.name || tier3Approver?.email || '' : '',
+                                role: fourTier ? fmtRoleC((tier3Approver as any)?.role) || 'Country Director' : 'Admin / Super Admin',
                                 status: t3StatusC, timestamp: oc.tier3_approved_at,
                                 waitingSince: t3StatusC === 'active' ? oc.tier2_approved_at : null,
                                 notes: cleanTier3Notes || undefined,
@@ -6789,7 +6793,7 @@ const CostSubmission = () => {
                                 notifText: t3StatusC === 'done'
                                   ? `Email sent to: ${submitterName}, ${t4NameC}`
                                   : `Email sent to: ${t3NameC}`,
-                                expectedApprovers: t3ExpectedC,
+                                expectedApprovers: fourTier ? t3ExpectedC : undefined,
                               });
                             }
 
@@ -6799,8 +6803,8 @@ const CostSubmission = () => {
                               const t4StatusC: StepStatus = raw4C === 'approved' ? 'done' : raw4C === 'rejected' ? 'rejected' : t4ReachedC ? 'active' : 'pending';
                               stepsC.push({
                                 label: 'Tier 4 — Admin', stepNum: '⑤',
-                                person: tier4Approver?.name || tier4Approver?.email || '',
-                                role: fmtRoleC((tier4Approver as any)?.role) || 'Admin / Super Admin',
+                                person: '',
+                                role: 'Admin / Super Admin',
                                 status: t4StatusC, timestamp: oc.tier4_approved_at,
                                 waitingSince: t4StatusC === 'active' ? oc.tier3_approved_at : null,
                                 notes: cleanTier4Notes || undefined,
@@ -6808,7 +6812,7 @@ const CostSubmission = () => {
                                 notifText: t4StatusC === 'done'
                                   ? `Email sent to: ${submitterName}`
                                   : `Email sent to: ${t4NameC}`,
-                                expectedApprovers: t4ExpectedC,
+                                expectedApprovers: undefined,
                               });
                             }
 
@@ -7675,8 +7679,12 @@ const CostSubmission = () => {
 
                             const t1Name = tier1Approver?.name || tier1Approver?.email || nameList(t1Expected) || 'Tier 1 approver';
                             const t2Name = tier2Approver?.name || tier2Approver?.email || nameList(t2Expected) || 'Tier 2 approver';
-                            const t3Name = tier3Approver?.name || tier3Approver?.email || nameList(t3Expected) || 'Tier 3 approver';
-                            const t4Name = tier4Approver?.name || tier4Approver?.email || nameList(t4Expected) || 'Admin';
+                            // Keep Admin/Super Admin identities private in Tier 3/Tier 4;
+                            // display only the responsible tier/role.
+                            const t3Name = fourTier
+                              ? tier3Approver?.name || tier3Approver?.email || nameList(t3Expected) || 'Tier 3 approver'
+                              : 'Admin / Super Admin';
+                            const t4Name = 'Admin / Super Admin';
 
                             const steps: FlowStep[] = [];
 
@@ -7756,8 +7764,8 @@ const CostSubmission = () => {
                               steps.push({
                                 label: fourTier ? 'Tier 3 — Country Director' : 'Tier 3 — Admin',
                                 stepNum: '④',
-                                person: tier3Approver?.name || tier3Approver?.email || '',
-                                role: fmtRole((tier3Approver as any)?.role) || t3RoleLabel,
+                                person: fourTier ? tier3Approver?.name || tier3Approver?.email || '' : '',
+                                role: fourTier ? fmtRole((tier3Approver as any)?.role) || t3RoleLabel : 'Admin / Super Admin',
                                 status: t3Status,
                                 timestamp: oc.tier3_approved_at,
                                 waitingSince: t3Status === 'active' ? oc.tier2_approved_at : null,
@@ -7766,7 +7774,7 @@ const CostSubmission = () => {
                                 notifText: t3Status === 'done'
                                   ? `Email sent to: ${submitterName}${fourTier ? `, ${t4Name}` : ''}`
                                   : `Email sent to: ${t3Name}`,
-                                expectedApprovers: t3Expected,
+                                expectedApprovers: fourTier ? t3Expected : undefined,
                               });
                             }
 
@@ -7778,8 +7786,8 @@ const CostSubmission = () => {
                               steps.push({
                                 label: 'Tier 4 — Admin',
                                 stepNum: '⑤',
-                                person: tier4Approver?.name || tier4Approver?.email || '',
-                                role: fmtRole((tier4Approver as any)?.role) || 'Admin / Super Admin',
+                                person: '',
+                                role: 'Admin / Super Admin',
                                 status: t4Status,
                                 timestamp: oc.tier4_approved_at,
                                 waitingSince: t4Status === 'active' ? oc.tier3_approved_at : null,
@@ -7788,7 +7796,7 @@ const CostSubmission = () => {
                                 notifText: t4Status === 'done'
                                   ? `Email sent to: ${submitterName}`
                                   : `Email sent to: ${t4Name}`,
-                                expectedApprovers: t4Expected,
+                                expectedApprovers: undefined,
                               });
                             }
 
