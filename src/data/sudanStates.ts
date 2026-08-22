@@ -622,6 +622,24 @@ export const normalizeHubId = (hubInput: string | null | undefined): string | nu
   if (hubAliases[normalized]) {
     return hubAliases[normalized];
   }
+
+  // Legacy data occasionally prefixes a state with an organisation label
+  // (for example, "PACT Central Darfur"). Resolve those values to the same
+  // hub as the plain state name so approval scopes remain consistent.
+  const normalizedWords = normalized
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (
+    normalizedWords.includes('forchana') ||
+    normalizedWords.includes('farchana') ||
+    normalizedWords.includes('west darfur') ||
+    normalizedWords.includes('central darfur') ||
+    normalizedWords.includes('el geneina') ||
+    normalizedWords.includes('geneina')
+  ) {
+    return 'forchana-hub';
+  }
   
   // Check if it's already a valid hub ID
   const directMatch = hubs.find(h => h.id === normalized);

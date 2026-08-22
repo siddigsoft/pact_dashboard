@@ -1085,6 +1085,28 @@ const CostSubmission = () => {
     });
   }, [users]);
 
+  /**
+   * Resolve the request's effective hub from the stored request value first,
+   * then the submitter's hub or state. Older requests can hold labels such as
+   * "PACT Central Darfur" instead of the canonical forchana-hub ID.
+   */
+  const getEffectiveSubmissionHubId = useCallback((submission: OperationalCostSubmission): string | null => {
+    const submitter = users.find(user => user.id === submission.submitted_by);
+    const candidates = [
+      submission.hub_id,
+      (submission as any).hubId,
+      submitter?.hubId,
+      submitter?.stateId,
+      (submitter as any)?.state,
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = normalizeHubId(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }, [users]);
+
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     // Admins and Super Admins see everything unfiltered
@@ -1180,8 +1202,6 @@ const CostSubmission = () => {
         // (primary hub + secondary hub from profile + any additional_roles hub assignments).
         const supervisorHubAccess = getHubAccessInfo(currentUser as any);
         const myHubIds = supervisorHubAccess.hubIds; // normalized list
-        const matchesAnyHub = (hubId: string | null | undefined) =>
-          !!hubId && myHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(hubId) || hubId));
 
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
@@ -1197,8 +1217,9 @@ const CostSubmission = () => {
             || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
           if (isCoordEnumSub) {
             if (myHubIds.length === 0) return false; // Supervisor with no hub assigned cannot see coordinator submissions
-            if (!o.hub_id) return teamMemberIds.includes(o.submitted_by); // Fallback: accept if confirmed team member
-            return matchesAnyHub(o.hub_id); // Match any of the supervisor's hubs
+            const submissionHubId = getEffectiveSubmissionHubId(o);
+            if (submissionHubId) return myHubIds.includes(submissionHubId);
+            return teamMemberIds.includes(o.submitted_by); // Legacy fallback when no hub/state is available
           }
           return false;
         });
@@ -1249,7 +1270,7 @@ const CostSubmission = () => {
        });
      }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter, userFilter, stateFilter, tierFilter, users]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter, userFilter, stateFilter, tierFilter, users, getEffectiveSubmissionHubId]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -1349,8 +1370,7 @@ const CostSubmission = () => {
     // Coordinator: T1 = Hub Supervisor (or FOM when the hub has no supervisor).
     if (hasFourTiers(oc)) {
       // Resolve effective hub (submission hub_id, or fall back to submitter's hubId)
-      const submitterUser = users.find(u => u.id === oc.submitted_by);
-      const effectiveHubId = oc.hub_id || (submitterUser as any)?.hubId || null;
+      const effectiveHubId = getEffectiveSubmissionHubId(oc);
 
       // If this hub has NO supervisor at all, FOM steps in as T1 approver.
       if (isFOM && !hubHasSupervisor(effectiveHubId)) return true;
@@ -1361,15 +1381,15 @@ const CostSubmission = () => {
         const supervisorHubAccess = getHubAccessInfo(currentUser as any);
         const myHubIds = supervisorHubAccess.hubIds;
         if (myHubIds.length === 0) return false;
-        if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
-        return myHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(oc.hub_id!) || oc.hub_id));
+        if (!effectiveHubId) return teamMemberIds.includes(oc.submitted_by);
+        return myHubIds.includes(effectiveHubId);
       }
       // FOM who also holds a Supervisor role via additional_roles — hub-scoped T1 approval.
       if (isFOM && isSupervisor) {
         const supervisedHubIds = getAdditionalSupervisorHubIds(currentUser as any);
         if (supervisedHubIds.length === 0) return false;
-        if (!oc.hub_id) return teamMemberIds.includes(oc.submitted_by);
-        return supervisedHubIds.some(h => (normalizeHubId(h) || h) === (normalizeHubId(oc.hub_id!) || oc.hub_id));
+        if (!effectiveHubId) return teamMemberIds.includes(oc.submitted_by);
+        return supervisedHubIds.some(h => normalizeHubId(h) === effectiveHubId);
       }
       return false;
     }
@@ -6661,8 +6681,12 @@ const CostSubmission = () => {
                               // Match the same effective hub used by the T1 authorization check.
                               // A request may not carry hub_id, while a user may be assigned a
                               // state name such as "West Darfur"; both resolve to Forchana Hub.
-                              const submitterHubId = users.find(u => u.id === oc.submitted_by)?.hubId;
-                              const effectiveHubId = oc.hub_id || submitterHubId || null;
+                              const submitter = users.find(u => u.id === oc.submitted_by);
+                              const effectiveHubId = oc.hub_id
+                                || submitter?.hubId
+                                || submitter?.stateId
+                                || (submitter as any)?.state
+                                || null;
                               const normalizedRequestHubId = normalizeHubId(effectiveHubId);
 
                               return users.filter(u => {
@@ -7623,8 +7647,12 @@ const CostSubmission = () => {
                             const getExpected = (rolePredicate: (r: string) => boolean, hubMatch?: boolean) => {
                               // Use the exact hub normalization applied by the T1 permission
                               // check so the pending approver names match who can approve.
-                              const submitterHubId = users.find(u => u.id === oc.submitted_by)?.hubId;
-                              const effectiveHubId = oc.hub_id || submitterHubId || null;
+                              const submitter = users.find(u => u.id === oc.submitted_by);
+                              const effectiveHubId = oc.hub_id
+                                || submitter?.hubId
+                                || submitter?.stateId
+                                || (submitter as any)?.state
+                                || null;
                               const normalizedRequestHubId = normalizeHubId(effectiveHubId);
 
                               return users.filter(u => {

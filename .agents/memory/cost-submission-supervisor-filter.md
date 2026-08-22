@@ -12,7 +12,7 @@ Supervisor visibility and T1-approve permission for Coordinator submissions must
 - The old catch-all `tier1_status === 'pending'` line exposed ALL pending submissions (FOM, CD, etc.) to all Supervisors
 
 **How to apply:**
-1. `filteredOperationalCosts` Supervisor branch: use `o.hub_id === currentUser?.hubId` for Coordinator/Enumerator/DataCollector role subs. Falls back to allow if either hub_id is absent. Replace `tier1_status === 'pending'` catch-all with `tier1_approved_by === currentUser?.id` (history).
-2. `canTier1Approve`: when `hasFourTiers(oc)` is true, check `oc.hub_id === currentUser?.hubId` in addition to `isSupervisor`. Fall back to `true` when hub data is missing.
-3. `currentUser` hub property is `hubId` (camelCase); submission DB column is `hub_id` (snake_case).
-4. Pending Tier 1 approver names must resolve the submission's effective hub (`oc.hub_id` or submitter hub) through `normalizeHubId` and `getHubAccessInfo`, never compare raw hub labels. Otherwise a correctly authorized Forchana supervisor can be omitted from the displayed name list.
+1. Resolve an effective hub from the request hub, then the submitter's hub, then their state. Normalize it before every client visibility, approval, and pending-approver comparison.
+2. The database RPC and RLS policy must use the same canonical hub scope as the client. Client-side normalization cannot restore rows already excluded by raw hub equality in the database.
+3. Profile hubs use `hubId` in the client while submission rows use `hub_id`; legacy values may contain a state or prefixed state label instead of a canonical hub ID.
+4. Keep historical requests actioned by the current Supervisor visible, but never expose another Supervisor's submissions merely because their Tier 1 status is pending.
