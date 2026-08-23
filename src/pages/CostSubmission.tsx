@@ -800,7 +800,6 @@ const CostSubmission = () => {
       name: string;
       currency: string;
       available_balance: number;
-      allocationRemaining: number | null;
     }>;
     preFundsLoading: boolean;
     preFundsError: string | null;
@@ -2640,7 +2639,6 @@ const CostSubmission = () => {
         name: string;
         currency: string;
         available_balance: number;
-        allocationRemaining: number | null;
       }> = [];
       try {
         const { data: pfData, error: fundsError } = await supabase
@@ -2652,50 +2650,14 @@ const CostSubmission = () => {
         if (fundsError) throw fundsError;
 
         const fundRows = (pfData ?? []) as any[];
-        const fundIds = fundRows.map(fund => fund.id).filter(Boolean);
-        const allocationRows: any[] = [];
-        for (let index = 0; index < fundIds.length; index += 100) {
-          const { data, error } = await supabase
-            .from('pre_fund_allocations' as any)
-            .select('pre_fund_request_id, user_id, allocated_amount, spent_amount')
-            .in('pre_fund_request_id', fundIds.slice(index, index + 100));
-          if (error) throw error;
-          allocationRows.push(...((data ?? []) as any[]));
-        }
-
-        const submitterId = oc.submitted_by;
-        const allocationCountByFund = new Map<string, number>();
-        const submitterAllocationByFund = new Map<string, number>();
-        const submitterAllocationCountByFund = new Map<string, number>();
-        allocationRows.forEach(allocation => {
-          const fundId = allocation.pre_fund_request_id;
-          if (!fundId) return;
-          allocationCountByFund.set(fundId, (allocationCountByFund.get(fundId) ?? 0) + 1);
-          if (submitterId && allocation.user_id === submitterId) {
-            const allocationCount = (submitterAllocationCountByFund.get(fundId) ?? 0) + 1;
-            submitterAllocationCountByFund.set(fundId, allocationCount);
-            const remaining = Math.max(0, Number(allocation.allocated_amount ?? 0) - Number(allocation.spent_amount ?? 0));
-            if (allocationCount === 1) submitterAllocationByFund.set(fundId, remaining);
-          }
-        });
-
         preFunds = fundRows
           .filter(fund => Number(fund.available_balance ?? 0) > 0)
-          .flatMap(fund => {
-            const allocationRemaining = submitterAllocationByFund.get(fund.id);
-            const isOpenPool = !allocationCountByFund.has(fund.id);
-            const hasDuplicateSubmitterAllocation = (submitterAllocationCountByFund.get(fund.id) ?? 0) > 1;
-            if (hasDuplicateSubmitterAllocation) return [];
-            if (allocationRemaining === undefined && !isOpenPool) return [];
-            if (allocationRemaining !== undefined && allocationRemaining <= 0) return [];
-            return [{
-              id: fund.id,
-              name: fund.name,
-              currency: fund.currency,
-              available_balance: Number(fund.available_balance ?? 0),
-              allocationRemaining: allocationRemaining ?? null,
-            }];
-          });
+          .map(fund => ({
+            id: fund.id,
+            name: fund.name,
+            currency: fund.currency,
+            available_balance: Number(fund.available_balance ?? 0),
+          }));
       } catch (error: any) {
         const message = error?.message || 'Unable to load eligible Pre-Funds.';
         setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id)
@@ -2760,10 +2722,6 @@ const CostSubmission = () => {
     }
     if (payAmountVal > selectedFund.available_balance) {
       toast({ title: 'Amount Exceeds Fund Balance / المبلغ يتجاوز رصيد التمويل', description: `This fund has only ${oc.currency} ${selectedFund.available_balance.toLocaleString()} available.`, variant: 'destructive' });
-      return;
-    }
-    if (selectedFund.allocationRemaining !== null && payAmountVal > selectedFund.allocationRemaining) {
-      toast({ title: 'Amount Exceeds Allocation / المبلغ يتجاوز المخصص', description: `The submitter has only ${oc.currency} ${selectedFund.allocationRemaining.toLocaleString()} remaining in this fund.`, variant: 'destructive' });
       return;
     }
     const isFullPayment = payAmountCents >= remainingCents;
@@ -12690,9 +12648,6 @@ const CostSubmission = () => {
                       {markAsPaidDialog.preFunds.map(f => (
                         <SelectItem key={f.id} value={f.id}>
                           {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
-                          {f.allocationRemaining === null
-                            ? ' · shared fund'
-                            : ` · ${f.currency} ${f.allocationRemaining.toLocaleString()} allocated to submitter`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -12720,7 +12675,7 @@ const CostSubmission = () => {
               )}
               {!markAsPaidDialog.preFundsLoading && !markAsPaidDialog.preFundsError && markAsPaidDialog.preFunds.length === 0 && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                  No eligible Pre-Fund is available for this submission. Allocate budget to the submitter or use a shared fund before recording payment.
+                  No active Pre-Fund with an available balance matches this submission’s currency.
                 </p>
               )}
 

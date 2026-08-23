@@ -1,10 +1,10 @@
 ---
 name: Operational Cost payment fund eligibility
-description: Preventing Cost Submission payment dialogs from offering funds the submission cannot charge.
+description: Pre-Fund eligibility rules for Cost Submissions versus Down Payments.
 ---
 
-When recording an Operational Cost payment, eligible Pre-Funds must be determined by the submission owner’s allocation and payment currency, not by the Finance/Admin operator. Allocation-free shared funds are also eligible.
+Operational Cost Submissions may use any active or low-balance Pre-Fund in the same currency with enough available balance. They do not consume or require a personal allocation. Down Payments remain allocation-bound.
 
-**Why:** An Admin can process payment for another person but does not transfer their own fund allocation to that request. Offering the wrong fund leads to a server-side allocation rejection after receipt upload.
+**Why:** Cost Submissions are paid from the available program fund, while individual allocation reporting should not block Finance from recording a valid disbursement. The user explicitly chose this policy after allocation data prevented payment.
 
-**How to apply:** Exclude funds allocated to other people, zero-remaining allocations, and malformed duplicate submitter allocations. Before uploading proof, validate the requested amount against the selected fund balance and the submitter’s remaining allocation; preserve the database guard for races.
+**How to apply:** For Cost Submissions, filter only by active/low-balance status, matching currency, and available fund balance; keep the submission owner as the ledger attribution. Scope the database allocation bypass to `operational_cost_submissions` so Down Payment allocation and spend rules stay unchanged.

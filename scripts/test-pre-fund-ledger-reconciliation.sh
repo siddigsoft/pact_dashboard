@@ -34,6 +34,8 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
 CREATE TABLE public.profiles (id uuid PRIMARY KEY, role text);
 INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000001');
 INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000001', 'super_admin');
+INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000002');
+INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000002', 'staff');
 CREATE TABLE public.wallets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES public.profiles(id),
   currency text NOT NULL DEFAULT 'SDG', balance_cents bigint NOT NULL DEFAULT 0,
@@ -157,6 +159,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823g_open_cost_submission_pre_fund_payments.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -195,6 +198,11 @@ INSERT INTO public.pre_fund_requests (
   id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
 ) VALUES (
   '10000000-0000-0000-0000-000000000004', 'Duplicate-Key Regression Fund', 'SDG', 200, 200, 0, '2400', '1200'
+);
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000099', 'Open Cost Payment Regression Fund', 'SDG', 100, 100, 0, '2400', '1200'
 );
 DO $$
 DECLARE v_paid numeric; v_available numeric;
@@ -244,6 +252,35 @@ INSERT INTO public.pre_fund_allocations (
 INSERT INTO public.pre_fund_allocations (
   pre_fund_request_id, user_id, allocated_amount, currency
 ) VALUES ('10000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', 200, 'SDG');
+INSERT INTO public.pre_fund_allocations (
+  pre_fund_request_id, user_id, allocated_amount, currency
+) VALUES ('10000000-0000-0000-0000-000000000099', '00000000-0000-0000-0000-000000000001', 100, 'SDG');
+-- Cost Submissions now use any funded Pre-Fund in the same currency. The
+-- source owner remains on the ledger but does not need an allocation row.
+INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, submitted_by)
+VALUES ('20000000-0000-0000-0000-000000000099', 'paid', 2500, '00000000-0000-0000-0000-000000000002');
+SELECT public.link_payment_atomically_rpc(
+  '10000000-0000-0000-0000-000000000099', 25, 'SDG', 'operational_cost_submissions',
+  '20000000-0000-0000-0000-000000000099', 'open-cost-fund', 'Cost Submission without allocation', CURRENT_DATE,
+  auth.uid(), '00000000-0000-0000-0000-000000000002', NULL, 'open-cost-fund'
+);
+DO $$
+DECLARE v_user_id uuid; v_spent numeric; v_available numeric;
+BEGIN
+  SELECT user_id INTO v_user_id
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'open-cost-fund';
+  SELECT spent_amount INTO v_spent
+  FROM public.pre_fund_allocations
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000099';
+  SELECT available_balance INTO v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000099';
+  IF v_user_id <> '00000000-0000-0000-0000-000000000002'::uuid OR v_spent <> 0 OR v_available <> 75 THEN
+    RAISE EXCEPTION 'open Cost Submission fund assertion failed: owner %, allocation spent %, available %',
+      v_user_id, v_spent, v_available;
+  END IF;
+END $$;
 INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents)
 VALUES ('20000000-0000-0000-0000-000000000001', 'paid', 35000);
 -- An initial instalment changes an approved OCS into partially_paid before it is
@@ -501,7 +538,7 @@ BEGIN
    SELECT spent_amount INTO v_spent
    FROM public.pre_fund_allocations
    WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000001';
-   IF v_paid <> 300 OR v_available <> 700 OR v_events <> 2 OR v_gl <> 7 OR v_spent <> 300 THEN
+  IF v_paid <> 300 OR v_available <> 700 OR v_events <> 2 OR v_gl <> 8 OR v_spent <> 0 THEN
     RAISE EXCEPTION 'instalment/idempotency assertion failed: paid %, avail %, events %, GL %, spent %',
       v_paid, v_available, v_events, v_gl, v_spent;
   END IF;
@@ -1193,31 +1230,32 @@ BEGIN
 END $$;
 
 DO $$
-DECLARE v_status text; v_paid_cents bigint; v_events int; v_spent numeric;
+DECLARE v_result jsonb; v_status text; v_paid_cents bigint; v_events int; v_spent numeric; v_available numeric;
 BEGIN
-  BEGIN
-    PERFORM public.record_required_pre_fund_payment_rpc(
-      'operational_cost_submissions',
-      '20000000-0000-0000-0000-000000000012',
-      '10000000-0000-0000-0000-000000000010',
-      50, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Must respect personal allocation', 'protected-insufficient-allocation'
-    );
-    RAISE EXCEPTION 'insufficient personal allocation was accepted';
-  EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'insufficient personal allocation was accepted' THEN RAISE; END IF;
-    IF SQLERRM NOT LIKE 'Insufficient personal allocation%' THEN RAISE; END IF;
-  END;
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'operational_cost_submissions',
+    '20000000-0000-0000-0000-000000000012',
+    '10000000-0000-0000-0000-000000000010',
+    50, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Open Cost Submission fund', 'protected-open-cost-fund'
+  ) INTO v_result;
   SELECT status, amount_paid_cents INTO v_status, v_paid_cents
   FROM public.operational_cost_submissions
   WHERE id = '20000000-0000-0000-0000-000000000012';
   SELECT count(*) INTO v_events FROM public.pre_fund_transactions
-  WHERE idempotency_key = 'protected-insufficient-allocation';
+  WHERE idempotency_key = 'protected-open-cost-fund';
   SELECT spent_amount INTO v_spent FROM public.pre_fund_allocations
   WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000010'
     AND user_id = auth.uid();
-  IF v_status <> 'approved' OR v_paid_cents <> 0 OR v_events <> 0 OR v_spent <> 0 THEN
-    RAISE EXCEPTION 'allocation rollback failed: source %/%, events %, spent %',
-      v_status, v_paid_cents, v_events, v_spent;
+  SELECT available_balance INTO v_available FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000010';
+  IF (v_result ->> 'success')::boolean IS DISTINCT FROM true
+     OR v_status <> 'paid'
+     OR v_paid_cents <> 5000
+     OR v_events <> 1
+     OR v_spent <> 0
+     OR v_available <> 50 THEN
+    RAISE EXCEPTION 'open Cost Submission payment failed: result %, source %/%, events %, spent %, available %',
+      v_result, v_status, v_paid_cents, v_events, v_spent, v_available;
   END IF;
 END $$;
 
