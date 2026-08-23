@@ -22,7 +22,7 @@ import {
   Calendar, Plus, Banknote, Shuffle, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, AlertCircle,
   Info, Receipt, User, Clock, FileSpreadsheet, Hash, Loader2,
-  UserPlus, Filter, Search, MapPin, ClipboardList,
+  UserPlus, Filter, Search, MapPin, ClipboardList, Link2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
