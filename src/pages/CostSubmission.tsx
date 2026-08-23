@@ -2496,44 +2496,22 @@ const CostSubmission = () => {
     return getRevertTierLabel(oc) !== null;
   };
 
-  /** Compute the minimal DB update needed to step back one approval tier */
-  const computeRevertUpdates = (oc: OperationalCostSubmission): Record<string, unknown> => {
-    const tier = getRevertTierLabel(oc);
-    // Always clear payment proof and payment amounts when reverting any tier
-    const proofClear = {
-      payment_proof_url: null,
-      payment_proof_notes: null,
-      payment_proof_uploaded_at: null,
-      amount_paid_cents: 0,
-      paid_at: null,
-      paid_by: null,
-    };
-    const base = { updated_at: new Date().toISOString(), ...proofClear };
-    if (tier === 'T4') return { ...base, tier4_status: 'pending', tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
-    if (tier === 'T3') return { ...base, tier3_status: 'pending', tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
-    if (tier === 'T2') return { ...base, tier2_status: 'pending', tier2_approved_by: null, tier2_approved_at: null, tier2_notes: null, tier3_status: null, tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'under_review' };
-    // T1 — full reset to pending
-    return { ...base, tier1_status: 'pending', tier1_approved_by: null, tier1_approved_at: null, tier1_notes: null, tier2_status: 'pending', tier2_approved_by: null, tier2_approved_at: null, tier2_notes: null, tier3_status: null, tier3_approved_by: null, tier3_approved_at: null, tier3_notes: null, tier4_status: null, tier4_approved_by: null, tier4_approved_at: null, tier4_notes: null, status: 'pending' };
-  };
-
   const handleRevertSubmission = async () => {
     if (!revertConfirm) return;
     setActionProcessing(true);
     try {
-      const updates = computeRevertUpdates(revertConfirm);
-      const { error } = await supabase
-        .from('operational_cost_submissions')
-        .update(updates)
-        .eq('id', revertConfirm.id);
-      if (error) {
-        toast({ title: 'Revert Failed / فشل الإرجاع', description: error.message, variant: 'destructive' });
-      } else {
-        const tier = getRevertTierLabel(revertConfirm);
-        toast({ title: 'Reverted / تم الإرجاع', description: `Submission reverted (${tier} undone). Payment proof and amount cleared. / تم إرجاع الطلب ومسح إيصال الدفع والمبلغ المدفوع.` });
-        fetchOperationalCosts();
-      }
-    } catch (err) {
-      toast({ title: 'Error / خطأ', description: 'Failed to revert submission.', variant: 'destructive' });
+      const tier = getRevertTierLabel(revertConfirm);
+      if (!tier) throw new Error('This submission no longer has an approval tier that can be reverted.');
+      const { revertOperationalCostTierAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostTierAtomically([revertConfirm.id], tier as 'T1' | 'T2' | 'T3' | 'T4');
+      if (!result.success) throw new Error(result.message);
+      toast({
+        title: 'Reverted / تم الإرجاع',
+        description: `Submission reverted (${tier} undone).${result.reversedPaymentSourceCount > 0 ? ' Linked Pre-Fund payment reversed and removed from active Reconciliation.' : ''}`,
+      });
+      fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Revert Failed / فشل الإرجاع', description: err.message || 'Failed to revert submission.', variant: 'destructive' });
     } finally {
       setActionProcessing(false);
       setRevertConfirm(null);
@@ -2544,24 +2522,20 @@ const CostSubmission = () => {
   const handleGroupRevertTier = async () => {
     if (!groupRevertTierConfirm || groupRevertTierConfirm.items.length === 0) return;
     setActionProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
     try {
-      for (const oc of groupRevertTierConfirm.items) {
-        const updates = computeRevertUpdates(oc);
-        const { error } = await supabase
-          .from('operational_cost_submissions')
-          .update(updates)
-          .eq('id', oc.id);
-        if (error) { failCount++; } else { successCount++; }
-      }
+      const { revertOperationalCostTierAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostTierAtomically(
+        groupRevertTierConfirm.items.map(oc => oc.id),
+        groupRevertTierConfirm.tier as 'T1' | 'T2' | 'T3' | 'T4',
+      );
+      if (!result.success) throw new Error(result.message);
       toast({
         title: 'Group Reverted / تم إرجاع المجموعة',
-        description: `${successCount} item${successCount !== 1 ? 's' : ''} reverted (${groupRevertTierConfirm.tier} undone).${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+        description: `${groupRevertTierConfirm.items.length} item${groupRevertTierConfirm.items.length !== 1 ? 's' : ''} reverted (${groupRevertTierConfirm.tier} undone).${result.reversedPaymentSourceCount > 0 ? ` ${result.reversedPaymentSourceCount} linked payment source${result.reversedPaymentSourceCount !== 1 ? 's were' : ' was'} reversed first.` : ''}`,
       });
       fetchOperationalCosts();
-    } catch (err) {
-      toast({ title: 'Error / خطأ', description: 'Group tier revert failed.', variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Group Revert Failed / فشل إرجاع المجموعة', description: err.message || 'Group tier revert failed.', variant: 'destructive' });
     } finally {
       setActionProcessing(false);
       setGroupRevertTierConfirm(null);
@@ -6497,7 +6471,7 @@ const CostSubmission = () => {
                                     disabled={actionProcessing}
                                     data-testid={`button-group-revert-tier-${groupId}`}>
                                     <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                                    Revert {grpRevertTier[0]}{grpRevertTier[1].length < groupItems.length ? ` (${grpRevertTier[1].length})` : ''}
+                                    Revert {grpRevertTier[0]}{grpRevertTier[1].length < groupItems.length ? ` (${grpRevertTier[1].length} of ${groupItems.length})` : ''}
                                   </Button>
                                 )}
                               </div>

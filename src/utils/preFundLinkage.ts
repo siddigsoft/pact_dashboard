@@ -913,3 +913,33 @@ export async function revertOperationalCostPaymentsAtomically(
     message: data?.success === true ? 'Payment source and ledger updated together.' : (data?.error ?? 'Source update failed.'),
   };
 }
+
+export async function revertOperationalCostTierAtomically(
+  sourceIds: string[],
+  tier: 'T1' | 'T2' | 'T3' | 'T4',
+): Promise<{ success: boolean; message: string; reversedPaymentSourceCount: number }> {
+  const { data, error } = await (supabase as any).rpc(
+    'revert_operational_cost_tier_atomically_rpc',
+    { p_source_ids: sourceIds, p_tier: tier },
+  );
+
+  if (error) {
+    const notDeployed =
+      (error as any).code === 'PGRST202' ||
+      String(error.message).toLowerCase().includes('could not find the function') ||
+      String(error.message).toLowerCase().includes('does not exist');
+    return {
+      success: false,
+      message: notDeployed
+        ? 'The safe tier-revert migration is required before paid submissions can be sent back for correction.'
+        : error.message,
+      reversedPaymentSourceCount: 0,
+    };
+  }
+
+  return {
+    success: data?.success === true,
+    message: data?.success === true ? 'Submission tier and linked payment were updated together.' : (data?.error ?? 'Tier revert failed.'),
+    reversedPaymentSourceCount: Number(data?.reversed_payment_source_count ?? 0),
+  };
+}
