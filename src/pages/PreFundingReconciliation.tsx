@@ -129,6 +129,29 @@ interface ExceptionQueueItem {
   currency?: string | null;
 }
 
+interface UnlinkedPayment {
+  id: string;
+  _source: 'operational_cost_submissions' | 'down_payment_requests' | 'mmp_site_entries';
+  _category: 'ocs' | 'dp' | 'ef';
+  _date: string | null;
+  amount: number;
+  paidAmount: number;
+  coveredAmount: number;
+  currency: string;
+  title: string;
+  userId: string | null;
+  submitterName: string | null;
+  sourceStatus: string | null;
+  state: string | null;
+  mmpName: string | null;
+}
+
+type UnlinkedPaymentGroups = {
+  ocs: UnlinkedPayment[];
+  dp: UnlinkedPayment[];
+  ef: UnlinkedPayment[];
+};
+
 const TXN_TYPE_CFG: Record<string, { label: string; color: string; bg: string }> = {
   receipt:       { label: 'Receipt',        color: 'text-emerald-700', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' },
   commitment:    { label: 'Commitment',     color: 'text-violet-700',  bg: 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800' },
@@ -730,7 +753,7 @@ export default function PreFundingReconciliation() {
 
   // Paid source coverage review. This is deliberately read-only: a missing
   // Pre-Fund link is not proof of which fund should have covered a payment.
-  const [unlinkedSubs, setUnlinkedSubs]       = useState<{ ocs: any[]; dp: any[]; ef: any[] }>({ ocs: [], dp: [], ef: [] });
+  const [unlinkedSubs, setUnlinkedSubs]       = useState<UnlinkedPaymentGroups>({ ocs: [], dp: [], ef: [] });
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
   const [showUnlinked, setShowUnlinked]       = useState(false);
   /** True while a stale-balance reset is in progress */
@@ -1240,67 +1263,129 @@ export default function PreFundingReconciliation() {
           : -Number(event.amount ?? 0);
         coveredAmounts.set(key, (coveredAmounts.get(key) ?? 0) + signedAmount);
       }
+      const asRecord = (value: unknown): Record<string, any> =>
+        value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
+      const firstText = (...values: unknown[]): string | null => {
+        for (const value of values) {
+          if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+        return null;
+      };
+      const isUuid = (value: unknown): value is string =>
+        typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+      const profileIds = [...new Set([
+        ...(ocsRows as any[]).map(row => row.submitted_by),
+        ...(dpRows as any[]).map(row => row.requested_by),
+        ...(efRows as any[]).map(row => row.accepted_by),
+      ].filter(isUuid))];
+      let profiles: any[] = [];
+      try {
+        profiles = await fetchAllIn(
+          (chunk) => supabase.from('profiles').select('id,full_name,email').in('id', chunk),
+          profileIds,
+        );
+      } catch (profileError) {
+        // This review list remains useful even when a legacy user profile has
+        // been removed or is outside the current read scope.
+        console.warn('[PRE_FUND_COVERAGE] Could not resolve submitter names:', profileError);
+      }
+      const profileNames = new Map((profiles as any[]).map(profile => [
+        profile.id,
+        profile.full_name || profile.email || 'Unknown user',
+      ]));
+      const submitterName = (value: unknown) => {
+        const person = firstText(value);
+        return person ? (profileNames.get(person) ?? person) : null;
+      };
+      const sourceContext = (record: any, extra: Record<string, any> = {}) => {
+        const metadata = asRecord(record.metadata);
+        return {
+          state: firstText(
+            record.state_name, record.state,
+            metadata.state_name, metadata.state,
+            extra.state_name, extra.state,
+          ),
+          mmpName: firstText(
+            record.mmp_name, record.mmp_id,
+            metadata.mmp_name, metadata.mmp_id,
+            extra.mmp_name, extra.mmp_id,
+          ),
+        };
+      };
       const uncovered = (sourceTable: string, record: any, paidAmount: number) => {
         const coveredAmount = Math.max(0, coveredAmounts.get(`${sourceTable}:${record.id}`) ?? 0);
         return { coveredAmount, uncoveredAmount: Math.max(0, paidAmount - coveredAmount) };
       };
 
-      const ocs = (ocsRows as any[]).map((r: any) => {
+      const ocs: UnlinkedPayment[] = (ocsRows as any[]).map((r: any) => {
         const paidAmount = Number(r.amount_paid_cents ?? 0) / 100;
         const coverage = uncovered('operational_cost_submissions', r, paidAmount);
+        const context = sourceContext(r);
         return {
-        ...r,
-        _source: 'operational_cost_submissions',
-        _category: 'ocs',
-        _date: r.paid_at ?? r.submitted_at ?? r.created_at,
-        amount: coverage.uncoveredAmount,
-        paidAmount,
-        coveredAmount: coverage.coveredAmount,
-        currency: r.currency ?? 'SDG',
-        title: r.description ?? `Submission ${r.id.slice(0, 8)}`,
-        userId: r.submitted_by ?? null,
+          id: r.id,
+          _source: 'operational_cost_submissions',
+          _category: 'ocs',
+          _date: r.paid_at ?? r.submitted_at ?? r.created_at ?? null,
+          amount: coverage.uncoveredAmount,
+          paidAmount,
+          coveredAmount: coverage.coveredAmount,
+          currency: r.currency ?? 'SDG',
+          title: firstText(r.description, `Submission ${r.id.slice(0, 8)}`) ?? r.id,
+          userId: r.submitted_by ?? null,
+          submitterName: submitterName(r.submitted_by),
+          sourceStatus: r.status ?? null,
+          ...context,
         };
-      }).filter((r: any) => r.amount > 0);
-      const dp = (dpRows as any[])
+      }).filter(r => r.amount > 0);
+      const dp: UnlinkedPayment[] = (dpRows as any[])
         // A legacy marker does not prove current event coverage; the net ledger
         // total above remains the source of truth.
         .map((r: any) => {
           const paidAmount = Number(r.total_paid_amount ?? 0);
           const coverage = uncovered('down_payment_requests', r, paidAmount);
+          const metadata = asRecord(r.metadata);
+          const context = sourceContext(r, metadata);
           return {
-          ...r,
-          _source: 'down_payment_requests',
-          _category: 'dp',
-          _date: r.metadata?.paid_at ?? r.created_at,
-          amount: coverage.uncoveredAmount,
-          paidAmount,
-          coveredAmount: coverage.coveredAmount,
-          currency: 'SDG',
-          title: r.justification ?? `Down-payment ${r.id.slice(0, 8)}`,
-          userId: r.requested_by ?? null,
+            id: r.id,
+            _source: 'down_payment_requests',
+            _category: 'dp',
+            _date: metadata.paid_at ?? r.created_at ?? null,
+            amount: coverage.uncoveredAmount,
+            paidAmount,
+            coveredAmount: coverage.coveredAmount,
+            currency: 'SDG',
+            title: firstText(r.justification, `Down-payment ${r.id.slice(0, 8)}`) ?? r.id,
+            userId: r.requested_by ?? null,
+            submitterName: submitterName(r.requested_by),
+            sourceStatus: r.status ?? null,
+            ...context,
           };
-        }).filter((r: any) => r.amount > 0);
+        }).filter(r => r.amount > 0);
       // Enumerator fees: sum transport_fee + enumerator_fee per entry
-      const ef = (efRows as any[]).map((r: any) => {
+      const ef: UnlinkedPayment[] = (efRows as any[]).map((r: any) => {
         const grossFee = Number(r.transport_fee ?? 0) + Number(r.enumerator_fee ?? 0);
         const paidAmount = Number(r.fee_paid_amount ?? grossFee);
         const coverage = uncovered('mmp_site_entries', r, paidAmount);
-        const additionalData = r.additional_data && typeof r.additional_data === 'object' ? r.additional_data : {};
+        const additionalData = asRecord(r.additional_data);
+        const context = sourceContext(r, additionalData);
         return {
-        ...r,
-        _source: 'mmp_site_entries',
-        _category: 'ef',
-        _date: r.fee_paid_at ?? r.visit_date,
-        amount: coverage.uncoveredAmount,
-        paidAmount,
-        coveredAmount: coverage.coveredAmount,
-        // MMP fee payment records are SDG-denominated; mmp_site_entries has
-        // no currency column and the fee bridge posts these payments as SDG.
-        currency: 'SDG',
-        title: `${r.site_name ?? 'Site'} — ${additionalData.enumerator_name ?? r.accepted_by ?? 'Enumerator'}`,
-        userId: r.accepted_by ?? null,
+          id: r.id,
+          _source: 'mmp_site_entries',
+          _category: 'ef',
+          _date: r.fee_paid_at ?? r.visit_date ?? null,
+          amount: coverage.uncoveredAmount,
+          paidAmount,
+          coveredAmount: coverage.coveredAmount,
+          // MMP fee payment records are SDG-denominated; mmp_site_entries has
+          // no currency column and the fee bridge posts these payments as SDG.
+          currency: 'SDG',
+          title: `${r.site_name ?? 'Site'} — ${additionalData.enumerator_name ?? submitterName(r.accepted_by) ?? 'Enumerator'}`,
+          userId: r.accepted_by ?? null,
+          submitterName: submitterName(r.accepted_by),
+          sourceStatus: r.fee_paid_status ?? null,
+          ...context,
         };
-      }).filter((r: any) => r.amount > 0);
+      }).filter(r => r.amount > 0);
       setUnlinkedSubs({ ocs, dp, ef });
     } catch (e: any) {
       setUnlinkedSubs({ ocs: [], dp: [], ef: [] });
@@ -2297,17 +2382,40 @@ export default function PreFundingReconciliation() {
                         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? 'rotate-180' : '')} />
                       </button>
                       {open && items.map(sub => (
-                        <div key={sub.id} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-muted/30 border-t border-muted/40" data-testid={`row-unlinked-${sub.id}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate text-xs">{sub.title ?? sub.id}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {formatIsoDate(sub._date, 'MMM d, yyyy')} · Paid {sub.currency} {formatNumber(sub.paidAmount ?? sub.amount, 0)}
-                              {Number(sub.coveredAmount ?? 0) > 0 && ` · Covered by Pre-Funding ${sub.currency} ${formatNumber(sub.coveredAmount, 0)}`}
-                            </p>
+                        <div key={sub.id} className="px-4 py-3 text-sm hover:bg-muted/30 border-t border-muted/40" data-testid={`row-unlinked-${sub.id}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-xs leading-5">{sub.title ?? sub.id}</p>
+                              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <User className="h-3 w-3 shrink-0" />
+                                {sub._category === 'dp' ? 'Requested by' : sub._category === 'ef' ? 'Accepted by' : 'Submitted by'}: {sub.submitterName ?? 'Not recorded'}
+                              </p>
+                            </div>
+                            <span className="font-mono text-xs shrink-0 text-amber-700 dark:text-amber-400">
+                              Uncovered: {sub.currency} {formatNumber(sub.amount, 0)}
+                            </span>
                           </div>
-                          <span className="font-mono text-xs shrink-0 text-amber-700 dark:text-amber-400">
-                            Uncovered: {sub.currency} {formatNumber(sub.amount, 0)}
-                          </span>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <Badge variant="outline" className="h-5 text-[10px] font-normal">
+                              {sub._category === 'dp' ? 'Down Payment' : sub._category === 'ef' ? 'Enumerator / Transport Fee' : 'Cost Submission'}
+                            </Badge>
+                            <Badge variant="outline" className="h-5 text-[10px] font-normal">
+                              Status: {sub.sourceStatus?.replace(/_/g, ' ') ?? 'Not recorded'}
+                            </Badge>
+                            <Badge variant="outline" className="h-5 text-[10px] font-normal">
+                              <MapPin className="mr-1 h-3 w-3" /> State: {sub.state ?? 'Not recorded'}
+                            </Badge>
+                            <Badge variant="outline" className="h-5 text-[10px] font-normal">
+                              <ClipboardList className="mr-1 h-3 w-3" /> MMP: {sub.mmpName ?? 'Not recorded'}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatIsoDate(sub._date, 'MMM d, yyyy')}</span>
+                            <span>Paid: <span className="font-mono text-foreground">{sub.currency} {formatNumber(sub.paidAmount ?? sub.amount, 0)}</span></span>
+                            {Number(sub.coveredAmount ?? 0) > 0 && (
+                              <span>Linked: <span className="font-mono text-foreground">{sub.currency} {formatNumber(sub.coveredAmount, 0)}</span></span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
