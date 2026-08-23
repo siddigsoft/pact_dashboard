@@ -47,3 +47,4 @@
 - [atomic-ocs-tier-reverts](atomic-ocs-tier-reverts.md) — Tier reverts must reverse active Pre-Fund payments transactionally before changing approval state; client-only resets create payment orphans.
 - [ocs-payment-fund-eligibility](ocs-payment-fund-eligibility.md) — Cost Submissions can use any active same-currency fund with balance; personal allocation remains a Down Payment rule.
 - [pre-fund-journal-period](pre-fund-journal-period.md) — Pre-Fund GL entries must receive a fiscal period matching the posting date before journal NOT NULL rules run.
+- [pre-fund-journal-fund](pre-fund-journal-fund.md) — Pre-Fund GL lines use the sole active Accounting Fund Registry ID, never the operational Pre-Fund request ID.
