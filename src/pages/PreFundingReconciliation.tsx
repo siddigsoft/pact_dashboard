@@ -839,6 +839,8 @@ export default function PreFundingReconciliation() {
   const [drillTxn, setDrillTxn]     = useState<PreFundTransaction | null>(null);
   const [drillSrc, setDrillSrc]     = useState<any | null>(null);
   const [loadingDrill, setLoadingDrill] = useState(false);
+  const [deletePaidRequestTxn, setDeletePaidRequestTxn] = useState<PreFundTransaction | null>(null);
+  const [deletingPaidRequest, setDeletingPaidRequest] = useState(false);
 
   // CSV import
   const [showCsvImport, setShowCsvImport] = useState(false);
@@ -1566,6 +1568,53 @@ export default function PreFundingReconciliation() {
       toast({ title: 'Unlink failed', description: e.message, variant: 'destructive' });
     } finally {
       setUnlinkingId(null);
+    }
+  };
+
+  const handleDeletePaidOperationalCostRequest = async () => {
+    const txn = deletePaidRequestTxn;
+    if (!isSuperAdmin || !txn?.source_id || txn.transaction_type !== 'payment' ||
+      txn.reconciled || txn.source_table !== 'operational_cost_submissions') {
+      toast({
+        title: 'Delete not available',
+        description: 'Only an unreconciled, source-linked Operational Cost payment can be deleted here.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setDeletingPaidRequest(true);
+    try {
+      const { revertOperationalCostPaymentsAtomically } = await import('@/utils/preFundLinkage');
+      const result = await revertOperationalCostPaymentsAtomically([txn.source_id], 'delete');
+      if (!result.success) throw new Error(result.message);
+
+      setDeletePaidRequestTxn(null);
+      setDrillTxn(null);
+      setDrillSrc(null);
+      setSelectedTxnIds(previous => {
+        const next = new Set(previous);
+        next.delete(txn.id);
+        return next;
+      });
+      setFinderResults(previous => previous.filter(result => result.source_id !== txn.source_id));
+      toast({
+        title: 'Payment and request deleted',
+        description: `The payment was reversed and ${txn.currency} ${formatNumber(txn.amount, 0)} was restored to the Pre-Fund.`,
+      });
+      await Promise.all([
+        loadFunds(),
+        selectedFund ? loadTxns(selectedFund.id) : Promise.resolve(),
+        loadUnlinkedPayments(),
+        loadExceptions(selectedFund?.id),
+      ]);
+    } catch (error: any) {
+      toast({
+        title: 'Could not delete payment',
+        description: error.message ?? 'The request and its linked payment were not changed.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingPaidRequest(false);
     }
   };
 
@@ -4030,9 +4079,67 @@ export default function PreFundingReconciliation() {
             </div>
           )}
 
-          <div className="shrink-0 px-5 py-3 border-t flex justify-end">
+          <div className="shrink-0 px-5 py-3 border-t flex items-center justify-between gap-3">
+            {isSuperAdmin && drillTxn?.transaction_type === 'payment' && drillTxn.source_table === 'operational_cost_submissions' && drillTxn.source_id && !drillTxn.reconciled && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setDeletePaidRequestTxn(drillTxn);
+                  setDrillTxn(null);
+                  setDrillSrc(null);
+                }}
+                data-testid="button-delete-paid-operational-cost-request"
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />Delete payment
+              </Button>
+            )}
             <Button variant="outline" onClick={() => { setDrillTxn(null); setDrillSrc(null); }}>Close</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!deletePaidRequestTxn}
+        onOpenChange={open => { if (!open && !deletingPaidRequest) setDeletePaidRequestTxn(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <Trash2 className="h-4 w-4" />Delete payment and request
+            </DialogTitle>
+          </DialogHeader>
+          {deletePaidRequestTxn && (
+            <div className="space-y-3 py-1">
+              <p className="text-sm text-muted-foreground">
+                This will delete the Operational Cost Submission and reverse its linked payment. The amount will no longer appear as active paid-out spend in Reconciliation.
+              </p>
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p className="font-medium">{deletePaidRequestTxn.description ?? 'Operational Cost Submission'}</p>
+                <p className="mt-1 font-mono font-semibold">
+                  {deletePaidRequestTxn.currency} {formatNumber(deletePaidRequestTxn.amount, 0)}
+                </p>
+              </div>
+              <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  The original payment is kept only as a reversed audit event. This action cannot delete a reconciled submission.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePaidRequestTxn(null)} disabled={deletingPaidRequest}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeletePaidOperationalCostRequest()}
+              disabled={deletingPaidRequest}
+              data-testid="button-confirm-delete-paid-operational-cost-request"
+            >
+              {deletingPaidRequest
+                ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Deleting…</>
+                : <><Trash2 className="mr-1.5 h-4 w-4" />Delete payment</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
