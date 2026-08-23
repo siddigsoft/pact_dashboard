@@ -795,10 +795,18 @@ const CostSubmission = () => {
     notes: string;
     uploading: boolean;
     preFundId: string | null;
-    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    preFunds: Array<{
+      id: string;
+      name: string;
+      currency: string;
+      available_balance: number;
+      allocationRemaining: number | null;
+    }>;
+    preFundsLoading: boolean;
+    preFundsError: string | null;
     payAmountStr: string;
     paymentEventKey?: string;
-  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
+  }>({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
 
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
@@ -2622,36 +2630,83 @@ const CostSubmission = () => {
     const remainingCents = oc.amount_cents - alreadyPaidCents;
     const remainingAmount = (remainingCents / 100).toFixed(2);
     setMarkAsPaidDialog({
-      open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: remainingAmount,
+      open: true, submission: oc, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: true, preFundsError: null, payAmountStr: remainingAmount,
       paymentEventKey: `source-payment:operational_cost_submissions:${oc.id}:${crypto.randomUUID()}`,
     });
     // Async: load pre-funds and update dialog state once available
     (async () => {
-      let preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }> = [];
+      let preFunds: Array<{
+        id: string;
+        name: string;
+        currency: string;
+        available_balance: number;
+        allocationRemaining: number | null;
+      }> = [];
       try {
-        let allowedFundIds: string[] | null = null;
-        if (!isSuperAdmin) {
-          const { data: allocData } = await supabase
+        const { data: pfData, error: fundsError } = await supabase
+          .from('pre_fund_requests' as any)
+          .select('id, name, currency, available_balance')
+          .in('status', ['active', 'low_balance'])
+          .eq('currency', oc.currency)
+          .order('name');
+        if (fundsError) throw fundsError;
+
+        const fundRows = (pfData ?? []) as any[];
+        const fundIds = fundRows.map(fund => fund.id).filter(Boolean);
+        const allocationRows: any[] = [];
+        for (let index = 0; index < fundIds.length; index += 100) {
+          const { data, error } = await supabase
             .from('pre_fund_allocations' as any)
-            .select('pre_fund_request_id')
-            .eq('user_id', currentUser?.id);
-          allowedFundIds = ((allocData ?? []) as any[]).map((a: any) => a.pre_fund_request_id).filter(Boolean);
+            .select('pre_fund_request_id, user_id, allocated_amount, spent_amount')
+            .in('pre_fund_request_id', fundIds.slice(index, index + 100));
+          if (error) throw error;
+          allocationRows.push(...((data ?? []) as any[]));
         }
-        if (isSuperAdmin || (allowedFundIds && allowedFundIds.length > 0)) {
-          let q = supabase
-            .from('pre_fund_requests' as any)
-            .select('id, name, currency, available_balance')
-            .in('status', ['active', 'low_balance'])
-            .order('name');
-          if (!isSuperAdmin && allowedFundIds) q = (q as any).in('id', allowedFundIds);
-          const { data: pfData } = await q;
-          preFunds = ((pfData ?? []) as any[]).map((f: any) => ({
-            id: f.id, name: f.name, currency: f.currency, available_balance: f.available_balance ?? 0,
-          }));
-        }
-      } catch (_) {}
+
+        const submitterId = oc.submitted_by;
+        const allocationCountByFund = new Map<string, number>();
+        const submitterAllocationByFund = new Map<string, number>();
+        const submitterAllocationCountByFund = new Map<string, number>();
+        allocationRows.forEach(allocation => {
+          const fundId = allocation.pre_fund_request_id;
+          if (!fundId) return;
+          allocationCountByFund.set(fundId, (allocationCountByFund.get(fundId) ?? 0) + 1);
+          if (submitterId && allocation.user_id === submitterId) {
+            const allocationCount = (submitterAllocationCountByFund.get(fundId) ?? 0) + 1;
+            submitterAllocationCountByFund.set(fundId, allocationCount);
+            const remaining = Math.max(0, Number(allocation.allocated_amount ?? 0) - Number(allocation.spent_amount ?? 0));
+            if (allocationCount === 1) submitterAllocationByFund.set(fundId, remaining);
+          }
+        });
+
+        preFunds = fundRows
+          .filter(fund => Number(fund.available_balance ?? 0) > 0)
+          .flatMap(fund => {
+            const allocationRemaining = submitterAllocationByFund.get(fund.id);
+            const isOpenPool = !allocationCountByFund.has(fund.id);
+            const hasDuplicateSubmitterAllocation = (submitterAllocationCountByFund.get(fund.id) ?? 0) > 1;
+            if (hasDuplicateSubmitterAllocation) return [];
+            if (allocationRemaining === undefined && !isOpenPool) return [];
+            if (allocationRemaining !== undefined && allocationRemaining <= 0) return [];
+            return [{
+              id: fund.id,
+              name: fund.name,
+              currency: fund.currency,
+              available_balance: Number(fund.available_balance ?? 0),
+              allocationRemaining: allocationRemaining ?? null,
+            }];
+          });
+      } catch (error: any) {
+        const message = error?.message || 'Unable to load eligible Pre-Funds.';
+        setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id)
+          ? { ...prev, preFundsLoading: false, preFundsError: message }
+          : prev);
+        return;
+      }
       // Only update if this dialog is still open for the same submission
-      setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id) ? { ...prev, preFunds } : prev);
+      setMarkAsPaidDialog(prev => (prev.open && prev.submission?.id === oc.id)
+        ? { ...prev, preFunds, preFundsLoading: false, preFundsError: null }
+        : prev);
     })();
   };
 
@@ -2696,6 +2751,19 @@ const CostSubmission = () => {
     // the record rather than being permanently locked out.
     if (remainingCents > 0 && payAmountCents > remainingCents) {
       toast({ title: "Amount Exceeds Remaining / المبلغ يتجاوز الباقي", description: `Payment amount cannot exceed the remaining balance of ${oc.currency} ${(remainingCents / 100).toLocaleString()}.`, variant: "destructive" });
+      return;
+    }
+    const selectedFund = markAsPaidDialog.preFunds.find(fund => fund.id === markAsPaidDialog.preFundId);
+    if (!selectedFund) {
+      toast({ title: 'Invalid Pre-Fund / تمويل مسبق غير صالح', description: 'Select an eligible Pre-Fund for this submission.', variant: 'destructive' });
+      return;
+    }
+    if (payAmountVal > selectedFund.available_balance) {
+      toast({ title: 'Amount Exceeds Fund Balance / المبلغ يتجاوز رصيد التمويل', description: `This fund has only ${oc.currency} ${selectedFund.available_balance.toLocaleString()} available.`, variant: 'destructive' });
+      return;
+    }
+    if (selectedFund.allocationRemaining !== null && payAmountVal > selectedFund.allocationRemaining) {
+      toast({ title: 'Amount Exceeds Allocation / المبلغ يتجاوز المخصص', description: `The submitter has only ${oc.currency} ${selectedFund.allocationRemaining.toLocaleString()} remaining in this fund.`, variant: 'destructive' });
       return;
     }
     const isFullPayment = payAmountCents >= remainingCents;
@@ -2794,7 +2862,7 @@ const CostSubmission = () => {
           isFullPayment ? 'تم صرف مطالبة التكلفة ✅' : 'تم استلام دفعة جزئية 💰',
         );
         markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
         fetchOperationalCosts();
       }
     } catch (err: any) {
@@ -12385,7 +12453,7 @@ const CostSubmission = () => {
         onOpenChange={(open) => {
           if (!open && !markAsPaidDialog.uploading) {
             markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
+            setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFundsLoading: false, preFundsError: null, payAmountStr: '' });
           }
         }}
       >
@@ -12622,6 +12690,9 @@ const CostSubmission = () => {
                       {markAsPaidDialog.preFunds.map(f => (
                         <SelectItem key={f.id} value={f.id}>
                           {f.name} · {f.currency} {f.available_balance.toLocaleString()} available
+                          {f.allocationRemaining === null
+                            ? ' · shared fund'
+                            : ` · ${f.currency} ${f.allocationRemaining.toLocaleString()} allocated to submitter`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -12638,6 +12709,19 @@ const CostSubmission = () => {
                     );
                   })()}
                 </div>
+              )}
+              {markAsPaidDialog.preFundsLoading && (
+                <p className="text-xs text-muted-foreground">Loading eligible Pre-Funds…</p>
+              )}
+              {markAsPaidDialog.preFundsError && (
+                <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+                  Could not load eligible Pre-Funds. Please close the dialog and try again.
+                </p>
+              )}
+              {!markAsPaidDialog.preFundsLoading && !markAsPaidDialog.preFundsError && markAsPaidDialog.preFunds.length === 0 && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  No eligible Pre-Fund is available for this submission. Allocate budget to the submitter or use a shared fund before recording payment.
+                </p>
               )}
 
               {/* Payment notes */}
@@ -12664,7 +12748,7 @@ const CostSubmission = () => {
               variant="outline"
               onClick={() => {
                 markAsPaidDialog.proofPreviews.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
-                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], payAmountStr: '' });
+                setMarkAsPaidDialog({ open: false, submission: null, proofFiles: [], proofPreviews: [], notes: '', uploading: false, preFundId: null, preFunds: [], preFundsLoading: false, preFundsError: null, payAmountStr: '' });
               }}
               disabled={markAsPaidDialog.uploading}
               data-testid="button-cancel-mark-paid"
@@ -12674,7 +12758,7 @@ const CostSubmission = () => {
             <Button
               type="button"
               onClick={handleConfirmMarkAsPaid}
-              disabled={markAsPaidDialog.uploading || markAsPaidDialog.proofFiles.length === 0}
+              disabled={markAsPaidDialog.uploading || markAsPaidDialog.proofFiles.length === 0 || markAsPaidDialog.preFundsLoading || Boolean(markAsPaidDialog.preFundsError) || markAsPaidDialog.preFunds.length === 0}
               className="bg-green-600 hover:bg-green-700 text-white"
               data-testid="button-confirm-mark-paid"
             >
