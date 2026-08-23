@@ -888,9 +888,12 @@ export async function revertOperationalCostPaymentsAtomically(
   sourceIds: string[],
   action: 'revert' | 'delete',
 ): Promise<{ success: boolean; message: string }> {
+  const functionName = action === 'delete'
+    ? 'delete_operational_cost_request_with_payment_reversal_rpc'
+    : 'revert_operational_cost_payments_atomically_rpc';
   const { data, error } = await (supabase as any).rpc(
-    'revert_operational_cost_payments_atomically_rpc',
-    { p_source_ids: sourceIds, p_action: action },
+    functionName,
+    action === 'delete' ? { p_source_ids: sourceIds } : { p_source_ids: sourceIds, p_action: action },
   );
 
   if (error) {
