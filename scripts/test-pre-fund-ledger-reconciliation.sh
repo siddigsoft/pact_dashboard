@@ -92,8 +92,15 @@ CREATE TABLE public.operational_cost_submissions (
   submitted_by uuid REFERENCES auth.users(id), reference_number text
 );
 CREATE TABLE public.acct_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE);
+CREATE TABLE public.acct_fiscal_periods (
+  id uuid PRIMARY KEY,
+  status text NOT NULL,
+  start_date date NOT NULL,
+  end_date date NOT NULL
+);
 CREATE TABLE public.acct_journal_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), description_en text, description_ar text, posting_date date,
+  period_id uuid NOT NULL REFERENCES public.acct_fiscal_periods(id),
   status text, source_type text, source_id uuid, idempotency_key text UNIQUE, created_by uuid
 );
 CREATE TABLE public.acct_journal_lines (
@@ -149,6 +156,8 @@ INSERT INTO public.pre_fund_requests (
   '10000000-0000-0000-0000-000000000005', 'Committed Cash Regression Fund', 'SDG',
   1000, 700, 0, 300, '2400', '1200'
 );
+INSERT INTO public.acct_fiscal_periods (id, status, start_date, end_date)
+VALUES ('40000000-0000-0000-0000-000000000001', 'open', '2020-01-01', '2030-12-31');
 SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820e_pre_fund_ledger_reconciliation.sql" >/dev/null
@@ -160,6 +169,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260820f_pre_fund_finance_exception_reviews.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821a_pre_fund_exception_visibility.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823g_open_cost_submission_pre_fund_payments.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823h_add_fiscal_period_to_pre_fund_payment_gl.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -265,20 +275,27 @@ SELECT public.link_payment_atomically_rpc(
   auth.uid(), '00000000-0000-0000-0000-000000000002', NULL, 'open-cost-fund'
 );
 DO $$
-DECLARE v_user_id uuid; v_spent numeric; v_available numeric;
+DECLARE v_user_id uuid; v_period_id uuid; v_spent numeric; v_available numeric;
 BEGIN
   SELECT user_id INTO v_user_id
   FROM public.pre_fund_transactions
   WHERE idempotency_key = 'open-cost-fund';
+  SELECT je.period_id INTO v_period_id
+  FROM public.acct_journal_entries je
+  JOIN public.pre_fund_transactions tx ON tx.id = je.source_id
+  WHERE tx.idempotency_key = 'open-cost-fund';
   SELECT spent_amount INTO v_spent
   FROM public.pre_fund_allocations
   WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000099';
   SELECT available_balance INTO v_available
   FROM public.pre_fund_requests
   WHERE id = '10000000-0000-0000-0000-000000000099';
-  IF v_user_id <> '00000000-0000-0000-0000-000000000002'::uuid OR v_spent <> 0 OR v_available <> 75 THEN
-    RAISE EXCEPTION 'open Cost Submission fund assertion failed: owner %, allocation spent %, available %',
-      v_user_id, v_spent, v_available;
+  IF v_user_id <> '00000000-0000-0000-0000-000000000002'::uuid
+     OR v_period_id <> '40000000-0000-0000-0000-000000000001'::uuid
+     OR v_spent <> 0
+     OR v_available <> 75 THEN
+    RAISE EXCEPTION 'open Cost Submission fund assertion failed: owner %, period %, allocation spent %, available %',
+      v_user_id, v_period_id, v_spent, v_available;
   END IF;
 END $$;
 INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents)
