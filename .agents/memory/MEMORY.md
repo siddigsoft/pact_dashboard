@@ -42,3 +42,4 @@
 - [safe-legacy-date-rendering](safe-legacy-date-rendering.md) — date-fns parseISO throws an internal `.split` error for absent dates; guard untrusted historical values before formatting.
 - [postgres-view-column-evolution](postgres-view-column-evolution.md) — CREATE OR REPLACE VIEW cannot insert or reorder existing output columns; preserve them and append new fields.
 - [supabase-in-filter-batching](supabase-in-filter-batching.md) — Large UUID `.in()` filters can fail as browser “Failed to fetch”; batch every related lookup, including fallback paths.
+- [reconciliation-filter-load-atomicity](reconciliation-filter-load-atomicity.md) — Source-derived review filters must publish rows atomically with metadata and discard stale fund loads.

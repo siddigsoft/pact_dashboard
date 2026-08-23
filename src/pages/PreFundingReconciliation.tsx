@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -22,7 +22,7 @@ import {
   Calendar, Plus, Banknote, Shuffle, Upload, X,
   ExternalLink, ChevronDown, History, Trash2, AlertCircle,
   Info, Receipt, User, Clock, FileSpreadsheet, Hash, Loader2,
-  UserPlus,
+  UserPlus, Filter, Search, MapPin, ClipboardList,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
@@ -81,6 +81,16 @@ interface Reconciliation {
   surplus_action: string; carry_forward_amount: number; return_amount: number; reserve_amount: number;
   status: string; closed_at: string | null; pdf_url: string | null; notes: string | null;
 }
+
+interface ReconciliationFilterMetadata {
+  state: string | null;
+  mmpId: string | null;
+  mmpName: string | null;
+  people: string[];
+}
+
+const FILTER_ALL = '__all__';
+const FILTER_UNASSIGNED = '__unassigned__';
 
 interface PaidOutBreakdown {
   downPayments: number;
@@ -671,6 +681,7 @@ export default function PreFundingReconciliation() {
   const [fundsComputedAvail, setFundsComputedAvail] = useState<Map<string, number>>(new Map());
   const [selectedFund, setSelected]   = useState<PreFundSummary | null>(null);
   const [transactions, setTxns]       = useState<PreFundTransaction[]>([]);
+  const transactionLoadVersion = useRef(0);
   const [reconciliations, setRecons]  = useState<Reconciliation[]>([]);
   const [loading, setLoading]         = useState(true);
   const [txnLoading, setTxnLoading]   = useState(false);
@@ -758,6 +769,13 @@ export default function PreFundingReconciliation() {
   const [groupByDate, setGroupByDate]          = useState('');
   const [reconcilingAll, setReconcilingAll]     = useState(false);
 
+  // ── Transaction review filters ───────────────────────────────────────────
+  // Values use explicit sentinels because Radix Select reserves "" for clearing.
+  const [transactionFilterMetadata, setTransactionFilterMetadata] = useState<Map<string, ReconciliationFilterMetadata>>(new Map());
+  const [stateFilter, setStateFilter] = useState(FILTER_ALL);
+  const [mmpFilter, setMmpFilter] = useState(FILTER_ALL);
+  const [nameSearch, setNameSearch] = useState('');
+
   // Transaction drill-down
   const [drillTxn, setDrillTxn]     = useState<PreFundTransaction | null>(null);
   const [drillSrc, setDrillSrc]     = useState<any | null>(null);
@@ -773,6 +791,71 @@ export default function PreFundingReconciliation() {
   const [profileMap, setProfileMap]       = useState<Map<string, string>>(new Map());
   const [profileEmailMap, setProfileEmailMap] = useState<Map<string, string>>(new Map());
   const [exportingExcel, setExportingExcel] = useState(false);
+
+  const stateOptions = useMemo(() => [...new Set(
+    [...transactionFilterMetadata.values()]
+      .map(metadata => metadata.state)
+      .filter((state): state is string => Boolean(state)),
+  )].sort((a, b) => a.localeCompare(b)), [transactionFilterMetadata]);
+
+  const mmpOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    transactionFilterMetadata.forEach(metadata => {
+      if (metadata.mmpId) options.set(metadata.mmpId, metadata.mmpName ?? metadata.mmpId);
+    });
+    return [...options.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [transactionFilterMetadata]);
+
+  const hasTransactionFilters = stateFilter !== FILTER_ALL || mmpFilter !== FILTER_ALL || Boolean(nameSearch.trim());
+  const filteredTransactions = useMemo(() => {
+    const normalizedName = nameSearch.trim().toLocaleLowerCase();
+    return transactions.filter(transaction => {
+      const metadata = transactionFilterMetadata.get(transaction.id);
+      const stateValue = metadata?.state ?? null;
+      const mmpValue = metadata?.mmpId ?? null;
+      const people = [
+        ...(metadata?.people ?? []),
+        transaction.user_id ? profileMap.get(transaction.user_id) : null,
+        transaction.created_by ? profileMap.get(transaction.created_by) : null,
+      ]
+        .filter((name): name is string => Boolean(name))
+        .join(' ')
+        .toLocaleLowerCase();
+
+      if (stateFilter === FILTER_UNASSIGNED ? stateValue !== null : stateFilter !== FILTER_ALL && stateValue !== stateFilter) return false;
+      if (mmpFilter === FILTER_UNASSIGNED ? mmpValue !== null : mmpFilter !== FILTER_ALL && mmpValue !== mmpFilter) return false;
+      return !normalizedName || people.includes(normalizedName);
+    });
+  }, [transactions, transactionFilterMetadata, stateFilter, mmpFilter, nameSearch, profileMap]);
+
+  const reviewTransactions = useMemo(() => showUnattributed
+    ? filteredTransactions.filter(transaction => transaction.transaction_type === 'payment' && !transaction.user_id)
+    : filteredTransactions, [filteredTransactions, showUnattributed]);
+  const displayTxns = useMemo(() => showOnlySelected && selectedTxnIds.size > 0
+    ? reviewTransactions.filter(transaction => selectedTxnIds.has(transaction.id))
+    : reviewTransactions, [reviewTransactions, showOnlySelected, selectedTxnIds]);
+  const visibleSelectedTransactions = useMemo(
+    () => displayTxns.filter(transaction => selectedTxnIds.has(transaction.id)),
+    [displayTxns, selectedTxnIds],
+  );
+
+  useEffect(() => {
+    const visibleIds = new Set(reviewTransactions.map(transaction => transaction.id));
+    setSelectedTxnIds(previous => {
+      const next = new Set([...previous].filter(id => visibleIds.has(id)));
+      return next.size === previous.size && [...next].every(id => previous.has(id)) ? previous : next;
+    });
+  }, [reviewTransactions]);
+
+  useEffect(() => {
+    setStateFilter(FILTER_ALL);
+    setMmpFilter(FILTER_ALL);
+    setNameSearch('');
+    setSelectedTxnIds(new Set());
+    setShowOnlySelected(false);
+  }, [selectedFund?.id]);
 
   // Inline receipt preview
   const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
@@ -802,6 +885,19 @@ export default function PreFundingReconciliation() {
     }
     return map;
   }, [transactions]);
+  const filteredReceiptGroupMap = useMemo(() => {
+    const map = new Map<string, PreFundTransaction[]>();
+    for (const transaction of reviewTransactions) {
+      if (!transaction.receipt_url) continue;
+      const group = map.get(transaction.receipt_url) ?? [];
+      group.push(transaction);
+      map.set(transaction.receipt_url, group);
+    }
+    for (const [url, group] of map) {
+      if (group.length < 2) map.delete(url);
+    }
+    return map;
+  }, [reviewTransactions]);
 
   const loadFunds = useCallback(async () => {
     setLoading(true);
@@ -893,7 +989,17 @@ export default function PreFundingReconciliation() {
   }, [toast]);
 
   const loadTxns = useCallback(async (fundId: string) => {
+    const loadVersion = ++transactionLoadVersion.current;
+    const isCurrentLoad = () => transactionLoadVersion.current === loadVersion;
     setTxnLoading(true);
+    // Do not let a newly selected fund be acted on until its source metadata
+    // has been resolved. Missing metadata means unknown while loading, not
+    // "unassigned" for State/MMP filter purposes.
+    setTxns([]);
+    setRecons([]);
+    setTransactionFilterMetadata(new Map());
+    setProfileMap(new Map());
+    setProfileEmailMap(new Map());
     try {
       const [rawTxns, reconData] = await Promise.all([
         // The canonical view excludes invalid source events and includes
@@ -908,32 +1014,142 @@ export default function PreFundingReconciliation() {
 
       const txns = rawTxns;
 
-      setTxns(txns);
-      setRecons(reconData as any);
+      // Source metadata lives on the linked Down Payment / Cost Submission rather
+      // than on the immutable Pre-Fund event. Resolve it in batched reads so the
+      // reconciliation filters can include legacy and current payment records.
+      const isUuid = (value: unknown): value is string =>
+        typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+      const firstText = (...values: unknown[]): string | null => {
+        for (const value of values) {
+          if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+        return null;
+      };
+      const asRecord = (value: unknown): Record<string, any> =>
+        value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
 
-      // Load profiles for user_id + created_by in transactions
+      const downPaymentIds = [...new Set(txns
+        .filter((t: PreFundTransaction) => t.source_table === 'down_payment_requests' && isUuid(t.source_id))
+        .map((t: PreFundTransaction) => t.source_id!))];
+      const costSubmissionIds = [...new Set(txns
+        .filter((t: PreFundTransaction) => t.source_table === 'operational_cost_submissions' && isUuid(t.source_id))
+        .map((t: PreFundTransaction) => t.source_id!))];
+
+      const [downPayments, costSubmissions] = await Promise.all([
+        fetchAllIn((chunk) => (supabase as any).from('down_payment_requests').select('*').in('id', chunk), downPaymentIds),
+        fetchAllIn((chunk) => (supabase as any).from('operational_cost_submissions').select('*').in('id', chunk), costSubmissionIds),
+      ]);
+      const downPaymentsById = new Map((downPayments as any[]).map(row => [row.id, row]));
+      const costSubmissionsById = new Map((costSubmissions as any[]).map(row => [row.id, row]));
+
+      const siteEntryIds = [...new Set((downPayments as any[])
+        .map(row => row.mmp_site_entry_id)
+        .filter(isUuid))];
+      const siteEntries = await fetchAllIn(
+        (chunk) => (supabase as any).from('mmp_site_entries').select('*').in('id', chunk),
+        siteEntryIds,
+      );
+      const siteEntriesById = new Map((siteEntries as any[]).map(row => [row.id, row]));
+
+      const mmpReferences = [...new Set([
+        ...(siteEntries as any[]).flatMap(row => [row.mmp_file_id, row.mmp_id]),
+        ...(downPayments as any[]).flatMap(row => {
+          const metadata = asRecord(row.metadata);
+          return [row.mmp_id, row.mmp_file_id, row.mmp_name, metadata.mmp_id, metadata.mmp_name];
+        }),
+        ...(costSubmissions as any[]).flatMap(row => {
+          const metadata = asRecord(row.metadata);
+          return [row.mmp_id, row.mmp_file_id, row.mmp_name, metadata.mmp_id, metadata.mmp_name];
+        }),
+      ].filter((value): value is string => typeof value === 'string' && value.trim()))];
+      const mmpFileIds = mmpReferences.filter(isUuid);
+      const [mmpByIdRows, mmpByCodeRows] = await Promise.all([
+        fetchAllIn((chunk) => (supabase as any).from('mmp_files').select('*').in('id', chunk), mmpFileIds),
+        fetchAllIn((chunk) => (supabase as any).from('mmp_files').select('*').in('mmp_id', chunk), mmpReferences),
+      ]);
+      const mmpByReference = new Map<string, any>();
+      [...(mmpByIdRows as any[]), ...(mmpByCodeRows as any[])].forEach(row => {
+        if (row.id) mmpByReference.set(row.id, row);
+        if (row.mmp_id) mmpByReference.set(row.mmp_id, row);
+      });
+
+      // Load people referenced by the ledger and source records in the same
+      // lookup so a partial typed name works for payer, recorder, and requester.
       const userIds = new Set<string>();
       txns.forEach((t: PreFundTransaction) => {
         if (t.user_id)    userIds.add(t.user_id);
         if (t.created_by) userIds.add(t.created_by);
       });
-      if (userIds.size > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles').select('id,full_name,email').in('id', [...userIds]);
-        const map = new Map<string, string>();
-        const emailMap = new Map<string, string>();
-        (profiles ?? []).forEach((p: any) => {
-          map.set(p.id, p.full_name || p.email || 'Unknown');
-          if (p.email) emailMap.set(p.id, p.email);
+      [...(downPayments as any[]), ...(costSubmissions as any[])].forEach(row => {
+        ['requested_by', 'submitted_by', 'created_by', 'requester_id', 'user_id'].forEach(key => {
+          if (isUuid(row[key])) userIds.add(row[key]);
         });
-        setProfileMap(map);
-        setProfileEmailMap(emailMap);
-      } else {
-        setProfileMap(new Map());
-        setProfileEmailMap(new Map());
+      });
+      const profileIds = [...userIds].filter(isUuid);
+      const profileNames = new Map<string, string>();
+      const profileEmails = new Map<string, string>();
+      if (profileIds.length > 0) {
+        const profiles = await fetchAllIn(
+          (chunk) => supabase.from('profiles').select('id,full_name,email').in('id', chunk),
+          profileIds,
+        );
+        (profiles ?? []).forEach((p: any) => {
+          profileNames.set(p.id, p.full_name || p.email || 'Unknown');
+          if (p.email) profileEmails.set(p.id, p.email);
+        });
       }
-    } catch (e: any) { toast({ title: 'Failed to load transactions', description: e.message, variant: 'destructive' }); }
-    finally { setTxnLoading(false); }
+
+      const personName = (value: unknown) => {
+        const text = firstText(value);
+        return text ? (profileNames.get(text) ?? text) : null;
+      };
+      const filterMetadata = new Map<string, ReconciliationFilterMetadata>();
+      txns.forEach((txn: PreFundTransaction) => {
+        const source = txn.source_table === 'down_payment_requests'
+          ? downPaymentsById.get(txn.source_id ?? '')
+          : txn.source_table === 'operational_cost_submissions'
+            ? costSubmissionsById.get(txn.source_id ?? '')
+            : null;
+        const sourceMetadata = asRecord(source?.metadata);
+        const siteEntry = source?.mmp_site_entry_id ? siteEntriesById.get(source.mmp_site_entry_id) : null;
+        const siteMetadata = asRecord(siteEntry?.metadata);
+        const mmpReference = firstText(
+          siteEntry?.mmp_file_id, siteEntry?.mmp_id,
+          source?.mmp_file_id, source?.mmp_id,
+          sourceMetadata.mmp_file_id, sourceMetadata.mmp_id,
+        );
+        const legacyMmpName = firstText(source?.mmp_name, sourceMetadata.mmp_name, siteEntry?.mmp_name);
+        const mmp = mmpReference ? mmpByReference.get(mmpReference) : null;
+        const people = [
+          personName(txn.user_id),
+          personName(txn.created_by),
+          personName(source?.requested_by),
+          personName(source?.submitted_by),
+          personName(source?.created_by),
+          firstText(source?.requester_name, source?.submitted_by_name, sourceMetadata.requester_name, sourceMetadata.submitted_by_name),
+        ].filter((name): name is string => Boolean(name));
+
+        filterMetadata.set(txn.id, {
+          state: firstText(
+            siteEntry?.state_name, siteEntry?.state, siteMetadata.state_name, siteMetadata.state,
+            source?.state_name, source?.state, sourceMetadata.state_name, sourceMetadata.state,
+          ),
+          mmpId: mmpReference ?? (legacyMmpName ? `legacy-name:${legacyMmpName.toLocaleLowerCase()}` : null),
+          mmpName: firstText(mmp?.name, mmp?.mmp_id, legacyMmpName, mmpReference),
+          people: [...new Set(people)],
+        });
+      });
+      if (!isCurrentLoad()) return;
+      setProfileMap(profileNames);
+      setProfileEmailMap(profileEmails);
+      setTransactionFilterMetadata(filterMetadata);
+      setTxns(txns);
+      setRecons(reconData as any);
+    } catch (e: any) {
+      if (isCurrentLoad()) toast({ title: 'Failed to load transactions', description: e.message, variant: 'destructive' });
+    } finally {
+      if (isCurrentLoad()) setTxnLoading(false);
+    }
   }, [toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);
@@ -1264,10 +1480,10 @@ export default function PreFundingReconciliation() {
 
   // ── Bulk delete handler ─────────────────────────────────────────────────
   const handleBulkUnlink = async () => {
-    if (!selectedFund || selectedTxnIds.size === 0) return;
+    if (!selectedFund || visibleSelectedTransactions.length === 0) return;
     setBulkDeleting(true);
     setConfirmBulkDelete(false);
-    const toDelete = transactions.filter(t => selectedTxnIds.has(t.id));
+    const toDelete = visibleSelectedTransactions;
     try {
       if (toDelete.some(t => t.transaction_type !== 'payment' || t.source_table !== 'down_payment_requests' || !t.source_id)) {
         throw new Error('Bulk cancellation only supports Down Payment events. Finance corrections must retain their immutable audit trail.');
@@ -1486,7 +1702,7 @@ export default function PreFundingReconciliation() {
 
   const handleReconcileAll = async (reconcile: boolean) => {
     if (!selectedFund || reconcilingAll) return;
-    const targets = transactions.filter(t => t.reconciled !== reconcile);
+    const targets = displayTxns.filter(t => t.reconciled !== reconcile);
     if (targets.length === 0) return;
     setReconcilingAll(true);
     try {
@@ -1882,11 +2098,7 @@ export default function PreFundingReconciliation() {
   const totalReconciled = accountingTxns.filter(t => t.reconciled).reduce((s, t) => s + t.amount, 0);
   const totalUnreconciled = accountingTxns.filter(t => !t.reconciled).reduce((s, t) => s + t.amount, 0);
   // Unattributed = payment txns with no user_id assigned
-  const unattributedPayments = transactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
-  const baseTxns    = showUnattributed ? unattributedPayments : transactions;
-  const displayTxns = showOnlySelected && selectedTxnIds.size > 0
-    ? baseTxns.filter(t => selectedTxnIds.has(t.id))
-    : baseTxns;
+  const filteredUnattributedPayments = filteredTransactions.filter(t => t.transaction_type === 'payment' && !t.user_id);
 
   if (!canAccess) return (
     <div className="p-8 text-center"><AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" /><p className="text-muted-foreground">Access denied.</p></div>
@@ -2268,13 +2480,15 @@ export default function PreFundingReconciliation() {
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                   <h3 className="text-sm font-semibold flex items-center gap-2 flex-wrap">
                     Transactions
-                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{transactions.length}</Badge>
-                    {transactions.some(t => t.receipt_url) && (() => {
-                      const withReceipt = transactions.filter(t => t.receipt_url).length;
-                      const batchCount  = receiptGroupMap.size;
-                      const batchTxns   = [...receiptGroupMap.values()].reduce((s, g) => s + g.length, 0);
-                      const batchTotal  = [...receiptGroupMap.values()].reduce((s, g) => s + g.reduce((a, t) => a + t.amount, 0), 0);
-                      const currency    = transactions.find(t => t.currency)?.currency ?? '';
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                      {hasTransactionFilters ? `${reviewTransactions.length} of ${transactions.length}` : transactions.length}
+                    </Badge>
+                    {reviewTransactions.some(t => t.receipt_url) && (() => {
+                      const withReceipt = reviewTransactions.filter(t => t.receipt_url).length;
+                      const batchCount  = filteredReceiptGroupMap.size;
+                      const batchTxns   = [...filteredReceiptGroupMap.values()].reduce((s, g) => s + g.length, 0);
+                      const batchTotal  = [...filteredReceiptGroupMap.values()].reduce((s, g) => s + g.reduce((a, t) => a + t.amount, 0), 0);
+                      const currency    = reviewTransactions.find(t => t.currency)?.currency ?? '';
                       return (
                         <span className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] text-muted-foreground font-normal flex items-center gap-1">
@@ -2302,19 +2516,96 @@ export default function PreFundingReconciliation() {
                   )}
                 </div>
 
+                {transactions.length > 0 && (
+                  <div className="mb-3 rounded-xl border bg-muted/20 p-3 space-y-2.5" data-testid="reconciliation-filters">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground mr-1">
+                        <Filter className="h-3.5 w-3.5" /> Filter ledger
+                      </div>
+                      <Select value={stateFilter} onValueChange={setStateFilter}>
+                        <SelectTrigger className="h-8 w-[175px] text-xs" data-testid="select-recon-state-filter">
+                          <MapPin className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="All states" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={FILTER_ALL}>All states</SelectItem>
+                          <SelectItem value={FILTER_UNASSIGNED}>No state assigned</SelectItem>
+                          {stateOptions.map(state => <SelectItem key={state} value={state}>{state}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={mmpFilter} onValueChange={setMmpFilter}>
+                        <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-recon-mmp-filter">
+                          <ClipboardList className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="All MMPs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={FILTER_ALL}>All MMPs</SelectItem>
+                          <SelectItem value={FILTER_UNASSIGNED}>No MMP assigned</SelectItem>
+                          {mmpOptions.map(mmp => <SelectItem key={mmp.id} value={mmp.id}>{mmp.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <div className="relative min-w-[210px] flex-1 max-w-sm">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          value={nameSearch}
+                          onChange={event => setNameSearch(event.target.value)}
+                          placeholder="Search a person by name…"
+                          className="h-8 pl-8 text-xs"
+                          data-testid="input-recon-name-search"
+                        />
+                      </div>
+                      {hasTransactionFilters && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-muted-foreground"
+                          onClick={() => { setStateFilter(FILTER_ALL); setMmpFilter(FILTER_ALL); setNameSearch(''); }}
+                          data-testid="button-clear-recon-filters"
+                        >
+                          <X className="mr-1 h-3.5 w-3.5" />Clear filters
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="text-muted-foreground">
+                        Showing <span className="font-semibold text-foreground">{reviewTransactions.length}</span> of {transactions.length} ledger transaction{transactions.length !== 1 ? 's' : ''}
+                      </span>
+                      {stateFilter !== FILTER_ALL && (
+                        <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
+                          State: {stateFilter === FILTER_UNASSIGNED ? 'Unassigned' : stateFilter}
+                          <button aria-label="Remove state filter" onClick={() => setStateFilter(FILTER_ALL)}><X className="h-3 w-3" /></button>
+                        </Badge>
+                      )}
+                      {mmpFilter !== FILTER_ALL && (
+                        <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
+                          MMP: {mmpFilter === FILTER_UNASSIGNED ? 'Unassigned' : mmpOptions.find(option => option.id === mmpFilter)?.name ?? mmpFilter}
+                          <button aria-label="Remove MMP filter" onClick={() => setMmpFilter(FILTER_ALL)}><X className="h-3 w-3" /></button>
+                        </Badge>
+                      )}
+                      {nameSearch.trim() && (
+                        <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
+                          Name: {nameSearch.trim()}
+                          <button aria-label="Clear name search" onClick={() => setNameSearch('')}><X className="h-3 w-3" /></button>
+                        </Badge>
+                      )}
+                      {hasTransactionFilters && <span className="ml-auto text-muted-foreground">Fund balances above remain the full fund totals.</span>}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Group-select + bulk action toolbar ─────────────────── */}
-                {!isCD && transactions.length > 0 && (() => {
-                  const allSelected = transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id));
+                {!isCD && reviewTransactions.length > 0 && (() => {
+                  const allSelected = reviewTransactions.length > 0 && reviewTransactions.every(t => selectedTxnIds.has(t.id));
                   const someSelected = selectedTxnIds.size > 0;
-                  const selectedTotal = transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0);
-                  const currency = transactions[0]?.currency ?? '';
+                  const selectedTotal = reviewTransactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0);
+                  const currency = reviewTransactions[0]?.currency ?? '';
 
                   // Unique groups for quick-select dropdowns
-                  const uniqueRefs = [...new Set(transactions.filter(t => t.reference).map(t => t.reference!))];
+                  const uniqueRefs = [...new Set(reviewTransactions.filter(t => t.reference).map(t => t.reference!))];
                   const uniqueCollectors = [...new Map(
-                    transactions.filter(t => t.user_id).map(t => [t.user_id!, profileMap.get(t.user_id!) ?? t.user_id!.slice(0, 8)])
+                    reviewTransactions.filter(t => t.user_id).map(t => [t.user_id!, profileMap.get(t.user_id!) ?? t.user_id!.slice(0, 8)])
                   ).entries()];
-                  const uniqueDates = [...new Set(transactions.map(t => datePart(t.transaction_date)).filter(Boolean))].sort().reverse();
+                  const uniqueDates = [...new Set(reviewTransactions.map(t => datePart(t.transaction_date)).filter(Boolean))].sort().reverse();
 
                   // Cycle indicator: none → some → all
                   const cycleState: 'none' | 'some' | 'all' = allSelected ? 'all' : someSelected ? 'some' : 'none';
@@ -2331,7 +2622,7 @@ export default function PreFundingReconciliation() {
 
                         {/* Cycle select-all button */}
                         <button
-                          onClick={() => setSelectedTxnIds(allSelected ? new Set() : new Set(transactions.map(t => t.id)))}
+                          onClick={() => setSelectedTxnIds(allSelected ? new Set() : new Set(reviewTransactions.map(t => t.id)))}
                           className="flex items-center gap-2 pr-3 mr-3 border-r border-border/60 shrink-0 group"
                           data-testid="button-select-all-txns"
                         >
@@ -2365,7 +2656,7 @@ export default function PreFundingReconciliation() {
                               setGroupByRef('');
                               setSelectedTxnIds(prev => {
                                 const next = new Set(prev);
-                                transactions.filter(t => t.reference === val).forEach(t => next.add(t.id));
+                                reviewTransactions.filter(t => t.reference === val).forEach(t => next.add(t.id));
                                 return next;
                               });
                             }}>
@@ -2381,7 +2672,7 @@ export default function PreFundingReconciliation() {
                                 {uniqueRefs.map(r => (
                                   <SelectItem key={r} value={r} className="text-xs">
                                     <span className="font-mono">{r}</span>
-                                    <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.reference === r).length} txns</span>
+                                    <span className="text-muted-foreground ml-1">· {reviewTransactions.filter(t => t.reference === r).length} txns</span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -2394,7 +2685,7 @@ export default function PreFundingReconciliation() {
                               setGroupByCollector('');
                               setSelectedTxnIds(prev => {
                                 const next = new Set(prev);
-                                transactions.filter(t => t.user_id === val).forEach(t => next.add(t.id));
+                                reviewTransactions.filter(t => t.user_id === val).forEach(t => next.add(t.id));
                                 return next;
                               });
                             }}>
@@ -2410,7 +2701,7 @@ export default function PreFundingReconciliation() {
                                 {uniqueCollectors.map(([uid, name]) => (
                                   <SelectItem key={uid} value={uid} className="text-xs">
                                     {name}
-                                    <span className="text-muted-foreground ml-1">· {transactions.filter(t => t.user_id === uid).length} txns</span>
+                                    <span className="text-muted-foreground ml-1">· {reviewTransactions.filter(t => t.user_id === uid).length} txns</span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -2422,7 +2713,7 @@ export default function PreFundingReconciliation() {
                             setGroupByDate('');
                             setSelectedTxnIds(prev => {
                               const next = new Set(prev);
-                              transactions.filter(t => datePart(t.transaction_date).startsWith(val)).forEach(t => next.add(t.id));
+                                reviewTransactions.filter(t => datePart(t.transaction_date).startsWith(val)).forEach(t => next.add(t.id));
                               return next;
                             });
                           }}>
@@ -2438,14 +2729,14 @@ export default function PreFundingReconciliation() {
                               {uniqueDates.map(d => (
                                 <SelectItem key={d} value={d} className="text-xs">
                                   {formatIsoDate(d, 'MMM d, yyyy')}
-                                  <span className="text-muted-foreground ml-1">· {transactions.filter(t => datePart(t.transaction_date).startsWith(d)).length} txns</span>
+                                  <span className="text-muted-foreground ml-1">· {reviewTransactions.filter(t => datePart(t.transaction_date).startsWith(d)).length} txns</span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
 
                           {/* Unattributed filter chip — inside the group pill row */}
-                          {unattributedPayments.length > 0 && (
+                          {(filteredUnattributedPayments.length > 0 || showUnattributed) && (
                             <button
                               onClick={() => setShowUnattributed(v => !v)}
                               className={cn(
@@ -2458,7 +2749,7 @@ export default function PreFundingReconciliation() {
                               title="Show only payment transactions with no staff assigned"
                             >
                               <UserPlus className="h-2.5 w-2.5 shrink-0" />
-                              Unattributed ({unattributedPayments.length})
+                              Unattributed ({filteredUnattributedPayments.length})
                               {showUnattributed && <X className="h-2.5 w-2.5 shrink-0" />}
                             </button>
                           )}
@@ -2473,7 +2764,7 @@ export default function PreFundingReconciliation() {
                             'text-[10px] font-semibold tabular-nums transition-colors',
                             someSelected ? 'text-[#1D3461]' : 'text-muted-foreground'
                           )}>
-                            {selectedTxnIds.size} of {transactions.length}
+                            {selectedTxnIds.size} of {reviewTransactions.length}
                           </span>
                         </div>
                       </div>
@@ -2536,6 +2827,22 @@ export default function PreFundingReconciliation() {
                     <RotateCcw className="h-8 w-8 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No transactions yet for this fund</p>
                   </div>
+                ) : displayTxns.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                    <Filter className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No transactions match these filters</p>
+                    <p className="mt-1 text-xs">Try another State, MMP, or person name.</p>
+                    {hasTransactionFilters && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="mt-2 h-7 text-xs"
+                        onClick={() => { setStateFilter(FILTER_ALL); setMmpFilter(FILTER_ALL); setNameSearch(''); }}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <div className="rounded-lg border overflow-x-auto">
                     <Table>
@@ -2544,25 +2851,25 @@ export default function PreFundingReconciliation() {
                           <TableHead className="w-8 text-center px-2">
                             <button
                               onClick={() => setSelectedTxnIds(
-                                transactions.every(t => selectedTxnIds.has(t.id))
+                                reviewTransactions.every(t => selectedTxnIds.has(t.id))
                                   ? new Set()
-                                  : new Set(transactions.map(t => t.id))
+                                  : new Set(reviewTransactions.map(t => t.id))
                               )}
                               className="group mx-auto flex items-center justify-center"
                               data-testid="checkbox-select-all-header"
                             >
                               <div className={cn(
                                 'h-4 w-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center',
-                                transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id))
+                                reviewTransactions.length > 0 && reviewTransactions.every(t => selectedTxnIds.has(t.id))
                                   ? 'bg-[#1D3461] border-[#1D3461]'
                                   : selectedTxnIds.size > 0
                                   ? 'bg-blue-50 border-blue-400 dark:bg-blue-950/30'
                                   : 'border-muted-foreground/30 group-hover:border-[#1D3461]/50'
                               )}>
-                                {transactions.length > 0 && transactions.every(t => selectedTxnIds.has(t.id)) && (
+                                {reviewTransactions.length > 0 && reviewTransactions.every(t => selectedTxnIds.has(t.id)) && (
                                   <div className="h-1.5 w-1.5 rounded-full bg-white" />
                                 )}
-                                {selectedTxnIds.size > 0 && !transactions.every(t => selectedTxnIds.has(t.id)) && (
+                                {selectedTxnIds.size > 0 && !reviewTransactions.every(t => selectedTxnIds.has(t.id)) && (
                                   <div className="h-px w-2 rounded-full bg-blue-500" />
                                 )}
                               </div>
@@ -2581,8 +2888,8 @@ export default function PreFundingReconciliation() {
                             {isCD ? (
                               <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Recon</span>
                             ) : (() => {
-                              const total = transactions.length;
-                              const reconciled = transactions.filter(t => t.reconciled).length;
+                              const total = displayTxns.length;
+                              const reconciled = displayTxns.filter(t => t.reconciled).length;
                               const allDone = total > 0 && reconciled === total;
                               const someDone = reconciled > 0 && reconciled < total;
                               return (
@@ -3527,10 +3834,10 @@ export default function PreFundingReconciliation() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-600">
-              <Trash2 className="h-4 w-4" /> Remove {selectedTxnIds.size} Transaction{selectedTxnIds.size !== 1 ? 's' : ''}
+              <Trash2 className="h-4 w-4" /> Remove {visibleSelectedTransactions.length} Transaction{visibleSelectedTransactions.length !== 1 ? 's' : ''}
             </DialogTitle>
             <p className="text-sm text-muted-foreground pt-1">
-              This will permanently remove the selected {selectedTxnIds.size} transaction{selectedTxnIds.size !== 1 ? 's' : ''} and restore the fund balance.
+              This will permanently remove the selected {visibleSelectedTransactions.length} transaction{visibleSelectedTransactions.length !== 1 ? 's' : ''} and restore the fund balance.
             </p>
           </DialogHeader>
 
@@ -3538,7 +3845,7 @@ export default function PreFundingReconciliation() {
             <div className="flex flex-col items-center gap-4 py-6">
               <Loader2 className="h-8 w-8 animate-spin text-rose-500" />
               <div className="text-center">
-                <p className="font-medium text-sm">Removing {selectedTxnIds.size} transactions…</p>
+                <p className="font-medium text-sm">Removing {visibleSelectedTransactions.length} transactions…</p>
                 <p className="text-xs text-muted-foreground mt-1">Unlinking fund records and restoring balance. Please wait.</p>
               </div>
             </div>
@@ -3548,12 +3855,12 @@ export default function PreFundingReconciliation() {
                 <div className="rounded-lg border p-4 space-y-2 bg-muted/30 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Selected transactions</span>
-                    <span className="font-semibold tabular-nums">{selectedTxnIds.size}</span>
+                    <span className="font-semibold tabular-nums">{visibleSelectedTransactions.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Balance to restore</span>
                     <span className="font-mono font-semibold text-emerald-600 tabular-nums">
-                      {selectedFund.currency} {formatNumber(transactions.filter(t => selectedTxnIds.has(t.id)).reduce((s, t) => s + t.amount, 0), 0)}
+                      {selectedFund.currency} {formatNumber(visibleSelectedTransactions.reduce((s, t) => s + t.amount, 0), 0)}
                     </span>
                   </div>
                   {/* Type breakdown */}
@@ -3588,7 +3895,7 @@ export default function PreFundingReconciliation() {
             <Button variant="destructive" onClick={handleBulkUnlink} disabled={bulkDeleting} data-testid="button-confirm-bulk-delete">
               {bulkDeleting
                 ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Removing…</>
-                : <><Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedTxnIds.size} & Restore Balance</>
+                : <><Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {visibleSelectedTransactions.length} & Restore Balance</>
               }
             </Button>
           </DialogFooter>
