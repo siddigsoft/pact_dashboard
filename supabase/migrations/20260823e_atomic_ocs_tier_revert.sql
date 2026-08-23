@@ -21,8 +21,6 @@ DECLARE
   v_unlink_result JSONB;
   v_role_key TEXT;
   v_submitter_role_key TEXT;
-  v_has_denied_override BOOLEAN := FALSE;
-  v_has_granted_override BOOLEAN := FALSE;
   v_is_service_role BOOLEAN := COALESCE(current_setting('request.jwt.claim.role', true), '') = 'service_role';
 BEGIN
   p_tier := upper(trim(p_tier));
@@ -39,21 +37,7 @@ BEGIN
     FROM public.profiles
     WHERE id = auth.uid();
 
-    SELECT
-      COALESCE(bool_or(is_granted IS FALSE), FALSE),
-      COALESCE(bool_or(is_granted IS TRUE), FALSE)
-    INTO v_has_denied_override, v_has_granted_override
-    FROM public.user_permission_overrides
-    WHERE user_id = auth.uid()
-      AND resource = 'cost_submissions'
-      AND action = 'revert_tier'
-      AND (expires_at IS NULL OR expires_at > now());
-
-    IF v_has_denied_override THEN
-      RAISE EXCEPTION 'Access denied: your tier-revert permission is explicitly blocked.';
-    END IF;
-    IF NOT v_has_granted_override
-       AND COALESCE(v_role_key, '') NOT IN ('admin', 'administrator', 'superadmin', 'superadministrator')
+    IF COALESCE(v_role_key, '') NOT IN ('admin', 'administrator', 'superadmin', 'superadministrator')
        AND NOT public.is_super_admin(auth.uid())
     THEN
       RAISE EXCEPTION 'Access denied: only an Admin or Super Admin can revert an approval tier.';

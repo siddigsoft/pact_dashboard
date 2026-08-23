@@ -63,8 +63,28 @@ $$;
 SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823e_atomic_ocs_tier_revert.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823f_lock_ocs_tier_revert_to_admins.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
+DO $$
+BEGIN
+  IF has_function_privilege(
+    'authenticated',
+    'public.revert_operational_cost_tier_atomically_rpc(uuid[],text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'authenticated users can still execute the legacy tier-revert RPC';
+  END IF;
+  IF NOT has_function_privilege(
+    'authenticated',
+    'public.revert_operational_cost_tier_as_admin_rpc(uuid[],text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'authenticated users cannot execute the protected tier-revert RPC';
+  END IF;
+END;
+$$;
+
 INSERT INTO public.operational_cost_submissions (
   id, status, submitter_role, tier1_status, tier2_status, tier3_status, tier4_status, amount_paid_cents
 ) VALUES
@@ -81,7 +101,7 @@ INSERT INTO public.pre_fund_transactions VALUES
 DO $$
 DECLARE v_result jsonb;
 BEGIN
-  v_result := public.revert_operational_cost_tier_atomically_rpc(
+  v_result := public.revert_operational_cost_tier_as_admin_rpc(
     ARRAY['22222222-2222-4222-8222-222222222222'::uuid], 'T4'
   );
   IF (v_result ->> 'success')::boolean IS NOT TRUE
@@ -99,7 +119,7 @@ BEGIN
     RAISE EXCEPTION 'T4 revert did not reset source only after payment reversal.';
   END IF;
 
-  v_result := public.revert_operational_cost_tier_atomically_rpc(
+  v_result := public.revert_operational_cost_tier_as_admin_rpc(
     ARRAY['33333333-3333-4333-8333-333333333333'::uuid], 'T3'
   );
   IF (v_result ->> 'success')::boolean IS NOT TRUE
@@ -108,7 +128,7 @@ BEGIN
   END IF;
 
   BEGIN
-    PERFORM public.revert_operational_cost_tier_atomically_rpc(
+    PERFORM public.revert_operational_cost_tier_as_admin_rpc(
       ARRAY['44444444-4444-4444-8444-444444444444'::uuid], 'T3'
     );
     RAISE EXCEPTION 'reconciled payment tier revert unexpectedly succeeded';
@@ -117,7 +137,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.revert_operational_cost_tier_atomically_rpc(
+    PERFORM public.revert_operational_cost_tier_as_admin_rpc(
       ARRAY['55555555-5555-4555-8555-555555555555'::uuid], 'T3'
     );
     RAISE EXCEPTION 'lower-tier rollback unexpectedly succeeded';
@@ -126,7 +146,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.revert_operational_cost_tier_atomically_rpc(
+    PERFORM public.revert_operational_cost_tier_as_admin_rpc(
       ARRAY['66666666-6666-4666-8666-666666666666'::uuid], 'T4'
     );
     RAISE EXCEPTION 'invalid four-tier workflow unexpectedly succeeded';
@@ -136,19 +156,21 @@ BEGIN
 END;
 $$;
 
+UPDATE public.profiles
+SET role = 'Finance'
+WHERE id = '11111111-1111-4111-8111-111111111111';
 INSERT INTO public.user_permission_overrides VALUES
-  ('11111111-1111-4111-8111-111111111111', 'cost_submissions', 'revert_tier', true, NULL),
-  ('11111111-1111-4111-8111-111111111111', 'cost_submissions', 'revert_tier', false, NULL);
+  ('11111111-1111-4111-8111-111111111111', 'cost_submissions', 'revert_tier', true, NULL);
 
 DO $$
 BEGIN
   BEGIN
-    PERFORM public.revert_operational_cost_tier_atomically_rpc(
+    PERFORM public.revert_operational_cost_tier_as_admin_rpc(
       ARRAY['33333333-3333-4333-8333-333333333333'::uuid], 'T3'
     );
-    RAISE EXCEPTION 'explicit deny unexpectedly succeeded';
+    RAISE EXCEPTION 'non-admin override unexpectedly succeeded';
   EXCEPTION WHEN others THEN
-    IF SQLERRM NOT LIKE 'Access denied: your tier-revert permission is explicitly blocked%' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Access denied: only an Admin or Super Admin can revert an approval tier%' THEN RAISE; END IF;
   END;
 END;
 $$;

@@ -919,7 +919,7 @@ export async function revertOperationalCostTierAtomically(
   tier: 'T1' | 'T2' | 'T3' | 'T4',
 ): Promise<{ success: boolean; message: string; reversedPaymentSourceCount: number }> {
   const { data, error } = await (supabase as any).rpc(
-    'revert_operational_cost_tier_atomically_rpc',
+    'revert_operational_cost_tier_as_admin_rpc',
     { p_source_ids: sourceIds, p_tier: tier },
   );
 

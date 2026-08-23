@@ -2492,7 +2492,7 @@ const CostSubmission = () => {
   };
 
   const canRevertSubmission = (oc: OperationalCostSubmission): boolean => {
-    if (!isSuperAdmin && !isAdmin && !hasRevertTierOverride) return false;
+    if (!isSuperAdmin && !isAdmin) return false;
     return getRevertTierLabel(oc) !== null;
   };
 
@@ -2564,7 +2564,6 @@ const CostSubmission = () => {
   const hasSendToFinanceOverride = cs('send_to_finance');
   const hasReconcileOverride    = cs('reconcile');
   const hasRecallOverride       = cs('recall');
-  const hasRevertTierOverride   = cs('revert_tier');
   const hasEditOverride         = cs('edit');
   const hasDeleteOverride       = cs('delete');
 
@@ -6435,7 +6434,7 @@ const CostSubmission = () => {
                             });
                             const grpRevertTier = Object.entries(tierCounts).sort((a, b) => b[1].length - a[1].length)[0];
                             const showApproveReject = groupApprovableTier !== null && grpApprovableItems.length > 0;
-                            const showRevert = grpRevertableItems.length > 0 && (isSuperAdmin || isAdmin || hasRevertTierOverride);
+                            const showRevert = grpRevertableItems.length > 0 && (isSuperAdmin || isAdmin);
                             if (!showApproveReject && !showRevert) return null;
                             return (
                               <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
