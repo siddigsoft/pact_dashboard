@@ -73,6 +73,15 @@ function projectLabel(req: DownPaymentRequest): string {
   return req.activityType || 'General / عام';
 }
 
+type PaymentEvidence = {
+  id: string;
+  name: string;
+  amount?: number;
+  currency?: string;
+  paymentEventId: string;
+  isCorrectable: boolean;
+};
+
 // ─── types ───────────────────────────────────────────────────────────────────
 
 type GroupRow = {
@@ -90,7 +99,21 @@ type GroupRow = {
 
 // ─── sub-components ──────────────────────────────────────────────────────────
 
-function RequestDetailsDialog({ req, onClose, getProfileName }: { req: DownPaymentRequest | null; onClose: () => void; getProfileName: (id: string) => string }) {
+function RequestDetailsDialog({
+  req,
+  onClose,
+  getProfileName,
+  paymentLinks = [],
+  canCorrectPreFund = false,
+  onCorrectPreFund,
+}: {
+  req: DownPaymentRequest | null;
+  onClose: () => void;
+  getProfileName: (id: string) => string;
+  paymentLinks?: PaymentEvidence[];
+  canCorrectPreFund?: boolean;
+  onCorrectPreFund?: (evidence: PaymentEvidence) => void;
+}) {
   if (!req) return null;
   const remaining = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
   return (
@@ -132,6 +155,29 @@ function RequestDetailsDialog({ req, onClose, getProfileName }: { req: DownPayme
               <p className="text-xs text-muted-foreground">SDG</p>
             </div>
           </div>
+          {paymentLinks.length > 0 && (
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Pre-Fund payment evidence</p>
+              {paymentLinks.map(link => (
+                <div key={link.paymentEventId} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs">
+                  <span>{link.name} · {link.currency || 'SDG'} {Number(link.amount ?? 0).toLocaleString()}</span>
+                  {canCorrectPreFund && link.isCorrectable && onCorrectPreFund && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => onCorrectPreFund(link)}
+                      data-testid={`button-correct-down-payment-pre-fund-${link.paymentEventId}`}
+                    >
+                      <Wallet className="mr-1 h-3 w-3" />
+                      Correct Pre-Fund
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {req.justification && (
             <div className="border-t pt-3">
               <p className="text-muted-foreground text-xs mb-1">Justification</p>
@@ -164,11 +210,17 @@ function GroupedSummaryTable({
   groupLabel,
   loading,
   getProfileName,
+  paymentLinksByRequest,
+  canCorrectPreFund,
+  onCorrectPreFund,
 }: {
   rows: GroupRow[];
   groupLabel: string;
   loading: boolean;
   getProfileName: (id: string) => string;
+  paymentLinksByRequest: ReadonlyMap<string, PaymentEvidence[]>;
+  canCorrectPreFund: boolean;
+  onCorrectPreFund: (evidence: PaymentEvidence) => void;
 }) {
   const isColVisible = useColumnVisibility('down-payment-approval');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -322,7 +374,7 @@ function GroupedSummaryTable({
         </Table>
       </div>
 
-      <RequestDetailsDialog req={detailsReq} onClose={() => setDetailsReq(null)} getProfileName={getProfileName} />
+      <RequestDetailsDialog req={detailsReq} onClose={() => setDetailsReq(null)} getProfileName={getProfileName} paymentLinks={detailsReq ? paymentLinksByRequest.get(detailsReq.id) : []} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={onCorrectPreFund} />
     </>
   );
 }
@@ -332,10 +384,16 @@ function AllRequestsTable({
   requests,
   getProfileName,
   loading,
+  paymentLinksByRequest,
+  canCorrectPreFund,
+  onCorrectPreFund,
 }: {
   requests: DownPaymentRequest[];
   getProfileName: (id: string) => string;
   loading: boolean;
+  paymentLinksByRequest: ReadonlyMap<string, PaymentEvidence[]>;
+  canCorrectPreFund: boolean;
+  onCorrectPreFund: (evidence: PaymentEvidence) => void;
 }) {
   const [detailsReq, setDetailsReq] = useState<DownPaymentRequest | null>(null);
 
@@ -438,7 +496,7 @@ function AllRequestsTable({
           </TableBody>
         </Table>
       </div>
-      <RequestDetailsDialog req={detailsReq} onClose={() => setDetailsReq(null)} getProfileName={getProfileName} />
+      <RequestDetailsDialog req={detailsReq} onClose={() => setDetailsReq(null)} getProfileName={getProfileName} paymentLinks={detailsReq ? paymentLinksByRequest.get(detailsReq.id) : []} canCorrectPreFund={canCorrectPreFund} onCorrectPreFund={onCorrectPreFund} />
     </>
   );
 }
@@ -449,14 +507,16 @@ export default function DownPaymentApproval() {
   const navigate = useNavigate();
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading } = useDownPayment();
+  const { requests, loading, refreshRequests } = useDownPayment();
   const { toast } = useToast();
 
   const userRole = currentUser?.role?.toLowerCase();
+  const normalizedRole = userRole?.replace(/[\s_-]/g, '') ?? '';
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
   const isCountryDirector = userRole === 'countrydirector' || userRole === 'country_director';
+  const isFinanceAdmin = ['financialadmin', 'financeadmin', 'finance', 'accountant'].includes(normalizedRole);
 
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
@@ -531,10 +591,20 @@ export default function DownPaymentApproval() {
     preFundId: string;
     preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
   }>({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
-  const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, { id: string; name: string; amount?: number; currency?: string }[]>>(new Map());
+  const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, PaymentEvidence[]>>(new Map());
+  const [preFundEvidenceRefresh, setPreFundEvidenceRefresh] = useState(0);
   const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
   const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
+  const [preFundCorrectionDialog, setPreFundCorrectionDialog] = useState<{
+    open: boolean;
+    evidence: PaymentEvidence | null;
+    replacementFundId: string;
+    reason: string;
+    funds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    loadingFunds: boolean;
+    saving: boolean;
+  }>({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false });
 
   useEffect(() => {
     let active = true;
@@ -542,12 +612,14 @@ export default function DownPaymentApproval() {
     void fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id))
       .then(links => {
         if (!active) return;
-        const next = new Map<string, { id: string; name: string; amount?: number; currency?: string }[]>();
+        const next = new Map<string, PaymentEvidence[]>();
         links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
           id: link.fundId,
           name: link.fundName,
           amount: link.paymentAmount,
           currency: link.currency,
+          paymentEventId: link.paymentEventId,
+          isCorrectable: link.isCorrectable,
         }]));
         setPreFundLinksByRequest(next);
       })
@@ -559,7 +631,7 @@ export default function DownPaymentApproval() {
         }
       });
     return () => { active = false; };
-  }, [requests]);
+  }, [requests, preFundEvidenceRefresh]);
 
   useEffect(() => {
     if (!canManagePreFundFilters) {
@@ -675,6 +747,55 @@ export default function DownPaymentApproval() {
       setPartialPayDialog(p => ({ ...p, saving: false }));
     }
   }, [partialPayDialog, currentUser, toast]);
+
+  const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
+    if (!isFinanceAdmin || !evidence.isCorrectable) return;
+    setPreFundCorrectionDialog({
+      open: true, evidence, replacementFundId: '', reason: '', funds: [], loadingFunds: true, saving: false,
+    });
+    const { data, error } = await (supabase as any)
+      .from('pre_fund_requests')
+      .select('id, name, currency, available_balance')
+      .eq('status', 'active')
+      .order('name', { ascending: true });
+    if (error) toast({ title: 'Could not load Pre-Funds', description: error.message, variant: 'destructive' });
+    setPreFundCorrectionDialog(current => current.evidence?.paymentEventId === evidence.paymentEventId
+      ? {
+          ...current,
+          funds: error ? [] : (data ?? []).map((fund: any) => ({
+            id: fund.id,
+            name: fund.name || fund.id,
+            currency: fund.currency || evidence.currency || 'SDG',
+            available_balance: Number(fund.available_balance ?? 0),
+          })),
+          loadingFunds: false,
+        }
+      : current);
+  }, [isFinanceAdmin, toast]);
+
+  const submitPreFundCorrection = useCallback(async () => {
+    const { evidence, replacementFundId, reason } = preFundCorrectionDialog;
+    if (!evidence || !replacementFundId || !reason.trim()) return;
+    setPreFundCorrectionDialog(current => ({ ...current, saving: true }));
+    try {
+      const { correctRequiredPreFundPaymentLink } = await import('@/utils/preFundLinkage');
+      await correctRequiredPreFundPaymentLink({
+        originalPaymentEventId: evidence.paymentEventId,
+        replacementFundId,
+        reason: reason.trim(),
+      });
+      toast({
+        title: 'Pre-Fund corrected',
+        description: 'The original payment remains in history as a reversal and a replacement payment was recorded.',
+      });
+      setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false });
+      setPreFundEvidenceRefresh(version => version + 1);
+      await refreshRequests();
+    } catch (error: any) {
+      toast({ title: 'Pre-Fund correction failed', description: error?.message ?? 'The payment link could not be corrected.', variant: 'destructive' });
+      setPreFundCorrectionDialog(current => ({ ...current, saving: false }));
+    }
+  }, [preFundCorrectionDialog, refreshRequests, toast]);
 
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1291,6 +1412,14 @@ export default function DownPaymentApproval() {
             externalRequests={filteredRequests}
             externalRequestsAreFiltered={true}
             paidAmountOverrides={selectedFundPaidAmounts}
+            preFundPaymentEvidence={preFundLinksByRequest}
+            canCorrectPreFund={isFinanceAdmin}
+            onCorrectPreFund={paymentEventId => {
+              const evidence = Array.from(preFundLinksByRequest.values())
+                .flat()
+                .find(link => link.paymentEventId === paymentEventId);
+              if (evidence) void openPreFundCorrectionDialog(evidence);
+            }}
             hideFiltersBar={true}
           />
         </TabsContent>
@@ -1306,7 +1435,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Click a row to expand and see individual requests · Breakdown per state / region</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byState} groupLabel="State" loading={loading} getProfileName={getProfileName} />
+              <GroupedSummaryTable rows={byState} groupLabel="State" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1322,7 +1451,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Grouped by cooperating partner / activity type · Click a row to expand requests</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byProject} groupLabel="Project / Activity" loading={loading} getProfileName={getProfileName} />
+              <GroupedSummaryTable rows={byProject} groupLabel="Project / Activity" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1338,7 +1467,7 @@ export default function DownPaymentApproval() {
               <CardDescription>Grouped by Monthly Monitoring Plan · Click a row to expand requests</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <GroupedSummaryTable rows={byMMP} groupLabel="MMP" loading={loading} getProfileName={getProfileName} />
+              <GroupedSummaryTable rows={byMMP} groupLabel="MMP" loading={loading} getProfileName={getProfileName} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1356,7 +1485,7 @@ export default function DownPaymentApproval() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <AllRequestsTable requests={filteredRequests} getProfileName={getProfileName} loading={loading} />
+              <AllRequestsTable requests={filteredRequests} getProfileName={getProfileName} loading={loading} paymentLinksByRequest={preFundLinksByRequest} canCorrectPreFund={isFinanceAdmin} onCorrectPreFund={openPreFundCorrectionDialog} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1967,6 +2096,72 @@ export default function DownPaymentApproval() {
               data-testid="button-confirm-partial-pay"
             >
               {partialPayDialog.saving ? 'Saving…' : 'Confirm & Deduct from Fund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={preFundCorrectionDialog.open}
+        onOpenChange={open => !open && !preFundCorrectionDialog.saving && setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false })}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Correct Pre-Fund</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This records an immutable reversal and replacement payment. The payment amount, receipt, and source payment history are unchanged.
+          </p>
+          <div className="space-y-4">
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <p className="font-medium">{preFundCorrectionDialog.evidence?.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {preFundCorrectionDialog.evidence?.currency} {Number(preFundCorrectionDialog.evidence?.amount ?? 0).toLocaleString()} was selected for this payment.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Replacement active Pre-Fund <span className="text-destructive">*</span></Label>
+              <Select
+                value={preFundCorrectionDialog.replacementFundId}
+                onValueChange={replacementFundId => setPreFundCorrectionDialog(current => ({ ...current, replacementFundId }))}
+                disabled={preFundCorrectionDialog.loadingFunds || preFundCorrectionDialog.saving}
+              >
+                <SelectTrigger data-testid="select-correct-down-payment-pre-fund">
+                  <SelectValue placeholder={preFundCorrectionDialog.loadingFunds ? 'Loading active Pre-Funds…' : 'Select a replacement Pre-Fund'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {preFundCorrectionDialog.funds
+                    .filter(fund => fund.id !== preFundCorrectionDialog.evidence?.id)
+                    .map(fund => (
+                      <SelectItem key={fund.id} value={fund.id}>
+                        {fund.name} · {fund.currency} {fund.available_balance.toLocaleString()} available
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correct-down-payment-pre-fund-reason">Reason <span className="text-destructive">*</span></Label>
+              <Input
+                id="correct-down-payment-pre-fund-reason"
+                value={preFundCorrectionDialog.reason}
+                onChange={event => setPreFundCorrectionDialog(current => ({ ...current, reason: event.target.value }))}
+                placeholder="Why was this Pre-Fund selected in error?"
+                disabled={preFundCorrectionDialog.saving}
+                data-testid="input-correct-down-payment-pre-fund-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false })} disabled={preFundCorrectionDialog.saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void submitPreFundCorrection()}
+              disabled={preFundCorrectionDialog.saving || preFundCorrectionDialog.loadingFunds || !preFundCorrectionDialog.replacementFundId || !preFundCorrectionDialog.reason.trim()}
+              data-testid="button-confirm-correct-down-payment-pre-fund"
+            >
+              {preFundCorrectionDialog.saving ? 'Correcting…' : 'Record correction'}
             </Button>
           </DialogFooter>
         </DialogContent>

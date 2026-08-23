@@ -32,7 +32,9 @@ SELECT
   t.receipt_url,
   t.user_id,
   t.created_by,
-  t.occurred_at
+  t.occurred_at,
+  -- Appended so existing deployments can safely replace this view.
+  t.idempotency_key
 FROM public.pre_fund_transactions t
 JOIN public.pre_fund_requests f ON f.id = t.pre_fund_request_id
 WHERE t.source_table IN ('down_payment_requests', 'operational_cost_submissions')

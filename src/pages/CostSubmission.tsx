@@ -377,9 +377,11 @@ const CostSubmission = () => {
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
-  const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, Array<{ id: string; name: string; amount?: number; currency?: string }>>>(new Map());
+  type PaymentEvidence = { id: string; name: string; amount?: number; currency?: string; paymentEventId: string; isCorrectable: boolean };
+  const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, PaymentEvidence[]>>(new Map());
   const [costPreFundLinkError, setCostPreFundLinkError] = useState<string | null>(null);
   const [costPreFundOptions, setCostPreFundOptions] = useState<Array<{ id: string; name: string; currency: string; status: string | null }>>([]);
+  const [costPreFundEvidenceRefresh, setCostPreFundEvidenceRefresh] = useState(0);
   // Super-admin only: filter by the current approval tier a submission is waiting at
   const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
@@ -400,12 +402,14 @@ const CostSubmission = () => {
         const { fetchPreFundSourcePaymentLinks } = await import('@/utils/preFundLinkage');
         const links = await fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id));
         if (!active) return;
-        const next = new Map<string, Array<{ id: string; name: string; amount?: number; currency?: string }>>();
+        const next = new Map<string, PaymentEvidence[]>();
         links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
           id: link.fundId,
           name: link.fundName,
           amount: link.paymentAmount,
           currency: link.currency,
+          paymentEventId: link.paymentEventId,
+          isCorrectable: link.isCorrectable,
         }]));
         setCostPreFundLinks(next);
       } catch (error: any) {
@@ -417,7 +421,7 @@ const CostSubmission = () => {
       }
     })();
     return () => { active = false; };
-  }, [operationalCosts]);
+  }, [operationalCosts, costPreFundEvidenceRefresh]);
   useEffect(() => {
     let active = true;
     if (!canManagePreFundFilters) {
@@ -757,6 +761,66 @@ const CostSubmission = () => {
     customInputType: 'pct' | 'amount';
     payCustomAmountStr: string;
   }>({ open: false, submissions: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, preFundId: null, preFunds: [], payMode: 'full', payPercent: '100', customInputType: 'pct', payCustomAmountStr: '' });
+  const [preFundCorrectionDialog, setPreFundCorrectionDialog] = useState<{
+    open: boolean;
+    evidence: PaymentEvidence | null;
+    replacementFundId: string;
+    reason: string;
+    funds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    loadingFunds: boolean;
+    saving: boolean;
+  }>({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false });
+
+  const openPreFundCorrectionDialog = async (evidence: PaymentEvidence) => {
+    if (!isFinanceAdmin || !evidence.isCorrectable) return;
+    setPreFundCorrectionDialog({
+      open: true, evidence, replacementFundId: '', reason: '', funds: [], loadingFunds: true, saving: false,
+    });
+    const { data, error } = await (supabase as any)
+      .from('pre_fund_requests')
+      .select('id, name, currency, available_balance')
+      .eq('status', 'active')
+      .order('name', { ascending: true });
+    if (error) {
+      toast({ title: 'Could not load Pre-Funds', description: error.message, variant: 'destructive' });
+    }
+    setPreFundCorrectionDialog(current => current.evidence?.paymentEventId === evidence.paymentEventId
+      ? {
+          ...current,
+          funds: error ? [] : (data ?? []).map((fund: any) => ({
+            id: fund.id,
+            name: fund.name || fund.id,
+            currency: fund.currency || evidence.currency || 'SDG',
+            available_balance: Number(fund.available_balance ?? 0),
+          })),
+          loadingFunds: false,
+        }
+      : current);
+  };
+
+  const submitPreFundCorrection = async () => {
+    const { evidence, replacementFundId, reason } = preFundCorrectionDialog;
+    if (!evidence || !replacementFundId || !reason.trim()) return;
+    setPreFundCorrectionDialog(current => ({ ...current, saving: true }));
+    try {
+      const { correctRequiredPreFundPaymentLink } = await import('@/utils/preFundLinkage');
+      await correctRequiredPreFundPaymentLink({
+        originalPaymentEventId: evidence.paymentEventId,
+        replacementFundId,
+        reason: reason.trim(),
+      });
+      toast({
+        title: 'Pre-Fund corrected',
+        description: 'The original payment remains in history as a reversal and a replacement payment was recorded.',
+      });
+      setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false });
+      setCostPreFundEvidenceRefresh(version => version + 1);
+      await fetchOperationalCosts();
+    } catch (error: any) {
+      toast({ title: 'Pre-Fund correction failed', description: error?.message ?? 'The payment link could not be corrected.', variant: 'destructive' });
+      setPreFundCorrectionDialog(current => ({ ...current, saving: false }));
+    }
+  };
 
   // In-page attachment/receipt viewer — supports multi-receipt navigation
   const [attachViewer, setAttachViewer] = useState<{ open: boolean; urls: string[]; index: number; name: string }>({ open: false, urls: [], index: 0, name: '' });
@@ -12136,6 +12200,37 @@ const CostSubmission = () => {
                           )}
                         </div>
                       )}
+                      {(() => {
+                        const evidence = costPreFundLinks.get(oc.id) ?? [];
+                        if (evidence.length === 0) return null;
+                        return (
+                          <div className="mt-3 border-t border-purple-200/70 pt-2 dark:border-purple-800/70">
+                            <p className="text-xs font-medium text-purple-700 dark:text-purple-300">Pre-Fund payment evidence</p>
+                            <div className="mt-1.5 space-y-1.5">
+                              {evidence.map(link => (
+                                <div key={link.paymentEventId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                  <span className="text-muted-foreground">
+                                    {link.name} · {link.currency || oc.currency} {Number(link.amount ?? 0).toLocaleString()}
+                                  </span>
+                                  {isFinanceAdmin && link.isCorrectable && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => void openPreFundCorrectionDialog(link)}
+                                      data-testid={`button-correct-pre-fund-${link.paymentEventId}`}
+                                    >
+                                      <RefreshCw className="mr-1 h-3 w-3" />
+                                      Correct Pre-Fund
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -13426,6 +13521,72 @@ const CostSubmission = () => {
             >
               <CheckCircle className="h-4 w-4 mr-1.5" />
               {confirmingReceipt ? 'Confirming…' : 'Confirm Receipt / تأكيد الاستلام'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={preFundCorrectionDialog.open}
+        onOpenChange={(open) => !open && !preFundCorrectionDialog.saving && setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false })}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Correct Pre-Fund</DialogTitle>
+            <DialogDescription>
+              This records an immutable reversal and replacement payment. It does not change the payment amount, receipt, or source payment history.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <p className="font-medium">{preFundCorrectionDialog.evidence?.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {preFundCorrectionDialog.evidence?.currency} {Number(preFundCorrectionDialog.evidence?.amount ?? 0).toLocaleString()} was selected for this payment.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Replacement active Pre-Fund <span className="text-destructive">*</span></Label>
+              <Select
+                value={preFundCorrectionDialog.replacementFundId}
+                onValueChange={replacementFundId => setPreFundCorrectionDialog(current => ({ ...current, replacementFundId }))}
+                disabled={preFundCorrectionDialog.loadingFunds || preFundCorrectionDialog.saving}
+              >
+                <SelectTrigger data-testid="select-correct-cost-pre-fund">
+                  <SelectValue placeholder={preFundCorrectionDialog.loadingFunds ? 'Loading active Pre-Funds…' : 'Select a replacement Pre-Fund'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {preFundCorrectionDialog.funds
+                    .filter(fund => fund.id !== preFundCorrectionDialog.evidence?.id)
+                    .map(fund => (
+                      <SelectItem key={fund.id} value={fund.id}>
+                        {fund.name} · {fund.currency} {fund.available_balance.toLocaleString()} available
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correct-cost-pre-fund-reason">Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="correct-cost-pre-fund-reason"
+                value={preFundCorrectionDialog.reason}
+                onChange={event => setPreFundCorrectionDialog(current => ({ ...current, reason: event.target.value }))}
+                placeholder="Explain why the payment was charged to the wrong Pre-Fund."
+                disabled={preFundCorrectionDialog.saving}
+                data-testid="input-correct-cost-pre-fund-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreFundCorrectionDialog({ open: false, evidence: null, replacementFundId: '', reason: '', funds: [], loadingFunds: false, saving: false })} disabled={preFundCorrectionDialog.saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void submitPreFundCorrection()}
+              disabled={preFundCorrectionDialog.saving || preFundCorrectionDialog.loadingFunds || !preFundCorrectionDialog.replacementFundId || !preFundCorrectionDialog.reason.trim()}
+              data-testid="button-confirm-correct-cost-pre-fund"
+            >
+              {preFundCorrectionDialog.saving ? 'Correcting…' : 'Record correction'}
             </Button>
           </DialogFooter>
         </DialogContent>

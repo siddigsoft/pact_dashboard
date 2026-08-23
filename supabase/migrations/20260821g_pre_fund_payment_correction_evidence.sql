@@ -1,13 +1,13 @@
 -- ============================================================================
--- ALIGN PRE-FUND SOURCE PAYMENT LINKS WITH VERIFIED LEDGER SPEND
+-- PRE-FUND PAYMENT CORRECTION EVIDENCE
 -- 2026-08-21
--- Safe to re-run. Prevents payment-filter screens from counting a linked
--- payment whose source request was later cancelled, rejected, or invalidated.
+-- Safe to re-run. Exposes whether an active source-payment event was created
+-- by the protected required-fund flow, without exposing correction authority.
 -- ============================================================================
 
--- This read model deliberately uses the reconciliation ledger, rather than raw
--- transaction rows. It therefore applies the same source validation and
--- reversal handling used to maintain pre_fund_requests.paid_amount.
+-- Keep the established output order intact and append the event key only.
+-- The UI uses this value solely to show correction controls for new controlled
+-- source-payment events; the RPC remains the authorization boundary.
 CREATE OR REPLACE VIEW public.pre_fund_source_payment_links_v
 WITH (security_invoker = true)
 AS
@@ -26,7 +26,6 @@ SELECT
   e.user_id,
   e.created_by,
   e.occurred_at,
-  -- Appended so existing deployments can safely replace this view.
   e.idempotency_key
 FROM public.pre_fund_event_ledger_v e
 JOIN public.pre_fund_requests f ON f.id = e.pre_fund_request_id

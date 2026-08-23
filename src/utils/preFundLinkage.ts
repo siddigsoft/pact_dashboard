@@ -24,6 +24,8 @@ export type PreFundSourcePaymentLink = {
   paymentAmount: number;
   paymentDate: string | null;
   receiptUrl: string | null;
+  /** True only for a new controlled source-payment event, never legacy evidence. */
+  isCorrectable: boolean;
 };
 
 /**
@@ -51,7 +53,7 @@ export async function fetchPreFundSourcePaymentLinks(
 
   const canonicalResults = await Promise.all(chunks.map(chunk => (supabase as any)
     .from('pre_fund_source_payment_links_v')
-    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url')
+    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, idempotency_key')
     .eq('source_table', sourceTable)
     .in('source_id', chunk)));
   const canonicalError = canonicalResults.find(result => result.error)?.error ?? null;
@@ -98,6 +100,7 @@ export async function fetchPreFundSourcePaymentLinks(
       paymentAmount: Number(row.payment_amount ?? 0),
       paymentDate: row.payment_date ?? null,
       receiptUrl: row.receipt_url ?? null,
+      isCorrectable: typeof row.idempotency_key === 'string' && row.idempotency_key.startsWith('source-payment:'),
     }));
 
   // The canonical view is the authority when it is available. Older
@@ -163,6 +166,7 @@ export async function fetchPreFundSourcePaymentLinks(
       paymentAmount: Number(transaction.amount ?? 0),
       paymentDate: transaction.transaction_date ?? null,
       receiptUrl: transaction.receipt_url ?? null,
+      isCorrectable: false,
     }));
   return [...canonicalLinks, ...historicBackLinks];
 }

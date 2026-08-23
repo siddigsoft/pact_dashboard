@@ -948,9 +948,12 @@ SQL
 
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821b_required_pre_fund_payment_links.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821c_align_pre_fund_source_payment_links.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821g_pre_fund_payment_correction_evidence.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821d_atomic_down_payment_payment_workflow.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821e_atomic_paid_down_payment_reopen.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821f_wallet_payment_idempotency_identity.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821h_finance_only_pre_fund_corrections.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821i_allow_partial_operational_cost_payments.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 -- Wallet-backed cancellation: paid source state, wallet evidence, and immutable
@@ -1223,6 +1226,7 @@ END $$;
 DO $$
 DECLARE v_first jsonb; v_second jsonb; v_correction jsonb; v_retry jsonb;
         v_original_id uuid; v_original_amount numeric; v_reversals int; v_active_links int;
+        v_visible_event_key text;
         v_source_status text; v_source_paid numeric; v_first_paid numeric; v_first_available numeric;
         v_second_paid numeric; v_second_available numeric;
 BEGIN
@@ -1239,6 +1243,20 @@ BEGIN
     40, 'SDG', CURRENT_DATE, auth.uid(), NULL, 'Second split payment', 'source-payment:protected-split-two'
   ) INTO v_second;
   v_original_id := (v_first ->> 'transaction_id')::uuid;
+  UPDATE public.profiles SET role = 'fom' WHERE id = auth.uid();
+  BEGIN
+    PERFORM public.correct_required_pre_fund_payment_link_rpc(
+      v_original_id,
+      '10000000-0000-0000-0000-000000000008',
+      'FOM must not correct a fund',
+      'fom-direct-correction-attempt'
+    );
+    RAISE EXCEPTION 'FOM was allowed to correct a Pre-Fund payment';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'FOM was allowed to correct a Pre-Fund payment' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Access denied: Finance role required for Pre-Fund corrections%' THEN RAISE; END IF;
+  END;
+  UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
   SELECT public.correct_required_pre_fund_payment_link_rpc(
     v_original_id,
     '10000000-0000-0000-0000-000000000008',
@@ -1256,6 +1274,9 @@ BEGIN
   SELECT count(*) INTO v_active_links FROM public.pre_fund_source_payment_links_v
   WHERE source_table = 'down_payment_requests'
     AND source_id = '30000000-0000-0000-0000-000000000011';
+  SELECT idempotency_key INTO v_visible_event_key
+  FROM public.pre_fund_source_payment_links_v
+  WHERE payment_event_id = (v_second ->> 'transaction_id')::uuid;
   SELECT status, total_paid_amount INTO v_source_status, v_source_paid
   FROM public.down_payment_requests WHERE id = '30000000-0000-0000-0000-000000000011';
   SELECT paid_amount, available_balance INTO v_first_paid, v_first_available
@@ -1267,6 +1288,7 @@ BEGIN
      OR v_original_amount <> 60
      OR v_reversals <> 1
      OR v_active_links <> 2
+     OR v_visible_event_key <> 'source-payment:protected-split-two'
      OR v_source_status <> 'fully_paid'
      OR v_source_paid <> 100
      OR v_first_paid <> 40
