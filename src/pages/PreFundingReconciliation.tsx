@@ -152,6 +152,33 @@ type UnlinkedPaymentGroups = {
   ef: UnlinkedPayment[];
 };
 
+interface LinkedPaymentFinderResult {
+  event_id: string;
+  original_payment_event_id: string;
+  reversal_of_id: string | null;
+  event_type: 'payment' | 'reversal';
+  link_status: 'active' | 'reversed' | 'reversal';
+  fund_id: string;
+  fund_name: string;
+  amount: number;
+  currency: string;
+  payment_date: string | null;
+  occurred_at: string | null;
+  reference: string | null;
+  description: string | null;
+  receipt_url: string | null;
+  source_table: string | null;
+  source_id: string | null;
+  source_title: string | null;
+  source_status: string | null;
+  submitter_id: string | null;
+  submitter_name: string | null;
+  event_user_id: string | null;
+  event_user_name: string | null;
+  event_created_by: string | null;
+  event_created_by_name: string | null;
+}
+
 const TXN_TYPE_CFG: Record<string, { label: string; color: string; bg: string }> = {
   receipt:       { label: 'Receipt',        color: 'text-emerald-700', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' },
   commitment:    { label: 'Commitment',     color: 'text-violet-700',  bg: 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800' },
@@ -760,6 +787,15 @@ export default function PreFundingReconciliation() {
   const [resettingBalance, setResettingBalance] = useState(false);
   const [openCategories, setOpenCategories]   = useState<Record<string, boolean>>({ ocs: true, dp: true, ef: true });
 
+  // ── Linked payment finder ─────────────────────────────────────────────────
+  // Finance-only, cross-fund, and deliberately read-only. The server RPC uses
+  // the immutable ledger so a search shows the original payment and reversal.
+  const [finderAmount, setFinderAmount] = useState('');
+  const [finderCurrency, setFinderCurrency] = useState(FILTER_ALL);
+  const [finderResults, setFinderResults] = useState<LinkedPaymentFinderResult[]>([]);
+  const [finderSearched, setFinderSearched] = useState(false);
+  const [findingPayments, setFindingPayments] = useState(false);
+
   // ── Finance exception queue ──────────────────────────────────────────────
   const [exceptionQueue, setExceptionQueue]     = useState<ExceptionQueueItem[]>([]);
   const [loadingExceptions, setLoadingExceptions] = useState(false);
@@ -830,6 +866,10 @@ export default function PreFundingReconciliation() {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [transactionFilterMetadata]);
+  const finderCurrencies = useMemo(
+    () => [...new Set(funds.map(fund => fund.currency).filter(Boolean))].sort(),
+    [funds],
+  );
 
   const hasTransactionFilters = stateFilter !== FILTER_ALL || mmpFilter !== FILTER_ALL || Boolean(nameSearch.trim());
   const filteredTransactions = useMemo(() => {
@@ -1637,6 +1677,70 @@ export default function PreFundingReconciliation() {
     finally { setLoadingDrill(false); }
   };
 
+  const handleFindLinkedPayments = async () => {
+    const amount = Number(finderAmount.replace(/,/g, '').trim());
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: 'Enter a valid amount', description: 'Use a payment amount greater than zero, for example 4,000,000.', variant: 'destructive' });
+      return;
+    }
+    setFindingPayments(true);
+    setFinderSearched(true);
+    setFinderResults([]);
+    try {
+      const { data, error } = await (supabase as any).rpc('find_pre_fund_payment_events_rpc', {
+        p_amount: amount,
+        p_currency: finderCurrency === FILTER_ALL ? null : finderCurrency,
+      });
+      if (error) {
+        if (/find_pre_fund_payment_events_rpc|does not exist/i.test(error.message)) {
+          throw new Error('The Linked Payment Finder database migration has not been applied yet. Apply the latest Pre-Fund migration, then try again.');
+        }
+        throw error;
+      }
+      setFinderResults((data ?? []) as LinkedPaymentFinderResult[]);
+    } catch (error: any) {
+      setFinderResults([]);
+      toast({ title: 'Payment search failed', description: error.message ?? 'Unable to search the immutable payment ledger.', variant: 'destructive' });
+    } finally {
+      setFindingPayments(false);
+    }
+  };
+
+  const handleOpenFinderResult = (result: LinkedPaymentFinderResult) => {
+    const possiblePeople: Array<[string | null, string | null]> = [
+      [result.submitter_id, result.submitter_name],
+      [result.event_user_id, result.event_user_name],
+      [result.event_created_by, result.event_created_by_name],
+    ];
+    const people = possiblePeople.filter((person): person is [string, string] => Boolean(person[0] && person[1]));
+    if (people.length > 0) {
+      setProfileMap(previous => {
+        const next = new Map(previous);
+        people.forEach(([id, name]) => next.set(id, name));
+        return next;
+      });
+    }
+    void handleDrillDown({
+      id: result.event_id,
+      pre_fund_request_id: result.fund_id,
+      transaction_type: result.event_type,
+      amount: Number(result.amount),
+      currency: result.currency,
+      reference: result.reference,
+      description: result.description ?? result.source_title,
+      transaction_date: result.payment_date ?? datePart(result.occurred_at),
+      reconciled: false,
+      reconciled_at: null,
+      source_table: result.source_table,
+      source_id: result.source_id,
+      created_at: result.occurred_at ?? new Date().toISOString(),
+      user_id: result.event_user_id,
+      created_by: result.event_created_by,
+      receipt_url: result.receipt_url,
+      gl_journal_entry_id: null,
+    });
+  };
+
   // ── CSV import ───────────────────────────────────────────────────────────
   const parseCsv = (text: string) => {
     const lines = text.trim().split('\n');
@@ -2358,6 +2462,119 @@ export default function PreFundingReconciliation() {
                     </Button>
                   )}
                 </div>
+              )}
+
+              {/* ── Linked Payment Finder ─────────────────────────────────────── */}
+              {canManageExceptions && (
+                <Card className="border-sky-200 dark:border-sky-900" data-testid="panel-linked-payment-finder">
+                  <CardHeader className="px-4 pt-4 pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Search className="h-4 w-4 text-sky-600" />
+                      Linked Payment Finder
+                    </CardTitle>
+                    <p className="text-xs font-normal text-muted-foreground">
+                      Find an exact payment across every Pre-Fund, including any immutable reversal. This lookup never changes a payment, fund, or balance.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        value={finderAmount}
+                        onChange={event => setFinderAmount(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter') void handleFindLinkedPayments(); }}
+                        inputMode="decimal"
+                        placeholder="Exact amount, e.g. 4,000,000"
+                        className="h-9 sm:max-w-xs"
+                        data-testid="input-linked-payment-amount"
+                      />
+                      <Select value={finderCurrency} onValueChange={setFinderCurrency}>
+                        <SelectTrigger className="h-9 w-full sm:w-40" data-testid="select-linked-payment-currency">
+                          <SelectValue placeholder="All currencies" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={FILTER_ALL}>All currencies</SelectItem>
+                          {finderCurrencies.map(currency => (
+                            <SelectItem key={currency} value={currency}>{currency}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={() => void handleFindLinkedPayments()}
+                        disabled={findingPayments}
+                        className="h-9"
+                        data-testid="button-find-linked-payment"
+                      >
+                        {findingPayments ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Search className="mr-1.5 h-4 w-4" />}
+                        {findingPayments ? 'Searching…' : 'Find payment'}
+                      </Button>
+                    </div>
+
+                    {finderSearched && (
+                      <div className="mt-4 border-t pt-3">
+                        {findingPayments ? (
+                          <div className="space-y-2"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
+                        ) : finderResults.length === 0 ? (
+                          <div className="rounded-md border border-dashed px-4 py-5 text-center text-sm text-muted-foreground" data-testid="linked-payment-no-results">
+                            No payment or reversal matched this exact amount{finderCurrency === FILTER_ALL ? '' : ` in ${finderCurrency}`}.
+                          </div>
+                        ) : (
+                          <div className="space-y-2" data-testid="linked-payment-results">
+                            <p className="text-xs text-muted-foreground">
+                              {finderResults.length} immutable ledger event{finderResults.length !== 1 ? 's' : ''} found. A reversed payment appears alongside its compensating reversal.
+                            </p>
+                            {finderResults.map(result => {
+                              const statusStyle = result.link_status === 'active'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : result.link_status === 'reversed'
+                                  ? 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300'
+                                  : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
+                              const statusLabel = result.link_status === 'active'
+                                ? 'Active payment'
+                                : result.link_status === 'reversed'
+                                  ? 'Payment reversed'
+                                  : 'Reversal event';
+                              return (
+                                <div key={result.event_id} className="rounded-md border bg-muted/20 px-3 py-3" data-testid={`linked-payment-result-${result.event_id}`}>
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="font-medium text-sm">{result.source_title ?? result.description ?? 'Pre-Fund payment event'}</p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        Fund: <span className="font-medium text-foreground">{result.fund_name}</span>
+                                        {result.submitter_name && <> · {result.source_table === 'down_payment_requests' ? 'Requested by' : result.source_table === 'operational_cost_submissions' ? 'Submitted by' : 'Paid by'} {result.submitter_name}</>}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-mono text-sm font-semibold">{result.currency} {formatNumber(Number(result.amount), 0)}</p>
+                                      <Badge variant="outline" className={cn('mt-1 h-5 text-[10px] font-medium', statusStyle)}>{statusLabel}</Badge>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatIsoDate(result.payment_date ?? result.occurred_at, 'MMM d, yyyy')}</span>
+                                    <span>{result.source_table ? result.source_table.replace(/_/g, ' ') : 'Manual Pre-Fund event'}</span>
+                                    <span>Source status: {result.source_status?.replace(/_/g, ' ') ?? 'Not recorded'}</span>
+                                    {result.reference && <span className="font-mono">Ref: {result.reference}</span>}
+                                  </div>
+                                  <div className="mt-2 flex justify-end">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-xs"
+                                      onClick={() => handleOpenFinderResult(result)}
+                                      disabled={!result.source_id || !result.source_table}
+                                      data-testid={`button-open-linked-payment-${result.event_id}`}
+                                    >
+                                      <ExternalLink className="mr-1 h-3.5 w-3.5" />Open source details
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
 
               {/* ── Paid outside Pre-Funding coverage ───────────────────────────── */}
