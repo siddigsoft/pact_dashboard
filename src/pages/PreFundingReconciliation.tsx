@@ -843,6 +843,7 @@ export default function PreFundingReconciliation() {
   const [loadingDrill, setLoadingDrill] = useState(false);
   const [removePaymentTxn, setRemovePaymentTxn] = useState<PreFundTransaction | null>(null);
   const [removingPayment, setRemovingPayment] = useState(false);
+  const [compensatedPaymentIds, setCompensatedPaymentIds] = useState<Set<string>>(new Set());
 
   // CSV import
   const [showCsvImport, setShowCsvImport] = useState(false);
@@ -880,10 +881,13 @@ export default function PreFundingReconciliation() {
   // a payment has been compensated, neither its original row nor its reversal
   // should be offered for review, selection, or reconciliation again.
   const reversedPaymentIds = useMemo(() => new Set(
-    transactions
-      .filter(transaction => transaction.transaction_type === 'reversal' && transaction.reversal_of_id)
-      .map(transaction => transaction.reversal_of_id!),
-  ), [transactions]);
+    [
+      ...transactions
+        .filter(transaction => transaction.transaction_type === 'reversal' && transaction.reversal_of_id)
+        .map(transaction => transaction.reversal_of_id!),
+      ...compensatedPaymentIds,
+    ],
+  ), [transactions, compensatedPaymentIds]);
   const activeReconciliationTransactions = useMemo(() => transactions.filter(transaction => {
     if (transaction.transaction_type === 'reversal') return false;
     return !(transaction.transaction_type === 'payment' && reversedPaymentIds.has(transaction.id));
@@ -1076,6 +1080,7 @@ export default function PreFundingReconciliation() {
     // "unassigned" for State/MMP filter purposes.
     setTxns([]);
     setRecons([]);
+    setCompensatedPaymentIds(new Set());
     setTransactionFilterMetadata(new Map());
     setProfileMap(new Map());
     setProfileEmailMap(new Map());
@@ -1092,6 +1097,23 @@ export default function PreFundingReconciliation() {
       ]);
 
       const txns = rawTxns;
+      // The ledger view can omit a compensating reversal when the source has
+      // already returned to Approved. Check the immutable table directly so
+      // an already-reversed payment is never offered as an active action.
+      const paymentIds = txns
+        .filter((transaction: PreFundTransaction) => transaction.transaction_type === 'payment')
+        .map((transaction: PreFundTransaction) => transaction.id);
+      const compensatingReversals = paymentIds.length > 0
+        ? await fetchAllIn((chunk) => supabase
+          .from('pre_fund_transactions')
+          .select('reversal_of_id')
+          .in('reversal_of_id', chunk), paymentIds)
+        : [];
+      const compensatedIds = new Set(
+        (compensatingReversals as any[])
+          .map((reversal: any) => reversal.reversal_of_id as string | null)
+          .filter((paymentId): paymentId is string => Boolean(paymentId)),
+      );
 
       // Source metadata lives on the linked Down Payment / Cost Submission rather
       // than on the immutable Pre-Fund event. Resolve it in batched reads so the
@@ -1222,6 +1244,7 @@ export default function PreFundingReconciliation() {
       setProfileMap(profileNames);
       setProfileEmailMap(profileEmails);
       setTransactionFilterMetadata(filterMetadata);
+      setCompensatedPaymentIds(compensatedIds);
       setTxns(txns);
       setRecons(reconData as any);
     } catch (e: any) {
@@ -1622,9 +1645,24 @@ export default function PreFundingReconciliation() {
         loadExceptions(selectedFund?.id),
       ]);
     } catch (error: any) {
+      const message = error?.message ?? 'The request and its linked payment were not changed.';
+      if (message.includes('No active Pre-Fund payment event is linked')) {
+        toast({
+          title: 'Payment is no longer active',
+          description: 'No fund balance was changed. The payment was already reversed or has no immutable Pre-Fund event, so Reconciliation has been refreshed and will no longer offer removal.',
+          variant: 'destructive',
+        });
+        await Promise.all([
+          loadFunds(),
+          selectedFund ? loadTxns(selectedFund.id) : Promise.resolve(),
+          loadUnlinkedPayments(),
+          loadExceptions(selectedFund?.id),
+        ]);
+        return;
+      }
       toast({
         title: 'Could not remove payment',
-        description: error.message ?? 'The request and its linked payment were not changed.',
+        description: message,
         variant: 'destructive',
       });
     } finally {
