@@ -74,6 +74,7 @@ interface PreFundTransaction {
   source_table: string | null; source_id: string | null; created_at: string;
   user_id: string | null; created_by: string | null; receipt_url: string | null;
   gl_journal_entry_id: string | null;
+  reversal_of_id: string | null;
 }
 interface Reconciliation {
   id: string; pre_fund_request_id: string; period_start: string | null; period_end: string | null;
@@ -875,9 +876,21 @@ export default function PreFundingReconciliation() {
   );
 
   const hasTransactionFilters = stateFilter !== FILTER_ALL || mmpFilter !== FILTER_ALL || Boolean(nameSearch.trim());
+  // Reconciliation is a working queue, not the immutable event history. Once
+  // a payment has been compensated, neither its original row nor its reversal
+  // should be offered for review, selection, or reconciliation again.
+  const reversedPaymentIds = useMemo(() => new Set(
+    transactions
+      .filter(transaction => transaction.transaction_type === 'reversal' && transaction.reversal_of_id)
+      .map(transaction => transaction.reversal_of_id!),
+  ), [transactions]);
+  const activeReconciliationTransactions = useMemo(() => transactions.filter(transaction => {
+    if (transaction.transaction_type === 'reversal') return false;
+    return !(transaction.transaction_type === 'payment' && reversedPaymentIds.has(transaction.id));
+  }), [transactions, reversedPaymentIds]);
   const filteredTransactions = useMemo(() => {
     const normalizedName = nameSearch.trim().toLocaleLowerCase();
-    return transactions.filter(transaction => {
+    return activeReconciliationTransactions.filter(transaction => {
       const metadata = transactionFilterMetadata.get(transaction.id);
       const stateValue = metadata?.state ?? null;
       const mmpValue = metadata?.mmpId ?? null;
@@ -894,7 +907,7 @@ export default function PreFundingReconciliation() {
       if (mmpFilter === FILTER_UNASSIGNED ? mmpValue !== null : mmpFilter !== FILTER_ALL && mmpValue !== mmpFilter) return false;
       return !normalizedName || people.includes(normalizedName);
     });
-  }, [transactions, transactionFilterMetadata, stateFilter, mmpFilter, nameSearch, profileMap]);
+  }, [activeReconciliationTransactions, transactionFilterMetadata, stateFilter, mmpFilter, nameSearch, profileMap]);
 
   const reviewTransactions = useMemo(() => showUnattributed
     ? filteredTransactions.filter(transaction => transaction.transaction_type === 'payment' && !transaction.user_id)
