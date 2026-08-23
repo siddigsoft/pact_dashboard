@@ -43,3 +43,4 @@
 - [postgres-view-column-evolution](postgres-view-column-evolution.md) — CREATE OR REPLACE VIEW cannot insert or reorder existing output columns; preserve them and append new fields.
 - [supabase-in-filter-batching](supabase-in-filter-batching.md) — Large UUID `.in()` filters can fail as browser “Failed to fetch”; batch every related lookup, including fallback paths.
 - [reconciliation-filter-load-atomicity](reconciliation-filter-load-atomicity.md) — Source-derived review filters must publish rows atomically with metadata and discard stale fund loads.
+- [sql-role-normalization-order](sql-role-normalization-order.md) — Lowercase role labels before stripping nonletters in SQL, or human-readable roles like “Super Admin” lose uppercase characters.

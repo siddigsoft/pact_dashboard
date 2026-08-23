@@ -268,6 +268,7 @@ const CostSubmission = () => {
   const isCountryDirector = hasAnyRole(['countryDirector']);
   const isDataCollector   = hasAnyRole(['dataCollector']);
   const isSuperAdmin      = isAdminOrSuperUser || isSuperAdminFn();
+  const isStrictCostSubmissionAdmin = isAdmin || isSuperAdminFn();
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
   const isDataTeam        = hasAnyRole(['dataTeam']);
   const canManagePreFundFilters = isAdmin || isSuperAdminFn();
@@ -342,12 +343,43 @@ const CostSubmission = () => {
       const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
       const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
 
+      // Reconciliation can resolve an Operational Cost Submission by a linked
+      // Pre-Fund payment even when the main list RPC omitted the source row.
+      // The supplemental RPC is restricted to Admins/Super Admins and performs
+      // the active-payment lookup in the database, rather than scanning ledger
+      // rows in the browser.
+      const includePaymentLinkedSources = async (baseRows: OperationalCostSubmission[]) => {
+        if (!isStrictCostSubmissionAdmin) return baseRows;
+
+        const { data, error } = await supabase.rpc('get_admin_payment_linked_operational_cost_submissions');
+        if (error) {
+          const missingRpc = error.code === 'PGRST202'
+            || (error.code === '42883' && /function .*does not exist/i.test(error.message));
+          if (missingRpc) {
+            console.warn('[CostSubmission] Payment-linked visibility migration is not applied yet:', error.message);
+            return baseRows;
+          }
+          throw new Error(`Failed to load payment-linked submissions: ${error.message}`);
+        }
+
+        const knownIds = new Set(baseRows.map(submission => submission.id));
+        const linkedRows = ((data ?? []) as OperationalCostSubmission[])
+          .filter(submission => !knownIds.has(submission.id));
+
+        if (linkedRows.length > 0) {
+          console.info(`[CostSubmission] Added ${linkedRows.length} payment-linked submission(s) missing from the standard list.`);
+        }
+        return [...baseRows, ...linkedRows].sort((a, b) =>
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+      };
+
       if (shouldFetchAll) {
         // Try SECURITY DEFINER RPC first — bypasses RLS
         const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
         console.log(`[CostSubmission] RPC: ${(rpcResult.data as any[] | null)?.length ?? 'null'} rows, error: ${rpcResult.error?.message ?? 'none'} (role: ${currentUser.role})`);
         if (!rpcResult.error && Array.isArray(rpcResult.data)) {
-          return rpcResult.data as OperationalCostSubmission[];
+          return includePaymentLinkedSources(rpcResult.data as OperationalCostSubmission[]);
         }
         console.warn('[CostSubmission] RPC failed, direct query fallback:', rpcResult.error?.message);
         const { data, error } = await supabase
@@ -357,7 +389,7 @@ const CostSubmission = () => {
           .limit(5000);
         console.log(`[CostSubmission] Direct: ${data?.length ?? 'null'} rows, error: ${error?.message ?? 'none'}`);
         if (error) throw new Error(`Failed to load submissions: ${error.message}`);
-        return (data || []) as OperationalCostSubmission[];
+        return includePaymentLinkedSources((data || []) as OperationalCostSubmission[]);
       } else {
         const { data, error } = await supabase
           .from('operational_cost_submissions')
@@ -371,6 +403,28 @@ const CostSubmission = () => {
     },
   });
   // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (!isStrictCostSubmissionAdmin) return;
+
+    const channel = supabase
+      .channel('cost-submission-payment-link-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pre_fund_transactions',
+          filter: 'source_table=eq.operational_cost_submissions',
+        },
+        () => queryClient.invalidateQueries({ queryKey: _opsQueryKey })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isStrictCostSubmissionAdmin, queryClient, _opsQueryKey]);
 
   const [opsGlLogMap, setOpsGlLogMap] = useState<Map<string, string>>(new Map());
   const [mmpFilter, setMmpFilter] = useState<string>('all');
