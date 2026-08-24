@@ -188,6 +188,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824_direct_pre_fund_topups.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824b_fix_direct_pre_fund_topup_country_uuid.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824c_repair_ops_cost_gl_bridge_account_codes.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824d_repair_down_payment_gl_bridge_account_codes.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
