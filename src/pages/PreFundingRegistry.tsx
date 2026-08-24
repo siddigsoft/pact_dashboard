@@ -2454,13 +2454,14 @@ export default function PreFundingRegistry() {
           setDirectTopUpFiles([]);
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <DollarSign className="h-5 w-5" />
               Add Funds Directly
             </DialogTitle>
           </DialogHeader>
+          <div className="min-h-0 overflow-y-auto overscroll-contain pr-1 -mr-1">
           {directTopUpDialog.fund && (() => {
             const fund = directTopUpDialog.fund;
             const hasGlAccounts = !!fund.gl_receipt_account && !!fund.gl_liability_account;
@@ -2558,6 +2559,7 @@ export default function PreFundingRegistry() {
               </div>
             );
           })()}
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
