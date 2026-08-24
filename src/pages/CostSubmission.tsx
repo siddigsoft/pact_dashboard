@@ -1339,7 +1339,8 @@ const CostSubmission = () => {
           // Coordinator/DataCollector submissions: match against ALL supervised hubs
           const isCoordEnumSub = submitterRole.includes('coordinator') || submitterRole.includes('enumerator')
             || submitterRole.includes('datacollector') || submitterRole.includes('fieldstaff')
-            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent');
+            || submitterRole.includes('fieldworker') || submitterRole.includes('fieldagent')
+            || submitterRole.includes('fieldofficer');
           if (isCoordEnumSub) {
             if (myHubIds.length === 0) return false; // Supervisor with no hub assigned cannot see coordinator submissions
             const submissionHubId = getEffectiveSubmissionHubId(o);
@@ -1399,13 +1400,14 @@ const CostSubmission = () => {
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
-    // Coordinator-level roles: coordinator, enumerator, data collector, field staff, field worker
+    // Coordinator-level roles: coordinator, enumerator, data collector, and field staff roles.
     return role.includes('coordinator')
       || role.includes('enumerator')
       || role.includes('datacollector')
       || role.includes('fieldstaff')
       || role.includes('fieldworker')
-      || role.includes('fieldagent');
+      || role.includes('fieldagent')
+      || role.includes('fieldofficer');
   };
 
   const isSupervisorSubmission = (oc: OperationalCostSubmission): boolean => {
