@@ -77,6 +77,8 @@ interface PreFundRequest {
   created_by: string | null;
   holder_user_id: string | null;
   allow_overpay: boolean | null;
+  gl_receipt_account?: string | null;
+  gl_liability_account?: string | null;
 }
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
@@ -938,6 +940,14 @@ export default function PreFundingRegistry() {
   }>({ open: false, fund: null, amount: '', reason: '' });
   const [topUpSubmitting, setTopUpSubmitting] = useState(false);
 
+  // Direct fund-level top-up — this records cash received immediately. It is
+  // deliberately separate from the notification-only Request Top-up flow.
+  const [directTopUpDialog, setDirectTopUpDialog] = useState<{
+    open: boolean; fund: PreFundRequest | null; amount: string; source: string; reason: string; idempotencyKey: string;
+  }>({ open: false, fund: null, amount: '', source: '', reason: '', idempotencyKey: '' });
+  const [directTopUpFiles, setDirectTopUpFiles] = useState<File[]>([]);
+  const [directTopUpSubmitting, setDirectTopUpSubmitting] = useState(false);
+
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
     open: boolean; sourceFund: PreFundRequest | null; destFundId: string; amount: string; reason: string;
@@ -990,7 +1000,7 @@ export default function PreFundingRegistry() {
     try {
       const [fundsRes, ptRes, projRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_requests')
-          .select('id,name,source,amount,currency,usd_to_sdg_rate,available_balance,committed_amount,paid_amount,status,warning_days,period_type_id,period_type_name,start_date,end_date,country_id,project_id,grant_id,matching_scope,cost_category,auto_renewal_mode,auto_renewal_days_before,notes,created_at,created_by,holder_user_id,allow_overpay')
+          .select('id,name,source,amount,currency,usd_to_sdg_rate,available_balance,committed_amount,paid_amount,status,warning_days,period_type_id,period_type_name,start_date,end_date,country_id,project_id,grant_id,matching_scope,cost_category,auto_renewal_mode,auto_renewal_days_before,notes,created_at,created_by,holder_user_id,allow_overpay,gl_receipt_account,gl_liability_account')
           .order('created_at', { ascending: false }),
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
@@ -1150,6 +1160,86 @@ export default function PreFundingRegistry() {
 
   const openTopUp = (f: PreFundRequest) => {
     setTopUpReqDialog({ open: true, fund: f, amount: '', reason: '' });
+  };
+
+  const openDirectTopUp = (fund: PreFundRequest) => {
+    setDirectTopUpFiles([]);
+    setDirectTopUpDialog({
+      open: true,
+      fund,
+      amount: '',
+      source: '',
+      reason: '',
+      idempotencyKey: crypto.randomUUID(),
+    });
+  };
+
+  const handleDirectTopUp = async () => {
+    const { fund, amount, source, reason, idempotencyKey } = directTopUpDialog;
+    if (!fund) return;
+
+    const parsedAmount = Number.parseFloat(amount.replace(/,/g, ''));
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      toast({ title: 'Enter a valid top-up amount', variant: 'destructive' });
+      return;
+    }
+    if (!source.trim()) {
+      toast({ title: 'Enter the funding source', variant: 'destructive' });
+      return;
+    }
+    if (!reason.trim()) {
+      toast({ title: 'Enter the top-up reason', variant: 'destructive' });
+      return;
+    }
+    if (directTopUpFiles.length === 0) {
+      toast({ title: 'Attach a receipt or supporting document', variant: 'destructive' });
+      return;
+    }
+    if (!['active', 'low_balance'].includes(fund.status)) {
+      toast({ title: 'This fund is not eligible for a direct top-up', variant: 'destructive' });
+      return;
+    }
+
+    setDirectTopUpSubmitting(true);
+    try {
+      const documentUrls = await Promise.all(
+        directTopUpFiles.map(async (file, index) => {
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `pre-fund-topups/${fund.id}/${idempotencyKey}-${index}-${safeName}`;
+          const { error: uploadError } = await supabase.storage.from('attachments').upload(path, file, { upsert: true });
+          if (uploadError) throw new Error(`Could not upload "${file.name}": ${uploadError.message}`);
+          return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl;
+        }),
+      );
+
+      const { data, error: rpcError } = await (supabase as any).rpc('record_direct_pre_fund_topup_rpc', {
+        p_fund_id: fund.id,
+        p_amount: parsedAmount,
+        p_funding_source: source.trim(),
+        p_reason: reason.trim(),
+        p_receipt_url: documentUrls[0],
+        p_supporting_document_urls: documentUrls,
+        p_idempotency_key: idempotencyKey,
+      });
+      if (rpcError) throw rpcError;
+      if (data?.success === false) throw new Error(data.error ?? 'The direct top-up could not be posted.');
+
+      toast({
+        title: data?.idempotent ? 'Direct top-up already recorded' : 'Direct top-up recorded',
+        description: `${fund.currency} ${formatNumber(parsedAmount, 0)} was added to "${fund.name}" with a receipt, immutable ledger event, and GL journal entry.`,
+      });
+      setDirectTopUpDialog({ open: false, fund: null, amount: '', source: '', reason: '', idempotencyKey: '' });
+      setDirectTopUpFiles([]);
+      await load();
+    } catch (e: any) {
+      toast({
+        title: 'Could not record direct top-up',
+        description: e?.message ?? 'No fund balance was changed.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDirectTopUpSubmitting(false);
+    }
   };
 
   const handleSubmitTopUp = async () => {
@@ -2057,7 +2147,12 @@ export default function PreFundingRegistry() {
                             </DropdownMenuItem>
                           )}
                           {['active', 'low_balance'].includes(f.status) && canManage && (
-                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-emerald-700" onClick={() => openTopUp(f)} data-testid={`menu-topup-${f.id}`}>
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-emerald-700" onClick={() => openDirectTopUp(f)} data-testid={`menu-direct-topup-${f.id}`}>
+                              <DollarSign className="h-3.5 w-3.5" />Add Funds (Direct)
+                            </DropdownMenuItem>
+                          )}
+                          {['active', 'low_balance'].includes(f.status) && canManage && (
+                            <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => openTopUp(f)} data-testid={`menu-topup-${f.id}`}>
                               <TrendingUp className="h-3.5 w-3.5" />Request Top-up
                             </DropdownMenuItem>
                           )}
@@ -2347,6 +2442,140 @@ export default function PreFundingRegistry() {
               data-testid="button-confirm-transfer"
             >
               {transferring ? 'Transferring…' : 'Confirm Transfer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Direct Fund-Level Top-up Dialog ────────────────────────────────── */}
+      <Dialog open={directTopUpDialog.open} onOpenChange={open => {
+        if (!open && !directTopUpSubmitting) {
+          setDirectTopUpDialog({ open: false, fund: null, amount: '', source: '', reason: '', idempotencyKey: '' });
+          setDirectTopUpFiles([]);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <DollarSign className="h-5 w-5" />
+              Add Funds Directly
+            </DialogTitle>
+          </DialogHeader>
+          {directTopUpDialog.fund && (() => {
+            const fund = directTopUpDialog.fund;
+            const hasGlAccounts = !!fund.gl_receipt_account && !!fund.gl_liability_account;
+            return (
+              <div className="space-y-4 py-1">
+                <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <AlertDescription className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
+                    This records money already received into the fund. It will increase the fund balance and create an immutable receipt event, audit record, and GL journal entry. It is <strong>not</strong> a request for funding.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm space-y-1">
+                  <p className="font-medium">{fund.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Current available balance: <span className="font-semibold text-foreground">{fund.currency} {formatNumber(fund.available_balance, 0)}</span>
+                  </p>
+                </div>
+
+                {!hasGlAccounts && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      Configure the fund’s Receipt / Bank and Donor Liability GL accounts before recording a direct top-up.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label>Amount ({fund.currency}) *</Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={directTopUpDialog.amount}
+                    onChange={e => setDirectTopUpDialog(p => ({ ...p, amount: e.target.value.replace(/[^0-9.]/g, '') }))}
+                    disabled={directTopUpSubmitting}
+                    data-testid="input-direct-topup-amount"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Funding source *</Label>
+                  <Input
+                    placeholder="e.g. Donor bank transfer, grant payment"
+                    value={directTopUpDialog.source}
+                    onChange={e => setDirectTopUpDialog(p => ({ ...p, source: e.target.value }))}
+                    disabled={directTopUpSubmitting}
+                    data-testid="input-direct-topup-source"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Reason / reference *</Label>
+                  <Textarea
+                    rows={3}
+                    placeholder="Explain the purpose of this top-up…"
+                    value={directTopUpDialog.reason}
+                    onChange={e => setDirectTopUpDialog(p => ({ ...p, reason: e.target.value }))}
+                    disabled={directTopUpSubmitting}
+                    data-testid="input-direct-topup-reason"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Receipt or supporting document *</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    multiple
+                    disabled={directTopUpSubmitting || !hasGlAccounts}
+                    onChange={e => setDirectTopUpFiles(Array.from(e.target.files ?? []))}
+                    data-testid="input-direct-topup-document"
+                  />
+                  <p className="text-[11px] text-muted-foreground">At least one document is required. All selected document references are retained with the ledger event.</p>
+                </div>
+
+                {directTopUpFiles.length > 0 && (
+                  <div className="rounded-md border border-border bg-muted/40 divide-y divide-border max-h-36 overflow-y-auto">
+                    {directTopUpFiles.map((file, index) => (
+                      <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                        <span className="truncate">{file.name}</span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDirectTopUpFiles(files => files.filter((_, fileIndex) => fileIndex !== index))}
+                          disabled={directTopUpSubmitting}
+                          aria-label={`Remove ${file.name}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDirectTopUpDialog({ open: false, fund: null, amount: '', source: '', reason: '', idempotencyKey: '' });
+                setDirectTopUpFiles([]);
+              }}
+              disabled={directTopUpSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleDirectTopUp}
+              disabled={directTopUpSubmitting || !directTopUpDialog.fund?.gl_receipt_account || !directTopUpDialog.fund?.gl_liability_account}
+              data-testid="button-confirm-direct-topup"
+            >
+              {directTopUpSubmitting ? 'Recording…' : 'Record Top-up'}
             </Button>
           </DialogFooter>
         </DialogContent>

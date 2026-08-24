@@ -55,7 +55,7 @@ CREATE TABLE public.pre_fund_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, currency text NOT NULL,
   amount numeric NOT NULL, available_balance numeric NOT NULL DEFAULT 0, paid_amount numeric NOT NULL DEFAULT 0,
   committed_amount numeric NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'active',
-  gl_liability_account text, gl_receipt_account text, holder_user_id uuid REFERENCES auth.users(id),
+  country_id uuid, gl_liability_account text, gl_receipt_account text, holder_user_id uuid REFERENCES auth.users(id),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.pre_fund_transactions (
@@ -91,7 +91,10 @@ CREATE TABLE public.operational_cost_submissions (
   description text, amount_cents bigint NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'SDG',
   submitted_by uuid REFERENCES auth.users(id), reference_number text
 );
-CREATE TABLE public.acct_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE);
+CREATE TABLE public.acct_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text,
+  country_id uuid, is_active boolean NOT NULL DEFAULT true, is_postable boolean NOT NULL DEFAULT true
+);
 CREATE TABLE public.acct_fiscal_periods (
   id uuid PRIMARY KEY,
   status text NOT NULL,
@@ -104,7 +107,7 @@ CREATE TABLE public.acct_funds (
 );
 CREATE TABLE public.acct_journal_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), description_en text, description_ar text, posting_date date,
-  period_id uuid NOT NULL REFERENCES public.acct_fiscal_periods(id),
+  period_id uuid NOT NULL REFERENCES public.acct_fiscal_periods(id), country_id uuid,
   status text, source_type text, source_id uuid, idempotency_key text UNIQUE, created_by uuid
 );
 CREATE TABLE public.acct_journal_lines (
@@ -178,6 +181,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823g_open_cost_submission_pre_fund_payments.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823h_add_fiscal_period_to_pre_fund_payment_gl.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823i_add_accounting_fund_to_pre_fund_journal_lines.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824_direct_pre_fund_topups.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -1378,6 +1382,178 @@ BEGIN
     IF SQLERRM = 'immutable original payment was updated' THEN RAISE; END IF;
     IF SQLERRM NOT LIKE 'Pre-fund payment events are immutable%' THEN RAISE; END IF;
   END;
+END $$;
+
+-- A direct top-up is a new receipt event, not a notification-only top-up
+-- request or an allocation change. It must commit a fund increase, audit row,
+-- journal entry, and receipt document references exactly once.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, status,
+  country_id, gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000013', 'Direct Top-Up Regression Fund',
+  'SDG', 1000, 1000, 0, 'low_balance',
+  '60000000-0000-0000-0000-000000000001', '2400', '1200'
+);
+-- Duplicate country-local codes must take precedence over their global
+-- counterparts when the top-up creates GL lines.
+INSERT INTO public.acct_accounts (code, country_id) VALUES
+  ('1200', '60000000-0000-0000-0000-000000000001'),
+  ('2400', '60000000-0000-0000-0000-000000000001');
+SELECT public.record_direct_pre_fund_topup_rpc(
+  '10000000-0000-0000-0000-000000000013',
+  250,
+  'Donor bank transfer',
+  'Grant tranche received',
+  'https://example.test/receipt-primary.pdf',
+  jsonb_build_array(
+    'https://example.test/receipt-primary.pdf',
+    'https://example.test/receipt-supporting.pdf'
+  ),
+  'direct-topup-regression-event'
+);
+-- The same retry key must never add the money a second time.
+SELECT public.record_direct_pre_fund_topup_rpc(
+  '10000000-0000-0000-0000-000000000013',
+  250,
+  'Donor bank transfer',
+  'Grant tranche received',
+  'https://example.test/receipt-primary.pdf',
+  jsonb_build_array('https://example.test/receipt-primary.pdf'),
+  'direct-topup-regression-event'
+);
+DO $$
+DECLARE
+  v_amount numeric;
+  v_available numeric;
+  v_status text;
+  v_events integer;
+  v_document_count integer;
+  v_audits integer;
+  v_journals integer;
+  v_lines integer;
+  v_bridge integer;
+  v_snapshot_funded numeric;
+  v_snapshot_available numeric;
+  v_journal_country uuid;
+  v_country_scoped_lines integer;
+BEGIN
+  SELECT amount, available_balance, status
+  INTO v_amount, v_available, v_status
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000013';
+  SELECT count(*),
+         COALESCE(MAX(jsonb_array_length(event_metadata -> 'supporting_document_urls')), 0)
+  INTO v_events, v_document_count
+  FROM public.pre_fund_transactions
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000013'
+    AND transaction_type = 'receipt';
+  SELECT count(*) INTO v_audits
+  FROM public.pre_fund_event_audit audit
+  JOIN public.pre_fund_transactions txn ON txn.id = audit.transaction_id
+  WHERE txn.pre_fund_request_id = '10000000-0000-0000-0000-000000000013'
+    AND audit.action = 'insert';
+  SELECT count(*) INTO v_journals
+  FROM public.acct_journal_entries
+  WHERE idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
+  SELECT count(*) INTO v_lines
+  FROM public.acct_journal_lines lines
+  JOIN public.acct_journal_entries entries ON entries.id = lines.entry_id
+  WHERE entries.idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
+  SELECT country_id INTO v_journal_country
+  FROM public.acct_journal_entries
+  WHERE idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
+  SELECT count(*) INTO v_country_scoped_lines
+  FROM public.acct_journal_lines lines
+  JOIN public.acct_journal_entries entries ON entries.id = lines.entry_id
+  JOIN public.acct_accounts accounts ON accounts.id = lines.account_id
+  WHERE entries.idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event'
+    AND accounts.country_id = '60000000-0000-0000-0000-000000000001';
+  SELECT count(*) INTO v_bridge
+  FROM public.acct_gl_bridge_log bridge
+  JOIN public.pre_fund_transactions txn ON txn.id = bridge.source_id
+  WHERE txn.pre_fund_request_id = '10000000-0000-0000-0000-000000000013'
+    AND bridge.event_type = 'pre_fund_direct_topup_received';
+  SELECT funded_amount, verified_available_balance
+  INTO v_snapshot_funded, v_snapshot_available
+  FROM public.pre_fund_balance_snapshot_v
+  WHERE fund_id = '10000000-0000-0000-0000-000000000013';
+
+  IF v_amount <> 1250 OR v_available <> 1250 OR v_status <> 'active'
+     OR v_events <> 1 OR v_document_count <> 2 OR v_audits <> 1
+     OR v_journals <> 1 OR v_lines <> 2 OR v_bridge <> 1
+     OR v_journal_country <> '60000000-0000-0000-0000-000000000001'
+     OR v_country_scoped_lines <> 2
+     OR v_snapshot_funded <> 1250 OR v_snapshot_available <> 1250 THEN
+    RAISE EXCEPTION 'direct top-up assertion failed: fund %/%/%, events %, documents %, audit %, journals %, lines %, bridge %, journal country %, scoped lines %, snapshot %/%',
+      v_amount, v_available, v_status, v_events, v_document_count, v_audits,
+      v_journals, v_lines, v_bridge, v_journal_country, v_country_scoped_lines,
+      v_snapshot_funded, v_snapshot_available;
+  END IF;
+END $$;
+INSERT INTO public.acct_funds (id, is_active)
+VALUES ('50000000-0000-0000-0000-000000000002', true);
+DO $$
+DECLARE v_amount numeric; v_available numeric;
+BEGIN
+  BEGIN
+    PERFORM public.record_direct_pre_fund_topup_rpc(
+      '10000000-0000-0000-0000-000000000013',
+      10, 'Invalid accounting setup', 'Must be rejected',
+      'https://example.test/multiple-active-funds.pdf', '[]'::jsonb, 'direct-topup-multiple-active-funds'
+    );
+    RAISE EXCEPTION 'multiple active accounting funds accepted a direct top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'multiple active accounting funds accepted a direct top-up' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Exactly one active Accounting Fund must be configured for Pre-Fund top-up posting%' THEN RAISE; END IF;
+  END;
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000013';
+  IF v_amount <> 1250 OR v_available <> 1250 THEN
+    RAISE EXCEPTION 'ambiguous accounting fund setup changed balance: %/%', v_amount, v_available;
+  END IF;
+END $$;
+DELETE FROM public.acct_funds WHERE id = '50000000-0000-0000-0000-000000000002';
+UPDATE public.profiles SET role = 'fom' WHERE id = auth.uid();
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.record_direct_pre_fund_topup_rpc(
+      '10000000-0000-0000-0000-000000000013',
+      10, 'Disallowed caller', 'Must be rejected',
+      'https://example.test/blocked.pdf', '[]'::jsonb, 'direct-topup-fom-blocked'
+    );
+    RAISE EXCEPTION 'FOM was allowed to record a direct top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'FOM was allowed to record a direct top-up' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Access denied: Finance, Admin, or Super Admin role required%' THEN RAISE; END IF;
+  END;
+END $$;
+UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
+UPDATE public.pre_fund_requests
+SET status = 'closed'
+WHERE id = '10000000-0000-0000-0000-000000000013';
+DO $$
+DECLARE v_amount numeric; v_available numeric;
+BEGIN
+  BEGIN
+    PERFORM public.record_direct_pre_fund_topup_rpc(
+      '10000000-0000-0000-0000-000000000013',
+      10, 'Closed fund attempt', 'Must be rejected',
+      'https://example.test/closed.pdf', '[]'::jsonb, 'direct-topup-closed-blocked'
+    );
+    RAISE EXCEPTION 'closed fund accepted a direct top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'closed fund accepted a direct top-up' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Direct top-ups are only allowed for active or low-balance funds%' THEN RAISE; END IF;
+  END;
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000013';
+  IF v_amount <> 1250 OR v_available <> 1250 THEN
+    RAISE EXCEPTION 'rejected direct top-up changed closed fund balance: %/%', v_amount, v_available;
+  END IF;
 END $$;
 SQL
 
