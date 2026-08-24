@@ -95,6 +95,8 @@ CREATE TABLE public.operational_cost_submissions (
 );
 CREATE TABLE public.acct_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text,
+  name_en text NOT NULL DEFAULT '', name_ar text NOT NULL DEFAULT '',
+  account_type text, subtype text, parent_id uuid,
   country_id uuid, is_active boolean NOT NULL DEFAULT true, is_postable boolean NOT NULL DEFAULT true
 );
 CREATE TABLE public.acct_fiscal_periods (
@@ -185,6 +187,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823i_add_accounting_fund_to_pre_fund_journal_lines.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824_direct_pre_fund_topups.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824b_fix_direct_pre_fund_topup_country_uuid.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824c_repair_ops_cost_gl_bridge_account_codes.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
