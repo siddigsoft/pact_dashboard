@@ -16,6 +16,8 @@ import { exportToExcel } from '@/utils/report-export';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
+import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 
 interface TbRow {
   account_id: string; account_code: string; account_name_en: string; account_name_ar: string;
@@ -65,8 +67,8 @@ export default function AccountingFinancialStatements() {
       const am: Record<string, AccountMeta> = {};
       for (const a of (aRes.data ?? [])) am[a.id] = a as AccountMeta;
       setAccountsMeta(am);
-      const firstOpen = (pRes.data ?? []).find((p: any) => p.status === 'open' || p.status === 'soft_closed');
-      if (firstOpen) setPeriodId(firstOpen.id);
+       const defaultPeriod = getDefaultAccountingPeriod((pRes.data ?? []) as Period[]);
+       if (defaultPeriod) setPeriodId(defaultPeriod.id);
       setBootstrap(false);
     })();
   }, []);
@@ -391,7 +393,14 @@ export default function AccountingFinancialStatements() {
         <div className="text-center text-muted-foreground py-16 text-sm">Select a fiscal period to generate financial statements</div>
       ) : (
         <Tabs defaultValue="income">
-          <TabsList className="mb-4">
+          <AccountingReportReadiness
+            periodId={periodId}
+            periodStart={selectedPeriod?.start_date ?? ''}
+            periodEnd={selectedPeriod?.end_date ?? ''}
+            hasRows={tb.length > 0}
+          />
+
+          <TabsList className="mb-4 mt-4">
             <TabsTrigger value="income" data-testid="tab-income"><TrendingUp className="h-3.5 w-3.5 mr-1.5" />Income Statement · قائمة الدخل</TabsTrigger>
             <TabsTrigger value="balance" data-testid="tab-balance"><Scale className="h-3.5 w-3.5 mr-1.5" />Balance Sheet · الميزانية العمومية</TabsTrigger>
           </TabsList>

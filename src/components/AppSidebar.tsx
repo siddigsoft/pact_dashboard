@@ -152,7 +152,6 @@
     'analytics-parent', 'admin-parent', 'help-parent', 'superadmin-parent',
     'super-admin',
     'finance-accounting',
-    'finance-accounting-core',
     'finance-accounting-ops',
     'finance-accounting-p2p',
     'finance-accounting-controls',
@@ -617,7 +616,7 @@
       if (!isHidden('/accounting/coa'))                coreItems.push({ id: 'accounting-coa',         title: 'Chart of Accounts',    url: '/accounting?tab=coa',                  icon: BarChart3,       priority: 3,  isPinned: isPinned('/accounting?tab=coa') });
       if (!isHidden('/accounting/trial-balance'))      coreItems.push({ id: 'accounting-trial-bal',   title: 'Trial Balance',        url: '/accounting?tab=trial-balance',        icon: TrendingUp,      priority: 4,  isPinned: isPinned('/accounting?tab=trial-balance') });
       if (!isHidden('/accounting/ledger'))             coreItems.push({ id: 'accounting-ledger',      title: 'General Ledger',       url: '/accounting?tab=ledger',               icon: BookOpen,        priority: 5,  isPinned: isPinned('/accounting?tab=ledger') });
-      if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Financial Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
+      if (!isHidden('/accounting/reports'))            coreItems.push({ id: 'accounting-reports',     title: 'Reports & Statements', url: '/accounting?tab=reports',              icon: FileText,        priority: 6,  isPinned: isPinned('/accounting?tab=reports') });
       if (!isHidden('/accounting/fiscal-years'))       coreItems.push({ id: 'accounting-fiscal-yrs',  title: 'Fiscal Years',         url: '/accounting?tab=fiscal-years',         icon: Calendar,        priority: 7,  isPinned: isPinned('/accounting?tab=fiscal-years') });
       if (!isHidden('/accounting/search'))             coreItems.push({ id: 'accounting-search',      title: 'Quick Search',         url: '/accounting?tab=search',               icon: Search,          priority: 8,  isPinned: isPinned('/accounting?tab=search') });
       if (coreItems.length) groups.push({ id: 'finance-accounting-core', label: 'Core Ledger', order: 5.50, items: coreItems, parentGroup: 'accounting' } as any);

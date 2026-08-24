@@ -16,6 +16,8 @@ import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFor
 import { ensureArabicFont, setArabicFont, setLatinFont, ARABIC_FONT_NAME } from '@/lib/jspdfArabic';
 import { cn } from '@/lib/utils';
 import { exportToExcel } from '@/utils/report-export';
+import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
+import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
@@ -72,8 +74,8 @@ export default function AccountingTrialBalance() {
       const am: Record<string, AccountMeta> = {};
       for (const a of (ares.data ?? [])) am[a.id] = { ...a, country_id: a.country_id ?? null } as AccountMeta;
       setAccountsMeta(am);
-      const firstOpen = (pres.data ?? []).find((p: any) => p.status === 'open' || p.status === 'soft_closed');
-      if (firstOpen) setPeriodId(firstOpen.id);
+       const defaultPeriod = getDefaultAccountingPeriod((pres.data ?? []) as Period[]);
+       if (defaultPeriod) setPeriodId(defaultPeriod.id);
       setBootstrap(false);
     })();
     return () => { cancel = true; };
@@ -342,7 +344,12 @@ export default function AccountingTrialBalance() {
           ) : !periodId ? (
             <div className="text-center py-12 text-muted-foreground text-sm" data-testid="text-no-period">Pick a fiscal period to compute the trial balance.</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground text-sm" data-testid="text-empty">No activity in this period under the chosen fund filter.</div>
+            <AccountingReportReadiness
+              periodId={periodId}
+              periodStart={periods.find(p => p.id === periodId)?.start_date ?? ''}
+              periodEnd={periods.find(p => p.id === periodId)?.end_date ?? ''}
+              hasRows={false}
+            />
           ) : (
             <div className="border rounded-md overflow-x-auto">
               <table className="w-full text-sm">

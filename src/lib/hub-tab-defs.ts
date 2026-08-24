@@ -288,7 +288,7 @@ export const HUB_TAB_REGISTRY: HubDef[] = [
           { tabId: 'journal-items',       label: 'Journal Items',        description: 'Flat view of all individual journal lines.' },
           { tabId: 'trial-balance',       label: 'Trial Balance',        description: 'Account balances verification.' },
           { tabId: 'ledger',              label: 'General Ledger',       description: 'Posted transactions per account.' },
-          { tabId: 'reports',             label: 'Financial Statements', description: 'Income statement, balance sheet, cash flows.' },
+          { tabId: 'reports',             label: 'Reports & Statements', description: 'Income statement, balance sheet, and cash-flow reporting.' },
           { tabId: 'fiscal-years',        label: 'Fiscal Years',         description: 'Configure fiscal years and accounting periods.' },
           { tabId: 'search',              label: 'Accounting Search',    description: 'Search across all transactions and accounts.' },
           { tabId: 'recurring-journals',  label: 'Recurring Journals',   description: 'Schedule automatically repeating journal entries.' },

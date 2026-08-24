@@ -157,7 +157,7 @@ const SECTIONS: SectionDef[] = [
         description: 'Drill into every posted transaction for any account over a selected date range, with full source references and running balance.',
       },
       {
-        id: 'reports', label: 'Financial Statements', icon: FileText,
+        id: 'reports', label: 'Reports & Statements', icon: FileText,
         description: 'Generate standard financial statements — income statement, balance sheet, and statement of cash flows — for any fiscal period or custom date range.',
       },
       {

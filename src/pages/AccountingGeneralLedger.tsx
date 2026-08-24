@@ -22,6 +22,8 @@ import {
   useGlLedgerQuery,
 } from '@/hooks/useAccountingQueries';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
+import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
 
 const PAGE_SIZE = 100;
 
@@ -46,10 +48,8 @@ export default function AccountingGeneralLedger() {
 
   useEffect(() => {
     if (periodInit || !bootstrapQuery.data) return;
-    const firstOpen = bootstrapQuery.data.periods.find(
-      (p) => p.status === 'open' || p.status === 'soft_closed'
-    );
-    if (firstOpen) setPeriodId(firstOpen.id);
+    const defaultPeriod = getDefaultAccountingPeriod(bootstrapQuery.data.periods);
+    if (defaultPeriod) setPeriodId(defaultPeriod.id);
     const preAcct = searchParams.get('account');
     if (preAcct) setAccountId(preAcct);
     setPeriodInit(true);
@@ -301,7 +301,12 @@ export default function AccountingGeneralLedger() {
       ) : !accountId ? (
         <div className="text-center text-muted-foreground py-16 text-sm">Select an account and period, then click Run Ledger</div>
       ) : lines.length === 0 && !loading ? (
-        <div className="text-center text-muted-foreground py-16 text-sm">No posted transactions found for this account in the selected period.</div>
+        <AccountingReportReadiness
+          periodId={periodId}
+          periodStart={selectedPeriod?.start_date ?? ''}
+          periodEnd={selectedPeriod?.end_date ?? ''}
+          hasRows={false}
+        />
       ) : (
         <Card>
           <CardHeader className="pb-2 pt-3 px-4">
