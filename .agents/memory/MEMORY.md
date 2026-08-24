@@ -48,4 +48,5 @@
 - [ocs-payment-fund-eligibility](ocs-payment-fund-eligibility.md) — Cost Submissions can use any active same-currency fund with balance; personal allocation remains a Down Payment rule.
 - [pre-fund-journal-period](pre-fund-journal-period.md) — Pre-Fund GL entries must receive a fiscal period matching the posting date before journal NOT NULL rules run.
 - [pre-fund-journal-fund](pre-fund-journal-fund.md) — Pre-Fund GL lines use the sole active Accounting Fund Registry ID, never the operational Pre-Fund request ID.
+- [pre-fund-country-id-normalization](pre-fund-country-id-normalization.md) — Legacy Pre-Fund country IDs may be text while accounting country IDs are UUIDs; normalize at the GL boundary.
 - [reconciliation-compensated-events](reconciliation-compensated-events.md) — Source status changes can hide reversal rows from the ledger view; verify compensation directly before offering actions.

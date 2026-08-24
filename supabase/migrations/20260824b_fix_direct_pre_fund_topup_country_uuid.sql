@@ -1,48 +1,5 @@
--- ============================================================================
--- DIRECT PRE-FUND TOP-UPS
--- ============================================================================
--- Records money already received into an eligible fund. This is intentionally
--- separate from the existing "Request Top-up" notification workflow and from
--- staff allocation top-ups. The event, GL posting, balance update, and audit
--- trail are committed together.
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION public._assert_direct_pre_fund_top_up_role()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_role TEXT;
-BEGIN
-  -- Automated finance jobs may use the service-role JWT. Human callers are
-  -- intentionally narrower than the general finance helper: only Finance,
-  -- Admin, and Super Admin may increase a fund balance directly.
-  IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
-    RETURN;
-  END IF;
-
-  SELECT lower(trim(role)) INTO v_role
-  FROM public.profiles
-  WHERE id = auth.uid()
-  LIMIT 1;
-
-  IF v_role IS NULL OR v_role NOT IN (
-    'super_admin', 'superadmin',
-    'admin', 'administrator',
-    'finance', 'finance admin',
-    'financialadmin', 'financial_admin'
-  ) THEN
-    RAISE EXCEPTION 'Access denied: Finance, Admin, or Super Admin role required (role="%").',
-      COALESCE(v_role, '<null>');
-  END IF;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public._assert_direct_pre_fund_top_up_role() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public._assert_direct_pre_fund_top_up_role() TO authenticated;
-
+-- Correct the direct top-up RPC for deployments where
+-- pre_fund_requests.country_id is stored as text but accounting uses UUIDs.
 CREATE OR REPLACE FUNCTION public.record_direct_pre_fund_topup_rpc(
   p_fund_id UUID,
   p_amount NUMERIC,
@@ -72,9 +29,6 @@ DECLARE
 BEGIN
   PERFORM public._assert_direct_pre_fund_top_up_role();
 
-  -- PostgreSQL numeric accepts NaN (and, on supported versions, infinities).
-  -- NaN compares above ordinary values, so a positive-only check alone would
-  -- let it corrupt the immutable event, GL lines, and fund balances.
   IF p_amount IS NULL
      OR p_amount::text IN ('NaN', 'Infinity', '-Infinity')
      OR p_amount <= 0 THEN
@@ -136,14 +90,13 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Fund not found.';
   END IF;
-  -- Some existing deployments store pre_fund_requests.country_id as text,
-  -- while accounting journal country_id is uuid. Normalize at the boundary
-  -- before account scoping and journal insertion.
+
   BEGIN
     v_country_id := NULLIF(to_jsonb(v_fund) ->> 'country_id', '')::uuid;
   EXCEPTION WHEN invalid_text_representation THEN
     RAISE EXCEPTION 'Fund country_id must be a valid country UUID.';
   END;
+
   IF v_fund.status NOT IN ('active', 'low_balance') THEN
     RAISE EXCEPTION 'Direct top-ups are only allowed for active or low-balance funds (current status="%").',
       v_fund.status;
@@ -184,6 +137,7 @@ BEGIN
     AND (country_id = v_country_id OR country_id IS NULL)
   ORDER BY CASE WHEN country_id = v_country_id THEN 0 ELSE 1 END
   LIMIT 1;
+
   SELECT id INTO v_liability_account_id
   FROM public.acct_accounts
   WHERE code = v_fund.gl_liability_account

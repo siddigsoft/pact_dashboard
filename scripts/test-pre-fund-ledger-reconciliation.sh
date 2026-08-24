@@ -55,7 +55,9 @@ CREATE TABLE public.pre_fund_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, currency text NOT NULL,
   amount numeric NOT NULL, available_balance numeric NOT NULL DEFAULT 0, paid_amount numeric NOT NULL DEFAULT 0,
   committed_amount numeric NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'active',
-  country_id uuid, gl_liability_account text, gl_receipt_account text, holder_user_id uuid REFERENCES auth.users(id),
+  -- Matches the legacy production pre-fund schema. The direct top-up RPC must
+  -- normalize this text country ID before writing accounting UUID columns.
+  country_id text, gl_liability_account text, gl_receipt_account text, holder_user_id uuid REFERENCES auth.users(id),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.pre_fund_transactions (
@@ -182,6 +184,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823h_add_fiscal_period_to_pre_fund_payment_gl.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260823i_add_accounting_fund_to_pre_fund_journal_lines.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824_direct_pre_fund_topups.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824b_fix_direct_pre_fund_topup_country_uuid.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
