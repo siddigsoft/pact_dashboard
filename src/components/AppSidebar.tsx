@@ -364,6 +364,8 @@
     const isAdmin = hasRole('admin');
     const isICT = hasRole('ict');
     const isFinancialAdmin = hasRole('financialAdmin');
+    const isFinance = hasRole('finance');
+    const isAccountant = hasRole('accountant');
     const isAuditor = hasRole('auditor');
     const isDataCollector = hasRole('dataCollector');
     const isCoordinator = hasRole('coordinator');
@@ -605,7 +607,9 @@
     if (preFundItems.length) groups.push({ id: 'finance-prefunding', label: 'Pre-Funding', order: 5.45, items: preFundItems, parentGroup: 'finance' } as any);
 
     // ── Accounting module — 5 sections mirroring AccountingHub ───────────────
-    const acctAccess = isSuperAdmin || isAdmin;
+    // Keep navigation aligned with the Accounting route's read gate. Individual
+    // panels continue to enforce their own action-level permissions.
+    const acctAccess = isSuperAdmin || isAdmin || isFinance || isFinancialAdmin || isAccountant || isAuditor;
     const acctAuditAccess = acctAccess;
 
     if (acctAccess) {

@@ -18,6 +18,7 @@ import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { getDefaultAccountingPeriod } from '@/lib/accountingReporting';
 import { AccountingReportReadiness } from '@/components/accounting/AccountingReportReadiness';
+import { calculateBalanceSheet, statementNetBalance } from '@/lib/accountingStatements';
 
 interface TbRow {
   account_id: string; account_code: string; account_name_en: string; account_name_ar: string;
@@ -31,10 +32,7 @@ interface Fund { id: string; code: string; name_en: string; name_ar: string }
 //   asset/expense → debit-normal → positive net = debit > credit
 //   liability/equity/revenue → credit-normal → positive net = credit > debit
 function netBalance(row: TbRow, type: string): number {
-  const dr = Number(row.debit_total) || 0;
-  const cr = Number(row.credit_total) || 0;
-  if (type === 'asset' || type === 'expense') return dr - cr;
-  return cr - dr;
+  return statementNetBalance(row, type);
 }
 
 export default function AccountingFinancialStatements() {
@@ -48,6 +46,7 @@ export default function AccountingFinancialStatements() {
   const [periodId, setPeriodId] = useState('');
   const [fundId, setFundId] = useState('all');
   const [tb, setTb] = useState<TbRow[]>([]);
+  const [balanceSheetTb, setBalanceSheetTb] = useState<TbRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [bootstrap, setBootstrap] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,14 +76,38 @@ export default function AccountingFinancialStatements() {
     if (!periodId) return;
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase.rpc('acct_trial_balance' as any, {
-      p_period_id: periodId,
-      p_branch_id: null,
-      p_fund_id: fundId === 'all' ? null : fundId,
-    } as any);
-    if (err) setError(err.message);
-    setTb((data ?? []) as TbRow[]);
-    setLoading(false);
+    try {
+      const selectedFundId = fundId === 'all' ? null : fundId;
+      const [incomeResult, balanceSheetResult] = await Promise.all([
+        supabase.rpc('acct_trial_balance' as any, {
+          p_period_id: periodId,
+          p_branch_id: null,
+          p_fund_id: selectedFundId,
+        } as any),
+        supabase.rpc('acct_balance_sheet_as_of' as any, {
+          p_period_id: periodId,
+          p_fund_id: selectedFundId,
+        } as any),
+      ]);
+      if (incomeResult.error || balanceSheetResult.error) {
+        setError(
+          incomeResult.error?.message
+            ?? balanceSheetResult.error?.message
+            ?? 'Unable to load financial statements.',
+        );
+        setTb([]);
+        setBalanceSheetTb([]);
+      } else {
+        setTb((incomeResult.data ?? []) as TbRow[]);
+        setBalanceSheetTb((balanceSheetResult.data ?? []) as TbRow[]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load financial statements.');
+      setTb([]);
+      setBalanceSheetTb([]);
+    } finally {
+      setLoading(false);
+    }
   }, [periodId, fundId]);
 
   useEffect(() => { if (!bootstrap && periodId) void runReport(); }, [periodId, fundId, bootstrap]);
@@ -118,22 +141,8 @@ export default function AccountingFinancialStatements() {
 
   // Balance Sheet data
   const bsData = useMemo(() => {
-    const assets: TbRow[] = [];
-    const liabilities: TbRow[] = [];
-    const equity: TbRow[] = [];
-    for (const r of filteredTb) {
-      const meta = accountsMeta[r.account_id];
-      if (!meta) continue;
-      if (meta.account_type === 'asset') assets.push(r);
-      else if (meta.account_type === 'liability') liabilities.push(r);
-      else if (meta.account_type === 'equity') equity.push(r);
-    }
-    const totalAssets = assets.reduce((s, r) => s + netBalance(r, 'asset'), 0);
-    const totalLiabilities = liabilities.reduce((s, r) => s + netBalance(r, 'liability'), 0);
-    const totalEquity = equity.reduce((s, r) => s + netBalance(r, 'equity'), 0);
-    const isBalanced = Math.abs(totalAssets - (totalLiabilities + totalEquity + incomeData.netSurplus)) < 0.01;
-    return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity, isBalanced };
-  }, [filteredTb, accountsMeta, incomeData.netSurplus]);
+    return calculateBalanceSheet(balanceSheetTb, accountsMeta);
+  }, [balanceSheetTb, accountsMeta]);
 
   const selectedCurrency = ACCT_FUNCTIONAL_CCY;
 
@@ -191,8 +200,8 @@ export default function AccountingFinancialStatements() {
       ['', '', '', ''],
       ['', '=== NET ASSETS / EQUITY ===', 'صافي الأصول / حقوق الملكية ===', ''],
       ...bsData.equity.map(r => [r.account_code, r.account_name_en, r.account_name_ar, formatNumber(netBalance(r, 'equity'))]),
-      ['', 'Period Surplus/(Deficit)', 'فائض/(عجز) الفترة', formatNumber(incomeData.netSurplus)],
-      ['', 'Total Net Assets', 'إجمالي صافي الأصول', formatNumber(bsData.totalEquity + incomeData.netSurplus)],
+       ['', 'Cumulative Unclosed Earnings', 'الأرباح المتراكمة غير المقفلة', formatNumber(bsData.cumulativeEarnings)],
+        ['', 'Total Net Assets', 'إجمالي صافي الأصول', formatNumber(bsData.totalNetAssets)],
     ];
     downloadCsv(`balance-sheet-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
@@ -224,8 +233,8 @@ export default function AccountingFinancialStatements() {
         'Name (AR)': r.account_name_ar,
         'Amount': netBalance(r, 'equity')
       })),
-      { 'Account Code': 'Period Surplus/(Deficit)', 'Name (EN)': '', 'Name (AR)': '', 'Amount': incomeData.netSurplus },
-      { 'Account Code': 'Total Net Assets', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.totalEquity + incomeData.netSurplus }
+       { 'Account Code': 'Cumulative Unclosed Earnings', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.cumulativeEarnings },
+       { 'Account Code': 'Total Net Assets', 'Name (EN)': '', 'Name (AR)': '', 'Amount': bsData.totalNetAssets }
     ];
     exportToExcel(data, 'Balance Sheet', `balance-sheet-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
@@ -272,8 +281,8 @@ export default function AccountingFinancialStatements() {
             ['', 'Total Liabilities', formatNumber(bsData.totalLiabilities)],
             [{ content: 'NET ASSETS / EQUITY · صافي الأصول', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [245, 243, 255] } }],
             ...bsData.equity.map(r => [r.account_code, r.account_name_en, formatNumber(netBalance(r, 'equity'))]),
-            ['', 'Period Surplus/(Deficit)', formatNumber(incomeData.netSurplus)],
-            ['', 'Total Net Assets', formatNumber(bsData.totalEquity + incomeData.netSurplus)],
+             ['', 'Cumulative Unclosed Earnings', formatNumber(bsData.cumulativeEarnings)],
+             ['', 'Total Net Assets', formatNumber(bsData.totalNetAssets)],
           ],
           styles: { fontSize: 8 },
           headStyles: { fillColor: [79, 70, 229] },
@@ -397,7 +406,7 @@ export default function AccountingFinancialStatements() {
             periodId={periodId}
             periodStart={selectedPeriod?.start_date ?? ''}
             periodEnd={selectedPeriod?.end_date ?? ''}
-            hasRows={tb.length > 0}
+            hasRows={tb.length > 0 || balanceSheetTb.length > 0}
           />
 
           <TabsList className="mb-4 mt-4">
@@ -464,18 +473,18 @@ export default function AccountingFinancialStatements() {
                 <p className="text-xs text-muted-foreground">{selectedPeriod ? `As of ${format(parseISO(selectedPeriod.end_date), 'MMMM d, yyyy')}` : ''} · {selectedCurrency}</p>
               </div>
               <div className="flex items-center gap-2">
-                {tb.length > 0 && (
+                {balanceSheetTb.length > 0 && (
                   <Badge variant={bsData.isBalanced ? 'default' : 'destructive'} className={bsData.isBalanced ? 'bg-emerald-600' : ''}>
                     {bsData.isBalanced ? '✓ Balanced' : '⚠ Imbalanced'}
                   </Badge>
                 )}
-                <Button variant="outline" size="sm" onClick={exportBalanceSheetCsv} disabled={!tb.length} data-testid="button-export-bs-csv">
+                <Button variant="outline" size="sm" onClick={exportBalanceSheetCsv} disabled={!balanceSheetTb.length} data-testid="button-export-bs-csv">
                   <Download className="h-3.5 w-3.5 mr-1" /> CSV
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportBalanceSheetExcel} disabled={!tb.length} data-testid="button-export-bs-excel">
+                <Button variant="outline" size="sm" onClick={exportBalanceSheetExcel} disabled={!balanceSheetTb.length} data-testid="button-export-bs-excel">
                   <Download className="h-3.5 w-3.5 mr-1" /> Excel
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => exportPdf('balance')} disabled={!tb.length || pdfBusy} data-testid="button-export-bs-pdf">
+                <Button variant="outline" size="sm" onClick={() => exportPdf('balance')} disabled={!balanceSheetTb.length || pdfBusy} data-testid="button-export-bs-pdf">
                   {pdfBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1" />} PDF
                 </Button>
               </div>
@@ -505,12 +514,12 @@ export default function AccountingFinancialStatements() {
                   totalLabel="Equity Total" totalLabelAr="إجمالي حقوق الملكية"
                   total={bsData.totalEquity} accentClass="bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300"
                 />
-                {/* Period net surplus added to equity side */}
-                <div className="mb-2 border rounded-md px-3 py-2 flex items-center justify-between bg-muted/30 text-xs">
-                  <span className="text-muted-foreground">+ Period Surplus/(Deficit) · فائض/(عجز) الفترة</span>
-                  <span className={cn('font-semibold', incomeData.netSurplus >= 0 ? 'text-emerald-700' : 'text-rose-700')}>
-                    {formatNumber(incomeData.netSurplus)} {selectedCurrency}
-                  </span>
+                <div className="mb-4 rounded-md border border-violet-200 bg-violet-50/60 px-3 py-2 text-sm dark:border-violet-800 dark:bg-violet-950/30">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">Cumulative Unclosed Earnings</span>
+                    <span className="font-semibold tabular-nums">{formatNumber(bsData.cumulativeEarnings)} {selectedCurrency}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">Posted revenue less expenses through this period end that have not yet been closed into equity.</p>
                 </div>
                 {/* Total L + E */}
                 <div className="rounded-md bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 px-3 py-2 flex items-center justify-between">
@@ -519,15 +528,15 @@ export default function AccountingFinancialStatements() {
                     <div className="text-xs text-muted-foreground">إجمالي الالتزامات + صافي الأصول</div>
                   </div>
                   <div className="text-lg font-bold text-violet-700 dark:text-violet-400">
-                    {formatNumber(bsData.totalLiabilities + bsData.totalEquity + incomeData.netSurplus)} <span className="text-xs font-normal text-muted-foreground">{selectedCurrency}</span>
+                    {formatNumber(bsData.totalLiabilities + bsData.totalNetAssets)} <span className="text-xs font-normal text-muted-foreground">{selectedCurrency}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {!bsData.isBalanced && tb.length > 0 && (
+            {!bsData.isBalanced && balanceSheetTb.length > 0 && (
               <div className="mt-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
-                <strong>Imbalance detected:</strong> Assets ({formatNumber(bsData.totalAssets)}) ≠ Liabilities + Net Assets ({formatNumber(bsData.totalLiabilities + bsData.totalEquity + incomeData.netSurplus)}). This may indicate missing journal entries or un-posted transactions.
+                <strong>Imbalance detected:</strong> Assets ({formatNumber(bsData.totalAssets)}) ≠ Liabilities + Net Assets ({formatNumber(bsData.totalLiabilities + bsData.totalNetAssets)}). This may indicate missing journal entries or un-posted transactions.
               </div>
             )}
           </TabsContent>

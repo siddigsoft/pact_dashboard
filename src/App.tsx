@@ -305,6 +305,15 @@ const FinanceAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+/** Accounting is readable by finance staff and auditors; panels retain their own action gates. */
+const AccountingRoute = ({ children }: { children: React.ReactNode }) => {
+  const { hasAnyRole } = useAuthorization();
+  if (!hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor'])) {
+    return <PageRoleDenied pageLabel="Accounting" />;
+  }
+  return <>{children}</>;
+};
+
 // Pre-Funding: Finance/Admin roles always pass through.
 // Any other user who is assigned as holder_user_id on at least one fund also gets access.
 // A quick async DB check gates the second path; a spinner shows while checking.
@@ -751,7 +760,7 @@ const AppRoutes = () => {
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
         <Route path="/recycle-bin" element={<SuperAdminRoute><RecycleBin /></SuperAdminRoute>} />
         <Route path="/system-diagrams" element={<SuperAdminRoute><SystemDiagrams /></SuperAdminRoute>} />
-        <Route path="/accounting" element={<SuperAdminRoute><AccountingHub /></SuperAdminRoute>} />
+        <Route path="/accounting" element={<AccountingRoute><AccountingHub /></AccountingRoute>} />
         <Route path="/pre-funding" element={<PreFundingRoute><PageWrapper><PreFundingHub /></PageWrapper></PreFundingRoute>} />
         <Route path="/pre-funding/overview" element={<Navigate to="/pre-funding?tab=overview" replace />} />
         <Route path="/pre-funding/registry" element={<Navigate to="/pre-funding?tab=registry" replace />} />

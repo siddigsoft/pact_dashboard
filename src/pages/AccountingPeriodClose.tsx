@@ -38,6 +38,14 @@ interface PeriodHealth {
   activePrefundsWithBalance: number;
   loading: boolean;
 }
+interface PeriodCloseRpcResult {
+  allocation?: { status?: string; rule_count?: number; journal_entry_id?: string | null };
+}
+
+const callAccountingRpc = supabase.rpc as unknown as (
+  name: string,
+  args: Record<string, unknown>
+) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 const STATUS_CFG: Record<string, { label: string; color: string; icon: React.ElementType; order: number }> = {
   open:        { label: 'Open',        color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30',    icon: Unlock,      order: 0 },
@@ -164,10 +172,13 @@ export default function AccountingPeriodClose() {
     }
     setTransitioning(period.id);
     setAllocationResult(null);
-    const update: Record<string, unknown> = { status: next };
-    if (['soft_closed', 'hard_closed', 'locked'].includes(next)) update.closed_at = new Date().toISOString();
-    else update.closed_at = null;
-    const { error } = await supabase.from('acct_fiscal_periods').update(update).eq('id', period.id);
+    // The server locks the period, validates the transition, optionally posts the
+    // allocation journal, and changes the status in one database transaction.
+    const { data, error } = await callAccountingRpc('acct_close_fiscal_period', {
+      p_period_id: period.id,
+      p_next_status: next,
+      p_run_allocation: runAllocation,
+    });
     if (error) {
       setTransitioning(null);
       setConfirmDialog(null);
@@ -176,26 +187,17 @@ export default function AccountingPeriodClose() {
       return;
     }
 
-    // Run cost allocation if requested and closing (not re-opening)
-    if (runAllocation && ['soft_closed', 'hard_closed'].includes(next)) {
-      const { data: allocData, error: allocError } = await supabase.rpc(
-        'run_period_close_allocation' as any,
-        { p_period_id: period.id }
-      );
-      if (allocError) {
-        toast({
-          title: 'Period closed, but allocation failed',
-          description: allocError.message,
-          variant: 'destructive',
-        });
-      } else {
-        const res = allocData as any;
-        setAllocationResult({ processed: res?.processed ?? 0, errors: res?.errors ?? 0 });
-        toast({
-          title: `Period ${STATUS_CFG[next]?.label ?? next} + Allocation run`,
-          description: `${res?.processed ?? 0} allocation rules processed, ${res?.errors ?? 0} errors.`,
-        });
-      }
+    const result = data as PeriodCloseRpcResult | null;
+    const allocation = result?.allocation;
+    if (runAllocation && allocation) {
+      const processed = allocation?.rule_count ?? 0;
+      setAllocationResult({ processed, errors: 0 });
+      toast({
+        title: `Period ${STATUS_CFG[next]?.label ?? next} + Allocation`,
+        description: allocation.status === 'no_activity'
+          ? 'Period closed. No positive source-pool activity required allocation.'
+          : `${processed} allocation rule(s) posted in journal ${allocation.journal_entry_id ?? ''}.`,
+      });
     } else {
       toast({ title: `Period ${STATUS_CFG[next]?.label ?? next}` });
     }
@@ -205,7 +207,7 @@ export default function AccountingPeriodClose() {
     setConfirmText('');
     setRunAllocation(false);
     void load();
-    if (expanded.has(period.id)) void loadHealth({ ...period, status: next as any });
+    if (expanded.has(period.id)) void loadHealth({ ...period, status: next as Period['status'] });
   };
 
   const exportPeriods = () => {

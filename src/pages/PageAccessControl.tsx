@@ -171,7 +171,7 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Accounting ────────────────────────────────────────────────────────────
   { slug:'accounting-hub',      label:'Accounting Hub',         path:'/accounting',             icon:BookOpen, group:'Accounting',
-    roles:['superAdmin','admin','financialAdmin','auditor'], note:'Full GL, AP, Fixed Assets, Budget, P2P cycle' },
+    roles:['superAdmin','admin','finance','financialAdmin','accountant','auditor'], note:'Full GL, AP, Fixed Assets, Budget, P2P cycle' },
   { slug:'accounting-coa',      label:'Chart of Accounts',      path:'/accounting?tab=coa',     icon:Layers, group:'Accounting',
     roles:['superAdmin','admin','financialAdmin','auditor'] },
   { slug:'accounting-journals', label:'Journal Entries',        path:'/accounting?tab=journals',icon:ScrollText, group:'Accounting',

@@ -21,6 +21,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { POSTING_TEMPLATES, COA_ACCOUNTS, type PostingTemplate } from '@/services/accounting/postingTemplates';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format } from 'date-fns';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { useToast } from '@/hooks/use-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +63,14 @@ interface ReconRow {
   subledger_total:  number;
   variance:         number;
   passed:           boolean;
+}
+
+interface RetryResult {
+  status: 'success' | 'error' | 'skipped';
+  journal_entry_id?: string;
+  amount?: number;
+  message?: string;
+  error?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -240,6 +254,14 @@ function BridgeHealthCard({
 
 export default function AccountingGLBridge() {
   const [reconDate, setReconDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [retryCandidate, setRetryCandidate] = useState<BridgeLogRow | null>(null);
+  const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
+  const [unresolvedOffset, setUnresolvedOffset] = useState(0);
+  const { hasAnyRole } = useAuthorization();
+  const { toast } = useToast();
+  // This matches the existing retry RPC's server-side role allowlist. The RPC
+  // remains the source of truth and performs its own authorization check.
+  const canRetry = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
 
   // Bridge summary from DB view
   const { data: summaryRows = [], refetch: refetchSummary, isFetching: loadingSummary } =
@@ -269,6 +291,23 @@ export default function AccountingGLBridge() {
         if (error) throw error;
         return data ?? [];
       },
+      staleTime: 30_000,
+    });
+
+  // Only the server-approved unresolved queue can be retried. A visible error
+  // in the audit history may already have been resolved or be unsupported.
+  const { data: unresolvedErrors = [], refetch: refetchUnresolvedErrors } =
+    useQuery<BridgeLogRow[]>({
+      queryKey: ['acct-bridge-unresolved-errors', unresolvedOffset],
+      queryFn: async () => {
+        const { data, error } = await (supabase as any).rpc('get_unresolved_gl_bridge_errors_page', {
+          p_limit: 100,
+          p_offset: unresolvedOffset,
+        });
+        if (error) throw error;
+        return (data ?? []) as BridgeLogRow[];
+      },
+      enabled: canRetry,
       staleTime: 30_000,
     });
 
@@ -307,7 +346,54 @@ export default function AccountingGLBridge() {
     refetchSummary();
     refetchLog();
     refetchRecon();
-  }, [refetchSummary, refetchLog, refetchRecon]);
+    refetchUnresolvedErrors();
+  }, [refetchSummary, refetchLog, refetchRecon, refetchUnresolvedErrors]);
+
+  const supportedRetryIds = new Set(
+    unresolvedErrors
+      .filter(row => ['down_payment_requests', 'operational_cost_submissions'].includes(row.source_table))
+      .map(row => row.id),
+  );
+  const hasMoreUnresolvedErrors = unresolvedErrors.length === 100;
+
+  const handleRetry = useCallback(async () => {
+    if (!retryCandidate || !canRetry) return;
+
+    setRetryingLogId(retryCandidate.id);
+    try {
+      const { data, error } = await (supabase as any).rpc('retry_gl_bridge_posting', {
+        p_log_id: retryCandidate.id,
+      });
+      if (error) throw error;
+
+      const result = data as RetryResult;
+      if (result.status === 'success') {
+        toast({
+          title: 'Posting retried successfully',
+          description: result.journal_entry_id
+            ? `Journal ${result.journal_entry_id.slice(0, 8)}… was posted.`
+            : 'The failed bridge posting was recovered.',
+        });
+      } else if (result.status === 'skipped') {
+        toast({
+          title: 'Retry not needed',
+          description: result.message ?? 'This failed posting was already handled.',
+        });
+      } else {
+        throw new Error(result.error ?? 'The bridge posting could not be retried.');
+      }
+      await Promise.all([refetchSummary(), refetchLog(), refetchRecon(), refetchUnresolvedErrors()]);
+    } catch (error: any) {
+      toast({
+        title: 'Retry failed',
+        description: error?.message ?? 'Unable to retry the selected bridge posting.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRetryingLogId(null);
+      setRetryCandidate(null);
+    }
+  }, [canRetry, refetchLog, refetchRecon, refetchSummary, refetchUnresolvedErrors, retryCandidate, toast]);
 
   // Compute KPIs
   const totalSuccess = summaryRows.reduce((s, r) => s + Number(r.success_count), 0);
@@ -461,6 +547,85 @@ export default function AccountingGLBridge() {
 
         {/* ── Audit Log tab ─────────────────────────────────────────────────── */}
         <TabsContent value="log">
+          {canRetry && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Unresolved Posting Recovery</CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Retry supported failed postings from the server-approved queue. This list is paged and is not limited to the recent audit log.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setUnresolvedOffset(Math.max(0, unresolvedOffset - 100))}
+                      disabled={unresolvedOffset === 0 || retryingLogId !== null}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setUnresolvedOffset(unresolvedOffset + 100)}
+                      disabled={!hasMoreUnresolvedErrors || retryingLogId !== null}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Source</TableHead>
+                        <TableHead className="text-xs">Event</TableHead>
+                        <TableHead className="text-xs">Error</TableHead>
+                        <TableHead className="text-xs">Failed at</TableHead>
+                        <TableHead className="text-xs text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unresolvedErrors.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                            {unresolvedOffset > 0 ? 'No more unresolved postings on this page.' : 'No unresolved bridge postings.'}
+                          </TableCell>
+                        </TableRow>
+                      ) : unresolvedErrors.map(row => (
+                        <TableRow key={row.id}>
+                          <TableCell className="text-xs font-mono">{row.source_table}</TableCell>
+                          <TableCell className="text-xs">{row.event_type}</TableCell>
+                          <TableCell className="max-w-80 truncate text-xs text-red-600">{row.error_message ?? '—'}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {format(new Date(row.created_at), 'MMM d, yyyy HH:mm')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {['down_payment_requests', 'operational_cost_submissions'].includes(row.source_table) ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRetryCandidate(row)}
+                                disabled={retryingLogId !== null}
+                                data-testid={`button-retry-gl-bridge-queue-${row.id}`}
+                              >
+                                <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
+                              </Button>
+                            ) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-sm font-semibold">
@@ -499,12 +664,13 @@ export default function AccountingGLBridge() {
                       <TableHead className="text-xs">Journal Entry</TableHead>
                       <TableHead className="text-xs">Error</TableHead>
                       <TableHead className="text-xs">Fired At</TableHead>
+                      {canRetry && <TableHead className="text-xs text-right">Action</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {logRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-8">
+                        <TableCell colSpan={canRetry ? 8 : 7} className="text-center text-muted-foreground text-sm py-8">
                           No bridge events logged yet. Events appear here the first time a trigger fires.
                         </TableCell>
                       </TableRow>
@@ -531,6 +697,22 @@ export default function AccountingGLBridge() {
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {format(new Date(row.created_at), 'MMM d, HH:mm:ss')}
                         </TableCell>
+                        {canRetry && (
+                          <TableCell className="text-right">
+                            {supportedRetryIds.has(row.id) ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRetryCandidate(row)}
+                                disabled={retryingLogId !== null}
+                                data-testid={`button-retry-gl-bridge-${row.id}`}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                                Retry
+                              </Button>
+                            ) : '—'}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -677,6 +859,42 @@ export default function AccountingGLBridge() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={retryCandidate !== null}
+        onOpenChange={open => !open && !retryingLogId && setRetryCandidate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retry failed GL posting?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This retries only the selected failed event and may create a journal entry if it is still eligible.
+              The bridge verifies its current source data and prevents duplicate postings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {retryCandidate && (
+            <div className="rounded-md bg-muted p-3 text-xs space-y-1">
+              <p><span className="font-medium">Source:</span> {retryCandidate.source_table}</p>
+              <p><span className="font-medium">Event:</span> {retryCandidate.event_type}</p>
+              <p className="text-red-600 dark:text-red-400 break-words">{retryCandidate.error_message}</p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={retryingLogId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={event => {
+                event.preventDefault();
+                handleRetry();
+              }}
+              disabled={retryingLogId !== null}
+              data-testid="button-confirm-retry-gl-bridge"
+            >
+              {retryingLogId ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+              {retryingLogId ? 'Retrying…' : 'Retry posting'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -17,26 +17,12 @@ import {
   Loader2, Zap, RefreshCw, Plus, AlertTriangle, CheckCircle2,
   Download, Target, BookOpen,
 } from 'lucide-react';
-import { format, startOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { exportToExcel } from '@/utils/report-export';
 import { cn } from '@/lib/utils';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useToast } from '@/hooks/use-toast';
-
-async function getGLPrereqs() {
-  const today = new Date().toISOString().slice(0, 10);
-  const [{ data: fund }, { data: period }, { data: authData }] = await Promise.all([
-    supabase.from('acct_funds').select('id').eq('is_active', true).limit(1).single(),
-    supabase.from('acct_fiscal_periods' as any).select('id').lte('start_date', today).gte('end_date', today).eq('status', 'open').limit(1).single(),
-    supabase.auth.getUser(),
-  ]);
-  return {
-    fundId: (fund as any)?.id as string | null ?? null,
-    periodId: (period as any)?.id as string | null ?? null,
-    userId: authData?.user?.id ?? null,
-  };
-}
 
 interface AllocationRule {
   id: string; pool_name: string; source_account_id: string; source_account_code: string;
@@ -51,6 +37,15 @@ interface AllocationRun {
   id: string; run_date: string; total_allocated: number; rule_count: number;
   journal_entry_id: string | null; status: string; notes: string | null; created_by: string | null;
 }
+interface AllocationRpcResult {
+  status?: string; idempotent?: boolean; rule_count?: number;
+  total_allocated?: number; journal_entry_id?: string | null;
+}
+
+const callAccountingRpc = supabase.rpc as unknown as (
+  name: string,
+  args: Record<string, unknown>
+) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 const BASIS_LABELS: Record<string, string> = { equal: 'Equal Split', budget_pct: 'Budget %', headcount: 'Headcount' };
 
@@ -192,12 +187,6 @@ export default function AccountingCostAllocation() {
     toast({ title: 'Target removed' });
   };
 
-  /**
-   * Run allocation — creates a real draft GL journal entry:
-   * For each active rule with targets:
-   *   CR source account for pool balance (current month posted debits)
-   *   DR each target account proportionally (by weight_pct)
-   */
   const runAllocation = async () => {
     const activeRules = rules.filter(r => r.is_active);
     if (activeRules.length === 0) { toast({ title: 'No active rules', variant: 'destructive' }); return; }
@@ -210,135 +199,22 @@ export default function AccountingCostAllocation() {
 
     setRunning(true);
     try {
-      const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-
-      // 1. Resolve GL prerequisites (fiscal period, fund, current user)
-      const prereqs = await getGLPrereqs();
-      if (!prereqs.periodId || !prereqs.userId) {
-        toast({ title: 'GL prerequisites missing', description: prereqs.periodId ? 'Could not resolve current user.' : 'No open fiscal period found for today. Create or open a fiscal period first.', variant: 'destructive' });
-        setRunning(false);
-        return;
-      }
-      if (!prereqs.fundId) {
-        toast({ title: 'No active fund found', description: 'Create at least one active fund in the Funds module before running cost allocation.', variant: 'destructive' });
-        setRunning(false);
-        return;
-      }
-
-      // 2. Create draft journal entry header
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: je, error: jeErr } = await supabase
-        .from('acct_journal_entries')
-        .insert({
-          posting_date: today,
-          description_en: `Cost Allocation Run — ${rulesWithTargets.length} pool(s) — ${format(new Date(), 'MMM yyyy')}`,
-          description_ar: 'تشغيل توزيع التكاليف',
-          status: 'draft',
-          source_type: 'cost_allocation',
-          period_id: prereqs.periodId,
-          idempotency_key: crypto.randomUUID(),
-          created_by: prereqs.userId,
-        })
-        .select('id')
-        .single();
-
-      if (jeErr || !je) {
-        toast({ title: 'Failed to create journal entry', description: jeErr?.message, variant: 'destructive' });
-        setRunning(false);
-        return;
-      }
-
-      const lines: any[] = [];
-      let totalAllocated = 0;
-
-      for (const rule of rulesWithTargets) {
-        const ruleTargets = targets.filter(t => t.rule_id === rule.id);
-        const totalWeight = ruleTargets.reduce((s, t) => s + t.weight_pct, 0) || 1;
-
-        // Get pool balance from posted debits this month
-        const { data: srcLines } = await supabase
-          .from('acct_journal_lines')
-          .select('functional_amount, debit_credit, acct_journal_entries!inner(posting_date, status)')
-          .eq('account_id', rule.source_account_id)
-          .eq('acct_journal_entries.status', 'posted')
-          .gte('acct_journal_entries.posting_date', monthStart);
-
-        const poolBalance = ((srcLines ?? []) as any[]).reduce((s: number, l: any) => {
-          const amt = Number(l.functional_amount ?? 0);
-          return l.debit_credit === 'DR' ? s + amt : s - amt;
-        }, 0);
-
-        // If no balance, skip this rule
-        if (poolBalance <= 0) continue;
-
-        totalAllocated += poolBalance;
-
-        // CR source — clear the pool
-        lines.push({
-          entry_id: je.id,
-          account_id: rule.source_account_id,
-          fund_id: prereqs.fundId,
-          function: 'none',
-          debit_credit: 'CR',
-          original_amount: poolBalance,
-          original_currency: 'USD',
-          functional_amount: poolBalance,
-          functional_currency: 'USD',
-          description: `Pool clearing: ${rule.pool_name}`,
-          line_no: lines.length + 1,
+      const { data, error } = await callAccountingRpc('acct_run_cost_allocation', {
+        p_period_id: null,
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+      const result = data as AllocationRpcResult | null;
+      if (result?.status === 'no_activity') {
+        toast({ title: 'No pool balance found', description: 'No positive posted source-pool activity exists in the current fiscal period.' });
+      } else {
+        toast({
+          title: result?.idempotent ? 'Allocation already completed' : 'Allocation posted',
+          description: `${result?.rule_count ?? 0} rule(s), ${formatNumber(Number(result?.total_allocated ?? 0), 2)} allocated. Journal ${result?.journal_entry_id ?? ''}.`,
         });
-
-        // DR each target proportionally
-        for (const tgt of ruleTargets) {
-          const share = parseFloat(((tgt.weight_pct / totalWeight) * poolBalance).toFixed(2));
-          lines.push({
-            entry_id: je.id,
-            account_id: tgt.target_account_id,
-            fund_id: prereqs.fundId,
-            function: 'program',
-            debit_credit: 'DR',
-            original_amount: share,
-            original_currency: 'USD',
-            functional_amount: share,
-            functional_currency: 'USD',
-            description: `Allocated from pool: ${rule.pool_name}`,
-            line_no: lines.length + 1,
-          });
-        }
       }
-
-      if (lines.length === 0) {
-        // No pool balance found — remove the empty JE
-        await supabase.from('acct_journal_entries').delete().eq('id', je.id);
-        toast({ title: 'No pool balance found', description: 'Source accounts have no posted debit activity this month. Post some journal entries first.', variant: 'destructive' });
-        setRunning(false);
-        return;
-      }
-
-      // 3. Insert all lines
-      const { error: lineErr } = await supabase.from('acct_journal_lines').insert(lines);
-      if (lineErr) {
-        toast({ title: 'Failed to insert journal lines', description: lineErr.message, variant: 'destructive' });
-        setRunning(false);
-        return;
-      }
-
-      // 5. Record the run
-      await supabase.from('acct_allocation_runs' as any).insert({
-        run_date: new Date().toISOString().slice(0, 10),
-        total_allocated: totalAllocated,
-        rule_count: rulesWithTargets.length,
-        journal_entry_id: je.id,
-        status: 'completed',
-        notes: `Draft JE #${nextNo} created — ${lines.length} lines posted`,
-      });
-
-      toast({
-        title: 'Allocation run completed',
-        description: `Draft journal entry #${nextNo} created with ${lines.length} lines. Review in the Journals module before posting.`,
-      });
-    } catch (e: any) {
-      toast({ title: 'Run failed', description: e.message, variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Run failed', description: e instanceof Error ? e.message : 'Unexpected allocation error', variant: 'destructive' });
     }
     setRunning(false);
     void load();
@@ -401,7 +277,7 @@ export default function AccountingCostAllocation() {
 
       <PageInfoBanner
         title="Cost Allocation"
-        description="Define overhead pools with a source GL account and target accounts. Click 'Run Allocation' to read this month's pool balance from posted journal lines and post a proportional draft journal entry (CR source, DR targets). Review and post the draft in the Journals module."
+        description="Define overhead pools with a source GL account and target accounts. Run Allocation securely validates the current fiscal period, posts a balanced allocation journal, and records the run only after posting succeeds."
         descriptionAr="تعريف مجمعات التكاليف غير المباشرة وتوزيعها على الحسابات المستهدفة مع ترحيل قيود اليومية تلقائياً."
       />
 

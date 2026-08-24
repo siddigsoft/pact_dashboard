@@ -112,7 +112,8 @@ CREATE TABLE public.acct_funds (
 CREATE TABLE public.acct_journal_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), description_en text, description_ar text, posting_date date,
   period_id uuid NOT NULL REFERENCES public.acct_fiscal_periods(id), country_id uuid,
-  status text, source_type text, source_id uuid, idempotency_key text UNIQUE, created_by uuid
+  status text, source_type text, source_id uuid, idempotency_key text UNIQUE, created_by uuid,
+  posted_at timestamptz, posted_by uuid
 );
 CREATE TABLE public.acct_journal_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), entry_id uuid, line_no int, account_id uuid,
@@ -189,6 +190,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824b_fix_direct_pre_fund_topup_country_uuid.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824c_repair_ops_cost_gl_bridge_account_codes.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824d_repair_down_payment_gl_bridge_account_codes.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260825_post_direct_pre_fund_topups.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -1443,6 +1445,7 @@ DECLARE
   v_snapshot_funded numeric;
   v_snapshot_available numeric;
   v_journal_country uuid;
+  v_journal_status text;
   v_country_scoped_lines integer;
 BEGIN
   SELECT amount, available_balance, status
@@ -1470,6 +1473,9 @@ BEGIN
   SELECT country_id INTO v_journal_country
   FROM public.acct_journal_entries
   WHERE idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
+  SELECT status INTO v_journal_status
+  FROM public.acct_journal_entries
+  WHERE idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
   SELECT count(*) INTO v_country_scoped_lines
   FROM public.acct_journal_lines lines
   JOIN public.acct_journal_entries entries ON entries.id = lines.entry_id
@@ -1489,12 +1495,13 @@ BEGIN
   IF v_amount <> 1250 OR v_available <> 1250 OR v_status <> 'active'
      OR v_events <> 1 OR v_document_count <> 2 OR v_audits <> 1
      OR v_journals <> 1 OR v_lines <> 2 OR v_bridge <> 1
+     OR v_journal_status <> 'posted'
      OR v_journal_country <> '60000000-0000-0000-0000-000000000001'
      OR v_country_scoped_lines <> 2
      OR v_snapshot_funded <> 1250 OR v_snapshot_available <> 1250 THEN
-    RAISE EXCEPTION 'direct top-up assertion failed: fund %/%/%, events %, documents %, audit %, journals %, lines %, bridge %, journal country %, scoped lines %, snapshot %/%',
+    RAISE EXCEPTION 'direct top-up assertion failed: fund %/%/%, events %, documents %, audit %, journals %, lines %, bridge %, journal status %, journal country %, scoped lines %, snapshot %/%',
       v_amount, v_available, v_status, v_events, v_document_count, v_audits,
-      v_journals, v_lines, v_bridge, v_journal_country, v_country_scoped_lines,
+      v_journals, v_lines, v_bridge, v_journal_status, v_journal_country, v_country_scoped_lines,
       v_snapshot_funded, v_snapshot_available;
   END IF;
 END $$;
