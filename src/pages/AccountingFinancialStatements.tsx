@@ -90,9 +90,14 @@ export default function AccountingFinancialStatements() {
         } as any),
       ]);
       if (incomeResult.error || balanceSheetResult.error) {
+        const balanceSheetMessage = balanceSheetResult.error?.message ?? '';
+        const migrationRequired = balanceSheetMessage.includes('acct_balance_sheet_as_of')
+          && balanceSheetMessage.includes('schema cache');
         setError(
           incomeResult.error?.message
-            ?? balanceSheetResult.error?.message
+            ?? (migrationRequired
+              ? 'Balance Sheet reporting migration is not registered in Supabase yet. Apply supabase/migrations/20260825b_repair_balance_sheet_rpc_schema_cache.sql in Supabase Studio, then refresh this page.'
+              : balanceSheetResult.error?.message)
             ?? 'Unable to load financial statements.',
         );
         setTb([]);
