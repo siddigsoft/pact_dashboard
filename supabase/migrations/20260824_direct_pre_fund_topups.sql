@@ -71,8 +71,13 @@ DECLARE
 BEGIN
   PERFORM public._assert_direct_pre_fund_top_up_role();
 
-  IF p_amount IS NULL OR p_amount <= 0 THEN
-    RAISE EXCEPTION 'Top-up amount must be greater than zero.';
+  -- PostgreSQL numeric accepts NaN (and, on supported versions, infinities).
+  -- NaN compares above ordinary values, so a positive-only check alone would
+  -- let it corrupt the immutable event, GL lines, and fund balances.
+  IF p_amount IS NULL
+     OR p_amount::text IN ('NaN', 'Infinity', '-Infinity')
+     OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Top-up amount must be finite and greater than zero.';
   END IF;
   IF NULLIF(BTRIM(p_funding_source), '') IS NULL THEN
     RAISE EXCEPTION 'Funding source is required.';

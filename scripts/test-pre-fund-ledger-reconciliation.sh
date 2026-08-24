@@ -1515,6 +1515,56 @@ BEGIN
   END IF;
 END $$;
 DELETE FROM public.acct_funds WHERE id = '50000000-0000-0000-0000-000000000002';
+DO $$
+DECLARE
+  v_amount numeric;
+  v_available numeric;
+  v_events integer;
+  v_journals integer;
+  v_bridge integer;
+BEGIN
+  BEGIN
+    PERFORM public.record_direct_pre_fund_topup_rpc(
+      '10000000-0000-0000-0000-000000000013',
+      'NaN'::numeric, 'Invalid numeric amount', 'Must be rejected',
+      'https://example.test/nan.pdf', '[]'::jsonb, 'direct-topup-nan-blocked'
+    );
+    RAISE EXCEPTION 'NaN amount was accepted for a direct top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'NaN amount was accepted for a direct top-up' THEN RAISE; END IF;
+    IF SQLERRM <> 'Top-up amount must be finite and greater than zero.' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.record_direct_pre_fund_topup_rpc(
+      '10000000-0000-0000-0000-000000000013',
+      'Infinity'::numeric, 'Invalid numeric amount', 'Must be rejected',
+      'https://example.test/infinity.pdf', '[]'::jsonb, 'direct-topup-infinity-blocked'
+    );
+    RAISE EXCEPTION 'infinite amount was accepted for a direct top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'infinite amount was accepted for a direct top-up' THEN RAISE; END IF;
+    IF SQLERRM <> 'Top-up amount must be finite and greater than zero.' THEN RAISE; END IF;
+  END;
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000013';
+  SELECT count(*) INTO v_events
+  FROM public.pre_fund_transactions
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000013'
+    AND transaction_type = 'receipt';
+  SELECT count(*) INTO v_journals
+  FROM public.acct_journal_entries
+  WHERE idempotency_key = 'pf-direct-topup:direct-fund-topup:direct-topup-regression-event';
+  SELECT count(*) INTO v_bridge
+  FROM public.acct_gl_bridge_log bridge
+  JOIN public.pre_fund_transactions txn ON txn.id = bridge.source_id
+  WHERE txn.pre_fund_request_id = '10000000-0000-0000-0000-000000000013'
+    AND bridge.event_type = 'pre_fund_direct_topup_received';
+  IF v_amount <> 1250 OR v_available <> 1250 OR v_events <> 1 OR v_journals <> 1 OR v_bridge <> 1 THEN
+    RAISE EXCEPTION 'NaN rejection changed financial evidence: fund %/%, events %, journals %, bridge %',
+      v_amount, v_available, v_events, v_journals, v_bridge;
+  END IF;
+END $$;
 UPDATE public.profiles SET role = 'fom' WHERE id = auth.uid();
 DO $$
 BEGIN
