@@ -421,7 +421,14 @@ export function DownPaymentApprovalPanel({
     uploading: boolean;
     partialPercent: number | null;
     preFundId: string | null;
-    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
+    preFunds: Array<{
+      id: string;
+      name: string;
+      currency: string;
+      available_balance: number;
+      isOpenPool: boolean;
+      allocationRemainingByUser: Record<string, number>;
+    }>;
     payMode?: 'percent' | 'amount';
     amountInput?: string;
   }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
@@ -1848,40 +1855,57 @@ export function DownPaymentApprovalPanel({
       .order('name');
     const allFunds = (pfData ?? []) as any[];
 
-    // Fetch allocations for all unique submitters in this batch so we only show
-    // the funds each submitter actually holds, not the full pool.
+    // Fetch every allocation on the candidate funds. A fund with any personal
+    // allocations is valid for this batch only when every submitter is covered.
+    // Otherwise one covered user can make an invalid fund appear selectable for
+    // the whole batch and the database correctly rejects each uncovered request.
     const submitterIds = [...new Set(eligible.map(r => r.requestedBy).filter(Boolean))] as string[];
-    let allocsByFund: Record<string, { allocated: number; spent: number }> = {};
-    if (submitterIds.length > 0 && allFunds.length > 0) {
-      const { data: allocData } = await (supabase as any)
+    const allocsByFund: Record<string, Record<string, number>> = {};
+    if (allFunds.length > 0) {
+      const { data: allocData, error: allocationError } = await (supabase as any)
         .from('pre_fund_allocations')
-        .select('pre_fund_request_id, allocated_amount, spent_amount')
-        .in('user_id', submitterIds)
+        .select('pre_fund_request_id, user_id, allocated_amount, spent_amount')
         .in('pre_fund_request_id', allFunds.map((f: any) => f.id));
-      // Aggregate remaining allocation per fund across all submitters
+      if (allocationError) {
+        toast({
+          title: 'Could not verify allocations',
+          description: `The batch was not opened because fund allocations could not be checked: ${allocationError.message}`,
+          variant: 'destructive',
+        });
+        return;
+      }
       for (const a of (allocData ?? []) as any[]) {
-        const prev = allocsByFund[a.pre_fund_request_id] ?? { allocated: 0, spent: 0 };
-        allocsByFund[a.pre_fund_request_id] = {
-          allocated: prev.allocated + (Number(a.allocated_amount) || 0),
-          spent:     prev.spent     + (Number(a.spent_amount)     || 0),
-        };
+        if (!allocsByFund[a.pre_fund_request_id]) allocsByFund[a.pre_fund_request_id] = {};
+        allocsByFund[a.pre_fund_request_id][a.user_id] =
+          (allocsByFund[a.pre_fund_request_id][a.user_id] ?? 0)
+          + (Number(a.allocated_amount) || 0)
+          - (Number(a.spent_amount) || 0);
       }
     }
 
-    const hasAnyAllocation = Object.keys(allocsByFund).length > 0;
-
-    const preFunds = hasAnyAllocation
-      ? allFunds
-          .filter((f: any) => allocsByFund[f.id] !== undefined)
-          .map((f: any) => {
-            const alloc = allocsByFund[f.id];
-            return { id: f.id, name: f.name, currency: f.currency,
-                     available_balance: alloc.allocated - alloc.spent };
-          })
-      : allFunds.map((f: any) => ({
-          id: f.id, name: f.name, currency: f.currency,
-          available_balance: f.available_balance ?? 0,
-        }));
+    const preFunds = allFunds
+      .map((f: any) => {
+        const allocationRemainingByUser = allocsByFund[f.id] ?? {};
+        const isOpenPool = Object.keys(allocationRemainingByUser).length === 0;
+        const coversEverySubmitter = isOpenPool || (
+          submitterIds.length > 0
+          && submitterIds.every(userId => allocationRemainingByUser[userId] !== undefined)
+        );
+        if (!coversEverySubmitter) return null;
+        const personalRemaining = Object.values(allocationRemainingByUser)
+          .reduce((sum, remaining) => sum + Math.max(remaining, 0), 0);
+        return {
+          id: f.id,
+          name: f.name,
+          currency: f.currency,
+          available_balance: isOpenPool
+            ? Number(f.available_balance ?? 0)
+            : Math.min(Number(f.available_balance ?? 0), personalRemaining),
+          isOpenPool,
+          allocationRemainingByUser,
+        };
+      })
+      .filter((fund): fund is NonNullable<typeof fund> => fund !== null);
 
     // Auto-detect the best pre-fund for these submitters so Finance doesn't
     // have to manually pick one when there is a clear allocation match.
@@ -1897,9 +1921,12 @@ export function DownPaymentApprovalPanel({
           countryIds: eligible.map(r => (r as any).country_id ?? null),
           projectIds: eligible.map(r => (r as any).project_id ?? null),
         });
-        if (result.fundId) autoFundId = result.fundId;
+        if (result.fundId && preFunds.some(fund => fund.id === result.fundId)) {
+          autoFundId = result.fundId;
+        }
       } catch (_) {}
     }
+    if (!autoFundId && preFunds.length === 1) autoFundId = preFunds[0].id;
 
     setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: autoFundId, preFunds });
   };
@@ -1948,6 +1975,36 @@ export function DownPaymentApprovalPanel({
       toast({ title: 'Pre-Fund Required / التمويل المسبق مطلوب', description: 'Select the Pre-Fund to charge before recording this batch.', variant: 'destructive' });
       return;
     }
+    const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
+    const selectedFund = batchPayDialog.preFunds.find(fund => fund.id === preFundId);
+    if (!selectedFund) {
+      toast({
+        title: 'Invalid Pre-Fund selection',
+        description: 'The selected Pre-Fund is not valid for every requester in this batch. Reopen the dialog and choose a fund that covers all requesters.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!selectedFund.isOpenPool) {
+      const requiredByUser = reqs.reduce<Record<string, number>>((totals, req) => {
+        const amount = isPartial && partialPercent
+          ? Math.round(getBatchPayBasis(req) * partialPercent) / 100
+          : getBatchPayBasis(req);
+        totals[req.requestedBy] = (totals[req.requestedBy] ?? 0) + amount;
+        return totals;
+      }, {});
+      const uncoveredUsers = Object.entries(requiredByUser).filter(
+        ([userId, required]) => (selectedFund.allocationRemainingByUser[userId] ?? -1) < required,
+      );
+      if (uncoveredUsers.length > 0) {
+        toast({
+          title: 'Insufficient requester allocation',
+          description: `${uncoveredUsers.length} requester${uncoveredUsers.length === 1 ? '' : 's'} do not have enough personal allocation in the selected fund. Reduce the payment or allocate budget before paying.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
     setBatchPayDialog(prev => ({ ...prev, uploading: true }));
     try {
       const uploadedUrls: string[] = [];
@@ -1962,7 +2019,6 @@ export function DownPaymentApprovalPanel({
       }
       const proofUrl = uploadedUrls.length === 1 ? uploadedUrls[0] : JSON.stringify(uploadedUrls);
       const now = new Date().toISOString();
-      const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
       // Source status and immutable fund events must be written together.
       // Do not call the legacy batch RPC: it updates source rows first and
@@ -1990,7 +2046,14 @@ export function DownPaymentApprovalPanel({
       const failures = results
         .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
         .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
-      if (successCount === 0) throw new Error(failures.join(' | ') || 'No advance payments were recorded.');
+      const uniqueFailures = [...new Set(failures)];
+      if (successCount === 0) {
+        throw new Error(
+          uniqueFailures.length === 1
+            ? `${reqs.length} payments were blocked: ${uniqueFailures[0]}`
+            : uniqueFailures.join(' | ') || 'No advance payments were recorded.',
+        );
+      }
       toast({
         title: failures.length ? 'Batch partly recorded' : 'Batch recorded',
         description: failures.length
