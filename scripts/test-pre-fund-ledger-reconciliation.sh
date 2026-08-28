@@ -36,6 +36,7 @@ INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000001');
 INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000001', 'super_admin');
 INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000002');
 INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000002', 'staff');
+INSERT INTO auth.users VALUES ('99999999-9999-9999-9999-999999999999');
 CREATE TABLE public.wallets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES public.profiles(id),
   currency text NOT NULL DEFAULT 'SDG', balance_cents bigint NOT NULL DEFAULT 0,
@@ -1038,6 +1039,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821f_wallet_payment_idempotency_identity.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821h_finance_only_pre_fund_corrections.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821i_allow_partial_operational_cost_payments.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260828_down_payment_shared_fund_balance.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 -- Wallet-backed cancellation: paid source state, wallet evidence, and immutable
@@ -1186,6 +1188,11 @@ INSERT INTO public.down_payment_requests (
 ) VALUES (
   '30000000-0000-0000-0000-000000000011',
   'approved', 100, 100, 100, 0, auth.uid(), 'Protected split Pre-Fund payment'
+), (
+  '30000000-0000-0000-0000-000000000019',
+  'approved', 20, 20, 20, 0,
+  '99999999-9999-9999-9999-999999999999',
+  'Shared fund payment without personal allocation'
 );
 
 -- A direct paid-state update must fail before it can create an unlinked source
@@ -1303,6 +1310,38 @@ BEGIN
      OR v_available <> 50 THEN
     RAISE EXCEPTION 'open Cost Submission payment failed: result %, source %/%, events %, spent %, available %',
       v_result, v_status, v_paid_cents, v_events, v_spent, v_available;
+  END IF;
+END $$;
+
+-- Down Payments use the selected fund's shared balance. The requester does not
+-- need a personal allocation and another user's allocation remains unchanged.
+DO $$
+DECLARE v_result jsonb; v_status text; v_paid numeric; v_spent numeric; v_available numeric;
+BEGIN
+  SELECT public.record_required_pre_fund_payment_rpc(
+    'down_payment_requests',
+    '30000000-0000-0000-0000-000000000019',
+    '10000000-0000-0000-0000-000000000010',
+    20, 'SDG', CURRENT_DATE, auth.uid(), NULL,
+    'Shared Down Payment fund', 'source-payment:shared-down-payment'
+  ) INTO v_result;
+  SELECT status, total_paid_amount INTO v_status, v_paid
+  FROM public.down_payment_requests
+  WHERE id = '30000000-0000-0000-0000-000000000019';
+  SELECT spent_amount INTO v_spent
+  FROM public.pre_fund_allocations
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000010'
+    AND user_id = auth.uid();
+  SELECT available_balance INTO v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000010';
+  IF (v_result ->> 'success')::boolean IS DISTINCT FROM true
+     OR v_status <> 'fully_paid'
+     OR v_paid <> 20
+     OR v_spent <> 0
+     OR v_available <> 30 THEN
+    RAISE EXCEPTION 'shared Down Payment fund failed: result %, source %/%, allocation spent %, available %',
+      v_result, v_status, v_paid, v_spent, v_available;
   END IF;
 END $$;
 

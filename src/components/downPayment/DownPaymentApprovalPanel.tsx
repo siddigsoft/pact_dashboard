@@ -421,14 +421,7 @@ export function DownPaymentApprovalPanel({
     uploading: boolean;
     partialPercent: number | null;
     preFundId: string | null;
-    preFunds: Array<{
-      id: string;
-      name: string;
-      currency: string;
-      available_balance: number;
-      isOpenPool: boolean;
-      allocationRemainingByUser: Record<string, number>;
-    }>;
+    preFunds: Array<{ id: string; name: string; currency: string; available_balance: number }>;
     payMode?: 'percent' | 'amount';
     amountInput?: string;
   }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
@@ -945,46 +938,13 @@ export function DownPaymentApprovalPanel({
           .order('name');
         const allFunds = (pfData ?? []) as any[];
 
-        // Fetch this submitter's allocations across all active funds
-        const submitterId = request.requestedBy;
-        let allocsByFund: Record<string, { allocated: number; spent: number }> = {};
-        if (submitterId && allFunds.length > 0) {
-          const { data: allocData } = await (supabase as any)
-            .from('pre_fund_allocations')
-            .select('pre_fund_request_id, allocated_amount, spent_amount')
-            .eq('user_id', submitterId)
-            .in('pre_fund_request_id', allFunds.map((f: any) => f.id));
-          for (const a of (allocData ?? []) as any[]) {
-            allocsByFund[a.pre_fund_request_id] = {
-              allocated: Number(a.allocated_amount) || 0,
-              spent: Number(a.spent_amount) || 0,
-            };
-          }
-        }
-
-        const hasAnyAllocation = Object.keys(allocsByFund).length > 0;
-
-        // If the submitter has personal allocations, show ONLY their funds with
-        // their personal remaining amount. Otherwise fall back to all active funds
-        // with the full available_balance (open-pool / no-allocation case).
-        const displayFunds = hasAnyAllocation
-          ? allFunds
-              .filter((f: any) => allocsByFund[f.id] !== undefined)
-              .map((f: any) => {
-                const alloc = allocsByFund[f.id];
-                return {
-                  id: f.id,
-                  name: f.name,
-                  currency: f.currency,
-                  available_balance: alloc.allocated - alloc.spent,
-                };
-              })
-          : allFunds.map((f: any) => ({
-              id: f.id, name: f.name, currency: f.currency,
-              available_balance: f.available_balance ?? 0,
-            }));
-
-        setSinglePayPreFunds(displayFunds);
+        // Down Payments charge the selected fund's shared balance. Personal
+        // allocations remain available for reporting, but no longer limit or
+        // filter an otherwise active, same-currency fund.
+        setSinglePayPreFunds(allFunds.map((f: any) => ({
+          id: f.id, name: f.name, currency: f.currency,
+          available_balance: f.available_balance ?? 0,
+        })));
       } catch (_) { setSinglePayPreFunds([]); }
     }
     if (actionType === 'approve') {
@@ -1855,57 +1815,12 @@ export function DownPaymentApprovalPanel({
       .order('name');
     const allFunds = (pfData ?? []) as any[];
 
-    // Fetch every allocation on the candidate funds. A fund with any personal
-    // allocations is valid for this batch only when every submitter is covered.
-    // Otherwise one covered user can make an invalid fund appear selectable for
-    // the whole batch and the database correctly rejects each uncovered request.
-    const submitterIds = [...new Set(eligible.map(r => r.requestedBy).filter(Boolean))] as string[];
-    const allocsByFund: Record<string, Record<string, number>> = {};
-    if (allFunds.length > 0) {
-      const { data: allocData, error: allocationError } = await (supabase as any)
-        .from('pre_fund_allocations')
-        .select('pre_fund_request_id, user_id, allocated_amount, spent_amount')
-        .in('pre_fund_request_id', allFunds.map((f: any) => f.id));
-      if (allocationError) {
-        toast({
-          title: 'Could not verify allocations',
-          description: `The batch was not opened because fund allocations could not be checked: ${allocationError.message}`,
-          variant: 'destructive',
-        });
-        return;
-      }
-      for (const a of (allocData ?? []) as any[]) {
-        if (!allocsByFund[a.pre_fund_request_id]) allocsByFund[a.pre_fund_request_id] = {};
-        allocsByFund[a.pre_fund_request_id][a.user_id] =
-          (allocsByFund[a.pre_fund_request_id][a.user_id] ?? 0)
-          + (Number(a.allocated_amount) || 0)
-          - (Number(a.spent_amount) || 0);
-      }
-    }
-
-    const preFunds = allFunds
-      .map((f: any) => {
-        const allocationRemainingByUser = allocsByFund[f.id] ?? {};
-        const isOpenPool = Object.keys(allocationRemainingByUser).length === 0;
-        const coversEverySubmitter = isOpenPool || (
-          submitterIds.length > 0
-          && submitterIds.every(userId => allocationRemainingByUser[userId] !== undefined)
-        );
-        if (!coversEverySubmitter) return null;
-        const personalRemaining = Object.values(allocationRemainingByUser)
-          .reduce((sum, remaining) => sum + Math.max(remaining, 0), 0);
-        return {
-          id: f.id,
-          name: f.name,
-          currency: f.currency,
-          available_balance: isOpenPool
-            ? Number(f.available_balance ?? 0)
-            : Math.min(Number(f.available_balance ?? 0), personalRemaining),
-          isOpenPool,
-          allocationRemainingByUser,
-        };
-      })
-      .filter((fund): fund is NonNullable<typeof fund> => fund !== null);
+    // Down Payments use the selected fund's shared balance, not the requester's
+    // personal allocation. Keep every active fund in the selector.
+    const preFunds = allFunds.map((f: any) => ({
+      id: f.id, name: f.name, currency: f.currency,
+      available_balance: f.available_balance ?? 0,
+    }));
 
     // Auto-detect the best pre-fund for these submitters so Finance doesn't
     // have to manually pick one when there is a clear allocation match.
@@ -1984,26 +1899,6 @@ export function DownPaymentApprovalPanel({
         variant: 'destructive',
       });
       return;
-    }
-    if (!selectedFund.isOpenPool) {
-      const requiredByUser = reqs.reduce<Record<string, number>>((totals, req) => {
-        const amount = isPartial && partialPercent
-          ? Math.round(getBatchPayBasis(req) * partialPercent) / 100
-          : getBatchPayBasis(req);
-        totals[req.requestedBy] = (totals[req.requestedBy] ?? 0) + amount;
-        return totals;
-      }, {});
-      const uncoveredUsers = Object.entries(requiredByUser).filter(
-        ([userId, required]) => (selectedFund.allocationRemainingByUser[userId] ?? -1) < required,
-      );
-      if (uncoveredUsers.length > 0) {
-        toast({
-          title: 'Insufficient requester allocation',
-          description: `${uncoveredUsers.length} requester${uncoveredUsers.length === 1 ? '' : 's'} do not have enough personal allocation in the selected fund. Reduce the payment or allocate budget before paying.`,
-          variant: 'destructive',
-        });
-        return;
-      }
     }
     setBatchPayDialog(prev => ({ ...prev, uploading: true }));
     try {
