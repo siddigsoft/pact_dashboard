@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Banknote, RefreshCw, Users, Search, Plus, Trash2,
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
@@ -33,6 +34,7 @@ interface HeldFund {
   available_balance: number;
   paid_amount: number;
   status: string;
+  holder_user_id: string | null;
 }
 
 interface Allocation {
@@ -71,6 +73,10 @@ export default function PreFundingDistribute() {
   const { toast } = useToast();
 
   const isFinanceAdmin = hasAnyRole(['super_admin', 'admin', 'financialAdmin', 'CountryDirector']);
+  const isAllocationTopUpAdmin = hasAnyRole([
+    'super_admin', 'superAdmin', 'admin', 'administrator',
+    'financialAdmin', 'financial_admin', 'finance', 'finance admin',
+  ]);
 
   const [funds, setFunds]               = useState<HeldFund[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -101,6 +107,14 @@ export default function PreFundingDistribute() {
   const [topUpReceiptFiles, setTopUpReceiptFiles] = useState<File[]>([]);
   const [topUpSaving, setTopUpSaving]     = useState(false);
   const [topUpConfirmStep, setTopUpConfirmStep] = useState(false);
+  const [deleteTopUpTarget, setDeleteTopUpTarget] = useState<{
+    alloc: Allocation;
+    entryIndex: number;
+    amount: number;
+    date: string;
+  } | null>(null);
+  const [deleteTopUpReason, setDeleteTopUpReason] = useState('');
+  const [deleteTopUpSaving, setDeleteTopUpSaving] = useState(false);
 
   // Receipt viewer popup — fetch-first to avoid cross-origin iframe bucket errors
   const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
@@ -318,6 +332,11 @@ export default function PreFundingDistribute() {
     receipt_url: string | null;
     reason?: string;
   }
+  interface TopUpReversalLogEntry extends TopUpLogEntry {
+    reversed_at: string;
+    reversed_by_user_id?: string | null;
+    reversal_reason: string;
+  }
   interface AllocMeta {
     text: string;
     top_up_count: number;
@@ -325,11 +344,12 @@ export default function PreFundingDistribute() {
     /** The original receipt URL saved when the first top-up overwrites receipt_url */
     initial_receipt_url?: string | null;
     initial_created_at?: string | null;
+    top_up_reversal_log: TopUpReversalLogEntry[];
   }
 
   /** Parse the notes field — may be plain text or JSON-encoded audit metadata. */
   const parseAllocMeta = (notes: string | null): AllocMeta => {
-    if (!notes) return { text: '', top_up_count: 0, top_up_log: [] };
+    if (!notes) return { text: '', top_up_count: 0, top_up_log: [], top_up_reversal_log: [] };
     try {
       const p = JSON.parse(notes);
       if (p && typeof p === 'object' && !Array.isArray(p)) {
@@ -339,10 +359,11 @@ export default function PreFundingDistribute() {
           top_up_log: p.top_up_log ?? [],
           initial_receipt_url: p.initial_receipt_url ?? null,
           initial_created_at: p.initial_created_at ?? null,
+          top_up_reversal_log: Array.isArray(p.top_up_reversal_log) ? p.top_up_reversal_log : [],
         };
       }
     } catch {}
-    return { text: notes, top_up_count: 0, top_up_log: [] };
+    return { text: notes, top_up_count: 0, top_up_log: [], top_up_reversal_log: [] };
   };
 
   /** Append a top-up entry. On first top-up, also preserves the original receipt URL. */
@@ -357,6 +378,7 @@ export default function PreFundingDistribute() {
       text: m.text,
       top_up_count: m.top_up_count + 1,
       top_up_log: [...m.top_up_log, entry],
+      top_up_reversal_log: m.top_up_reversal_log,
     };
     // Preserve original receipt on first top-up
     if (m.top_up_count === 0) {
@@ -411,8 +433,9 @@ export default function PreFundingDistribute() {
       const newUrl = await uploadReceipt(file, alloc.pre_fund_request_id, alloc.user_id);
       if (!newUrl) return;
       const meta = parseAllocMeta(alloc.notes);
+      let updateData: Record<string, any>;
       if (rowType === 'initial') {
-        let updateData: Record<string, any> = {};
+        updateData = {};
         if (meta.top_up_count === 0) {
           // No top-ups: receipt_url IS the initial receipt
           updateData.receipt_url = newUrl;
@@ -421,8 +444,6 @@ export default function PreFundingDistribute() {
           const parsed = JSON.parse(alloc.notes ?? '{}');
           updateData.notes = JSON.stringify({ ...parsed, initial_receipt_url: newUrl });
         }
-        const { error } = await (supabase as any).from('pre_fund_allocations').update(updateData).eq('id', alloc.id);
-        if (error) throw error;
       } else {
         const idx = rowType as number;
         const parsed = JSON.parse(alloc.notes ?? '{}');
@@ -430,10 +451,30 @@ export default function PreFundingDistribute() {
         updatedLog[idx] = { ...updatedLog[idx], receipt_url: newUrl };
         const updatedNotes = JSON.stringify({ ...parsed, top_up_log: updatedLog });
         const isLatest = idx === meta.top_up_log.length - 1;
-        const updateData: Record<string, any> = { notes: updatedNotes };
+        updateData = { notes: updatedNotes };
         if (isLatest) updateData.receipt_url = newUrl;
-        const { error } = await (supabase as any).from('pre_fund_allocations').update(updateData).eq('id', alloc.id);
-        if (error) throw error;
+      }
+
+      // Receipt replacement rewrites allocation metadata. Compare all relevant
+      // source values so a stale browser cannot reintroduce a concurrently
+      // reversed top-up or overwrite its restored receipt.
+      let updateQuery = (supabase as any)
+        .from('pre_fund_allocations')
+        .update(updateData)
+        .eq('id', alloc.id)
+        .eq('allocated_amount', alloc.allocated_amount);
+      updateQuery = alloc.notes === null
+        ? updateQuery.is('notes', null)
+        : updateQuery.eq('notes', alloc.notes);
+      updateQuery = alloc.receipt_url === null
+        ? updateQuery.is('receipt_url', null)
+        : updateQuery.eq('receipt_url', alloc.receipt_url);
+      const { data: updatedAllocation, error } = await updateQuery
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!updatedAllocation) {
+        throw new Error('The allocation changed while the receipt was uploading. Refresh the page and upload it again.');
       }
       toast({ title: '✅ Receipt uploaded', description: `${file.name} saved successfully.` });
       await loadAllocations(alloc.pre_fund_request_id);
@@ -451,7 +492,7 @@ export default function PreFundingDistribute() {
       // Build funds query first (needs runtime filter applied before awaiting)
       let fundsQ = (supabase as any)
         .from('pre_fund_requests')
-        .select('id,name,source,amount,currency,available_balance,paid_amount,status')
+        .select('id,name,source,amount,currency,available_balance,paid_amount,status,holder_user_id')
         .order('created_at', { ascending: false });
       if (!isFinanceAdmin) fundsQ = fundsQ.eq('holder_user_id', currentUser.id);
       else fundsQ = fundsQ.not('holder_user_id', 'is', null);
@@ -772,14 +813,19 @@ export default function PreFundingDistribute() {
         alloc.receipt_url,     // preserve original receipt on first top-up
         alloc.created_at,      // preserve original allocation date
       );
-      const { data: updatedAllocation, error } = await (supabase as any)
+      let updateAllocationQuery = (supabase as any)
         .from('pre_fund_allocations')
         .update({ allocated_amount: newTotal, receipt_url: uploaded, notes: newNotes })
         .eq('id', alloc.id)
+        .eq('allocated_amount', alloc.allocated_amount);
+      updateAllocationQuery = alloc.notes === null
+        ? updateAllocationQuery.is('notes', null)
+        : updateAllocationQuery.eq('notes', alloc.notes);
+      const { data: updatedAllocation, error } = await updateAllocationQuery
         .select('id')
         .maybeSingle();
       if (error) throw error;
-      if (!updatedAllocation) throw new Error('The allocation could not be updated. It may have been removed or changed; refresh the page and try again.');
+      if (!updatedAllocation) throw new Error('The allocation changed while this top-up was being recorded. Refresh the page and try again.');
       dispatchNotification({
         event: 'pre_fund_allocation_updated', recipientIds: [alloc.user_id],
         titleEn: 'Fund Allocation Topped Up', titleAr: 'تم تعبئة تخصيص الصندوق',
@@ -799,6 +845,49 @@ export default function PreFundingDistribute() {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setTopUpSaving(false);
+    }
+  };
+
+  const handleDeleteLatestTopUp = async () => {
+    if (!deleteTopUpTarget) return;
+    if (!deleteTopUpReason.trim()) {
+      toast({
+        title: 'Reason required',
+        description: 'Explain why the latest Add Funds transaction must be removed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDeleteTopUpSaving(true);
+    try {
+      const { data, error } = await (supabase as any).rpc(
+        'reverse_latest_pre_fund_allocation_topup_rpc',
+        {
+          p_allocation_id: deleteTopUpTarget.alloc.id,
+          p_expected_latest_date: deleteTopUpTarget.date,
+          p_reason: deleteTopUpReason.trim(),
+        },
+      );
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'The latest Add Funds transaction could not be removed.');
+
+      const allocation = deleteTopUpTarget.alloc;
+      toast({
+        title: 'Latest transaction removed',
+        description: `${formatNumber(Number(data.reversed_amount ?? deleteTopUpTarget.amount), 0)} ${allocation.currency} was reversed. The previous Add Funds transaction is now the latest.`,
+      });
+      setDeleteTopUpTarget(null);
+      setDeleteTopUpReason('');
+      await loadAllocations(allocation.pre_fund_request_id);
+    } catch (e: any) {
+      toast({
+        title: 'Could not remove transaction',
+        description: e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteTopUpSaving(false);
     }
   };
 
@@ -1388,6 +1477,14 @@ export default function PreFundingDistribute() {
                                         <tbody>
                                           {rows.map((row) => {
                                             const missingReceipt = !row.receipt_url;
+                                            const entryIndex = row.seq - 2;
+                                            const canDeleteLatestTopUp =
+                                              !row.is_initial &&
+                                              entryIndex === m.top_up_log.length - 1 &&
+                                              (
+                                                isAllocationTopUpAdmin ||
+                                                fund.holder_user_id === currentUser?.id
+                                              );
                                             return (
                                             <tr
                                               key={row.seq}
@@ -1468,6 +1565,26 @@ export default function PreFundingDistribute() {
                                                       <Upload className="h-2.5 w-2.5" />Upload
                                                     </button>
                                                   </div>
+                                                )}
+                                                {canDeleteLatestTopUp && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setDeleteTopUpTarget({
+                                                        alloc: a,
+                                                        entryIndex,
+                                                        amount: row.amount,
+                                                        date: row.date ?? '',
+                                                      });
+                                                      setDeleteTopUpReason('');
+                                                    }}
+                                                    className="mt-1 inline-flex items-center gap-0.5 rounded border border-destructive/30 px-1.5 py-0.5 text-[9px] font-medium text-destructive hover:bg-destructive/10"
+                                                    title="Remove the latest Add Funds transaction"
+                                                    data-testid={`button-delete-latest-topup-${a.id}`}
+                                                  >
+                                                    <Trash2 className="h-2.5 w-2.5" />
+                                                    Delete latest
+                                                  </button>
                                                 )}
                                               </td>
                                             </tr>
@@ -2097,6 +2214,34 @@ export default function PreFundingDistribute() {
                       </div>
                     </div>
                   )}
+                  {allocMeta.top_up_reversal_log.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <History className="h-3 w-3" />
+                        Reversed Add Funds Transactions
+                      </p>
+                      <div className="max-h-32 space-y-1.5 overflow-y-auto">
+                        {[...allocMeta.top_up_reversal_log].reverse().map((entry, i) => (
+                          <div
+                            key={`${entry.reversed_at}-${i}`}
+                            className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-1.5 text-[10px]"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-destructive">
+                                −{alloc.currency} {formatNumber(entry.amount, 0)}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {format(new Date(entry.reversed_at), 'dd MMM yyyy HH:mm')}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-muted-foreground">
+                              Reason: {entry.reversal_reason}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setTopUpDialog({ open: false, alloc: null, fundId: '', fund: null })}>Cancel</Button>
@@ -2109,6 +2254,97 @@ export default function PreFundingDistribute() {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete latest Add Funds transaction confirmation */}
+      <Dialog
+        open={!!deleteTopUpTarget}
+        onOpenChange={open => {
+          if (!open && !deleteTopUpSaving) {
+            setDeleteTopUpTarget(null);
+            setDeleteTopUpReason('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Remove Latest Add Funds Transaction
+            </DialogTitle>
+          </DialogHeader>
+          {deleteTopUpTarget && (
+            <div className="space-y-4 py-1">
+              <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  Only the current latest transaction can be removed. After it is reversed,
+                  the previous Add Funds transaction becomes the latest and may be removed next.
+                </AlertDescription>
+              </Alert>
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                <p className="font-medium">{deleteTopUpTarget.alloc.user_name}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <span className="text-muted-foreground">Transaction</span>
+                  <span className="text-right font-medium">#{deleteTopUpTarget.entryIndex + 2}</span>
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="text-right">
+                    {format(new Date(deleteTopUpTarget.date), 'dd MMM yyyy HH:mm')}
+                  </span>
+                  <span className="text-muted-foreground">Amount</span>
+                  <span className="text-right font-mono font-semibold text-destructive">
+                    −{deleteTopUpTarget.alloc.currency} {formatNumber(deleteTopUpTarget.amount, 0)}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="delete-topup-reason">Reason *</Label>
+                <Textarea
+                  id="delete-topup-reason"
+                  rows={3}
+                  placeholder="Explain why this latest transaction must be removed…"
+                  value={deleteTopUpReason}
+                  onChange={event => setDeleteTopUpReason(event.target.value)}
+                  disabled={deleteTopUpSaving}
+                  data-testid="input-delete-latest-topup-reason"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  The reversal and its reason remain in the allocation audit history.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteTopUpTarget(null);
+                setDeleteTopUpReason('');
+              }}
+              disabled={deleteTopUpSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteLatestTopUp}
+              disabled={deleteTopUpSaving || !deleteTopUpReason.trim()}
+              data-testid="button-confirm-delete-latest-topup"
+            >
+              {deleteTopUpSaving ? (
+                <>
+                  <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" />
+                  Removing…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  Remove Latest
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

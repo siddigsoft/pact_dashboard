@@ -32,6 +32,11 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
   $$ SELECT '00000000-0000-0000-0000-000000000001'::uuid $$;
 
 CREATE TABLE public.profiles (id uuid PRIMARY KEY, role text);
+CREATE TABLE public.user_roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id),
+  role text
+);
 INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000001');
 INSERT INTO public.profiles VALUES ('00000000-0000-0000-0000-000000000001', 'super_admin');
 INSERT INTO auth.users VALUES ('00000000-0000-0000-0000-000000000002');
@@ -73,7 +78,7 @@ CREATE TABLE public.pre_fund_transactions (
 CREATE TABLE public.pre_fund_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), pre_fund_request_id uuid NOT NULL REFERENCES public.pre_fund_requests(id),
   user_id uuid NOT NULL REFERENCES auth.users(id), allocated_amount numeric NOT NULL, spent_amount numeric NOT NULL DEFAULT 0,
-  currency text NOT NULL, notes text, created_by uuid, created_at timestamptz NOT NULL DEFAULT now(),
+  currency text NOT NULL, notes text, receipt_url text, created_by uuid, created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(pre_fund_request_id, user_id)
 );
 CREATE TABLE public.down_payment_requests (
@@ -192,6 +197,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824c_repair_ops_cost_gl_bridge_account_codes.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824d_repair_down_payment_gl_bridge_account_codes.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260825_post_direct_pre_fund_topups.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_reverse_latest_allocation_topup.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -287,6 +293,210 @@ INSERT INTO public.pre_fund_allocations (
 INSERT INTO public.pre_fund_allocations (
   pre_fund_request_id, user_id, allocated_amount, currency
 ) VALUES ('10000000-0000-0000-0000-000000000099', '00000000-0000-0000-0000-000000000001', 100, 'SDG');
+
+-- Allocation Add Funds reversals are newest-only, holder/admin authorised, and
+-- restore the previous amount/receipt without removing audit evidence.
+UPDATE public.pre_fund_requests
+SET holder_user_id = '00000000-0000-0000-0000-000000000002'
+WHERE id = '10000000-0000-0000-0000-000000000002';
+
+INSERT INTO public.pre_fund_allocations (
+  id, pre_fund_request_id, user_id, allocated_amount, spent_amount, currency, notes, receipt_url
+) VALUES (
+  '60000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000002',
+  175, 20, 'SDG',
+  jsonb_build_object(
+    'text', 'Newest-only fixture',
+    'top_up_count', 2,
+    'initial_receipt_url', 'receipt-initial',
+    'initial_created_at', '2026-08-01T00:00:00.000Z',
+    'top_up_log', jsonb_build_array(
+      jsonb_build_object(
+        'date', '2026-08-02T10:00:00.000Z',
+        'amount', 50,
+        'previous_total', 100,
+        'new_total', 150,
+        'by_user_id', auth.uid(),
+        'by_name', 'Admin',
+        'receipt_url', 'receipt-topup-one'
+      ),
+      jsonb_build_object(
+        'date', '2026-08-03T10:00:00.000Z',
+        'amount', 25,
+        'previous_total', 150,
+        'new_total', 175,
+        'by_user_id', auth.uid(),
+        'by_name', 'Admin',
+        'receipt_url', 'receipt-topup-two'
+      )
+    )
+  )::text,
+  'receipt-topup-two'
+);
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.reverse_latest_pre_fund_allocation_topup_rpc(
+      '60000000-0000-0000-0000-000000000001',
+      '2026-08-02T10:00:00.000Z',
+      'Must reject a stale older row'
+    );
+    RAISE EXCEPTION 'stale non-latest allocation top-up was reversed';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'stale non-latest allocation top-up was reversed' THEN RAISE; END IF;
+  END;
+END $$;
+
+SELECT public.reverse_latest_pre_fund_allocation_topup_rpc(
+  '60000000-0000-0000-0000-000000000001',
+  '2026-08-03T10:00:00.000Z',
+  'Correct the newest top-up'
+);
+
+DO $$
+DECLARE
+  v_rows integer;
+BEGIN
+  -- Mirrors the UI receipt replacement compare-and-swap. A replacement that
+  -- started from the pre-reversal snapshot must update zero rows and therefore
+  -- cannot restore the reversed top-up metadata.
+  UPDATE public.pre_fund_allocations
+  SET notes = jsonb_set(
+    notes::jsonb,
+    '{top_up_log,1,receipt_url}',
+    to_jsonb('stale-replacement-receipt'::text)
+  )::text
+  WHERE id = '60000000-0000-0000-0000-000000000001'
+    AND allocated_amount = 175
+    AND receipt_url = 'receipt-topup-two';
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+
+  IF v_rows <> 0 THEN
+    RAISE EXCEPTION 'stale receipt replacement overwrote a completed top-up reversal';
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  v_amount numeric;
+  v_spent numeric;
+  v_receipt text;
+  v_active_count integer;
+  v_reversal_count integer;
+  v_audit_count integer;
+BEGIN
+  SELECT allocated_amount, spent_amount, receipt_url,
+    jsonb_array_length(notes::jsonb -> 'top_up_log'),
+    jsonb_array_length(notes::jsonb -> 'top_up_reversal_log')
+  INTO v_amount, v_spent, v_receipt, v_active_count, v_reversal_count
+  FROM public.pre_fund_allocations
+  WHERE id = '60000000-0000-0000-0000-000000000001';
+
+  SELECT count(*) INTO v_audit_count
+  FROM public.pre_fund_allocation_topup_reversal_audit
+  WHERE allocation_id = '60000000-0000-0000-0000-000000000001';
+
+  IF v_amount <> 150 OR v_spent <> 20 OR v_receipt <> 'receipt-topup-one'
+     OR v_active_count <> 1 OR v_reversal_count <> 1 OR v_audit_count <> 1 THEN
+    RAISE EXCEPTION 'latest top-up reversal state is inconsistent: amount %, spent %, receipt %, active %, reversed %, audit %',
+      v_amount, v_spent, v_receipt, v_active_count, v_reversal_count, v_audit_count;
+  END IF;
+END $$;
+
+UPDATE public.profiles SET role = 'staff' WHERE id = auth.uid();
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.reverse_latest_pre_fund_allocation_topup_rpc(
+      '60000000-0000-0000-0000-000000000001',
+      '2026-08-02T10:00:00.000Z',
+      'Unauthorised attempt'
+    );
+    RAISE EXCEPTION 'non-holder non-admin reversed an allocation top-up';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'non-holder non-admin reversed an allocation top-up' THEN RAISE; END IF;
+  END;
+END $$;
+UPDATE public.profiles SET role = 'super_admin' WHERE id = auth.uid();
+
+SELECT public.reverse_latest_pre_fund_allocation_topup_rpc(
+  '60000000-0000-0000-0000-000000000001',
+  '2026-08-02T10:00:00.000Z',
+  'Remove the new latest top-up'
+);
+
+DO $$
+DECLARE
+  v_amount numeric;
+  v_receipt text;
+  v_active_count integer;
+  v_reversal_count integer;
+BEGIN
+  SELECT allocated_amount, receipt_url,
+    jsonb_array_length(notes::jsonb -> 'top_up_log'),
+    jsonb_array_length(notes::jsonb -> 'top_up_reversal_log')
+  INTO v_amount, v_receipt, v_active_count, v_reversal_count
+  FROM public.pre_fund_allocations
+  WHERE id = '60000000-0000-0000-0000-000000000001';
+
+  IF v_amount <> 100 OR v_receipt <> 'receipt-initial'
+     OR v_active_count <> 0 OR v_reversal_count <> 2 THEN
+    RAISE EXCEPTION 'repeated newest-to-oldest reversal failed: amount %, receipt %, active %, reversed %',
+      v_amount, v_receipt, v_active_count, v_reversal_count;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.reverse_latest_pre_fund_allocation_topup_rpc(
+      '60000000-0000-0000-0000-000000000001',
+      '2026-08-02T10:00:00.000Z',
+      'Original allocation must remain'
+    );
+    RAISE EXCEPTION 'original allocation was treated as an Add Funds transaction';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'original allocation was treated as an Add Funds transaction' THEN RAISE; END IF;
+  END;
+END $$;
+
+UPDATE public.pre_fund_allocations
+SET allocated_amount = 130,
+    spent_amount = 120,
+    receipt_url = 'receipt-spent-topup',
+    notes = jsonb_build_object(
+      'text', 'Spent protection fixture',
+      'top_up_count', 1,
+      'initial_receipt_url', 'receipt-initial',
+      'top_up_log', jsonb_build_array(jsonb_build_object(
+        'date', '2026-08-04T10:00:00.000Z',
+        'amount', 30,
+        'previous_total', 100,
+        'new_total', 130,
+        'by_user_id', auth.uid(),
+        'by_name', 'Admin',
+        'receipt_url', 'receipt-spent-topup'
+      ))
+    )::text
+WHERE id = '60000000-0000-0000-0000-000000000001';
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.reverse_latest_pre_fund_allocation_topup_rpc(
+      '60000000-0000-0000-0000-000000000001',
+      '2026-08-04T10:00:00.000Z',
+      'Must not reduce allocation below spent'
+    );
+    RAISE EXCEPTION 'spent allocation top-up was unsafely reversed';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'spent allocation top-up was unsafely reversed' THEN RAISE; END IF;
+  END;
+END $$;
+
 -- Cost Submissions now use any funded Pre-Fund in the same currency. The
 -- source owner remains on the ledger but does not need an allocation row.
 INSERT INTO public.operational_cost_submissions (id, status, amount_paid_cents, submitted_by)
