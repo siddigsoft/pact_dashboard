@@ -23,7 +23,7 @@ import {
   AlertTriangle, ChevronRight, DollarSign, Calendar, CheckCircle2,
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
   Users, UserPlus, Wallet, TrendingUp, Bell, ArrowLeftRight,
-  PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, MoreHorizontal,
+  PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, ChevronLeft, MoreHorizontal,
   History, Eye,
 } from 'lucide-react';
 import {
@@ -987,9 +987,10 @@ export default function PreFundingRegistry() {
   const [adjustDirectTopUpSaving, setAdjustDirectTopUpSaving] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<{
     open: boolean;
-    url: string;
+    urls: string[];
+    index: number;
     name: string;
-  }>({ open: false, url: '', name: '' });
+  }>({ open: false, urls: [], index: 0, name: '' });
   const [receiptPreviewError, setReceiptPreviewError] = useState(false);
 
   // Transfer Funds dialog
@@ -1303,7 +1304,7 @@ export default function PreFundingRegistry() {
     return [...new Set(urls)];
   };
 
-  const openReceiptPreview = (url: string, index = 0) => {
+  const getReceiptName = (url: string, index: number) => {
     let name = `Receipt ${index + 1}`;
     try {
       const pathName = new URL(url).pathname;
@@ -1312,18 +1313,40 @@ export default function PreFundingRegistry() {
     } catch {
       // Keep the generic receipt name for legacy/non-URL document references.
     }
+    return name;
+  };
+
+  const openReceiptPreview = (urls: string[], index = 0) => {
+    const safeIndex = Math.max(0, Math.min(index, urls.length - 1));
     setReceiptPreviewError(false);
-    setReceiptPreview({ open: true, url, name });
+    setReceiptPreview({
+      open: true,
+      urls,
+      index: safeIndex,
+      name: getReceiptName(urls[safeIndex], safeIndex),
+    });
   };
 
   const closeReceiptPreview = () => {
-    setReceiptPreview({ open: false, url: '', name: '' });
+    setReceiptPreview({ open: false, urls: [], index: 0, name: '' });
     setReceiptPreviewError(false);
   };
 
-  const receiptUrlPath = receiptPreview.url.split('?')[0].toLowerCase();
+  const currentReceiptUrl = receiptPreview.urls[receiptPreview.index] ?? '';
+  const receiptUrlPath = currentReceiptUrl.split('?')[0].toLowerCase();
   const receiptIsImage = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/.test(receiptUrlPath);
   const receiptIsPdf = /\.pdf$/.test(receiptUrlPath);
+
+  const moveReceiptPreview = (direction: -1 | 1) => {
+    if (receiptPreview.urls.length < 2) return;
+    const nextIndex = (receiptPreview.index + direction + receiptPreview.urls.length) % receiptPreview.urls.length;
+    setReceiptPreviewError(false);
+    setReceiptPreview(prev => ({
+      ...prev,
+      index: nextIndex,
+      name: getReceiptName(prev.urls[nextIndex], nextIndex),
+    }));
+  };
 
   const handleReverseLatestDirectTopUp = async () => {
     if (!reverseDirectTopUpTarget) return;
@@ -2881,18 +2904,13 @@ export default function PreFundingRegistry() {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => openReceiptPreview(documentUrls[0])}
+                                    onClick={() => openReceiptPreview(documentUrls)}
                                     className="h-7 gap-1 px-1.5 text-[10px] font-normal text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/30"
                                     data-testid={`button-view-fund-receipt-${transaction.id}`}
                                   >
                                     <Eye className="h-3 w-3" />
-                                    View
+                                    {documentUrls.length > 1 ? `View all (${documentUrls.length})` : 'View'}
                                   </Button>
-                                  {documentUrls.length > 1 && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      +{documentUrls.length - 1}
-                                    </span>
-                                  )}
                                 </div>
                               ) : (
                                 <span className="text-[10px] text-muted-foreground">—</span>
@@ -3056,6 +3074,35 @@ export default function PreFundingRegistry() {
             <p className="truncate text-xs text-muted-foreground" title={receiptPreview.name}>
               {receiptPreview.name}
             </p>
+            {receiptPreview.urls.length > 1 && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => moveReceiptPreview(-1)}
+                  className="h-7 px-2 text-xs"
+                  aria-label="Previous receipt"
+                >
+                  <ChevronLeft className="mr-1 h-3.5 w-3.5" />
+                  Previous
+                </Button>
+                <span className="text-xs font-medium text-muted-foreground">
+                  Receipt {receiptPreview.index + 1} of {receiptPreview.urls.length}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => moveReceiptPreview(1)}
+                  className="h-7 px-2 text-xs"
+                  aria-label="Next receipt"
+                >
+                  Next
+                  <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </DialogHeader>
 
           <div className="min-h-0 overflow-auto rounded-lg border bg-muted/20 p-2">
@@ -3071,14 +3118,14 @@ export default function PreFundingRegistry() {
               </div>
             ) : receiptIsImage ? (
               <img
-                src={receiptPreview.url}
+                src={currentReceiptUrl}
                 alt={receiptPreview.name}
                 className="mx-auto max-h-[calc(100dvh-13rem)] max-w-full rounded object-contain"
                 onError={() => setReceiptPreviewError(true)}
               />
             ) : receiptIsPdf ? (
               <iframe
-                src={receiptPreview.url}
+                src={currentReceiptUrl}
                 title={receiptPreview.name}
                 className="h-[calc(100dvh-13rem)] min-h-[420px] w-full rounded border-0"
                 onError={() => setReceiptPreviewError(true)}
@@ -3094,9 +3141,9 @@ export default function PreFundingRegistry() {
           </div>
 
           <DialogFooter className="flex-row justify-end gap-2">
-            {!receiptPreviewError && receiptPreview.url && (
+            {!receiptPreviewError && currentReceiptUrl && (
               <a
-                href={receiptPreview.url}
+                href={currentReceiptUrl}
                 download={receiptPreview.name}
                 className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted"
               >
