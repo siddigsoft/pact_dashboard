@@ -99,6 +99,25 @@ interface FundingHistoryTransaction {
   created_by_name?: string;
 }
 
+function parseSupabaseStorageReference(rawUrl: string): { bucket: string; path: string } | null {
+  try {
+    const pathname = new URL(rawUrl).pathname;
+    const marker = '/storage/v1/object/';
+    const markerIndex = pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+
+    const remainder = pathname.slice(markerIndex + marker.length);
+    const parts = remainder.split('/');
+    if (parts.length < 3 || !['public', 'sign', 'authenticated'].includes(parts[0])) return null;
+
+    const bucket = decodeURIComponent(parts[1]);
+    const path = decodeURIComponent(parts.slice(2).join('/'));
+    return bucket && path ? { bucket, path } : null;
+  } catch {
+    return null;
+  }
+}
+
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
   draft:            { label: 'Draft',            cls: 'bg-slate-100 text-slate-600 border-slate-200' },
   pending_approval: { label: 'Awaiting Approval',cls: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -992,6 +1011,9 @@ export default function PreFundingRegistry() {
     name: string;
   }>({ open: false, urls: [], index: 0, name: '' });
   const [receiptPreviewError, setReceiptPreviewError] = useState(false);
+  const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState('');
+  const [receiptPreviewMime, setReceiptPreviewMime] = useState('');
 
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
@@ -1334,8 +1356,64 @@ export default function PreFundingRegistry() {
 
   const currentReceiptUrl = receiptPreview.urls[receiptPreview.index] ?? '';
   const receiptUrlPath = currentReceiptUrl.split('?')[0].toLowerCase();
-  const receiptIsImage = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/.test(receiptUrlPath);
-  const receiptIsPdf = /\.pdf$/.test(receiptUrlPath);
+  const receiptIsImage = receiptPreviewMime.startsWith('image/')
+    || /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/.test(receiptUrlPath);
+  const receiptIsPdf = receiptPreviewMime === 'application/pdf' || /\.pdf$/.test(receiptUrlPath);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    setReceiptPreviewError(false);
+    setReceiptPreviewUrl('');
+    setReceiptPreviewMime('');
+
+    if (!currentReceiptUrl) {
+      setReceiptPreviewLoading(false);
+      return () => undefined;
+    }
+
+    setReceiptPreviewLoading(true);
+
+    const loadReceipt = async () => {
+      const storageReference = parseSupabaseStorageReference(currentReceiptUrl);
+      if (!storageReference) {
+        if (!cancelled) {
+          setReceiptPreviewUrl(currentReceiptUrl);
+          setReceiptPreviewLoading(false);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from(storageReference.bucket)
+        .download(storageReference.path);
+
+      if (cancelled) return;
+      if (error || !data) {
+        setReceiptPreviewError(true);
+        setReceiptPreviewLoading(false);
+        return;
+      }
+
+      objectUrl = URL.createObjectURL(data);
+      setReceiptPreviewUrl(objectUrl);
+      setReceiptPreviewMime(data.type || '');
+      setReceiptPreviewLoading(false);
+    };
+
+    loadReceipt().catch(() => {
+      if (!cancelled) {
+        setReceiptPreviewError(true);
+        setReceiptPreviewLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [currentReceiptUrl]);
 
   const moveReceiptPreview = (direction: -1 | 1) => {
     if (receiptPreview.urls.length < 2) return;
@@ -3106,7 +3184,11 @@ export default function PreFundingRegistry() {
           </DialogHeader>
 
           <div className="min-h-0 overflow-auto rounded-lg border bg-muted/20 p-2">
-            {receiptPreviewError ? (
+            {receiptPreviewLoading ? (
+              <div className="flex min-h-[260px] items-center justify-center">
+                <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : receiptPreviewError ? (
               <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-4 text-center">
                 <AlertTriangle className="h-8 w-8 text-amber-500" />
                 <div>
@@ -3118,14 +3200,14 @@ export default function PreFundingRegistry() {
               </div>
             ) : receiptIsImage ? (
               <img
-                src={currentReceiptUrl}
+                src={receiptPreviewUrl}
                 alt={receiptPreview.name}
                 className="mx-auto max-h-[calc(100dvh-13rem)] max-w-full rounded object-contain"
                 onError={() => setReceiptPreviewError(true)}
               />
             ) : receiptIsPdf ? (
               <iframe
-                src={currentReceiptUrl}
+                src={receiptPreviewUrl}
                 title={receiptPreview.name}
                 className="h-[calc(100dvh-13rem)] min-h-[420px] w-full rounded border-0"
                 onError={() => setReceiptPreviewError(true)}
@@ -3141,9 +3223,9 @@ export default function PreFundingRegistry() {
           </div>
 
           <DialogFooter className="flex-row justify-end gap-2">
-            {!receiptPreviewError && currentReceiptUrl && (
+            {!receiptPreviewError && receiptPreviewUrl && (
               <a
-                href={currentReceiptUrl}
+                href={receiptPreviewUrl}
                 download={receiptPreview.name}
                 className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted"
               >
