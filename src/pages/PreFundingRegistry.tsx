@@ -24,6 +24,7 @@ import {
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
   Users, UserPlus, Wallet, TrendingUp, Bell, ArrowLeftRight,
   PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, MoreHorizontal,
+  History, ExternalLink,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -79,6 +80,21 @@ interface PreFundRequest {
   allow_overpay: boolean | null;
   gl_receipt_account?: string | null;
   gl_liability_account?: string | null;
+}
+
+interface FundingHistoryTransaction {
+  id: string;
+  transaction_type: string;
+  amount: number;
+  currency: string;
+  transaction_date: string | null;
+  description: string | null;
+  reference: string | null;
+  receipt_url: string | null;
+  event_reason: string | null;
+  event_metadata: Record<string, any> | string | null;
+  created_by: string | null;
+  created_by_name?: string;
 }
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
@@ -948,6 +964,13 @@ export default function PreFundingRegistry() {
   const [directTopUpFiles, setDirectTopUpFiles] = useState<File[]>([]);
   const [directTopUpSubmitting, setDirectTopUpSubmitting] = useState(false);
 
+  const [fundingHistoryDialog, setFundingHistoryDialog] = useState<{
+    open: boolean;
+    fund: PreFundRequest | null;
+  }>({ open: false, fund: null });
+  const [fundingHistory, setFundingHistory] = useState<FundingHistoryTransaction[]>([]);
+  const [fundingHistoryLoading, setFundingHistoryLoading] = useState(false);
+
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
     open: boolean; sourceFund: PreFundRequest | null; destFundId: string; amount: string; reason: string;
@@ -1172,6 +1195,89 @@ export default function PreFundingRegistry() {
       reason: '',
       idempotencyKey: crypto.randomUUID(),
     });
+  };
+
+  const openFundingHistory = async (fund: PreFundRequest) => {
+    setFundingHistoryDialog({ open: true, fund });
+    setFundingHistory([]);
+    setFundingHistoryLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('pre_fund_transactions')
+        .select('id,transaction_type,amount,currency,transaction_date,description,reference,receipt_url,event_reason,event_metadata,created_by')
+        .eq('pre_fund_request_id', fund.id)
+        .order('transaction_date', { ascending: true });
+      if (error) throw error;
+
+      const transactions = (data ?? []) as FundingHistoryTransaction[];
+      const creatorIds = [...new Set(transactions.map(t => t.created_by).filter(Boolean))];
+      let profileMap: Record<string, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id,full_name,email')
+          .in('id', creatorIds);
+        profileMap = Object.fromEntries(
+          (profiles ?? []).map((profile: any) => [
+            profile.id,
+            profile.full_name || profile.email || 'Unknown user',
+          ]),
+        );
+      }
+
+      setFundingHistory(
+        transactions
+          .filter(transaction => {
+            const metadata = typeof transaction.event_metadata === 'string'
+              ? (() => {
+                  try { return JSON.parse(transaction.event_metadata as string); } catch { return {}; }
+                })()
+              : transaction.event_metadata ?? {};
+            return transaction.transaction_type === 'receipt'
+              || metadata.event_type === 'direct_fund_top_up';
+          })
+          .map(transaction => ({
+            ...transaction,
+            created_by_name: transaction.created_by
+              ? profileMap[transaction.created_by] ?? 'Unknown user'
+              : 'System',
+          })),
+      );
+    } catch (e: any) {
+      toast({
+        title: 'Could not load funding history',
+        description: e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setFundingHistoryLoading(false);
+    }
+  };
+
+  const parseFundingMetadata = (transaction: FundingHistoryTransaction): Record<string, any> => {
+    if (typeof transaction.event_metadata === 'object' && transaction.event_metadata) {
+      return transaction.event_metadata;
+    }
+    if (typeof transaction.event_metadata === 'string') {
+      try { return JSON.parse(transaction.event_metadata); } catch { return {}; }
+    }
+    return {};
+  };
+
+  const parseDocumentUrls = (url: string | null, metadata: Record<string, any>): string[] => {
+    const urls: string[] = [];
+    if (url) {
+      try {
+        const parsed = JSON.parse(url);
+        if (Array.isArray(parsed)) urls.push(...parsed.filter(Boolean));
+        else urls.push(url);
+      } catch {
+        urls.push(url);
+      }
+    }
+    const supporting = metadata.supporting_document_urls;
+    if (Array.isArray(supporting)) urls.push(...supporting.filter(Boolean));
+    return [...new Set(urls)];
   };
 
   const handleDirectTopUp = async () => {
@@ -2135,6 +2241,13 @@ export default function PreFundingRegistry() {
                         <DropdownMenuContent align="end" className="w-52 max-h-[min(420px,80vh)] overflow-y-auto">
 
                           {/* Fund-level actions */}
+                          <DropdownMenuItem
+                            className="gap-2 text-xs cursor-pointer text-indigo-700"
+                            onClick={() => openFundingHistory(f)}
+                            data-testid={`menu-funding-history-${f.id}`}
+                          >
+                            <History className="h-3.5 w-3.5" />Funding History
+                          </DropdownMenuItem>
                           {['active', 'low_balance', 'closed'].includes(f.status) && (
                             <DropdownMenuItem className="gap-2 text-xs cursor-pointer text-sky-700" onClick={() => handleDonorPDF(f)} disabled={generatingDonorPdf === f.id} data-testid={`menu-pdf-${f.id}`}>
                               <FileText className="h-3.5 w-3.5" />
@@ -2442,6 +2555,164 @@ export default function PreFundingRegistry() {
               data-testid="button-confirm-transfer"
             >
               {transferring ? 'Transferring…' : 'Confirm Transfer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Fund Funding History Dialog ─────────────────────────────────────── */}
+      <Dialog
+        open={fundingHistoryDialog.open}
+        onOpenChange={open => {
+          if (!open) setFundingHistoryDialog({ open: false, fund: null });
+        }}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] max-w-4xl max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+              <History className="h-5 w-5" />
+              Funding History
+            </DialogTitle>
+          </DialogHeader>
+          {fundingHistoryDialog.fund && (() => {
+            const fund = fundingHistoryDialog.fund;
+            let runningTotal = 0;
+            const historyRows = fundingHistory.map(transaction => {
+              runningTotal += Number(transaction.amount) || 0;
+              const metadata = parseFundingMetadata(transaction);
+              const isDirectTopUp = metadata.event_type === 'direct_fund_top_up'
+                || (transaction.description ?? '').toLowerCase().includes('top-up');
+              const documentUrls = parseDocumentUrls(transaction.receipt_url, metadata);
+              return { transaction, metadata, isDirectTopUp, documentUrls, runningTotal };
+            });
+
+            return (
+              <div className="min-h-0 overflow-y-auto overscroll-contain pr-1 -mr-1">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 mb-4">
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Funded</p>
+                    <p className="mt-1 font-mono text-sm font-bold">
+                      {fund.currency} {formatNumber(fund.amount, 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-emerald-50/60 dark:bg-emerald-950/20 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Available Balance</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                      {fund.currency} {formatNumber(fund.available_balance, 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-sky-50/60 dark:bg-sky-950/20 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Disbursed</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-sky-700 dark:text-sky-300">
+                      {fund.currency} {formatNumber(fund.paid_amount, 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <Alert className="mb-4 border-indigo-200 bg-indigo-50/60 dark:border-indigo-900 dark:bg-indigo-950/20">
+                  <AlertDescription className="text-xs text-indigo-900 dark:text-indigo-200">
+                    This history shows money received into the fund. Each direct top-up has its funding source,
+                    reason, recorder, and supporting receipt or document.
+                  </AlertDescription>
+                </Alert>
+
+                {fundingHistoryLoading ? (
+                  <div className="space-y-2 py-4">
+                    {[1, 2, 3].map(item => <Skeleton key={item} className="h-12 w-full" />)}
+                  </div>
+                ) : historyRows.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+                    No receipt or direct top-up transactions were found for this fund.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead>Type / Source</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Running Funded Total</TableHead>
+                          <TableHead>Reason / Reference</TableHead>
+                          <TableHead>Recorded By</TableHead>
+                          <TableHead className="text-center">Evidence</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {historyRows.map(({ transaction, metadata, isDirectTopUp, documentUrls, runningTotal }) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                              {transaction.transaction_date
+                                ? format(parseISO(transaction.transaction_date), 'dd MMM yyyy HH:mm')
+                                : '—'}
+                            </TableCell>
+                            <TableCell className="min-w-[150px]">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  'text-[10px]',
+                                  isDirectTopUp
+                                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
+                                )}
+                              >
+                                {isDirectTopUp ? 'Direct top-up' : 'Initial funding'}
+                              </Badge>
+                              <p className="mt-1 max-w-[220px] truncate text-[11px] text-muted-foreground" title={String(metadata.funding_source ?? transaction.description ?? '')}>
+                                {metadata.funding_source ?? transaction.description ?? '—'}
+                              </p>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-right font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                              +{transaction.currency} {formatNumber(transaction.amount, 0)}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-right font-mono text-xs">
+                              {transaction.currency} {formatNumber(runningTotal, 0)}
+                            </TableCell>
+                            <TableCell className="min-w-[180px] max-w-[260px] text-xs text-muted-foreground">
+                              <p className="truncate" title={String(metadata.reason ?? transaction.event_reason ?? transaction.reference ?? '')}>
+                                {metadata.reason ?? transaction.event_reason ?? transaction.reference ?? '—'}
+                              </p>
+                              {transaction.reference && metadata.reason && (
+                                <p className="mt-0.5 truncate text-[10px]">Ref: {transaction.reference}</p>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                              {transaction.created_by_name ?? 'System'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {documentUrls.length > 0 ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <a
+                                    href={documentUrls[0]}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:underline"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    View
+                                  </a>
+                                  {documentUrls.length > 1 && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      +{documentUrls.length - 1}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFundingHistoryDialog({ open: false, fund: null })}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
