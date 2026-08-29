@@ -1532,6 +1532,13 @@ SELECT public.record_direct_pre_fund_topup_rpc(
   '[]'::jsonb,
   'direct-topup-adjustment-original'
 );
+UPDATE public.acct_journal_entries
+SET status = 'draft', posted_at = NULL
+WHERE idempotency_key = (
+  SELECT 'pf-direct-topup:' || idempotency_key
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'direct-fund-topup:direct-topup-adjustment-original'
+);
 UPDATE public.pre_fund_requests
 SET paid_amount = 1040, available_balance = 60
 WHERE id = '10000000-0000-0000-0000-000000000015';
@@ -1544,6 +1551,7 @@ DECLARE
   v_adjustment_events integer;
   v_replacement_events integer;
   v_posted_journals integer;
+  v_original_journal_status text;
   v_reversal_line_amount numeric;
   v_replacement_line_amount numeric;
 BEGIN
@@ -1598,6 +1606,10 @@ BEGIN
     'pf-direct-topup-adjusted:' || v_original_id::text
   )
     AND status = 'posted';
+  SELECT journal.status INTO v_original_journal_status
+  FROM public.acct_journal_entries journal
+  WHERE journal.source_type = 'pre_fund_transactions'
+    AND journal.source_id = v_original_id;
   SELECT line.original_amount INTO v_reversal_line_amount
   FROM public.acct_journal_lines line
   JOIN public.acct_journal_entries journal ON journal.id = line.entry_id
@@ -1614,6 +1626,7 @@ BEGIN
   IF v_amount <> 1060 OR v_available <> 20
      OR v_adjustment_events <> 1 OR v_replacement_events <> 1
      OR v_posted_journals <> 2
+     OR v_original_journal_status <> 'posted'
      OR v_reversal_line_amount <> 100 OR v_replacement_line_amount <> 60 THEN
     RAISE EXCEPTION 'direct top-up adjustment assertion failed: balance %/%, adjustment %, replacement %, journals %, line amounts %/%',
       v_amount, v_available, v_adjustment_events, v_replacement_events,

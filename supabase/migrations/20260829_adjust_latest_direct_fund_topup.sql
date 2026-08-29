@@ -151,7 +151,7 @@ BEGIN
     FROM public.acct_journal_entries journal
    WHERE journal.source_type = 'pre_fund_transactions'
      AND journal.source_id = v_original.id
-     AND journal.status = 'posted'
+     AND journal.status IN ('posted', 'draft')
    ORDER BY journal.posted_at DESC NULLS LAST, journal.id DESC
    LIMIT 1
    FOR SHARE;
@@ -165,6 +165,21 @@ BEGIN
    WHERE entry_id = v_original_journal.id;
   IF v_original_line_count = 0 THEN
     RAISE EXCEPTION 'The latest top-up GL journal has no lines and cannot be adjusted automatically.';
+  END IF;
+
+  -- Direct top-ups created by the first version of the posting RPC have the
+  -- correct journal and lines but were left in draft status. Finalize that
+  -- existing evidence before creating the compensating adjustment entries.
+  IF v_original_journal.status = 'draft' THEN
+    UPDATE public.acct_journal_entries
+       SET status = 'posted',
+           posted_at = now(),
+           posted_by = v_actor_id
+     WHERE id = v_original_journal.id
+       AND status = 'draft';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'The historical top-up journal could not be finalized for adjustment.';
+    END IF;
   END IF;
 
   SELECT id

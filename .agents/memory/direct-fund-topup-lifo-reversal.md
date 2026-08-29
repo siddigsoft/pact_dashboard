@@ -10,3 +10,5 @@ If the latest top-up amount was recorded too high after some of the money was us
 **Why:** Direct top-ups represent money already received. Physical deletion would erase financial evidence, while reversing money that is already spent, committed, or allocated would underfund recorded obligations.
 
 **How to apply:** Require Finance/Admin authorization and a reason, lock the fund, reject stale or non-latest requests, and reject any reversal or downward correction that would make availability negative or put funded value below paid, committed, or allocated amounts.
+
+Legacy direct top-ups from the first posting RPC may have a complete journal left in `draft`. A correction may finalize that linked journal before compensation, but must still reject missing or line-less journals rather than synthesizing evidence.
