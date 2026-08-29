@@ -2208,6 +2208,7 @@ const MMP = () => {
   const isCoordinator = cycleCloseAccess.isCoordinator;
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
+  const isCountryDirector = hasRole(['CountryDirector', 'countryDirector', 'country_director', 'Country Director']);
   // Data collectors and coordinators can claim/accept sites; supervisors, FOM, ICT and admins are oversight-only.
   // PRIORITY RULE: admin/ICT/FOM always override DataCollector, even when DataCollector appears
   // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
@@ -2846,9 +2847,10 @@ const MMP = () => {
     }
 
     // PROJECT TEAM MEMBERSHIP FILTER
-    // Only show MMPs from projects the user belongs to (unless admin/superuser).
+    // Only show MMPs from projects the user belongs to, except organization-wide
+    // oversight roles. Country Directors need read/report visibility across all MMPs.
     // For FOMs and Supervisors, still honor project membership but also allow MMPs explicitly forwarded to them.
-    if (!isAdminOrSuperUser && !isDataTeam) {
+    if (!isAdminOrSuperUser && !isDataTeam && !isCountryDirector) {
       if (userProjectIds.length > 0) {
         // For hub-scoped roles (supervisors & coordinators), apply the project filter ON TOP of
         // the already hub-filtered list so the hub filter is not overridden.
@@ -3008,7 +3010,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, isCountryDirector, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
 
   // Hub-scoped MMP list for the MMP Tracker tab.
   // Supervisors and coordinators should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
