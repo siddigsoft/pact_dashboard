@@ -733,6 +733,27 @@ export default function PreFundingDistribute() {
     }
     setTopUpSaving(true);
     try {
+      // Confirm both records are still present before uploading a receipt.
+      // The allocation list can outlive a stale dialog, and the database
+      // ceiling trigger should not be the first place this is discovered.
+      const [{ data: currentFund, error: fundLookupError }, { data: currentAllocation, error: allocationLookupError }] = await Promise.all([
+        (supabase as any)
+          .from('pre_fund_requests')
+          .select('id')
+          .eq('id', fundId)
+          .maybeSingle(),
+        (supabase as any)
+          .from('pre_fund_allocations')
+          .select('id')
+          .eq('id', alloc.id)
+          .eq('pre_fund_request_id', fundId)
+          .maybeSingle(),
+      ]);
+      if (fundLookupError) throw new Error(`The fund could not be verified: ${fundLookupError.message}`);
+      if (allocationLookupError) throw new Error(`The allocation could not be verified: ${allocationLookupError.message}`);
+      if (!currentFund) throw new Error('This fund no longer exists. Refresh the page and select the current fund.');
+      if (!currentAllocation) throw new Error('This allocation no longer exists. Refresh the page and reopen the allocation.');
+
       const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
       if (!uploaded) { setTopUpSaving(false); return; }
       const newTotal = alloc.allocated_amount + increment;
@@ -751,11 +772,14 @@ export default function PreFundingDistribute() {
         alloc.receipt_url,     // preserve original receipt on first top-up
         alloc.created_at,      // preserve original allocation date
       );
-      const { error } = await (supabase as any)
+      const { data: updatedAllocation, error } = await (supabase as any)
         .from('pre_fund_allocations')
         .update({ allocated_amount: newTotal, receipt_url: uploaded, notes: newNotes })
-        .eq('id', alloc.id);
+        .eq('id', alloc.id)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!updatedAllocation) throw new Error('The allocation could not be updated. It may have been removed or changed; refresh the page and try again.');
       dispatchNotification({
         event: 'pre_fund_allocation_updated', recipientIds: [alloc.user_id],
         titleEn: 'Fund Allocation Topped Up', titleAr: 'تم تعبئة تخصيص الصندوق',

@@ -1040,6 +1040,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821h_finance_only_pre_fund_corrections.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821i_allow_partial_operational_cost_payments.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260828_down_payment_shared_fund_balance.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_fix_allocation_ceiling_rls.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 -- Wallet-backed cancellation: paid source state, wallet evidence, and immutable

@@ -46,6 +46,7 @@
 - [sql-role-normalization-order](sql-role-normalization-order.md) — Lowercase role labels before stripping nonletters in SQL, or human-readable roles like “Super Admin” lose uppercase characters.
 - [atomic-ocs-tier-reverts](atomic-ocs-tier-reverts.md) — Tier reverts must reverse active Pre-Fund payments transactionally before changing approval state; client-only resets create payment orphans.
 - [shared-pre-fund-payment-eligibility](ocs-payment-fund-eligibility.md) — Cost Submissions and Down Payments use shared fund balance; personal allocations do not block or limit payments.
+- [allocation-ceiling-trigger-rls](allocation-ceiling-trigger-rls.md) — parent-fund validation in allocation triggers must use definer rights or RLS can falsely report that a visible fund does not exist.
 - [pre-fund-journal-period](pre-fund-journal-period.md) — Pre-Fund GL entries must receive a fiscal period matching the posting date before journal NOT NULL rules run.
 - [pre-fund-journal-fund](pre-fund-journal-fund.md) — Pre-Fund GL lines use the sole active Accounting Fund Registry ID, never the operational Pre-Fund request ID.
 - [pre-fund-country-id-normalization](pre-fund-country-id-normalization.md) — Legacy Pre-Fund country IDs may be text while accounting country IDs are UUIDs; normalize at the GL boundary.
