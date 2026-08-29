@@ -24,7 +24,7 @@ import {
   FolderOpen, Download, Send, Briefcase, ArrowRight, X as XIcon,
   Users, UserPlus, Wallet, TrendingUp, Bell, ArrowLeftRight,
   PauseCircle, PlayCircle, Lock, RotateCcw, ChevronDown, MoreHorizontal,
-  History, ExternalLink,
+  History, Eye,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -985,6 +985,12 @@ export default function PreFundingRegistry() {
   const [adjustDirectTopUpAmount, setAdjustDirectTopUpAmount] = useState('');
   const [adjustDirectTopUpReason, setAdjustDirectTopUpReason] = useState('');
   const [adjustDirectTopUpSaving, setAdjustDirectTopUpSaving] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<{
+    open: boolean;
+    url: string;
+    name: string;
+  }>({ open: false, url: '', name: '' });
+  const [receiptPreviewError, setReceiptPreviewError] = useState(false);
 
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
@@ -1296,6 +1302,28 @@ export default function PreFundingRegistry() {
     if (Array.isArray(supporting)) urls.push(...supporting.filter(Boolean));
     return [...new Set(urls)];
   };
+
+  const openReceiptPreview = (url: string, index = 0) => {
+    let name = `Receipt ${index + 1}`;
+    try {
+      const pathName = new URL(url).pathname;
+      const lastSegment = decodeURIComponent(pathName.split('/').filter(Boolean).pop() ?? '');
+      if (lastSegment) name = lastSegment;
+    } catch {
+      // Keep the generic receipt name for legacy/non-URL document references.
+    }
+    setReceiptPreviewError(false);
+    setReceiptPreview({ open: true, url, name });
+  };
+
+  const closeReceiptPreview = () => {
+    setReceiptPreview({ open: false, url: '', name: '' });
+    setReceiptPreviewError(false);
+  };
+
+  const receiptUrlPath = receiptPreview.url.split('?')[0].toLowerCase();
+  const receiptIsImage = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/.test(receiptUrlPath);
+  const receiptIsPdf = /\.pdf$/.test(receiptUrlPath);
 
   const handleReverseLatestDirectTopUp = async () => {
     if (!reverseDirectTopUpTarget) return;
@@ -2849,15 +2877,17 @@ export default function PreFundingRegistry() {
                             <TableCell className="text-center">
                               {documentUrls.length > 0 ? (
                                 <div className="flex items-center justify-center gap-1">
-                                  <a
-                                    href={documentUrls[0]}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:underline"
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openReceiptPreview(documentUrls[0])}
+                                    className="h-7 gap-1 px-1.5 text-[10px] font-normal text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/30"
+                                    data-testid={`button-view-fund-receipt-${transaction.id}`}
                                   >
-                                    <ExternalLink className="h-3 w-3" />
+                                    <Eye className="h-3 w-3" />
                                     View
-                                  </a>
+                                  </Button>
                                   {documentUrls.length > 1 && (
                                     <span className="text-[10px] text-muted-foreground">
                                       +{documentUrls.length - 1}
@@ -3004,6 +3034,77 @@ export default function PreFundingRegistry() {
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setFundingHistoryDialog({ open: false, fund: null })}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt preview remains inside the current Pre-Funding page and tab. */}
+      <Dialog
+        open={receiptPreview.open}
+        onOpenChange={open => {
+          if (!open) closeReceiptPreview();
+        }}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+              <FileText className="h-5 w-5" />
+              Receipt Preview
+            </DialogTitle>
+            <p className="truncate text-xs text-muted-foreground" title={receiptPreview.name}>
+              {receiptPreview.name}
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 overflow-auto rounded-lg border bg-muted/20 p-2">
+            {receiptPreviewError ? (
+              <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-4 text-center">
+                <AlertTriangle className="h-8 w-8 text-amber-500" />
+                <div>
+                  <p className="text-sm font-medium">This receipt could not be previewed</p>
+                  <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                    The file may be missing or the receipt storage bucket may still need to be created.
+                  </p>
+                </div>
+              </div>
+            ) : receiptIsImage ? (
+              <img
+                src={receiptPreview.url}
+                alt={receiptPreview.name}
+                className="mx-auto max-h-[calc(100dvh-13rem)] max-w-full rounded object-contain"
+                onError={() => setReceiptPreviewError(true)}
+              />
+            ) : receiptIsPdf ? (
+              <iframe
+                src={receiptPreview.url}
+                title={receiptPreview.name}
+                className="h-[calc(100dvh-13rem)] min-h-[420px] w-full rounded border-0"
+                onError={() => setReceiptPreviewError(true)}
+              />
+            ) : (
+              <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-4 text-center">
+                <FileText className="h-10 w-10 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Preview is not available for this file type.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-row justify-end gap-2">
+            {!receiptPreviewError && receiptPreview.url && (
+              <a
+                href={receiptPreview.url}
+                download={receiptPreview.name}
+                className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </a>
+            )}
+            <Button type="button" variant="outline" onClick={closeReceiptPreview}>
               Close
             </Button>
           </DialogFooter>
