@@ -199,6 +199,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260825_post_direct_pre_fund_topups.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_reverse_latest_allocation_topup.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_reverse_latest_direct_fund_topup.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_adjust_latest_direct_fund_topup.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -1509,6 +1510,114 @@ BEGIN
     RAISE EXCEPTION 'direct top-up LIFO reversal assertion failed: balance %/%, reversals %, journals %, lines %, swapped %, bridge %',
       v_amount, v_available, v_reversals, v_posted_reversal_journals,
       v_reversal_lines, v_swapped_lines, v_bridge_rows;
+  END IF;
+END $$;
+
+-- A partially used direct top-up can be corrected downward by the amount that
+-- remains uncommitted. The original event is reversed and a corrected receipt
+-- replaces it, so audit and GL evidence remain balanced.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, status,
+  gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000015', 'Direct Top-Up Adjustment Fund',
+  'SDG', 1000, 1000, 0, 'active', '2400', '1200'
+);
+SELECT public.record_direct_pre_fund_topup_rpc(
+  '10000000-0000-0000-0000-000000000015',
+  100,
+  'Correction test tranche',
+  'Originally recorded above the amount received',
+  'https://example.test/receipt-adjustment.pdf',
+  '[]'::jsonb,
+  'direct-topup-adjustment-original'
+);
+UPDATE public.pre_fund_requests
+SET paid_amount = 1040, available_balance = 60
+WHERE id = '10000000-0000-0000-0000-000000000015';
+DO $$
+DECLARE
+  v_original_id uuid;
+  v_result jsonb;
+  v_amount numeric;
+  v_available numeric;
+  v_adjustment_events integer;
+  v_replacement_events integer;
+  v_posted_journals integer;
+  v_reversal_line_amount numeric;
+  v_replacement_line_amount numeric;
+BEGIN
+  SELECT id INTO v_original_id
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'direct-fund-topup:direct-topup-adjustment-original';
+
+  BEGIN
+    PERFORM public.adjust_latest_direct_pre_fund_topup_rpc(
+      v_original_id, 10, 'Would reduce the fund below valid spending'
+    );
+    RAISE EXCEPTION 'an unsafe direct top-up correction was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'an unsafe direct top-up correction was accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'The corrected amount is too low. Only%' THEN RAISE; END IF;
+  END;
+
+  v_result := public.adjust_latest_direct_pre_fund_topup_rpc(
+    v_original_id, 60, 'Only SDG 60 was actually received'
+  );
+  IF (v_result ->> 'success')::boolean IS DISTINCT FROM true
+     OR (v_result ->> 'corrected_amount')::numeric <> 60
+     OR (v_result ->> 'adjustment_amount')::numeric <> 40 THEN
+    RAISE EXCEPTION 'direct top-up adjustment returned the wrong result: %', v_result;
+  END IF;
+
+  -- A retry is idempotent and cannot post the replacement twice.
+  v_result := public.adjust_latest_direct_pre_fund_topup_rpc(
+    v_original_id, 60, 'Network retry'
+  );
+  IF (v_result ->> 'idempotent')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'direct top-up adjustment retry was not idempotent: %', v_result;
+  END IF;
+
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000015';
+  SELECT count(*) INTO v_adjustment_events
+  FROM public.pre_fund_transactions
+  WHERE reversal_of_id = v_original_id
+    AND event_metadata ->> 'event_type' = 'direct_fund_top_up_adjustment'
+    AND (event_metadata ->> 'adjustment_amount')::numeric = 40;
+  SELECT count(*) INTO v_replacement_events
+  FROM public.pre_fund_transactions
+  WHERE event_metadata ->> 'adjusted_from_transaction_id' = v_original_id::text
+    AND transaction_type = 'receipt'
+    AND amount = 60;
+  SELECT count(*) INTO v_posted_journals
+  FROM public.acct_journal_entries
+  WHERE idempotency_key IN (
+    'pf-direct-topup-adjustment-reversal:' || v_original_id::text,
+    'pf-direct-topup-adjusted:' || v_original_id::text
+  )
+    AND status = 'posted';
+  SELECT line.original_amount INTO v_reversal_line_amount
+  FROM public.acct_journal_lines line
+  JOIN public.acct_journal_entries journal ON journal.id = line.entry_id
+  WHERE journal.idempotency_key = 'pf-direct-topup-adjustment-reversal:' || v_original_id::text
+  ORDER BY line.line_no
+  LIMIT 1;
+  SELECT line.original_amount INTO v_replacement_line_amount
+  FROM public.acct_journal_lines line
+  JOIN public.acct_journal_entries journal ON journal.id = line.entry_id
+  WHERE journal.idempotency_key = 'pf-direct-topup-adjusted:' || v_original_id::text
+  ORDER BY line.line_no
+  LIMIT 1;
+
+  IF v_amount <> 1060 OR v_available <> 20
+     OR v_adjustment_events <> 1 OR v_replacement_events <> 1
+     OR v_posted_journals <> 2
+     OR v_reversal_line_amount <> 100 OR v_replacement_line_amount <> 60 THEN
+    RAISE EXCEPTION 'direct top-up adjustment assertion failed: balance %/%, adjustment %, replacement %, journals %, line amounts %/%',
+      v_amount, v_available, v_adjustment_events, v_replacement_events,
+      v_posted_journals, v_reversal_line_amount, v_replacement_line_amount;
   END IF;
 END $$;
 SQL

@@ -978,6 +978,13 @@ export default function PreFundingRegistry() {
   } | null>(null);
   const [reverseDirectTopUpReason, setReverseDirectTopUpReason] = useState('');
   const [reverseDirectTopUpSaving, setReverseDirectTopUpSaving] = useState(false);
+  const [adjustDirectTopUpTarget, setAdjustDirectTopUpTarget] = useState<{
+    fund: PreFundRequest;
+    transaction: FundingHistoryTransaction;
+  } | null>(null);
+  const [adjustDirectTopUpAmount, setAdjustDirectTopUpAmount] = useState('');
+  const [adjustDirectTopUpReason, setAdjustDirectTopUpReason] = useState('');
+  const [adjustDirectTopUpSaving, setAdjustDirectTopUpSaving] = useState(false);
 
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
@@ -1243,7 +1250,8 @@ export default function PreFundingRegistry() {
               : transaction.event_metadata ?? {};
             return transaction.transaction_type === 'receipt'
               || metadata.event_type === 'direct_fund_top_up'
-              || metadata.event_type === 'direct_fund_top_up_reversal';
+              || metadata.event_type === 'direct_fund_top_up_reversal'
+              || metadata.event_type === 'direct_fund_top_up_adjustment';
           })
           .map(transaction => ({
             ...transaction,
@@ -1337,6 +1345,66 @@ export default function PreFundingRegistry() {
       });
     } finally {
       setReverseDirectTopUpSaving(false);
+    }
+  };
+
+  const handleAdjustLatestDirectTopUp = async () => {
+    if (!adjustDirectTopUpTarget) return;
+    const correctedAmount = Number(adjustDirectTopUpAmount.replace(/,/g, ''));
+    if (!Number.isFinite(correctedAmount) || correctedAmount <= 0) {
+      toast({
+        title: 'Valid amount required',
+        description: 'Enter the corrected amount that was actually received.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!adjustDirectTopUpReason.trim()) {
+      toast({
+        title: 'Reason required',
+        description: 'Explain why the latest direct fund top-up amount is being adjusted.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setAdjustDirectTopUpSaving(true);
+    try {
+      const { fund, transaction } = adjustDirectTopUpTarget;
+      const { data, error } = await (supabase as any).rpc(
+        'adjust_latest_direct_pre_fund_topup_rpc',
+        {
+          p_expected_transaction_id: transaction.id,
+          p_corrected_amount: correctedAmount,
+          p_reason: adjustDirectTopUpReason.trim(),
+        },
+      );
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.error || 'The latest direct fund top-up could not be adjusted.');
+      }
+
+      const refreshedFund: PreFundRequest = {
+        ...fund,
+        amount: Number(data.new_funded_amount ?? fund.amount),
+        available_balance: Number(data.new_available_balance ?? fund.available_balance),
+      };
+      toast({
+        title: 'Latest fund top-up adjusted',
+        description: `The recorded amount is now ${transaction.currency} ${formatNumber(correctedAmount, 0)}. The original receipt remains in the audit history.`,
+      });
+      setAdjustDirectTopUpTarget(null);
+      setAdjustDirectTopUpAmount('');
+      setAdjustDirectTopUpReason('');
+      await Promise.all([load(), openFundingHistory(refreshedFund)]);
+    } catch (e: any) {
+      toast({
+        title: 'Could not adjust fund top-up',
+        description: e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setAdjustDirectTopUpSaving(false);
     }
   };
 
@@ -2641,8 +2709,15 @@ export default function PreFundingRegistry() {
               return transaction.transaction_type === 'reversal'
                 && metadata.event_type === 'direct_fund_top_up_reversal';
             });
+            const adjustmentRows = fundingHistory.filter(transaction => {
+              const metadata = parseFundingMetadata(transaction);
+              return transaction.transaction_type === 'reversal'
+                && metadata.event_type === 'direct_fund_top_up_adjustment';
+            });
             const reversedTransactionIds = new Set(
-              reversalRows.map(transaction => transaction.reversal_of_id).filter(Boolean),
+              [...reversalRows, ...adjustmentRows]
+                .map(transaction => transaction.reversal_of_id)
+                .filter(Boolean),
             );
             const activeFundingTransactions = fundingHistory.filter(transaction =>
               transaction.transaction_type === 'receipt'
@@ -2658,12 +2733,21 @@ export default function PreFundingRegistry() {
               })[0] ?? null;
             let runningTotal = 0;
             const historyRows = activeFundingTransactions.map(transaction => {
-              runningTotal += Number(transaction.amount) || 0;
+              const effectiveAmount = Number(transaction.amount) || 0;
+              runningTotal += effectiveAmount;
               const metadata = parseFundingMetadata(transaction);
               const isDirectTopUp = metadata.event_type === 'direct_fund_top_up'
                 || (transaction.description ?? '').toLowerCase().includes('top-up');
               const documentUrls = parseDocumentUrls(transaction.receipt_url, metadata);
-              return { transaction, metadata, isDirectTopUp, documentUrls, runningTotal };
+              return {
+                transaction,
+                metadata,
+                isDirectTopUp,
+                documentUrls,
+                runningTotal,
+                effectiveAmount,
+                hasAdjustment: !!metadata.adjusted_from_transaction_id,
+              };
             });
 
             return (
@@ -2720,7 +2804,7 @@ export default function PreFundingRegistry() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {historyRows.map(({ transaction, metadata, isDirectTopUp, documentUrls, runningTotal }) => (
+                        {historyRows.map(({ transaction, metadata, isDirectTopUp, documentUrls, runningTotal, effectiveAmount, hasAdjustment }) => (
                           <TableRow key={transaction.id}>
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                               {transaction.transaction_date
@@ -2737,14 +2821,16 @@ export default function PreFundingRegistry() {
                                     : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
                                 )}
                               >
-                                {isDirectTopUp ? 'Direct top-up' : 'Initial funding'}
+                                {isDirectTopUp
+                                  ? (hasAdjustment ? 'Direct top-up (adjusted)' : 'Direct top-up')
+                                  : 'Initial funding'}
                               </Badge>
                               <p className="mt-1 max-w-[220px] truncate text-[11px] text-muted-foreground" title={String(metadata.funding_source ?? transaction.description ?? '')}>
                                 {metadata.funding_source ?? transaction.description ?? '—'}
                               </p>
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-right font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                              +{transaction.currency} {formatNumber(transaction.amount, 0)}
+                               +{transaction.currency} {formatNumber(effectiveAmount, 0)}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-right font-mono text-xs">
                               {transaction.currency} {formatNumber(runningTotal, 0)}
@@ -2784,20 +2870,59 @@ export default function PreFundingRegistry() {
                             </TableCell>
                             <TableCell className="text-center">
                               {isDirectTopUp && latestActiveDirectTopUp?.id === transaction.id ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 whitespace-nowrap border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                  onClick={() => {
-                                    setReverseDirectTopUpTarget({ fund, transaction });
-                                    setReverseDirectTopUpReason('');
-                                  }}
-                                  data-testid={`button-reverse-latest-direct-topup-${transaction.id}`}
-                                >
-                                  <Trash2 className="mr-1 h-3 w-3" />
-                                  Delete latest
-                                </Button>
+                                hasAdjustment ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                                      Adjusted
+                                    </Badge>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 whitespace-nowrap border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() => {
+                                        setReverseDirectTopUpTarget({ fund, transaction });
+                                        setReverseDirectTopUpReason('');
+                                      }}
+                                      data-testid={`button-reverse-latest-direct-topup-${transaction.id}`}
+                                    >
+                                      <Trash2 className="mr-1 h-3 w-3" />
+                                      Delete latest
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 whitespace-nowrap border-amber-300 px-2 text-[10px] text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                                      onClick={() => {
+                                        setAdjustDirectTopUpTarget({ fund, transaction });
+                                        setAdjustDirectTopUpAmount(String(transaction.amount));
+                                        setAdjustDirectTopUpReason('');
+                                      }}
+                                      data-testid={`button-adjust-latest-direct-topup-${transaction.id}`}
+                                    >
+                                      <Pencil className="mr-1 h-3 w-3" />
+                                      Adjust amount
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 whitespace-nowrap border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() => {
+                                        setReverseDirectTopUpTarget({ fund, transaction });
+                                        setReverseDirectTopUpReason('');
+                                      }}
+                                      data-testid={`button-reverse-latest-direct-topup-${transaction.id}`}
+                                    >
+                                      <Trash2 className="mr-1 h-3 w-3" />
+                                      Delete latest
+                                    </Button>
+                                  </div>
+                                )
                               ) : (
                                 <span className="text-[10px] text-muted-foreground">—</span>
                               )}
@@ -2825,6 +2950,39 @@ export default function PreFundingRegistry() {
                             <div>
                               <span className="font-mono font-semibold text-destructive">
                                 −{transaction.currency} {formatNumber(transaction.amount, 0)}
+                              </span>
+                              <span className="ml-2 text-muted-foreground">
+                                {transaction.transaction_date
+                                  ? format(parseISO(transaction.transaction_date), 'dd MMM yyyy')
+                                  : '—'}
+                              </span>
+                            </div>
+                            <p className="max-w-lg truncate text-muted-foreground" title={String(metadata.reason ?? transaction.event_reason ?? '')}>
+                              Reason: {metadata.reason ?? transaction.event_reason ?? '—'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {!fundingHistoryLoading && adjustmentRows.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <Pencil className="h-3.5 w-3.5" />
+                      Fund Top-Up Adjustments
+                    </p>
+                    <div className="space-y-2">
+                      {[...adjustmentRows].reverse().map(transaction => {
+                        const metadata = parseFundingMetadata(transaction);
+                        return (
+                          <div
+                            key={transaction.id}
+                            className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs dark:border-amber-900 dark:bg-amber-950/20 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                                −{transaction.currency} {formatNumber(metadata.adjustment_amount ?? transaction.amount, 0)}
                               </span>
                               <span className="ml-2 text-muted-foreground">
                                 {transaction.transaction_date
@@ -2925,6 +3083,116 @@ export default function PreFundingRegistry() {
                 <>
                   <RotateCcw className="mr-1.5 h-4 w-4" />
                   Reverse Latest
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Adjust Latest Direct Fund Top-up Confirmation ──────────────────── */}
+      <Dialog
+        open={!!adjustDirectTopUpTarget}
+        onOpenChange={open => {
+          if (!open && !adjustDirectTopUpSaving) {
+            setAdjustDirectTopUpTarget(null);
+            setAdjustDirectTopUpAmount('');
+            setAdjustDirectTopUpReason('');
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+              <Pencil className="h-5 w-5" />
+              Adjust Latest Fund Top-up
+            </DialogTitle>
+          </DialogHeader>
+          {adjustDirectTopUpTarget && (() => {
+            const { fund, transaction } = adjustDirectTopUpTarget;
+            const originalAmount = Number(transaction.amount);
+            const minimumAmount = Math.max(0.01, originalAmount - Number(fund.available_balance));
+            return (
+              <div className="space-y-4">
+                <Alert className="border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20">
+                  <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+                  <AlertDescription className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+                    Correct the recorded amount for the latest direct top-up. The difference will be
+                    reversed with a GL journal, while the original receipt remains available in the audit history.
+                  </AlertDescription>
+                </Alert>
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                  <p>Original amount: <strong>{transaction.currency} {formatNumber(originalAmount, 0)}</strong></p>
+                  <p className="mt-1 text-muted-foreground">
+                    Available for correction: {transaction.currency} {formatNumber(fund.available_balance, 0)}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="adjust-direct-topup-amount">Correct amount received ({transaction.currency}) *</Label>
+                  <Input
+                    id="adjust-direct-topup-amount"
+                    type="text"
+                    inputMode="decimal"
+                    value={adjustDirectTopUpAmount}
+                    onChange={event => setAdjustDirectTopUpAmount(event.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder={String(originalAmount)}
+                    disabled={adjustDirectTopUpSaving}
+                    data-testid="input-adjust-direct-topup-amount"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Must be less than the original amount and at least {transaction.currency} {formatNumber(minimumAmount, 0)}.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="adjust-direct-topup-reason">Adjustment reason *</Label>
+                  <Textarea
+                    id="adjust-direct-topup-reason"
+                    value={adjustDirectTopUpReason}
+                    onChange={event => setAdjustDirectTopUpReason(event.target.value)}
+                    placeholder="Explain why the received amount was lower…"
+                    rows={3}
+                    disabled={adjustDirectTopUpSaving}
+                    data-testid="input-adjust-direct-topup-reason"
+                  />
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setAdjustDirectTopUpTarget(null);
+                setAdjustDirectTopUpAmount('');
+                setAdjustDirectTopUpReason('');
+              }}
+              disabled={adjustDirectTopUpSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 text-white hover:bg-amber-700"
+              onClick={handleAdjustLatestDirectTopUp}
+              disabled={
+                adjustDirectTopUpSaving
+                || !adjustDirectTopUpReason.trim()
+                || !adjustDirectTopUpAmount
+                || !adjustDirectTopUpTarget
+                || Number(adjustDirectTopUpAmount.replace(/,/g, '')) >= Number(adjustDirectTopUpTarget.transaction.amount)
+              }
+              data-testid="button-confirm-adjust-direct-topup"
+            >
+              {adjustDirectTopUpSaving ? (
+                <>
+                  <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" />
+                  Adjusting…
+                </>
+              ) : (
+                <>
+                  <Pencil className="mr-1.5 h-4 w-4" />
+                  Save Adjustment
                 </>
               )}
             </Button>
