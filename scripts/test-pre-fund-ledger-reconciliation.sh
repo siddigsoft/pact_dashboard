@@ -198,6 +198,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260824d_repair_down_payment_gl_bridge_account_codes.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260825_post_direct_pre_fund_topups.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_reverse_latest_allocation_topup.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_reverse_latest_direct_fund_topup.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 DO $$
@@ -1361,6 +1362,153 @@ BEGIN
      OR v_reversals <> 1 THEN
     RAISE EXCEPTION 'controlled paid reopen assertion failed: payment %, reopen %, source %/%/%, fund %/%, wallet %, reversals %',
       v_payment, v_reopen, v_status, v_paid, v_remaining, v_fund_paid, v_fund_available, v_wallet_status, v_reversals;
+  END IF;
+END $$;
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount, status,
+  gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000014', 'Direct Top-Up Reversal Fund',
+  'SDG', 1000, 1000, 0, 'active', '2400', '1200'
+);
+SELECT public.record_direct_pre_fund_topup_rpc(
+  '10000000-0000-0000-0000-000000000014',
+  250,
+  'First donor tranche',
+  'Previous top-up reversal regression',
+  'https://example.test/receipt-first-reversal.pdf',
+  '[]'::jsonb,
+  'direct-topup-reversal-first'
+);
+UPDATE public.pre_fund_requests
+SET status = 'active'
+WHERE id = '10000000-0000-0000-0000-000000000014';
+SELECT public.record_direct_pre_fund_topup_rpc(
+  '10000000-0000-0000-0000-000000000014',
+  100,
+  'Second donor tranche',
+  'Latest-first reversal regression',
+  'https://example.test/receipt-second.pdf',
+  '[]'::jsonb,
+  'direct-topup-reversal-second'
+);
+DO $$
+DECLARE
+  v_first_id uuid;
+  v_second_id uuid;
+  v_amount numeric;
+  v_available numeric;
+  v_reversals integer;
+  v_posted_reversal_journals integer;
+  v_reversal_lines integer;
+  v_swapped_lines integer;
+  v_bridge_rows integer;
+BEGIN
+  SELECT id INTO v_first_id
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'direct-fund-topup:direct-topup-reversal-first';
+  SELECT id INTO v_second_id
+  FROM public.pre_fund_transactions
+  WHERE idempotency_key = 'direct-fund-topup:direct-topup-reversal-second';
+
+  BEGIN
+    PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_first_id, 'Stale reversal attempt');
+    RAISE EXCEPTION 'an older direct fund top-up was reversed before the latest';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'an older direct fund top-up was reversed before the latest' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'Only the latest direct fund top-up can be reversed%' THEN RAISE; END IF;
+  END;
+
+  INSERT INTO public.pre_fund_allocations (
+    pre_fund_request_id, user_id, allocated_amount, currency, created_by
+  ) VALUES (
+    '10000000-0000-0000-0000-000000000014', auth.uid(), 1300, 'SDG', auth.uid()
+  );
+  BEGIN
+    PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_second_id, 'Would underfund allocations');
+    RAISE EXCEPTION 'a direct fund top-up reversal underfunded staff allocations';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'a direct fund top-up reversal underfunded staff allocations' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'This top-up cannot be reversed because staff allocations%' THEN RAISE; END IF;
+  END;
+  DELETE FROM public.pre_fund_allocations
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000014'
+    AND user_id = auth.uid();
+
+  UPDATE public.pre_fund_requests
+  SET committed_amount = 1300, available_balance = 50
+  WHERE id = '10000000-0000-0000-0000-000000000014';
+  BEGIN
+    PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_second_id, 'Would consume committed money');
+    RAISE EXCEPTION 'a spent or committed direct fund top-up was reversed';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'a spent or committed direct fund top-up was reversed' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'This top-up cannot be reversed because only%' THEN RAISE; END IF;
+  END;
+  UPDATE public.pre_fund_requests
+  SET committed_amount = 0, available_balance = 1350
+  WHERE id = '10000000-0000-0000-0000-000000000014';
+
+  PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_second_id, 'Duplicate latest tranche');
+  -- A network retry must return the original reversal rather than creating
+  -- another event or changing the balance again.
+  PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_second_id, 'Duplicate latest tranche retry');
+
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000014';
+  IF v_amount <> 1250 OR v_available <> 1250 THEN
+    RAISE EXCEPTION 'latest direct top-up reversal restored the wrong balance: %/%', v_amount, v_available;
+  END IF;
+
+  -- Once the newest top-up is reversed, the previous top-up becomes eligible.
+  PERFORM public.reverse_latest_direct_pre_fund_topup_rpc(v_first_id, 'Original regression top-up no longer needed');
+
+  SELECT amount, available_balance INTO v_amount, v_available
+  FROM public.pre_fund_requests
+  WHERE id = '10000000-0000-0000-0000-000000000014';
+  SELECT count(*) INTO v_reversals
+  FROM public.pre_fund_transactions
+  WHERE pre_fund_request_id = '10000000-0000-0000-0000-000000000014'
+    AND transaction_type = 'reversal'
+    AND event_metadata ->> 'event_type' = 'direct_fund_top_up_reversal';
+  SELECT count(*) INTO v_posted_reversal_journals
+  FROM public.acct_journal_entries
+  WHERE idempotency_key LIKE 'pf-direct-topup-reversal:%'
+    AND status = 'posted';
+  SELECT count(*) INTO v_reversal_lines
+  FROM public.acct_journal_lines line
+  JOIN public.acct_journal_entries journal ON journal.id = line.entry_id
+  WHERE journal.idempotency_key LIKE 'pf-direct-topup-reversal:%';
+  SELECT count(*) INTO v_swapped_lines
+  FROM public.pre_fund_transactions reversal
+  JOIN public.acct_journal_entries reversal_journal
+    ON reversal_journal.source_id = reversal.id
+   AND reversal_journal.source_type = 'pre_fund_transactions'
+  JOIN public.acct_journal_lines reversal_line
+    ON reversal_line.entry_id = reversal_journal.id
+  JOIN public.acct_journal_entries original_journal
+    ON original_journal.source_id = reversal.reversal_of_id
+   AND original_journal.source_type = 'pre_fund_transactions'
+  JOIN public.acct_journal_lines original_line
+    ON original_line.entry_id = original_journal.id
+   AND original_line.line_no = reversal_line.line_no
+  WHERE reversal.event_metadata ->> 'event_type' = 'direct_fund_top_up_reversal'
+    AND (
+      (original_line.debit_credit = 'DR' AND reversal_line.debit_credit = 'CR')
+      OR (original_line.debit_credit = 'CR' AND reversal_line.debit_credit = 'DR')
+    );
+  SELECT count(*) INTO v_bridge_rows
+  FROM public.acct_gl_bridge_log
+  WHERE event_type = 'pre_fund_direct_topup_reversed'
+    AND status = 'success';
+
+  IF v_amount <> 1000 OR v_available <> 1000
+     OR v_reversals <> 2 OR v_posted_reversal_journals <> 2
+     OR v_reversal_lines <> 4 OR v_swapped_lines <> 4 OR v_bridge_rows <> 2 THEN
+    RAISE EXCEPTION 'direct top-up LIFO reversal assertion failed: balance %/%, reversals %, journals %, lines %, swapped %, bridge %',
+      v_amount, v_available, v_reversals, v_posted_reversal_journals,
+      v_reversal_lines, v_swapped_lines, v_bridge_rows;
   END IF;
 END $$;
 SQL

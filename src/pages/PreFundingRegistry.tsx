@@ -94,6 +94,8 @@ interface FundingHistoryTransaction {
   event_reason: string | null;
   event_metadata: Record<string, any> | string | null;
   created_by: string | null;
+  reversal_of_id: string | null;
+  occurred_at: string | null;
   created_by_name?: string;
 }
 
@@ -970,6 +972,12 @@ export default function PreFundingRegistry() {
   }>({ open: false, fund: null });
   const [fundingHistory, setFundingHistory] = useState<FundingHistoryTransaction[]>([]);
   const [fundingHistoryLoading, setFundingHistoryLoading] = useState(false);
+  const [reverseDirectTopUpTarget, setReverseDirectTopUpTarget] = useState<{
+    fund: PreFundRequest;
+    transaction: FundingHistoryTransaction;
+  } | null>(null);
+  const [reverseDirectTopUpReason, setReverseDirectTopUpReason] = useState('');
+  const [reverseDirectTopUpSaving, setReverseDirectTopUpSaving] = useState(false);
 
   // Transfer Funds dialog
   const [transferDialog, setTransferDialog] = useState<{
@@ -1204,7 +1212,7 @@ export default function PreFundingRegistry() {
     try {
       const { data, error } = await (supabase as any)
         .from('pre_fund_transactions')
-        .select('id,transaction_type,amount,currency,transaction_date,description,reference,receipt_url,event_reason,event_metadata,created_by')
+        .select('id,transaction_type,amount,currency,transaction_date,description,reference,receipt_url,event_reason,event_metadata,created_by,reversal_of_id,occurred_at')
         .eq('pre_fund_request_id', fund.id)
         .order('transaction_date', { ascending: true });
       if (error) throw error;
@@ -1234,7 +1242,8 @@ export default function PreFundingRegistry() {
                 })()
               : transaction.event_metadata ?? {};
             return transaction.transaction_type === 'receipt'
-              || metadata.event_type === 'direct_fund_top_up';
+              || metadata.event_type === 'direct_fund_top_up'
+              || metadata.event_type === 'direct_fund_top_up_reversal';
           })
           .map(transaction => ({
             ...transaction,
@@ -1278,6 +1287,57 @@ export default function PreFundingRegistry() {
     const supporting = metadata.supporting_document_urls;
     if (Array.isArray(supporting)) urls.push(...supporting.filter(Boolean));
     return [...new Set(urls)];
+  };
+
+  const handleReverseLatestDirectTopUp = async () => {
+    if (!reverseDirectTopUpTarget) return;
+    if (!reverseDirectTopUpReason.trim()) {
+      toast({
+        title: 'Reason required',
+        description: 'Explain why the latest direct fund top-up must be reversed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setReverseDirectTopUpSaving(true);
+    try {
+      const { fund, transaction } = reverseDirectTopUpTarget;
+      const { data, error } = await (supabase as any).rpc(
+        'reverse_latest_direct_pre_fund_topup_rpc',
+        {
+          p_expected_transaction_id: transaction.id,
+          p_reason: reverseDirectTopUpReason.trim(),
+        },
+      );
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.error || 'The latest direct fund top-up could not be reversed.');
+      }
+
+      const refreshedFund: PreFundRequest = {
+        ...fund,
+        amount: Number(data.new_funded_amount ?? fund.amount - Number(transaction.amount)),
+        available_balance: Number(
+          data.new_available_balance ?? fund.available_balance - Number(transaction.amount),
+        ),
+      };
+      toast({
+        title: 'Latest fund top-up reversed',
+        description: `${transaction.currency} ${formatNumber(transaction.amount, 0)} was reversed. The previous direct top-up is now the latest.`,
+      });
+      setReverseDirectTopUpTarget(null);
+      setReverseDirectTopUpReason('');
+      await Promise.all([load(), openFundingHistory(refreshedFund)]);
+    } catch (e: any) {
+      toast({
+        title: 'Could not reverse fund top-up',
+        description: e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReverseDirectTopUpSaving(false);
+    }
   };
 
   const handleDirectTopUp = async () => {
@@ -2576,8 +2636,28 @@ export default function PreFundingRegistry() {
           </DialogHeader>
           {fundingHistoryDialog.fund && (() => {
             const fund = fundingHistoryDialog.fund;
+            const reversalRows = fundingHistory.filter(transaction => {
+              const metadata = parseFundingMetadata(transaction);
+              return transaction.transaction_type === 'reversal'
+                && metadata.event_type === 'direct_fund_top_up_reversal';
+            });
+            const reversedTransactionIds = new Set(
+              reversalRows.map(transaction => transaction.reversal_of_id).filter(Boolean),
+            );
+            const activeFundingTransactions = fundingHistory.filter(transaction =>
+              transaction.transaction_type === 'receipt'
+              && !reversedTransactionIds.has(transaction.id),
+            );
+            const latestActiveDirectTopUp = [...activeFundingTransactions]
+              .filter(transaction => parseFundingMetadata(transaction).event_type === 'direct_fund_top_up')
+              .sort((left, right) => {
+                const leftTime = new Date(left.occurred_at ?? left.transaction_date ?? 0).getTime();
+                const rightTime = new Date(right.occurred_at ?? right.transaction_date ?? 0).getTime();
+                if (leftTime !== rightTime) return rightTime - leftTime;
+                return right.id.localeCompare(left.id);
+              })[0] ?? null;
             let runningTotal = 0;
-            const historyRows = fundingHistory.map(transaction => {
+            const historyRows = activeFundingTransactions.map(transaction => {
               runningTotal += Number(transaction.amount) || 0;
               const metadata = parseFundingMetadata(transaction);
               const isDirectTopUp = metadata.event_type === 'direct_fund_top_up'
@@ -2636,6 +2716,7 @@ export default function PreFundingRegistry() {
                           <TableHead>Reason / Reference</TableHead>
                           <TableHead>Recorded By</TableHead>
                           <TableHead className="text-center">Evidence</TableHead>
+                          <TableHead className="text-center">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2701,10 +2782,63 @@ export default function PreFundingRegistry() {
                                 <span className="text-[10px] text-muted-foreground">—</span>
                               )}
                             </TableCell>
+                            <TableCell className="text-center">
+                              {isDirectTopUp && latestActiveDirectTopUp?.id === transaction.id ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 whitespace-nowrap border-destructive/30 px-2 text-[10px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => {
+                                    setReverseDirectTopUpTarget({ fund, transaction });
+                                    setReverseDirectTopUpReason('');
+                                  }}
+                                  data-testid={`button-reverse-latest-direct-topup-${transaction.id}`}
+                                >
+                                  <Trash2 className="mr-1 h-3 w-3" />
+                                  Delete latest
+                                </Button>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
+                  </div>
+                )}
+                {!fundingHistoryLoading && reversalRows.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reversed Direct Top-Ups
+                    </p>
+                    <div className="space-y-2">
+                      {[...reversalRows].reverse().map(transaction => {
+                        const metadata = parseFundingMetadata(transaction);
+                        return (
+                          <div
+                            key={transaction.id}
+                            className="flex flex-col gap-1 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <span className="font-mono font-semibold text-destructive">
+                                −{transaction.currency} {formatNumber(transaction.amount, 0)}
+                              </span>
+                              <span className="ml-2 text-muted-foreground">
+                                {transaction.transaction_date
+                                  ? format(parseISO(transaction.transaction_date), 'dd MMM yyyy')
+                                  : '—'}
+                              </span>
+                            </div>
+                            <p className="max-w-lg truncate text-muted-foreground" title={String(metadata.reason ?? transaction.event_reason ?? '')}>
+                              Reason: {metadata.reason ?? transaction.event_reason ?? '—'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2713,6 +2847,86 @@ export default function PreFundingRegistry() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setFundingHistoryDialog({ open: false, fund: null })}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reverse Latest Direct Fund Top-up Confirmation ─────────────────── */}
+      <Dialog
+        open={!!reverseDirectTopUpTarget}
+        onOpenChange={open => {
+          if (!open && !reverseDirectTopUpSaving) {
+            setReverseDirectTopUpTarget(null);
+            setReverseDirectTopUpReason('');
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <RotateCcw className="h-5 w-5" />
+              Reverse Latest Fund Top-up
+            </DialogTitle>
+          </DialogHeader>
+          {reverseDirectTopUpTarget && (
+            <div className="space-y-4">
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs leading-relaxed">
+                  This reverses the latest direct top-up of{' '}
+                  <strong>
+                    {reverseDirectTopUpTarget.transaction.currency}{' '}
+                    {formatNumber(reverseDirectTopUpTarget.transaction.amount, 0)}
+                  </strong>{' '}
+                  from <strong>{reverseDirectTopUpTarget.fund.name}</strong>. The transaction and
+                  GL evidence will remain in the audit history.
+                </AlertDescription>
+              </Alert>
+              <div className="space-y-1.5">
+                <Label htmlFor="reverse-direct-topup-reason">Reversal reason *</Label>
+                <Textarea
+                  id="reverse-direct-topup-reason"
+                  value={reverseDirectTopUpReason}
+                  onChange={event => setReverseDirectTopUpReason(event.target.value)}
+                  placeholder="Explain why this top-up must be reversed…"
+                  rows={3}
+                  disabled={reverseDirectTopUpSaving}
+                  data-testid="input-reverse-direct-topup-reason"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setReverseDirectTopUpTarget(null);
+                setReverseDirectTopUpReason('');
+              }}
+              disabled={reverseDirectTopUpSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleReverseLatestDirectTopUp}
+              disabled={reverseDirectTopUpSaving || !reverseDirectTopUpReason.trim()}
+              data-testid="button-confirm-reverse-direct-topup"
+            >
+              {reverseDirectTopUpSaving ? (
+                <>
+                  <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" />
+                  Reversing…
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                  Reverse Latest
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
