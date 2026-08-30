@@ -485,13 +485,14 @@ export function getDownPaymentStats(
   const fullyPaid = requests.filter(r => r.status === 'fully_paid').length;
 
   const APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
+  const PAID_ELIGIBLE_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed', 'paid', 'reconciled'];
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
   const totalApproved = requests
     .filter(r => APPROVED_STATUSES.includes(r.status))
     .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
-  const paidStatuses = ['partially_paid', 'fully_paid', 'completed'];
-  const totalPaid = requests
-    .filter(r => paidStatuses.includes(r.status))
+  const paidRequests = requests
+    .filter(r => PAID_ELIGIBLE_STATUSES.includes(r.status) && getPaidAmount(r) > 0);
+  const totalPaid = paidRequests
     .reduce((sum, request) => sum + getPaidAmount(request), 0);
   const totalRemaining = totalApproved - totalPaid;
   const totalPendingAmount = requests
@@ -508,6 +509,7 @@ export function getDownPaymentStats(
       cancelled,
       partiallyPaid,
       fullyPaid,
+      paid: paidRequests.length,
     },
     amounts: {
       totalRequested,

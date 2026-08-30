@@ -3376,9 +3376,9 @@ export function DownPaymentApprovalPanel({
               {Math.round(stats.amounts.totalPaid / stats.amounts.totalApproved * 100)}% of approved
             </div>
           )}
-          {(stats.counts.partiallyPaid + stats.counts.fullyPaid) > 0 && (
+          {stats.counts.paid > 0 && (
             <div className="text-[11px] font-medium text-green-700 dark:text-green-400 mt-0.5 tabular-nums" data-testid="text-stats-paid-count">
-              {(stats.counts.partiallyPaid + stats.counts.fullyPaid).toLocaleString()} {(stats.counts.partiallyPaid + stats.counts.fullyPaid) === 1 ? 'request' : 'requests'}
+              {stats.counts.paid.toLocaleString()} {stats.counts.paid === 1 ? 'request' : 'requests'}
             </div>
           )}
         </CardContent>

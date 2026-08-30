@@ -880,8 +880,16 @@ export default function DownPaymentApproval() {
     // Use the canonical typed ledger fields for filtering. The id/name aliases
     // are retained only for display compatibility with older child components.
     const uniqueFunds = new Map(links.map(link => [link.fundId, link.fundName]));
+    const ledgerPaid = links.reduce((sum, link) => sum + (link.paymentAmount || 0), 0);
+    const hasLedgerEvidence = links.length > 0;
+    const effectivePaid = hasLedgerEvidence ? ledgerPaid : (req.totalPaidAmount || 0);
+    const approvedAmount = req.approvedAmount || req.requestedAmount;
     return {
       ...req,
+      // Active immutable events are authoritative when available. Source-side
+      // totals can lag after historical imports or reconciliation operations.
+      totalPaidAmount: effectivePaid,
+      remainingAmount: Math.max(0, approvedAmount - effectivePaid),
       preFundNames: [...uniqueFunds.values()],
       preFundIds: [...uniqueFunds.keys()],
     } as DownPaymentRequest;
