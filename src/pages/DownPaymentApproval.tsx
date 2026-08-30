@@ -33,7 +33,7 @@ import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
 import { dispatchNotification } from '@/lib/notify';
-import { createRequiredPreFundPaymentEventKey, deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, fetchPreFundSourcePaymentLinks, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
+import { createRequiredPreFundPaymentEventKey, deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, fetchPreFundSourcePaymentGaps, fetchPreFundSourcePaymentLinks, isActivePreFundSourcePayment, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -601,10 +601,11 @@ export default function DownPaymentApproval() {
     void Promise.all([
       fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id)),
       fetchDeletedPreFundSourcePayments('down_payment_requests', requests.map(r => r.id)),
-    ]).then(([activeLinks, deletedLinks]) => {
+      fetchPreFundSourcePaymentGaps('down_payment_requests', requests.map(r => r.id)),
+    ]).then(([activeLinks, deletedLinks, reviewGaps]) => {
         if (!active) return;
         const next = new Map<string, PaymentEvidence[]>();
-        [...activeLinks, ...deletedLinks].forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
+        [...activeLinks, ...deletedLinks, ...reviewGaps].forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
           id: link.fundId,
           name: link.fundName,
           amount: link.paymentAmount,
@@ -875,7 +876,7 @@ export default function DownPaymentApproval() {
   const requestsWithFunding = useMemo(() => requests.map(req => {
     // Deleted payment snapshots remain available to the payment-history
     // panel, but must not make a request appear funded by a Pre-Fund.
-    const links = (preFundLinksByRequest.get(req.id) ?? []).filter(link => !link.isDeleted);
+    const links = (preFundLinksByRequest.get(req.id) ?? []).filter(isActivePreFundSourcePayment);
     return { ...req, preFundNames: links.map(link => link.name), preFundIds: links.map(link => link.id) } as DownPaymentRequest;
   }), [requests, preFundLinksByRequest]);
   const filteredRequests = useMemo(() => filterDownPayments(requestsWithFunding, filters), [requestsWithFunding, filters]);
@@ -886,7 +887,7 @@ export default function DownPaymentApproval() {
     const amounts = new Map<string, number>();
     filteredRequests.forEach(request => {
       const amount = (preFundLinksByRequest.get(request.id) ?? [])
-        .filter(link => link.id === selectedFundId && !link.isDeleted)
+        .filter(link => link.id === selectedFundId && isActivePreFundSourcePayment(link))
         .reduce((sum, link) => sum + (link.amount ?? 0), 0);
       amounts.set(request.id, amount);
     });
@@ -910,7 +911,7 @@ export default function DownPaymentApproval() {
     } else {
       filteredRequests.forEach(request => {
         (preFundLinksByRequest.get(request.id) ?? [])
-          .filter(link => link.id === selectedFundId && !link.isDeleted)
+          .filter(link => link.id === selectedFundId && isActivePreFundSourcePayment(link))
           .forEach(link => add(link.currency || 'SDG', link.amount ?? 0));
       });
     }

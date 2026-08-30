@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
-import { deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
+import { deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, isActivePreFundSourcePayment, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
@@ -5677,7 +5677,7 @@ const CostSubmission = () => {
               );
               if (costPreFundFilter !== 'all') {
                 result = result.filter(oc => {
-                  const links = costPreFundLinks.get(oc.id) ?? [];
+                  const links = (costPreFundLinks.get(oc.id) ?? []).filter(isActivePreFundSourcePayment);
                   if (costPreFundFilter === '__unlinked__') return links.length === 0 && (oc.amount_paid_cents ?? 0) > 0;
                   if (costPreFundFilter === '__multiple__') return links.length > 1;
                   return links.some(link => link.id === costPreFundFilter);
@@ -5752,7 +5752,7 @@ const CostSubmission = () => {
               && costPreFundFilter !== '__unlinked__'
               && costPreFundFilter !== '__multiple__') {
               searchFiltered.forEach(oc => (costPreFundLinks.get(oc.id) ?? [])
-                .filter(link => link.id === costPreFundFilter)
+                .filter(link => link.id === costPreFundFilter && isActivePreFundSourcePayment(link))
                 .forEach(link => {
                   const currency = link.currency || oc.currency || 'SDG';
                   selectedFundingPaidByCurrency.set(
@@ -6221,7 +6221,7 @@ const CostSubmission = () => {
                        const linkedMmpName = groupItems[0].mmp_file_id ? mmpNameMap.get(groupItems[0].mmp_file_id) || null : null;
                         const groupPreFundNames = [...new Map(
                           groupItems
-                            .flatMap(item => costPreFundLinks.get(item.id) ?? [])
+                            .flatMap(item => (costPreFundLinks.get(item.id) ?? []).filter(isActivePreFundSourcePayment))
                             .map(link => [link.id, link.name]),
                         ).values()];
                        const projPalette = getProjectPalette(groupItems[0].project_id);
@@ -6573,7 +6573,7 @@ const CostSubmission = () => {
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
                     const linkedProjectName = oc.project_id ? allProjects.find(p => p.id === oc.project_id)?.name : null;
                     const requestId = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
-                    const preFundLinks = costPreFundLinks.get(oc.id) ?? [];
+                    const preFundLinks = (costPreFundLinks.get(oc.id) ?? []).filter(isActivePreFundSourcePayment);
                     const preFundNames = [...new Map(preFundLinks.map(link => [link.id, link.name])).values()];
                     const hasRecordedPayment = (oc.amount_paid_cents ?? 0) > 0;
 
@@ -6767,9 +6767,9 @@ const CostSubmission = () => {
                                       <p className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400 mt-0.5" data-testid={`text-paid-amount-${oc.id}`}>
                                         Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
                                       </p>
-                                       <p className={`text-[9px] max-w-[180px] truncate ${((costPreFundLinks.get(oc.id) ?? []).length > 0) ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}>
-                                         {(costPreFundLinks.get(oc.id) ?? []).length > 0
-                                           ? `From: ${(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}`
+                                       <p className={`text-[9px] max-w-[180px] truncate ${preFundLinks.length > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={preFundLinks.map(link => link.name).join(', ')}>
+                                         {preFundLinks.length > 0
+                                           ? `From: ${preFundLinks.map(link => link.name).join(', ')}`
                                            : 'Pre-Fund: unlinked historical'}
                                        </p>
                                       {(oc.amount_paid_cents || 0) < oc.amount_cents && (
@@ -7599,9 +7599,9 @@ const CostSubmission = () => {
                                   <span className="text-[11px] font-semibold tabular-nums text-orange-600 dark:text-orange-400" data-testid={`text-paid-amount-${oc.id}`}>
                                     Paid: {oc.currency} {((oc.amount_paid_cents || 0) / 100).toLocaleString()}
                                   </span>
-                                   <span className={`text-[9px] max-w-[180px] truncate ${((costPreFundLinks.get(oc.id) ?? []).length > 0) ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}>
-                                     {(costPreFundLinks.get(oc.id) ?? []).length > 0
-                                       ? `From: ${(costPreFundLinks.get(oc.id) ?? []).map(link => link.name).join(', ')}`
+                                   <span className={`text-[9px] max-w-[180px] truncate ${preFundLinks.length > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-amber-700 dark:text-amber-300'}`} title={preFundLinks.map(link => link.name).join(', ')}>
+                                     {preFundLinks.length > 0
+                                       ? `From: ${preFundLinks.map(link => link.name).join(', ')}`
                                        : 'Pre-Fund: unlinked historical'}
                                    </span>
                                   {(oc.amount_paid_cents || 0) < oc.amount_cents && (

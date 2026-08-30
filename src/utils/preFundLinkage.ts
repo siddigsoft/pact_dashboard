@@ -32,9 +32,18 @@ export type PreFundSourcePaymentLink = {
   deletedBy?: string | null;
   deletionReason?: string | null;
   isDeleted?: boolean;
+  historyStatus?: 'active' | 'reversed' | 'deleted' | 'needs_review';
+  reversalEventId?: string | null;
+  reversedAt?: string | null;
+  reversalReason?: string | null;
+  reviewReason?: string | null;
   /** True only for a new controlled source-payment event, never legacy evidence. */
   isCorrectable: boolean;
 };
+
+export function isActivePreFundSourcePayment(link: PreFundSourcePaymentLink): boolean {
+  return (link.historyStatus ?? (link.isDeleted ? 'deleted' : 'active')) === 'active';
+}
 
 /**
  * Names one controlled source-payment operation. Reuse it only if the same
@@ -59,13 +68,31 @@ export async function fetchPreFundSourcePaymentLinks(
     chunks.push(sourceIds.slice(i, i + QUERY_CHUNK_SIZE));
   }
 
-  const canonicalResults = await Promise.all(chunks.map(chunk => (supabase as any)
-    .from('pre_fund_source_payment_links_v')
-    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, reference, description, created_by, occurred_at, idempotency_key')
+  // Prefer the complete history view. It contains both active instalments and
+  // payment events later neutralised by an immutable reversal.
+  const historyResults = await Promise.all(chunks.map(chunk => (supabase as any)
+    .from('pre_fund_source_payment_history_v')
+    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, reference, description, created_by, occurred_at, idempotency_key, history_status, reversal_event_id, reversed_at, reversal_reason')
     .eq('source_table', sourceTable)
     .in('source_id', chunk)));
-  const canonicalError = canonicalResults.find(result => result.error)?.error ?? null;
-  const canonicalRows = canonicalResults.flatMap(result => result.data ?? []);
+  const historyError = historyResults.find(result => result.error)?.error ?? null;
+  const historyRows = historyResults.flatMap(result => result.data ?? []);
+
+  // Deployments where the new history migration has not yet been applied keep
+  // the previous active-only behavior instead of losing payment evidence.
+  const canonicalResults = historyError
+    ? await Promise.all(chunks.map(chunk => (supabase as any)
+        .from('pre_fund_source_payment_links_v')
+        .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, reference, description, created_by, occurred_at, idempotency_key')
+        .eq('source_table', sourceTable)
+        .in('source_id', chunk)))
+    : [];
+  const canonicalError = historyError
+    ? canonicalResults.find(result => result.error)?.error ?? null
+    : null;
+  const canonicalRows = historyError
+    ? canonicalResults.flatMap(result => result.data ?? [])
+    : historyRows;
 
   // Verify every source before using its event. The ledger's reconciliation
   // totals reject payments whose Down Payment or Cost Submission was later
@@ -113,7 +140,13 @@ export async function fetchPreFundSourcePaymentLinks(
       recordedBy: row.created_by ?? null,
       recordedAt: row.occurred_at ?? null,
       isDeleted: false,
-      isCorrectable: typeof row.idempotency_key === 'string' && row.idempotency_key.startsWith('source-payment:'),
+      historyStatus: row.history_status ?? 'active',
+      reversalEventId: row.reversal_event_id ?? null,
+      reversedAt: row.reversed_at ?? null,
+      reversalReason: row.reversal_reason ?? null,
+      isCorrectable: (row.history_status ?? 'active') === 'active'
+        && typeof row.idempotency_key === 'string'
+        && row.idempotency_key.startsWith('source-payment:'),
     }));
 
   // The canonical view is the authority when it is available. Older
@@ -184,9 +217,51 @@ export async function fetchPreFundSourcePaymentLinks(
       recordedBy: null,
       recordedAt: transaction.transaction_date ?? null,
       isDeleted: false,
+      historyStatus: 'active',
       isCorrectable: false,
     }));
   return [...canonicalLinks, ...historicBackLinks];
+}
+
+export async function fetchPreFundSourcePaymentGaps(
+  sourceTable: PreFundSourcePaymentLink['sourceTable'],
+  sourceIds: string[],
+): Promise<PreFundSourcePaymentLink[]> {
+  if (sourceIds.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < sourceIds.length; i += 150) chunks.push(sourceIds.slice(i, i + 150));
+  const results = await Promise.all(chunks.map(chunk => (supabase as any)
+    .from('pre_fund_historic_exceptions_v')
+    .select('source_table, source_id, amount, currency, description, finance_action')
+    .eq('exception_type', 'source_payment_gap')
+    .eq('source_table', sourceTable)
+    .in('source_id', chunk)));
+  const error = results.find(result => result.error)?.error;
+  if (error) {
+    if (/does not exist|schema cache|permission denied/i.test(error.message ?? '')) return [];
+    throw new Error(error.message);
+  }
+  return results.flatMap(result => result.data ?? [])
+    .filter((row: any) => row.source_id && Number(row.amount ?? 0) > 0)
+    .map((row: any) => ({
+      paymentEventId: `review-gap:${row.source_table}:${row.source_id}`,
+      sourceTable: row.source_table,
+      sourceId: row.source_id,
+      fundId: '',
+      fundName: 'Pre-Fund not yet verified',
+      currency: row.currency ?? 'SDG',
+      paymentAmount: Number(row.amount ?? 0),
+      paymentDate: null,
+      receiptUrl: null,
+      reference: null,
+      description: row.description ?? null,
+      recordedBy: null,
+      recordedAt: null,
+      isDeleted: false,
+      historyStatus: 'needs_review',
+      reviewReason: row.finance_action ?? 'Finance must verify the original payment evidence before assigning a Pre-Fund.',
+      isCorrectable: false,
+    }));
 }
 
 export async function fetchDeletedPreFundSourcePayments(
@@ -225,6 +300,7 @@ export async function fetchDeletedPreFundSourcePayments(
     deletedBy: row.deleted_by,
     deletionReason: row.deletion_reason,
     isDeleted: true,
+    historyStatus: 'deleted',
     isCorrectable: false,
   }));
 }
