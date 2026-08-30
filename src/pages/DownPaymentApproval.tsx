@@ -877,7 +877,9 @@ export default function DownPaymentApproval() {
     // Deleted payment snapshots remain available to the payment-history
     // panel, but must not make a request appear funded by a Pre-Fund.
     const links = (preFundLinksByRequest.get(req.id) ?? []).filter(isActivePreFundSourcePayment);
-    const uniqueFunds = new Map(links.map(link => [link.id, link.name]));
+    // Use the canonical typed ledger fields for filtering. The id/name aliases
+    // are retained only for display compatibility with older child components.
+    const uniqueFunds = new Map(links.map(link => [link.fundId, link.fundName]));
     return {
       ...req,
       preFundNames: [...uniqueFunds.values()],
@@ -903,8 +905,8 @@ export default function DownPaymentApproval() {
     } else {
       filteredRequests.forEach(request => {
         (preFundLinksByRequest.get(request.id) ?? [])
-          .filter(link => link.id === selectedFundId && isActivePreFundSourcePayment(link))
-          .forEach(link => add(link.currency || 'SDG', link.amount ?? 0));
+          .filter(link => link.fundId === selectedFundId && isActivePreFundSourcePayment(link))
+          .forEach(link => add(link.currency || 'SDG', link.paymentAmount ?? 0));
       });
     }
     return { label, totals: [...totals.entries()] };
