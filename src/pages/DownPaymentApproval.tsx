@@ -873,7 +873,9 @@ export default function DownPaymentApproval() {
 
   // Filtered requests shared across all analytics tabs
   const requestsWithFunding = useMemo(() => requests.map(req => {
-    const links = preFundLinksByRequest.get(req.id) ?? [];
+    // Deleted payment snapshots remain available to the payment-history
+    // panel, but must not make a request appear funded by a Pre-Fund.
+    const links = (preFundLinksByRequest.get(req.id) ?? []).filter(link => !link.isDeleted);
     return { ...req, preFundNames: links.map(link => link.name), preFundIds: links.map(link => link.id) } as DownPaymentRequest;
   }), [requests, preFundLinksByRequest]);
   const filteredRequests = useMemo(() => filterDownPayments(requestsWithFunding, filters), [requestsWithFunding, filters]);
@@ -884,7 +886,7 @@ export default function DownPaymentApproval() {
     const amounts = new Map<string, number>();
     filteredRequests.forEach(request => {
       const amount = (preFundLinksByRequest.get(request.id) ?? [])
-        .filter(link => link.id === selectedFundId)
+        .filter(link => link.id === selectedFundId && !link.isDeleted)
         .reduce((sum, link) => sum + (link.amount ?? 0), 0);
       amounts.set(request.id, amount);
     });
@@ -908,7 +910,7 @@ export default function DownPaymentApproval() {
     } else {
       filteredRequests.forEach(request => {
         (preFundLinksByRequest.get(request.id) ?? [])
-          .filter(link => link.id === selectedFundId)
+          .filter(link => link.id === selectedFundId && !link.isDeleted)
           .forEach(link => add(link.currency || 'SDG', link.amount ?? 0));
       });
     }
