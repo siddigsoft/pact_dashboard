@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -113,6 +113,7 @@ export default function PreFundingApprovalFlow() {
   const [saving, setSaving]                 = useState(false);
 
   const [processing, setProcessing]         = useState<string | null>(null);
+  const stepLoadVersion = useRef(0);
   const [actionDialog, setActionDialog]     = useState<{ step: ApprovalStep; action: 'approve' | 'reject' } | null>(null);
   const [actionNotes, setActionNotes]       = useState('');
 
@@ -150,19 +151,14 @@ export default function PreFundingApprovalFlow() {
   }, []);
 
   const loadSteps = useCallback(async (fundId: string) => {
+    const version = ++stepLoadVersion.current;
     setStepsLoading(true);
     try {
-      const [stepsRes, votesRes] = await Promise.all([
-        supabase.from('pre_fund_approval_steps')
-          .select('*').eq('pre_fund_request_id', fundId).order('step_order'),
-        supabase.from('pre_fund_step_approvals' as any)
-          .select('*')
-          .in('step_id',
-            // we'll set this properly after first query; use a sub-approach
-            ['__placeholder__']
-          ).limit(0),    // placeholder — overridden below
-      ]);
-
+      const stepsRes = await supabase.from('pre_fund_approval_steps')
+        .select('id,pre_fund_request_id,step_order,step_label,assigned_user_id,assigned_user_ids,required_approvals,is_required,status,approved_at,approved_by,notes')
+        .eq('pre_fund_request_id', fundId)
+        .order('step_order');
+      if (version !== stepLoadVersion.current) return;
       if (stepsRes.error) throw stepsRes.error;
       const rawSteps = (stepsRes.data as any) ?? [];
       const stepIds: string[] = rawSteps.map((s: any) => s.id);
@@ -172,8 +168,9 @@ export default function PreFundingApprovalFlow() {
       if (stepIds.length > 0) {
         const { data: vData } = await supabase
           .from('pre_fund_step_approvals' as any)
-          .select('*')
+          .select('id,step_id,user_id,action,notes,created_at')
           .in('step_id', stepIds);
+        if (version !== stepLoadVersion.current) return;
         votes = (vData as any) ?? [];
       }
 
@@ -198,9 +195,9 @@ export default function PreFundingApprovalFlow() {
           votes: stepVotes,
         };
       });
-      setSteps(enriched);
+      if (version === stepLoadVersion.current) setSteps(enriched);
     } catch (e: any) { toast({ title: 'Failed to load steps', description: e.message, variant: 'destructive' }); }
-    finally { setStepsLoading(false); }
+    finally { if (version === stepLoadVersion.current) setStepsLoading(false); }
   }, [users, toast]);
 
   useEffect(() => { loadFunds(); }, [loadFunds]);

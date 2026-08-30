@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -121,6 +121,8 @@ export default function PreFundingAllocations() {
 
   const [allAllocations, setAll] = useState<AllocRow[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(true);
+  const [detailsReady, setDetailsReady] = useState(false);
   const [search, setSearch]     = useState('');
   const [fundFilter, setFund]   = useState('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -130,9 +132,13 @@ export default function PreFundingAllocations() {
   // Inline allocation editing — available to Finance Admin and Country Director
   const [editingAllocId, setEditingAllocId] = useState<string | null>(null);
   const [editAllocAmt, setEditAllocAmt]     = useState('');
+  const loadVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
+    setDetailsLoading(true);
+    setDetailsReady(false);
     try {
       // For non-finance-admin users (fund holders: CD, FOM, etc.):
       // fetch their assigned fund IDs first, then scope allocations to those funds.
@@ -163,37 +169,65 @@ export default function PreFundingAllocations() {
         return q;
       });
 
-      if (allocs.length === 0) { setAll([]); setFunds([]); setLoading(false); return; }
+      if (version !== loadVersion.current) return;
+      if (allocs.length === 0) {
+        setAll([]);
+        setFunds([]);
+        setLoading(false);
+        setDetailsLoading(false);
+        setDetailsReady(true);
+        return;
+      }
 
       const userIds  = [...new Set(allocs.map((a: any) => a.user_id as string).filter(Boolean))];
       const fundIds  = [...new Set(allocs.map((a: any) => a.pre_fund_request_id as string).filter(Boolean))];
 
-      // Fetch profiles, fund metadata, AND transactions — all unlimited
-      const [profilesData, fundsData, rawTxns] = await Promise.all([
+      // Profiles and fund labels are sufficient for first paint. Ledger
+      // attribution is loaded immediately afterward without blocking the page.
+      const [profilesData, fundsData] = await Promise.all([
         fetchAllIn(chunk => supabase.from('profiles').select('id,full_name,email,role').in('id', chunk), userIds),
         fetchAllIn(chunk => (supabase as any).from('pre_fund_requests').select('id,name,status,currency,paid_amount').in('id', chunk), fundIds),
-        // Transactions: unlimited fetch, scoped to visible fund IDs
-        fetchAllIn(
-          chunk => (supabase as any)
-            .from('pre_fund_event_ledger_v')
-            .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
-            .in('pre_fund_request_id', chunk)
-            .eq('source_is_verified', true)
-            .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
-          fundIds,
-        ),
       ]);
+      if (version !== loadVersion.current) return;
 
       const profileMap = new Map(profilesData.map((p: any) => [p.id as string, p]));
       const fundMap    = new Map(fundsData.map((f: any) => [f.id as string, f]));
-
-      const validTxns = rawTxns;
+      const baseEnriched: AllocRow[] = allocs.map((a: any) => {
+        const p = profileMap.get(a.user_id) as any;
+        const f = fundMap.get(a.pre_fund_request_id) as any;
+        return {
+          ...a,
+          allocated_amount: Number(a.allocated_amount),
+          spent_amount: Math.max(0, Number(a.spent_amount ?? 0)),
+          fund_name:   f?.name   ?? 'Unknown Fund',
+          fund_status: f?.status ?? 'unknown',
+          user_name:   p?.full_name ?? p?.email ?? 'Unknown',
+          user_email:  p?.email  ?? '',
+          user_role:   p?.role   ?? 'employee',
+        };
+      });
+      setAll(baseEnriched);
+      setFunds(fundsData.map((f: any) => ({ id: f.id as string, name: f.name as string })));
 
       const paidMap = new Map<string, number>();
       for (const f of fundsData as any[]) {
         const dbPaid  = Number(f.paid_amount ?? 0);
         paidMap.set(f.id as string, dbPaid);
       }
+      setFundPaidMap(paidMap as Map<string, number>);
+      setLoading(false);
+
+      const rawTxns = await fetchAllIn(
+        chunk => (supabase as any)
+          .from('pre_fund_event_ledger_v')
+          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
+          .in('pre_fund_request_id', chunk)
+          .eq('source_is_verified', true)
+          .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
+        fundIds,
+      );
+      if (version !== loadVersion.current) return;
+      const validTxns = rawTxns;
 
       // Some transactions (esp. manually added via Reconciliation, or auto-linked
       // where the staff member has no allocation yet) are saved with user_id = NULL
@@ -279,12 +313,15 @@ export default function PreFundingAllocations() {
       });
 
       setAll(enriched);
-      setFundPaidMap(paidMap as Map<string, number>);
-      setFunds(fundsData.map((f: any) => ({ id: f.id as string, name: f.name as string })));
+      setDetailsLoading(false);
+      setDetailsReady(true);
     } catch (e: any) {
       console.error('Allocations load error', e);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) {
+        setLoading(false);
+        setDetailsLoading(false);
+      }
     }
   }, [isFinanceAdmin, currentUser?.id]);
 
@@ -387,7 +424,7 @@ export default function PreFundingAllocations() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportAllocations} data-testid="button-export-allocations">
+          <Button variant="outline" size="sm" onClick={exportAllocations} disabled={!detailsReady} data-testid="button-export-allocations">
             <Download className="h-4 w-4 mr-1.5" />Export
           </Button>
           <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-allocs">
@@ -397,7 +434,7 @@ export default function PreFundingAllocations() {
       </div>
 
       {/* KPI row */}
-      {!loading && (
+      {!loading && detailsReady && (
         <div className={`grid gap-3 ${canManageAllocations ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2'}`}>
           {(canManageAllocations ? [
             { label: 'Staff Allocated',   value: String(staff.length),                                   sub: 'unique people',           icon: Users,          accent: 'bg-violet-600' },
@@ -432,7 +469,17 @@ export default function PreFundingAllocations() {
       )}
 
       {/* Unattributed spend alert — shows when fund has paid out more than is tracked in allocations */}
-      {!loading && isFinanceAdmin && unattributedSpend > 0 && ( // Unattributed alert is finance-only (requires Reconciliation access)
+      {!loading && !detailsLoading && !detailsReady && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>Live payment attribution could not be loaded. Financial totals and export remain unavailable.</span>
+            <Button variant="outline" size="sm" onClick={load}>Retry</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loading && detailsReady && isFinanceAdmin && unattributedSpend > 0 && ( // Unattributed alert is finance-only (requires Reconciliation access)
         <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
           <Info className="h-4 w-4 text-amber-600 mt-0.5" />
           <AlertDescription className="text-sm text-amber-800 dark:text-amber-300">

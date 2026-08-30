@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
@@ -92,6 +92,28 @@ const TXN_COLORS: Record<string, string> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const rows: T[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryFn().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+async function fetchAllIn<T = any>(queryFn: (ids: string[]) => any, ids: string[]): Promise<T[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  const batches: Promise<T[]>[] = [];
+  for (let i = 0; i < uniqueIds.length; i += 100) {
+    const chunk = uniqueIds.slice(i, i + 100);
+    batches.push(fetchAll<T>(() => queryFn(chunk)));
+  }
+  return (await Promise.all(batches)).flat();
+}
+
 function kpiCard(title: string, value: string, sub: string, icon: React.ElementType, cls: string) {
   const Icon = icon;
   return (
@@ -149,47 +171,87 @@ export default function PreFundingReport() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
   const [userSearch, setUserSearch] = useState('');
   const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
+  const loadVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
     try {
-      // Build the funds query — holders only see their assigned fund(s)
-      let fundsQuery = supabase.from('pre_fund_requests')
-        .select('id,name,source,status,currency,amount,available_balance,committed_amount,paid_amount,usd_to_sdg_rate,start_date,end_date,project_id,created_at')
-        .order('created_at', { ascending: false });
-      if (holderUserId) fundsQuery = (fundsQuery as any).eq('holder_user_id', holderUserId);
+      const fundRows = await fetchAll<FundRow>(() => {
+        let query = supabase.from('pre_fund_requests')
+          .select('id,name,source,status,currency,amount,available_balance,committed_amount,paid_amount,usd_to_sdg_rate,start_date,end_date,project_id,created_at')
+          .order('created_at', { ascending: false })
+          .order('id');
+        if (holderUserId) query = (query as any).eq('holder_user_id', holderUserId);
+        return query;
+      });
+      if (version !== loadVersion.current) return;
+      const fundIds = fundRows.map(fund => fund.id);
 
-      const [fundsRes, txnsRes, stepsRes, projRes, profRes, allocRes, hubsRes, ratesRes] = await Promise.all([
-        fundsQuery,
-        (supabase as any).from('pre_fund_event_ledger_v')
+      if (fundIds.length === 0) {
+        setFunds([]);
+        setTxns([]);
+        setSteps([]);
+        setAllocations([]);
+        setProjects([]);
+        setProfiles(new Map());
+        setCurrencies(['All']);
+        return;
+      }
+
+      const [txnRows, stepRows, projRes, allocRows, ratesRes] = await Promise.all([
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_event_ledger_v')
           .select('id,pre_fund_request_id,transaction_type,amount,currency,reference,description,transaction_date,created_at,user_id,created_by,receipt_url,source_table,source_id,reconciled')
+          .in('pre_fund_request_id', chunk)
           .eq('source_is_verified', true)
-          .order('transaction_date', { ascending: false }),
-        supabase.from('pre_fund_approval_steps')
+          .order('transaction_date', { ascending: false })
+          .order('id'), fundIds),
+        fetchAllIn(chunk => supabase.from('pre_fund_approval_steps')
           .select('id,pre_fund_request_id,step_label,status,step_order,is_required,approved_at,notes,assigned_user_id,assigned_user_ids')
-          .order('step_order'),
+          .in('pre_fund_request_id', chunk)
+          .order('step_order')
+          .order('id'), fundIds),
         supabase.from('projects').select('id,name').order('name'),
-        supabase.from('profiles').select('id,full_name,email,hub_id'),
-        (supabase as any).from('pre_fund_allocations')
+        fetchAllIn(chunk => (supabase as any).from('pre_fund_allocations')
           .select('id,pre_fund_request_id,user_id,allocated_amount,spent_amount,currency,notes')
-          .order('created_at', { ascending: false }),
-        // hubs + exchange-rates moved here from sequential post-processing
-        (supabase as any).from('hubs').select('id,name').limit(500),
-        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency'),
+          .in('pre_fund_request_id', chunk)
+          .order('created_at', { ascending: false })
+          .order('id'), fundIds),
+        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').limit(250),
       ]);
-      if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
+      if (version !== loadVersion.current) return;
+
+      const referencedProfileIds = [...new Set([
+        ...txnRows.flatMap((transaction: any) => [transaction.user_id, transaction.created_by]),
+        ...allocRows.map((allocation: any) => allocation.user_id),
+        ...stepRows.flatMap((step: any) => [
+          step.assigned_user_id,
+          ...(Array.isArray(step.assigned_user_ids) ? step.assigned_user_ids : []),
+        ]),
+      ].filter(Boolean) as string[])];
+      const profileRows = await fetchAllIn<any>(
+        chunk => supabase.from('profiles').select('id,full_name,email,hub_id').in('id', chunk),
+        referencedProfileIds,
+      );
+      if (version !== loadVersion.current) return;
+      const hubIds = [...new Set(profileRows.map((profile: any) => profile.hub_id).filter(Boolean) as string[])];
+      const hubRows = await fetchAllIn<any>(
+        chunk => (supabase as any).from('hubs').select('id,name').in('id', chunk),
+        hubIds,
+      );
+      if (version !== loadVersion.current) return;
 
       const projMap = new Map<string, string>((projRes.data ?? []).map((p: Project) => [p.id, p.name]));
       const fundMap = new Map<string, string>();
 
       // Build profile id → display name map
       const profMap = new Map<string, string>();
-      ((profRes.data as any) ?? []).forEach((p: ProfileRow) => {
+      profileRows.forEach((p: ProfileRow) => {
         profMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
       });
 
-      const enrichedFunds: FundRow[] = ((fundsRes.data as any) ?? []).map((f: FundRow) => {
+      const enrichedFunds: FundRow[] = fundRows.map((f: FundRow) => {
         const enriched = { ...f, project_name: f.project_id ? (projMap.get(f.project_id) ?? 'Unknown') : '—' };
         fundMap.set(f.id, f.name);
         return enriched;
@@ -199,7 +261,7 @@ export default function PreFundingReport() {
       const allowedFundIds = holderUserId ? new Set(enrichedFunds.map(f => f.id)) : null;
       const inScope = (fundId: string) => !allowedFundIds || allowedFundIds.has(fundId);
 
-      const enrichedTxns: TxnRow[] = ((txnsRes.data as any) ?? [])
+      const enrichedTxns: TxnRow[] = txnRows
         .filter((t: TxnRow) => inScope(t.pre_fund_request_id))
         .map((t: TxnRow) => {
           const userId = t.user_id ?? t.created_by ?? null;
@@ -210,7 +272,7 @@ export default function PreFundingReport() {
           };
         });
 
-      const enrichedSteps: StepRow[] = ((stepsRes.data as any) ?? [])
+      const enrichedSteps: StepRow[] = stepRows
         .filter((s: StepRow) => inScope(s.pre_fund_request_id))
         .map((s: StepRow) => {
           const ids: string[] = Array.isArray(s.assigned_user_ids) && s.assigned_user_ids.length
@@ -220,7 +282,7 @@ export default function PreFundingReport() {
           return { ...s, fund_name: fundMap.get(s.pre_fund_request_id) ?? '—', assignee_names };
         });
 
-      const enrichedAllocs: AllocRow[] = ((allocRes.data as any) ?? [])
+      const enrichedAllocs: AllocRow[] = allocRows
         .filter((a: AllocRow) => inScope(a.pre_fund_request_id))
         .map((a: AllocRow) => ({
           ...a,
@@ -235,11 +297,11 @@ export default function PreFundingReport() {
       setProjects((projRes.data as any) ?? []);
       setProfiles(profMap);
 
-      // Build hub map for Excel export (hubsRes already fetched above in Promise.all)
-      if (!hubsRes.error && hubsRes.data) {
-        const hubM = new Map<string, string>((hubsRes.data as any[]).map((h: any) => [h.id, h.name as string]));
+      // Build hub map for Excel export from only hubs referenced by report users.
+      if (hubRows.length > 0) {
+        const hubM = new Map<string, string>(hubRows.map((h: any) => [h.id, h.name as string]));
         const phm = new Map<string, string>();
-        ((profRes.data as any) ?? []).forEach((p: any) => {
+        profileRows.forEach((p: any) => {
           phm.set(p.id, p.hub_id ? (hubM.get(p.hub_id) ?? p.hub_id) : '—');
         });
         setProfHubMap(phm);
@@ -253,7 +315,7 @@ export default function PreFundingReport() {
       }
       setCurrencies(['All', ...[...currSet].sort()]);
     } catch (e: any) { setError(e.message); }
-    finally { setLoading(false); }
+    finally { if (version === loadVersion.current) setLoading(false); }
   }, [holderUserId]);
 
   useEffect(() => { load(); }, [load]);

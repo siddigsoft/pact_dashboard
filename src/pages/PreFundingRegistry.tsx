@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
@@ -934,6 +934,18 @@ function PreFundFormDialog({ open, onClose, editing, projects, periodTypes, acct
 
 
 
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const rows: T[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryFn().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export default function PreFundingRegistry() {
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const { currentUser } = useAppContext();
@@ -1036,45 +1048,57 @@ export default function PreFundingRegistry() {
 
   // Tracks whether form-only data (accounts, profiles) has been loaded
   const [formDataLoaded, setFormDataLoaded] = useState(false);
+  const loadVersion = useRef(0);
 
   // Heavy queries only needed when the create/edit form is open — lazy-loaded on first open
   const loadFormData = useCallback(async () => {
     if (formDataLoaded) return;
-    const [acctRes, ratesRes, profRes] = await Promise.all([
-      (supabase as any).from('acct_accounts').select('id,code,name_en,is_active,is_postable').order('code'),
+    const [accountRows, ratesRes, profileRows] = await Promise.all([
+      fetchAll<any>(() => (supabase as any).from('acct_accounts')
+        .select('id,code,name_en,is_active,is_postable')
+        .order('code')
+        .order('id')),
       (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }).limit(200),
-      supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
+      fetchAll<any>(() => supabase.from('profiles')
+        .select('id,full_name,email,role')
+        .order('full_name')
+        .order('id')),
     ]);
-    if (!acctRes.error) {
-      const seen = new Set<string>();
-      const deduped = ((acctRes.data as any[]) ?? [])
-        .filter((a: any) => a.is_active && a.is_postable)
-        .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
-      setAcctAccounts(deduped);
-    }
+    const seen = new Set<string>();
+    const deduped = accountRows
+      .filter((a: any) => a.is_active && a.is_postable)
+      .filter((a: any) => { if (seen.has(a.code)) return false; seen.add(a.code); return true; });
+    setAcctAccounts(deduped);
     if (!ratesRes.error) {
       const rows: any[] = ratesRes.data ?? [];
       const seen = new Set<string>(['USD', 'SDG', 'EUR', 'GBP', 'SAR', 'AED']);
       rows.forEach((r: any) => { seen.add(r.from_currency); seen.add(r.to_currency); });
       setDynamicCurrencies([...seen].sort());
     }
-    if (!profRes.error) setStaffProfiles((profRes.data as any) ?? []);
+    setStaffProfiles(profileRows);
     setFormDataLoaded(true);
   }, [formDataLoaded]);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
+    setError(null);
     try {
-      const [fundsRes, ptRes, projRes, settingsRes] = await Promise.all([
-        supabase.from('pre_fund_requests')
-          .select('id,name,source,amount,currency,usd_to_sdg_rate,available_balance,committed_amount,paid_amount,status,warning_days,period_type_id,period_type_name,start_date,end_date,country_id,project_id,grant_id,matching_scope,cost_category,auto_renewal_mode,auto_renewal_days_before,notes,created_at,created_by,holder_user_id,allow_overpay,gl_receipt_account,gl_liability_account')
-          .order('created_at', { ascending: false }),
+      const loadedFunds = await fetchAll<PreFundRequest>(() => supabase.from('pre_fund_requests')
+        .select('id,name,source,amount,currency,usd_to_sdg_rate,available_balance,committed_amount,paid_amount,status,warning_days,period_type_id,period_type_name,start_date,end_date,country_id,project_id,grant_id,matching_scope,cost_category,auto_renewal_mode,auto_renewal_days_before,notes,created_at,created_by,holder_user_id,allow_overpay,gl_receipt_account,gl_liability_account')
+        .order('created_at', { ascending: false })
+        .order('id'));
+      if (version !== loadVersion.current) return;
+      setFunds(loadedFunds);
+      // The registry list can render without form reference data.
+      setLoading(false);
+
+      const [ptRes, projRes, settingsRes] = await Promise.all([
         supabase.from('pre_fund_period_types').select('id,name,day_count,is_builtin').order('display_order'),
         supabase.from('projects').select('id,name,status,description').order('name'),
         (supabase as any).from('pre_fund_settings').select('default_warning_days,default_renewal_mode,default_threshold_pct').maybeSingle(),
       ]);
-      if (fundsRes.error && !fundsRes.error.message.includes('does not exist')) throw fundsRes.error;
-      setFunds((fundsRes.data as any) ?? []);
+      if (version !== loadVersion.current) return;
       setProjects((projRes.data as any) ?? []);
       const dbTypes = (ptRes.data as any[]) ?? [];
       setPeriodTypes(dbTypes.length > 0 ? dbTypes : BUILTIN_PERIOD_TYPES);
@@ -1082,7 +1106,7 @@ export default function PreFundingRegistry() {
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, []);
 
@@ -1219,10 +1243,14 @@ export default function PreFundingRegistry() {
     toast({ title: 'Allocation removed' });
   };
 
-  const openNew = () => {
+  const openNew = async () => {
     setEditing(null);
-    setShowForm(true);
-    loadFormData();
+    try {
+      await loadFormData();
+      setShowForm(true);
+    } catch (e: any) {
+      toast({ title: 'Could not load fund form', description: e.message, variant: 'destructive' });
+    }
   };
 
   const openTopUp = (f: PreFundRequest) => {
@@ -1675,10 +1703,14 @@ export default function PreFundingRegistry() {
     });
   };
 
-  const openEdit = (f: PreFundRequest) => {
+  const openEdit = async (f: PreFundRequest) => {
     setEditing(f);
-    setShowForm(true);
-    loadFormData();
+    try {
+      await loadFormData();
+      setShowForm(true);
+    } catch (e: any) {
+      toast({ title: 'Could not load fund form', description: e.message, variant: 'destructive' });
+    }
   };
 
   const handleSave = async (formData: typeof EMPTY_FORM) => {
@@ -2622,7 +2654,7 @@ export default function PreFundingRegistry() {
                       onClick={() => {
                         setReceiptDialog({ open: false, fundId: '', fundName: '' });
                         setReceiptFiles([]);
-                        if (receiptFund) { setEditing(receiptFund as any); setShowForm(true); loadFormData(); }
+                        if (receiptFund) void openEdit(receiptFund as any);
                       }}
                     >
                       Configure GL Accounts in Edit Fund →

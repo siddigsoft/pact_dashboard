@@ -127,8 +127,8 @@ export default function PreFundingSettings() {
       const [sRes, ptRes, acctRes, ratesRes] = await Promise.all([
         supabase.from('pre_fund_settings').select('*').maybeSingle(),
         supabase.from('pre_fund_period_types').select('*').order('display_order'),
-        (supabase as any).from('acct_accounts').select('code,name_en,is_active,is_postable').order('code'),
-        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }),
+        (supabase as any).from('acct_accounts').select('code,name_en,is_active,is_postable').eq('is_active', true).eq('is_postable', true).order('code').limit(1000),
+        (supabase as any).from('acct_exchange_rates').select('from_currency,to_currency').order('effective_date', { ascending: false }).limit(250),
       ]);
       // Surface SELECT errors (e.g. RLS blocking or table missing)
       if (sRes.error && !sRes.error.message.includes('does not exist') && !sRes.error.message.includes('relation')) {
@@ -241,7 +241,19 @@ export default function PreFundingSettings() {
     } finally { setMatchingId(null); }
   };
 
-  useEffect(() => { if (settings.bank_api_enabled) loadUnmatched(); }, [settings.bank_api_enabled, loadUnmatched]);
+  useEffect(() => {
+    if (!settings.bank_api_enabled) return;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const id = idleWindow.requestIdleCallback(() => void loadUnmatched(), { timeout: 2500 });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+    const timeout = window.setTimeout(() => void loadUnmatched(), 800);
+    return () => window.clearTimeout(timeout);
+  }, [settings.bank_api_enabled, loadUnmatched]);
 
   const handleSave = async () => {
     setSaving(true);

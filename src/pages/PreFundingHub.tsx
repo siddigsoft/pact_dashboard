@@ -5,16 +5,27 @@ import { HubLayout } from '@/components/ui/hub-layout';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useCurrentUserAccess } from '@/context/CurrentUserAccessContext';
 
-const OverviewPanel        = lazy(() => import('./PreFundingOverview'));
-const RegistryPanel        = lazy(() => import('./PreFundingRegistry'));
-const ApprovalFlowPanel    = lazy(() => import('./PreFundingApprovalFlow'));
-const ReconciliationPanel  = lazy(() => import('./PreFundingReconciliation'));
-const SettingsPanel        = lazy(() => import('./PreFundingSettings'));
-const ReportPanel          = lazy(() => import('./PreFundingReport'));
-const AllocationsPanel     = lazy(() => import('./PreFundingAllocations'));
-const DistributePanel      = lazy(() => import('./PreFundingDistribute'));
-
 type PFTab = 'overview' | 'registry' | 'approvals' | 'reconciliation' | 'allocations' | 'settings' | 'report' | 'distribute';
+
+const PANEL_LOADERS: Record<PFTab, () => Promise<any>> = {
+  overview: () => import('./PreFundingOverview'),
+  registry: () => import('./PreFundingRegistry'),
+  approvals: () => import('./PreFundingApprovalFlow'),
+  reconciliation: () => import('./PreFundingReconciliation'),
+  allocations: () => import('./PreFundingAllocations'),
+  settings: () => import('./PreFundingSettings'),
+  report: () => import('./PreFundingReport'),
+  distribute: () => import('./PreFundingDistribute'),
+};
+
+const OverviewPanel        = lazy(PANEL_LOADERS.overview);
+const RegistryPanel        = lazy(PANEL_LOADERS.registry);
+const ApprovalFlowPanel    = lazy(PANEL_LOADERS.approvals);
+const ReconciliationPanel  = lazy(PANEL_LOADERS.reconciliation);
+const SettingsPanel        = lazy(PANEL_LOADERS.settings);
+const ReportPanel          = lazy(PANEL_LOADERS.report);
+const AllocationsPanel     = lazy(PANEL_LOADERS.allocations);
+const DistributePanel      = lazy(PANEL_LOADERS.distribute);
 
 type SectionDef = { id: string; label: string; icon: React.ElementType; color: string; description: string; tabs: { id: string; label: string; icon: React.ElementType; description: string }[] };
 
@@ -143,6 +154,27 @@ export default function PreFundingHub() {
   useEffect(() => {
     if (rawTab && tab !== rawTab) setParams({ tab }, { replace: true });
   }, [rawTab, tab]);
+
+  // Download the other permitted panel chunks only after the active panel has
+  // rendered. This keeps first paint fast while making later tab switches feel
+  // immediate; data queries still run only when a panel is actually opened.
+  useEffect(() => {
+    const preload = () => {
+      allowedTabs.forEach(panelTab => {
+        if (panelTab !== tab) void PANEL_LOADERS[panelTab]();
+      });
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const id = idleWindow.requestIdleCallback(preload, { timeout: 2500 });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+    const timeout = window.setTimeout(preload, 900);
+    return () => window.clearTimeout(timeout);
+  }, [tab, allowedTabs.join('|')]);
 
   const activeTabDef = ALL_TABS.find(t => t.id === tab)!;
 

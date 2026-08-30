@@ -67,6 +67,18 @@ const STATUS_BADGE: Record<string, string> = {
   draft:       'bg-slate-100 text-slate-600 border-slate-200',
 };
 
+async function fetchAll<T = any>(queryFn: () => any): Promise<T[]> {
+  const rows: T[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryFn().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 async function fetchAllIn<T = any>(
   queryFn: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: any }>,
   ids: string[],
@@ -95,6 +107,7 @@ export default function PreFundingDistribute() {
   const [funds, setFunds]               = useState<HeldFund[]>([]);
   const [loading, setLoading]           = useState(true);
   const [staffProfiles, setStaff]       = useState<StaffProfile[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
   const [expanded, setExpanded]         = useState<Set<string>>(new Set());
   const [fundAllocs, setFundAllocs]     = useState<Map<string, Allocation[]>>(new Map());
   const [allocLoading, setAllocLoading] = useState<Set<string>>(new Set());
@@ -552,14 +565,13 @@ export default function PreFundingDistribute() {
       if (!isFinanceAdmin) fundsQ = fundsQ.eq('holder_user_id', currentUser.id);
       else fundsQ = fundsQ.not('holder_user_id', 'is', null);
 
-      // Run all three independent queries in parallel — was sequential (3 round-trips → 1)
+      // Only fetch data required to render the tab. The full staff directory is
+      // loaded on demand when Add Staff opens.
       const [
         { data: fundsData, error: fErr },
-        { data: profiles },
         { data: myAllocs },
       ] = await Promise.all([
         fundsQ,
-        supabase.from('profiles').select('id,full_name,email,role').order('full_name'),
         (supabase as any)
           .from('pre_fund_allocations')
           .select('id,pre_fund_request_id,allocated_amount,spent_amount,currency,notes,receipt_url')
@@ -587,8 +599,6 @@ export default function PreFundingDistribute() {
           available_balance: Number(verified.verified_available_balance ?? 0),
         } : fund;
       }));
-      setStaff((profiles as any) ?? []);
-
       if (myAllocs && myAllocs.length > 0) {
         // Fund details depends on myAllocs result — one extra query only when user has allocations
         const fundIds: string[] = [...new Set(myAllocs.map((a: any) => a.pre_fund_request_id as string))];
@@ -617,15 +627,22 @@ export default function PreFundingDistribute() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Eagerly load payment details for every fund where the current user has a
-  // personal allocation so the Paid-Out Breakdown is available without requiring
-  // the user to manually expand anything.
-  useEffect(() => {
-    if (!currentUser?.id || myAllocations.length === 0) return;
-    myAllocations.forEach(alloc => {
-      loadAllocPayments(alloc.id, currentUser.id, alloc.pre_fund_request_id);
-    });
-  }, [myAllocations, currentUser?.id, loadAllocPayments]);
+  const loadStaffProfiles = useCallback(async () => {
+    if (staffLoading || staffProfiles.length > 0) return;
+    setStaffLoading(true);
+    try {
+      const rows = await fetchAll<StaffProfile>(() => supabase
+        .from('profiles')
+        .select('id,full_name,email,role')
+        .order('full_name')
+        .order('id'));
+      setStaff(rows);
+    } catch (e: any) {
+      toast({ title: 'Could not load staff', description: e.message, variant: 'destructive' });
+    } finally {
+      setStaffLoading(false);
+    }
+  }, [staffLoading, staffProfiles.length, toast]);
 
   const loadAllocations = useCallback(async (fundId: string) => {
     setAllocLoading(prev => new Set(prev).add(fundId));
@@ -715,6 +732,7 @@ export default function PreFundingDistribute() {
     setAddForm({ userId: '', amount: '', notes: '' });
     setUserSearch('');
     setAddDialog({ open: true, fund });
+    void loadStaffProfiles();
     // Ensure allocations are loaded so the duplicate check in handleAddAllocation works
     if (!fundAllocs.has(fund.id)) loadAllocations(fund.id);
   };
@@ -1861,9 +1879,13 @@ export default function PreFundingDistribute() {
                         value={userSearch}
                         onChange={e => setUserSearch(e.target.value)}
                         placeholder="Search staff by name or email…"
+                        disabled={staffLoading}
                         className="pl-8 h-8 text-sm"
                         data-testid="input-user-search"
                       />
+                      {staffLoading && (
+                        <span className="absolute right-3 top-2 text-[10px] text-muted-foreground">Loading staff…</span>
+                      )}
                     </div>
                     {userSearch.trim() && (
                       <div className="border border-border rounded-md max-h-40 overflow-y-auto divide-y divide-border">

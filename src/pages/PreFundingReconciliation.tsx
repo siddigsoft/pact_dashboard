@@ -734,6 +734,7 @@ export default function PreFundingReconciliation() {
   const [selectedFund, setSelected]   = useState<PreFundSummary | null>(null);
   const [transactions, setTxns]       = useState<PreFundTransaction[]>([]);
   const transactionLoadVersion = useRef(0);
+  const fundLoadVersion = useRef(0);
   const [reconciliations, setRecons]  = useState<Reconciliation[]>([]);
   const [loading, setLoading]         = useState(true);
   const [txnLoading, setTxnLoading]   = useState(false);
@@ -987,19 +988,21 @@ export default function PreFundingReconciliation() {
   }, [reviewTransactions]);
 
   const loadFunds = useCallback(async () => {
+    const loadVersion = ++fundLoadVersion.current;
     setLoading(true);
     try {
-      let q = supabase.from('pre_fund_requests')
-        .select('id,name,source,currency,amount,available_balance,committed_amount,paid_amount,status,start_date,end_date')
-        .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
-        .order('created_at', { ascending: false });
-      // CD sees only their own held funds
-      if (isCD && !hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
-        q = (q as any).eq('holder_user_id', currentUser?.id);
-      }
-      const { data, error: e } = await q;
-      if (e && !e.message.includes('does not exist')) throw e;
-      let loaded: PreFundSummary[] = (data as any) ?? [];
+      let loaded = await fetchAll<PreFundSummary>(() => {
+        let q = supabase.from('pre_fund_requests')
+          .select('id,name,source,currency,amount,available_balance,committed_amount,paid_amount,status,start_date,end_date')
+          .in('status', ['active', 'low_balance', 'closed', 'period_locked'])
+          .order('created_at', { ascending: false })
+          .order('id');
+        if (isCD && !hasAnyRole(['super_admin', 'admin', 'financialAdmin'])) {
+          q = (q as any).eq('holder_user_id', currentUser?.id);
+        }
+        return q;
+      });
+      if (loadVersion !== fundLoadVersion.current) return;
       if (loaded.length > 0) {
         const balanceRows: any[] = await fetchAllIn(
           chunk => (supabase as any)
@@ -1008,6 +1011,7 @@ export default function PreFundingReconciliation() {
             .in('fund_id', chunk),
           loaded.map(fund => fund.id),
         );
+        if (loadVersion !== fundLoadVersion.current) return;
         const canonicalByFund = new Map(balanceRows.map(row => [row.fund_id, row]));
         loaded = loaded.map(fund => {
           const canonical = canonicalByFund.get(fund.id);
@@ -1023,7 +1027,10 @@ export default function PreFundingReconciliation() {
       // of leaving the page in an empty "Select a fund" state. Preserve an
       // existing selection when refreshing, and fall back if it disappeared.
       setSelected(current => {
-        if (current && loaded.some(fund => fund.id === current.id)) return current;
+        if (current) {
+          const refreshed = loaded.find(fund => fund.id === current.id);
+          if (refreshed) return refreshed;
+        }
         return loaded[0] ?? null;
       });
       // The selector only needs the primary fund list. Do not keep the whole
@@ -1031,67 +1038,15 @@ export default function PreFundingReconciliation() {
       // below scan historical transactions and Down Payments.
       setLoading(false);
 
-      // Compute accurate available balance per fund using 3 global batched queries
-      // (was N per-fund queries — one transaction fetch + two DP validation queries per fund).
-      const DP_NO_DISBURSE = new Set(['pending', 'pending_supervisor', 'pending_admin', 'draft', 'rejected', 'cancelled']);
-      const avMap = new Map<string, number>();
-      if (loaded.length > 0) {
-        const fundIds = loaded.map(f => f.id);
-
-        // ONE batched transaction query for all funds
-        const allTxns: any[] = await fetchAllIn(
-          (chunk) => supabase.from('pre_fund_transactions')
-            .select('id,transaction_type,amount,source_table,source_id,pre_fund_request_id')
-            .in('pre_fund_request_id', chunk)
-            .eq('transaction_type', 'payment'),
-          fundIds,
-        );
-
-        // Group by fund
-        const txnsByFund = new Map<string, any[]>();
-        for (const t of allTxns) {
-          const bucket = txnsByFund.get(t.pre_fund_request_id);
-          if (bucket) bucket.push(t);
-          else txnsByFund.set(t.pre_fund_request_id, [t]);
-        }
-
-        // Two global DP validation queries (was 2N)
-        const allDpIds  = [...new Set(allTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id).map((t: any) => t.source_id as string))];
-        const allTxnIds = allTxns.map((t: any) => t.id as string).filter(Boolean);
-        const [validDpData, backLinked] = await Promise.all([
-          allDpIds.length  ? fetchAllIn((chunk) => supabase.from('down_payment_requests').select('id,status,metadata').in('id', chunk), allDpIds)                                                               : Promise.resolve([] as any[]),
-          allTxnIds.length ? fetchAllIn((chunk) => supabase.from('down_payment_requests').select('pre_fund_transaction_id,status,metadata').in('pre_fund_transaction_id', chunk), allTxnIds) : Promise.resolve([] as any[]),
-        ]);
-
-        const paidDpSet      = new Set<string>((validDpData as any[]).filter((d: any) => !DP_NO_DISBURSE.has(d.status) && d.metadata?.deleted !== true).map((d: any) => d.id as string));
-        const nonPaidBackIds = new Set<string>((backLinked as any[]).filter((d: any) => DP_NO_DISBURSE.has(d.status) || d.metadata?.deleted === true).map((d: any) => d.pre_fund_transaction_id as string));
-
-        for (const fund of loaded) {
-          const rawTxns = txnsByFund.get(fund.id) ?? [];
-          if (rawTxns.length === 0) {
-            avMap.set(fund.id, fund.amount - Number(fund.paid_amount ?? 0));
-            continue;
-          }
-          let paid = 0;
-          for (const t of rawTxns) {
-            if (t.source_table === 'down_payment_requests') {
-              if (!t.source_id || paidDpSet.has(t.source_id)) paid += Number(t.amount ?? 0);
-            } else if (!t.source_table) {
-              if (!nonPaidBackIds.has(t.id)) paid += Number(t.amount ?? 0);
-            } else {
-              paid += Number(t.amount ?? 0);
-            }
-          }
-          avMap.set(fund.id, Math.max(0, fund.amount - paid));
-        }
-        // The server-owned cache is the sole balance authority. The preceding
-        // legacy scan remains useful for the exception queue, not for balances.
-        loaded.forEach(fund => avMap.set(fund.id, Number(fund.available_balance ?? 0)));
-      }
-      setFundsComputedAvail(new Map(avMap));
+      // The balance snapshot already applies source validation and reversals.
+      // Avoid rescanning every transaction and Down Payment merely to overwrite
+      // the result with these same canonical values.
+      setFundsComputedAvail(new Map(
+        loaded.map(fund => [fund.id, Number(fund.available_balance ?? 0)]),
+      ));
     } catch (e: any) { toast({ title: 'Load failed', description: e.message, variant: 'destructive' }); }
-    finally { setLoading(false); }
-  }, [toast]);
+    finally { if (loadVersion === fundLoadVersion.current) setLoading(false); }
+  }, [toast, isCD, hasAnyRole, currentUser?.id]);
 
   const loadTxns = useCallback(async (fundId: string) => {
     const loadVersion = ++transactionLoadVersion.current;
