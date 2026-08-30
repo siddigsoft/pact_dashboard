@@ -74,6 +74,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
+import { allocateExactProportionally } from '@/utils/proportionalAllocation';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateAllSheetsStatementExcelBase64 } from '@/utils/financialStatementExcel';
 import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.service';
@@ -1890,7 +1891,40 @@ export function DownPaymentApprovalPanel({
       toast({ title: 'Pre-Fund Required / التمويل المسبق مطلوب', description: 'Select the Pre-Fund to charge before recording this batch.', variant: 'destructive' });
       return;
     }
-    const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
+    const fullTotal = reqs.reduce((sum, req) => sum + getBatchPayBasis(req), 0);
+    const payMode = batchPayDialog.payMode ?? 'percent';
+    const enteredAmount = Number(batchPayDialog.amountInput);
+    const targetAmount = partialPercent === null
+      ? fullTotal
+      : payMode === 'amount'
+        ? enteredAmount
+        : fullTotal * partialPercent / 100;
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      toast({ title: 'Invalid payment amount', description: 'Enter an amount greater than zero.', variant: 'destructive' });
+      return;
+    }
+    if (targetAmount > fullTotal) {
+      toast({
+        title: 'Amount exceeds the batch balance',
+        description: `The most that can be paid across these requests is SDG ${fullTotal.toLocaleString()}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    const isPartial = targetAmount < fullTotal;
+    const allocations = allocateExactProportionally(
+      reqs.map(req => ({ id: req.id, amount: getBatchPayBasis(req) })),
+      targetAmount,
+    );
+    if (allocations.some(allocation => allocation.amount <= 0)) {
+      toast({
+        title: 'Amount is too small for this batch',
+        description: 'Increase the amount so every selected request receives a payment, or select fewer requests.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const allocationById = new Map(allocations.map(allocation => [allocation.id, allocation.amount]));
     const selectedFund = batchPayDialog.preFunds.find(fund => fund.id === preFundId);
     if (!selectedFund) {
       toast({
@@ -1920,10 +1954,7 @@ export function DownPaymentApprovalPanel({
       // attempted to link the selected fund afterwards.
       const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
       const results = await Promise.allSettled(reqs.map(async (req) => {
-        const basis = getBatchPayBasis(req);
-        const amount = isPartial && partialPercent
-          ? Math.round(basis * partialPercent) / 100
-          : basis;
+        const amount = allocationById.get(req.id) ?? 0;
         return recordRequiredPreFundPayment({
           sourceTable: 'down_payment_requests',
           sourceId: req.id,
@@ -1939,9 +1970,10 @@ export function DownPaymentApprovalPanel({
       }));
       const successCount = results.filter(result => result.status === 'fulfilled').length;
       const failures = results
-        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-        .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
-      const uniqueFailures = [...new Set(failures)];
+        .map((result, index) => ({ result, request: reqs[index] }))
+        .filter((outcome): outcome is { result: PromiseRejectedResult; request: DownPaymentRequest } => outcome.result.status === 'rejected');
+      const failureMessages = failures.map(({ result }) => result.reason instanceof Error ? result.reason.message : String(result.reason));
+      const uniqueFailures = [...new Set(failureMessages)];
       if (successCount === 0) {
         throw new Error(
           uniqueFailures.length === 1
@@ -1952,12 +1984,12 @@ export function DownPaymentApprovalPanel({
       toast({
         title: failures.length ? 'Batch partly recorded' : 'Batch recorded',
         description: failures.length
-          ? `${successCount} payment(s) recorded. ${failures.length} failed without changing their source rows.`
+          ? `${successCount} payment(s) recorded. ${failures.length} remain selected for review. ${uniqueFailures[0] ?? ''}`
           : `${successCount} payment(s) recorded with the selected Pre-Fund.`,
         variant: failures.length ? 'destructive' : 'default',
       });
       setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null, preFundId: null, preFunds: [] });
-      clearSelection();
+      setSelectedIds(new Set(failures.map(({ request }) => request.id)));
       await refreshRequests();
       return;
 
@@ -5521,8 +5553,17 @@ export function DownPaymentApprovalPanel({
             const payMode: 'percent' | 'amount' = batchPayDialog.payMode ?? 'percent';
             const isPartial = batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent > 0 && batchPayDialog.partialPercent < 100;
             const partialPct = batchPayDialog.partialPercent ?? 100;
-            const partialTotal = isPartial ? Math.round(fullTotal * (partialPct / 100)) : null;
+            const enteredAmount = Number(batchPayDialog.amountInput);
+            const requestedPartialTotal = payMode === 'amount' && Number.isFinite(enteredAmount)
+              ? Math.min(fullTotal, Math.max(0, enteredAmount))
+              : Math.round(fullTotal * partialPct) / 100;
+            const partialTotal = isPartial ? requestedPartialTotal : null;
             const remainingTotal = partialTotal !== null ? fullTotal - partialTotal : null;
+            const previewAllocations = allocateExactProportionally(
+              batchPayDialog.requests.map(req => ({ id: req.id, amount: getBatchPayBasis(req) })),
+              partialTotal ?? fullTotal,
+            );
+            const previewAmountById = new Map(previewAllocations.map(allocation => [allocation.id, allocation.amount]));
             const pctLabel = (p: number) => (p % 1 === 0 ? p.toString() : p.toFixed(2));
             const setPercent = (pct: number) => {
               if (isNaN(pct)) return;
@@ -5583,7 +5624,7 @@ export function DownPaymentApprovalPanel({
               <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                 {batchPayDialog.requests.map((req) => {
                   const basis = getBatchPayBasis(req);
-                  const paying = isPartial ? Math.round(basis * partialPct / 100) : basis;
+                  const paying = previewAmountById.get(req.id) ?? 0;
                   return (
                     <div key={req.id} className="flex items-center justify-between px-3 py-2 text-sm">
                       <div className="min-w-0">
@@ -5794,7 +5835,7 @@ export function DownPaymentApprovalPanel({
                     <div className="space-y-0.5 pt-1 border-t border-amber-200 dark:border-amber-800">
                       {batchPayDialog.requests.slice(0, 5).map(r => {
                         const basis = getBatchPayBasis(r);
-                        const paying = Math.round(basis * partialPct / 100);
+                        const paying = previewAmountById.get(r.id) ?? 0;
                         return (
                           <p key={r.id} className="text-xs text-muted-foreground">
                             {r.siteName}: pay <span className="font-semibold text-foreground">{paying.toLocaleString()} SDG</span> / leave {(basis - paying).toLocaleString()} SDG
@@ -5838,7 +5879,7 @@ export function DownPaymentApprovalPanel({
                   </Select>
                   {batchPayDialog.preFundId && (() => {
                     const f = batchPayDialog.preFunds.find(x => x.id === batchPayDialog.preFundId);
-                    const paying = isPartial ? Math.round(fullTotal * (partialPct / 100)) : fullTotal;
+                    const paying = partialTotal ?? fullTotal;
                     const afterBalance = (f?.available_balance ?? 0) - paying;
                     return (
                       <p className={`text-xs ${afterBalance < 0 ? 'text-rose-600 font-medium' : 'text-muted-foreground'}`}>
@@ -5894,7 +5935,9 @@ export function DownPaymentApprovalPanel({
               {batchPayDialog.uploading ? (
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
               ) : batchPayDialog.partialPercent !== null && batchPayDialog.partialPercent < 100 ? (
-                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.partialPercent % 1 === 0 ? batchPayDialog.partialPercent : batchPayDialog.partialPercent.toFixed(2)}% of {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
+                batchPayDialog.payMode === 'amount'
+                  ? <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay SDG {Number(batchPayDialog.amountInput || 0).toLocaleString()} across {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
+                  : <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.partialPercent % 1 === 0 ? batchPayDialog.partialPercent : batchPayDialog.partialPercent.toFixed(2)}% of {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               ) : (
                 <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               )}
