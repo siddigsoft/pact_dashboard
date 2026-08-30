@@ -220,6 +220,9 @@ const VirtualizedRequestList = memo(function VirtualizedRequestList({
 }: {
   requests: DownPaymentRequest[];
   renderCard: (request: DownPaymentRequest) => ReactNode;
+  // Changes whenever row selection changes. The list stays memoized for
+  // request/data updates, but must re-render checkboxes and their handlers.
+  selectionKey?: string;
 }) {
   if (requests.length === 0) return null;
   return (
@@ -3562,6 +3565,10 @@ export function DownPaymentApprovalPanel({
 
   const hasHubId = !!currentUser?.hubId;
 
+  const selectionKey = useMemo(
+    () => Array.from(selectedIds).sort().join('|'),
+    [selectedIds],
+  );
   const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox />, [RequestCard]);
   const renderCardPlain = useCallback((r: DownPaymentRequest) => <RequestCard request={r} />, [RequestCard]);
   const renderCardWithConfirmation = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showConfirmationDetails />, [RequestCard]);
@@ -3782,7 +3789,7 @@ export function DownPaymentApprovalPanel({
                   Select All
                 </Button>
               </div>
-              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} />
+              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
             </div>
           )}
         </TabsContent>
@@ -3865,7 +3872,7 @@ export function DownPaymentApprovalPanel({
                   Select All ({approvedRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} />
+              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
             </div>
           )}
         </TabsContent>
@@ -4130,7 +4137,7 @@ export function DownPaymentApprovalPanel({
                   Select All ({processingRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} />
+              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
             </div>
           )}
         </TabsContent>
@@ -4216,7 +4223,7 @@ export function DownPaymentApprovalPanel({
                       </div>
                     )}
                   </div>
-                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} />
+                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} selectionKey={selectionKey} />
                 </div>
               )
             ) : (
