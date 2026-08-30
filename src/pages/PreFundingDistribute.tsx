@@ -627,6 +627,28 @@ export default function PreFundingDistribute() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Personal-allocation breakdowns are visible without expanding a fund card,
+  // including for staff who are not fund holders. Load only those allocations
+  // after first paint so the behavior is preserved without blocking page load.
+  useEffect(() => {
+    if (!currentUser?.id || myAllocations.length === 0) return;
+    const loadVisibleBreakdowns = () => {
+      myAllocations.forEach(allocation => {
+        void loadAllocPayments(allocation.id, currentUser.id, allocation.pre_fund_request_id);
+      });
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const id = idleWindow.requestIdleCallback(loadVisibleBreakdowns, { timeout: 1500 });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+    const timeout = window.setTimeout(loadVisibleBreakdowns, 300);
+    return () => window.clearTimeout(timeout);
+  }, [myAllocations, currentUser?.id, loadAllocPayments]);
+
   const loadStaffProfiles = useCallback(async () => {
     if (staffLoading || staffProfiles.length > 0) return;
     setStaffLoading(true);
