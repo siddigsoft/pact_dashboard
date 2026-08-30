@@ -67,6 +67,20 @@ const STATUS_BADGE: Record<string, string> = {
   draft:       'bg-slate-100 text-slate-600 border-slate-200',
 };
 
+async function fetchAllIn<T = any>(
+  queryFn: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: any }>,
+  ids: string[],
+): Promise<T[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  const rows: T[] = [];
+  for (let i = 0; i < uniqueIds.length; i += 50) {
+    const { data, error } = await queryFn(uniqueIds.slice(i, i + 50));
+    if (error) throw error;
+    rows.push(...(data ?? []));
+  }
+  return rows;
+}
+
 export default function PreFundingDistribute() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
@@ -213,28 +227,56 @@ export default function PreFundingDistribute() {
 
       let payments: any[] = [];
 
-      // Fetch OCS and DP enrichment data in parallel (was sequential — 2 round-trips → 1)
-      const [{ data: ocsData }, { data: dpData }] = await Promise.all([
+      // Fetch OCS and DP enrichment data in parallel. Newer transactions carry
+      // source_table/source_id; older rows are linked from the source record via
+      // pre_fund_transaction_id, so query both paths before labeling anything
+      // as a manual entry.
+      const [ocsData, dpData, ocsLegacyData, dpLegacyData] = await Promise.all([
         ocsIds.length > 0
-          ? (supabase as any)
-              .from('operational_cost_submissions')
-              .select('id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-              .in('id', ocsIds)
-          : Promise.resolve({ data: [] }),
+          ? fetchAllIn(chunk => (supabase as any)
+            .from('operational_cost_submissions')
+            .select('id,pre_fund_transaction_id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
+            .in('id', chunk), ocsIds)
+          : Promise.resolve([]),
         dpIds.length > 0
-          ? (supabase as any)
-              .from('down_payment_requests')
-              .select('id,requested_by,purpose,amount,currency,status,approved_at,created_at')
-              .in('id', dpIds)
-          : Promise.resolve({ data: [] }),
+          ? fetchAllIn(chunk => (supabase as any)
+            .from('down_payment_requests')
+            .select('id,pre_fund_transaction_id,requested_by,purpose,payment_type,amount,currency,status,approved_at,created_at')
+            .in('id', chunk), dpIds)
+          : Promise.resolve([]),
+        allTxns.length > 0
+          ? fetchAllIn(chunk => (supabase as any)
+            .from('operational_cost_submissions')
+            .select('id,pre_fund_transaction_id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
+            .in('pre_fund_transaction_id', chunk), allTxns.map((t: any) => t.id))
+          : Promise.resolve([]),
+        allTxns.length > 0
+          ? fetchAllIn(chunk => (supabase as any)
+            .from('down_payment_requests')
+            .select('id,pre_fund_transaction_id,requested_by,purpose,payment_type,amount,currency,status,approved_at,created_at')
+            .in('pre_fund_transaction_id', chunk), allTxns.map((t: any) => t.id))
+          : Promise.resolve([]),
       ]);
 
+      const ocsBySourceId = new Map(ocsData.map((row: any) => [row.id, row]));
+      const ocsByTxnId = new Map(ocsLegacyData.map((row: any) => [row.pre_fund_transaction_id, row]));
+      const dpBySourceId = new Map(dpData.map((row: any) => [row.id, row]));
+      const dpByTxnId = new Map(dpLegacyData.map((row: any) => [row.pre_fund_transaction_id, row]));
       // Enrich OCS-linked transactions. Track which source_ids were matched so
       // unresolved ones are added as fallback manual entries (not silently dropped).
-      const matchedOcsIds = new Set<string>();
-      (ocsData ?? []).forEach((o: any) => {
-        matchedOcsIds.add(o.id);
-        const txn = ocsTxns.find((t: any) => t.source_id === o.id);
+      const resolvedTxnIds = new Set<string>();
+      ocsTxns.forEach((txn: any) => {
+        const o = ocsBySourceId.get(txn.source_id) ?? ocsByTxnId.get(txn.id);
+        if (!o) {
+          payments.push({
+            ...txn, _type: 'manual', _txn_amount: Number(txn.amount) || 0,
+            _txn_date: txn.transaction_date, amount: Number(txn.amount) || 0,
+            description: txn.description || 'Cost submission (details unavailable)',
+            status: 'paid',
+          });
+          return;
+        }
+        resolvedTxnIds.add(txn.id);
         // Use the transaction amount as the authoritative amount (it is recorded in
         // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
         // the transaction row itself has no amount.
@@ -242,54 +284,67 @@ export default function PreFundingDistribute() {
         payments.push({
           ...o,
           _type: 'ocs',
+          _category: o.expense_category,
           _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
-          _txn_date: txn?.transaction_date,
+          _txn_date: txn.transaction_date,
         });
       });
-      // Unresolved OCS transactions → fallback manual entries so they aren't dropped
-      ocsTxns
-        .filter((t: any) => !matchedOcsIds.has(t.source_id))
-        .forEach((t: any) => {
-          payments.push({
-            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-            description: t.description || 'Cost submission (details unavailable)',
-            status: 'paid',
-          });
-        });
 
       // Enrich DP-linked transactions with same fallback pattern
-      const matchedDpIds = new Set<string>();
-      (dpData ?? []).forEach((dp: any) => {
-        matchedDpIds.add(dp.id);
-        const txn = dpTxns.find((t: any) => t.source_id === dp.id);
+      dpTxns.forEach((txn: any) => {
+        const dp = dpBySourceId.get(txn.source_id) ?? dpByTxnId.get(txn.id);
+        if (!dp) {
+          payments.push({
+            ...txn, _type: 'manual', _txn_amount: Number(txn.amount) || 0,
+            _txn_date: txn.transaction_date, amount: Number(txn.amount) || 0,
+            description: txn.description || 'Down payment (details unavailable)',
+            status: 'paid',
+          });
+          return;
+        }
+        resolvedTxnIds.add(txn.id);
         // Prefer the recorded transaction amount over the DP requested amount
-        const txnAmt = Number(txn?.amount ?? 0);
+        const txnAmt = Number(txn.amount ?? 0);
         payments.push({
           ...dp,
           _type: 'dp',
+          _category: dp.payment_type || dp.purpose,
           _txn_amount: txnAmt || Number(dp.amount) || 0,
-          _txn_date: txn?.transaction_date,
+          _txn_date: txn.transaction_date,
           amount: txnAmt || Number(dp.amount) || 0,
         });
       });
-      // Unresolved DP transactions → fallback manual entries
-      dpTxns
-        .filter((t: any) => !matchedDpIds.has(t.source_id))
-        .forEach((t: any) => {
-          payments.push({
-            ...t, _type: 'manual', _txn_amount: Number(t.amount) || 0,
-            _txn_date: t.transaction_date, amount: Number(t.amount) || 0,
-            description: t.description || 'Down payment (details unavailable)',
-            status: 'paid',
-          });
-        });
 
-      // Manual / other transactions — always included
+      // Transactions without source_table/source_id may still have a source-side
+      // backlink. Resolve that before using the genuine manual-entry fallback.
       otherTxns.forEach((t: any) => {
+        const legacyOcs = ocsByTxnId.get(t.id);
+        const legacyDp = dpByTxnId.get(t.id);
+        if (legacyOcs) {
+          payments.push({
+            ...legacyOcs,
+            _type: 'ocs',
+            _category: legacyOcs.expense_category,
+            _txn_amount: Number(t.amount) || (legacyOcs.amount_paid_cents ?? legacyOcs.amount_cents ?? 0) / 100,
+            _txn_date: t.transaction_date,
+          });
+          return;
+        }
+        if (legacyDp) {
+          payments.push({
+            ...legacyDp,
+            _type: 'dp',
+            _category: legacyDp.payment_type || legacyDp.purpose,
+            _txn_amount: Number(t.amount) || Number(legacyDp.amount) || 0,
+            _txn_date: t.transaction_date,
+            amount: Number(t.amount) || Number(legacyDp.amount) || 0,
+          });
+          return;
+        }
         payments.push({
           ...t,
           _type: 'manual',
+          _category: t.reference || t.transaction_type,
           _txn_amount: Number(t.amount) || 0,
           _txn_date: t.transaction_date,
           amount: Number(t.amount) || 0,
@@ -1688,11 +1743,14 @@ export default function PreFundingDistribute() {
                                           (p._type === 'ocs'
                                             ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
                                             : Number(p.amount) || 0);
+                                        const rawCategory = p._category || p.expense_category;
                                         const category = p._type === 'ocs'
-                                          ? (catLabel[p.expense_category] ?? p.expense_category ?? '—')
+                                          ? (catLabel[rawCategory] ?? rawCategory?.replace(/_/g, ' ') ?? '—')
+                                          : p._type === 'dp'
+                                            ? (rawCategory?.replace(/_/g, ' ') || 'Down Payment')
                                           : p._type === 'manual'
-                                            ? (p.reference ? `Manual · ${p.reference}` : 'Manual Entry')
-                                            : 'Down Payment';
+                                            ? (rawCategory?.replace(/_/g, ' ') || 'Manual Entry')
+                                            : '—';
                                         const desc = p._type === 'ocs'
                                           ? (p.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '—')
                                           : p._type === 'manual'
