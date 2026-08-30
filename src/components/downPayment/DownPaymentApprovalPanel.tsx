@@ -90,6 +90,8 @@ import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
 import { voidUnpaidDownPaymentRequest } from '@/utils/downPaymentVoid';
 import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
+import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
+import type { PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
@@ -110,16 +112,15 @@ interface DownPaymentApprovalPanelProps {
    */
   paidAmountOverrides?: ReadonlyMap<string, number>;
   /** Immutable payment evidence and correction callback owned by the page. */
-  preFundPaymentEvidence?: ReadonlyMap<string, Array<{
+  preFundPaymentEvidence?: ReadonlyMap<string, Array<PreFundSourcePaymentLink & {
     id: string;
     name: string;
-    amount?: number;
-    currency?: string;
-    paymentEventId: string;
-    isCorrectable: boolean;
+    amount: number;
   }>>;
   canCorrectPreFund?: boolean;
   onCorrectPreFund?: (paymentEventId: string) => void;
+  canDeletePayment?: boolean;
+  onDeletePayment?: (paymentEventId: string) => void;
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -348,6 +349,8 @@ export function DownPaymentApprovalPanel({
   preFundPaymentEvidence,
   canCorrectPreFund = false,
   onCorrectPreFund,
+  canDeletePayment = false,
+  onDeletePayment,
 }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
@@ -2342,7 +2345,7 @@ export function DownPaymentApprovalPanel({
     openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
     handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
     isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
-    preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund,
+    preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
   };
 
   // useMemo([], []) → RequestCard has a STABLE function reference on every render.
@@ -2355,7 +2358,7 @@ export function DownPaymentApprovalPanel({
       openActionDialog, openPaymentRequestDialog, handleDownloadCertificate, openEditDialog,
       handleMarkAsPaid, setDeleteConfirm, setSignatureRequest, resendPaymentNotification,
       isSuperAdmin, markPaidProcessing, userRole, currentUser, cancelRequest,
-      preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund,
+      preFundPaymentEvidence, canCorrectPreFund, onCorrectPreFund, canDeletePayment, onDeletePayment,
     } = _cardCtxRef.current;
     const [showAuditDetails, setShowAuditDetails] = useState(false);
     const [resending, setResending] = useState(false);
@@ -2844,28 +2847,16 @@ export function DownPaymentApprovalPanel({
                   </span>
                 </div>
               )}
-              {(preFundPaymentEvidence?.get(request.id) ?? []).map(evidence => (
-                <div key={evidence.paymentEventId} className="flex flex-wrap items-center gap-2 pt-1 text-xs" data-testid={`text-pre-fund-payment-evidence-${evidence.paymentEventId}`}>
-                  <span className="font-semibold text-muted-foreground min-w-[22px]">
-                    <Wallet className="h-3.5 w-3.5 inline" />
-                  </span>
-                  <span className="text-muted-foreground">
-                    Pre-Fund: {evidence.name} · {evidence.currency || 'SDG'} {Number(evidence.amount ?? 0).toLocaleString()}
-                  </span>
-                  {canCorrectPreFund && evidence.isCorrectable && onCorrectPreFund && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onCorrectPreFund(evidence.paymentEventId)}
-                      data-testid={`button-correct-down-payment-pre-fund-${evidence.paymentEventId}`}
-                    >
-                      Correct Pre-Fund
-                    </Button>
-                  )}
+              {(preFundPaymentEvidence?.get(request.id)?.length ?? 0) > 0 && (
+                <div className="pt-2">
+                  <PaymentHistoryPanel
+                    payments={preFundPaymentEvidence?.get(request.id) ?? []}
+                    canDelete={canDeletePayment}
+                    onDelete={onDeletePayment ? payment => onDeletePayment(payment.paymentEventId) : undefined}
+                    onCorrect={canCorrectPreFund && onCorrectPreFund ? payment => onCorrectPreFund(payment.paymentEventId) : undefined}
+                  />
                 </div>
-              ))}
+              )}
             </div>
           )}
 

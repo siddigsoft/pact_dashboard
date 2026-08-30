@@ -61,6 +61,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
+import { deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
@@ -431,11 +433,12 @@ const CostSubmission = () => {
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [costPreFundFilter, setCostPreFundFilter] = useState<string>('all');
-  type PaymentEvidence = { id: string; name: string; amount?: number; currency?: string; paymentEventId: string; isCorrectable: boolean };
+  type PaymentEvidence = PreFundSourcePaymentLink & { id: string; name: string; amount: number };
   const [costPreFundLinks, setCostPreFundLinks] = useState<Map<string, PaymentEvidence[]>>(new Map());
   const [costPreFundLinkError, setCostPreFundLinkError] = useState<string | null>(null);
   const [costPreFundOptions, setCostPreFundOptions] = useState<Array<{ id: string; name: string; currency: string; status: string | null }>>([]);
   const [costPreFundEvidenceRefresh, setCostPreFundEvidenceRefresh] = useState(0);
+  const [paymentDeleteDialog, setPaymentDeleteDialog] = useState<{ payment: PaymentEvidence | null; reason: string; saving: boolean }>({ payment: null, reason: '', saving: false });
   // Super-admin only: filter by the current approval tier a submission is waiting at
   const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all');
   const [addToGroupContext, setAddToGroupContext] = useState<{ id: string; title: string } | null>(null);
@@ -454,16 +457,17 @@ const CostSubmission = () => {
       try {
         setCostPreFundLinkError(null);
         const { fetchPreFundSourcePaymentLinks } = await import('@/utils/preFundLinkage');
-        const links = await fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id));
+        const [links, deletedLinks] = await Promise.all([
+          fetchPreFundSourcePaymentLinks('operational_cost_submissions', operationalCosts.map(o => o.id)),
+          fetchDeletedPreFundSourcePayments('operational_cost_submissions', operationalCosts.map(o => o.id)),
+        ]);
         if (!active) return;
         const next = new Map<string, PaymentEvidence[]>();
-        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
+        [...links, ...deletedLinks].forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
           id: link.fundId,
           name: link.fundName,
           amount: link.paymentAmount,
-          currency: link.currency,
-          paymentEventId: link.paymentEventId,
-          isCorrectable: link.isCorrectable,
+          ...link,
         }]));
         setCostPreFundLinks(next);
       } catch (error: any) {
@@ -880,6 +884,22 @@ const CostSubmission = () => {
     } catch (error: any) {
       toast({ title: 'Pre-Fund correction failed', description: error?.message ?? 'The payment link could not be corrected.', variant: 'destructive' });
       setPreFundCorrectionDialog(current => ({ ...current, saving: false }));
+    }
+  };
+
+  const submitPaymentDelete = async () => {
+    const payment = paymentDeleteDialog.payment;
+    if (!payment || paymentDeleteDialog.reason.trim().length < 5) return;
+    setPaymentDeleteDialog(current => ({ ...current, saving: true }));
+    try {
+      await deleteLatestSourcePayment(payment.paymentEventId, paymentDeleteDialog.reason.trim());
+      toast({ title: 'Payment deleted', description: 'Balances were recalculated and a permanent audit snapshot was retained.' });
+      setPaymentDeleteDialog({ payment: null, reason: '', saving: false });
+      setCostPreFundEvidenceRefresh(version => version + 1);
+      await fetchOperationalCosts();
+    } catch (error: any) {
+      toast({ title: 'Payment deletion failed', description: error?.message ?? 'The payment could not be deleted.', variant: 'destructive' });
+      setPaymentDeleteDialog(current => ({ ...current, saving: false }));
     }
   };
 
@@ -10200,30 +10220,12 @@ const CostSubmission = () => {
                   </section>
 
                   {/* ── Payment Info ── */}
-                  {oc.paid_at && (
-                    <section>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Payment / الدفع</p>
-                      <div className="rounded-lg border divide-y text-sm">
-                        <div className="px-3 py-2">
-                          <p className="text-xs text-muted-foreground mb-0.5">Paid At</p>
-                          <p className="flex items-center gap-1.5">
-                            <Wallet className="h-3.5 w-3.5 text-purple-500" />
-                            {format(new Date(oc.paid_at), 'dd MMM yyyy, h:mm a')}
-                          </p>
-                        </div>
-                        {oc.payment_proof_url && (
-                          <div className="px-3 py-2 flex flex-col gap-0.5">
-                            {(() => { let urls: string[] = []; try { const p = JSON.parse(oc.payment_proof_url!); urls = Array.isArray(p) ? p : [oc.payment_proof_url!]; } catch { urls = [oc.payment_proof_url!]; } return urls.map((u, i) => (
-                              <button key={i} type="button" onClick={() => openAttach(urls, 'Payment Proof', i)}
-                                className="text-blue-600 dark:text-blue-400 hover:underline text-xs flex items-center gap-1">
-                                <Eye className="h-3.5 w-3.5" /> {urls.length > 1 ? `Receipt ${i + 1} of ${urls.length}` : 'View Payment Proof'}
-                              </button>
-                            )); })()}
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  )}
+                  <PaymentHistoryPanel
+                    payments={costPreFundLinks.get(oc.id) ?? []}
+                    canDelete={isSuperAdmin || isAdmin || isFinanceAdmin}
+                    onDelete={payment => setPaymentDeleteDialog({ payment: payment as PaymentEvidence, reason: '', saving: false })}
+                    onCorrect={isFinanceAdmin ? payment => void openPreFundCorrectionDialog(payment as PaymentEvidence) : undefined}
+                  />
 
                   {/* ── Attachments ── */}
                   {docs.length > 0 && (
@@ -11072,6 +11074,31 @@ const CostSubmission = () => {
           })()}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!paymentDeleteDialog.payment} onOpenChange={(open) => !open && setPaymentDeleteDialog({ payment: null, reason: '', saving: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete latest payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the active payment, wallet and accounting rows and recalculates balances. A complete audit snapshot will remain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="cost-payment-delete-reason">Deletion reason</Label>
+            <Textarea id="cost-payment-delete-reason" value={paymentDeleteDialog.reason} onChange={event => setPaymentDeleteDialog(current => ({ ...current, reason: event.target.value }))} placeholder="Explain why this payment must be deleted" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={paymentDeleteDialog.saving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={paymentDeleteDialog.saving || paymentDeleteDialog.reason.trim().length < 5}
+              onClick={event => { event.preventDefault(); void submitPaymentDelete(); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {paymentDeleteDialog.saving ? 'Deleting…' : 'Delete payment'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>

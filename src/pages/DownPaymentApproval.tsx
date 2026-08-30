@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { PaymentHistoryPanel } from '@/components/financial/PaymentHistoryPanel';
 import { useToast } from '@/hooks/use-toast';
 import {
   DollarSign, Shield, AlertTriangle, Info, Users, UserCheck,
@@ -31,7 +33,7 @@ import { format, parseISO } from 'date-fns';
 import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
 import { dispatchNotification } from '@/lib/notify';
-import { createRequiredPreFundPaymentEventKey, fetchPreFundSourcePaymentLinks } from '@/utils/preFundLinkage';
+import { createRequiredPreFundPaymentEventKey, deleteLatestSourcePayment, fetchDeletedPreFundSourcePayments, fetchPreFundSourcePaymentLinks, type PreFundSourcePaymentLink } from '@/utils/preFundLinkage';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -73,13 +75,10 @@ function projectLabel(req: DownPaymentRequest): string {
   return req.activityType || 'General / عام';
 }
 
-type PaymentEvidence = {
+type PaymentEvidence = PreFundSourcePaymentLink & {
   id: string;
   name: string;
-  amount?: number;
-  currency?: string;
-  paymentEventId: string;
-  isCorrectable: boolean;
+  amount: number;
 };
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -106,6 +105,8 @@ function RequestDetailsDialog({
   paymentLinks = [],
   canCorrectPreFund = false,
   onCorrectPreFund,
+  canDeletePayment = false,
+  onDeletePayment,
 }: {
   req: DownPaymentRequest | null;
   onClose: () => void;
@@ -113,6 +114,8 @@ function RequestDetailsDialog({
   paymentLinks?: PaymentEvidence[];
   canCorrectPreFund?: boolean;
   onCorrectPreFund?: (evidence: PaymentEvidence) => void;
+  canDeletePayment?: boolean;
+  onDeletePayment?: (evidence: PaymentEvidence) => void;
 }) {
   if (!req) return null;
   const remaining = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
@@ -155,29 +158,14 @@ function RequestDetailsDialog({
               <p className="text-xs text-muted-foreground">SDG</p>
             </div>
           </div>
-          {paymentLinks.length > 0 && (
-            <div className="border-t pt-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Pre-Fund payment evidence</p>
-              {paymentLinks.map(link => (
-                <div key={link.paymentEventId} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs">
-                  <span>{link.name} · {link.currency || 'SDG'} {Number(link.amount ?? 0).toLocaleString()}</span>
-                  {canCorrectPreFund && link.isCorrectable && onCorrectPreFund && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onCorrectPreFund(link)}
-                      data-testid={`button-correct-down-payment-pre-fund-${link.paymentEventId}`}
-                    >
-                      <Wallet className="mr-1 h-3 w-3" />
-                      Correct Pre-Fund
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="border-t pt-3">
+            <PaymentHistoryPanel
+              payments={paymentLinks}
+              canDelete={canDeletePayment}
+              onDelete={onDeletePayment}
+              onCorrect={canCorrectPreFund ? onCorrectPreFund : undefined}
+            />
+          </div>
           {req.justification && (
             <div className="border-t pt-3">
               <p className="text-muted-foreground text-xs mb-1">Justification</p>
@@ -593,6 +581,7 @@ export default function DownPaymentApproval() {
   }>({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
   const [preFundLinksByRequest, setPreFundLinksByRequest] = useState<Map<string, PaymentEvidence[]>>(new Map());
   const [preFundEvidenceRefresh, setPreFundEvidenceRefresh] = useState(0);
+  const [paymentDeleteDialog, setPaymentDeleteDialog] = useState<{ payment: PaymentEvidence | null; reason: string; saving: boolean }>({ payment: null, reason: '', saving: false });
   const [preFundLinkError, setPreFundLinkError] = useState<string | null>(null);
   const [preFundFilterOptions, setPreFundFilterOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
   const canManagePreFundFilters = userRole === 'admin' || userRole === 'superadmin' || isSuperAdmin;
@@ -609,17 +598,17 @@ export default function DownPaymentApproval() {
   useEffect(() => {
     let active = true;
     setPreFundLinkError(null);
-    void fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id))
-      .then(links => {
+    void Promise.all([
+      fetchPreFundSourcePaymentLinks('down_payment_requests', requests.map(r => r.id)),
+      fetchDeletedPreFundSourcePayments('down_payment_requests', requests.map(r => r.id)),
+    ]).then(([activeLinks, deletedLinks]) => {
         if (!active) return;
         const next = new Map<string, PaymentEvidence[]>();
-        links.forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
+        [...activeLinks, ...deletedLinks].forEach(link => next.set(link.sourceId, [...(next.get(link.sourceId) ?? []), {
           id: link.fundId,
           name: link.fundName,
           amount: link.paymentAmount,
-          currency: link.currency,
-          paymentEventId: link.paymentEventId,
-          isCorrectable: link.isCorrectable,
+          ...link,
         }]));
         setPreFundLinksByRequest(next);
       })
@@ -632,6 +621,22 @@ export default function DownPaymentApproval() {
       });
     return () => { active = false; };
   }, [requests, preFundEvidenceRefresh]);
+
+  const submitPaymentDelete = useCallback(async () => {
+    const payment = paymentDeleteDialog.payment;
+    if (!payment || paymentDeleteDialog.reason.trim().length < 5) return;
+    setPaymentDeleteDialog(current => ({ ...current, saving: true }));
+    try {
+      await deleteLatestSourcePayment(payment.paymentEventId, paymentDeleteDialog.reason.trim());
+      toast({ title: 'Payment deleted', description: 'Balances were recalculated and a permanent audit snapshot was retained.' });
+      setPaymentDeleteDialog({ payment: null, reason: '', saving: false });
+      setPreFundEvidenceRefresh(version => version + 1);
+      await refreshRequests();
+    } catch (error: any) {
+      toast({ title: 'Payment deletion failed', description: error?.message ?? 'The payment could not be deleted.', variant: 'destructive' });
+      setPaymentDeleteDialog(current => ({ ...current, saving: false }));
+    }
+  }, [paymentDeleteDialog, refreshRequests, toast]);
 
   useEffect(() => {
     if (!canManagePreFundFilters) {
@@ -1420,6 +1425,11 @@ export default function DownPaymentApproval() {
                 .find(link => link.paymentEventId === paymentEventId);
               if (evidence) void openPreFundCorrectionDialog(evidence);
             }}
+            canDeletePayment={isAdmin || isFinanceAdmin || isSuperAdmin}
+            onDeletePayment={paymentEventId => {
+              const payment = Array.from(preFundLinksByRequest.values()).flat().find(link => link.paymentEventId === paymentEventId);
+              if (payment) setPaymentDeleteDialog({ payment, reason: '', saving: false });
+            }}
             hideFiltersBar={true}
           />
         </TabsContent>
@@ -2024,6 +2034,26 @@ export default function DownPaymentApproval() {
           </Card>
         </TabsContent>
       </Tabs>
+      <Dialog open={!!paymentDeleteDialog.payment} onOpenChange={open => !open && setPaymentDeleteDialog({ payment: null, reason: '', saving: false })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete latest payment?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This permanently removes the active payment, wallet and accounting rows and recalculates balances. A complete audit snapshot will remain.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="down-payment-delete-reason">Deletion reason</Label>
+            <Textarea id="down-payment-delete-reason" value={paymentDeleteDialog.reason} onChange={event => setPaymentDeleteDialog(current => ({ ...current, reason: event.target.value }))} placeholder="Explain why this payment must be deleted" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDeleteDialog({ payment: null, reason: '', saving: false })}>Cancel</Button>
+            <Button variant="destructive" disabled={paymentDeleteDialog.saving || paymentDeleteDialog.reason.trim().length < 5} onClick={() => void submitPaymentDelete()}>
+              {paymentDeleteDialog.saving ? 'Deleting…' : 'Delete payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Partial Payment Dialog ──────────────────────────────────────── */}
       <Dialog open={partialPayDialog.open} onOpenChange={open => { if (!open && !partialPayDialog.saving) setPartialPayDialog(p => ({ ...p, open: false })); }}>

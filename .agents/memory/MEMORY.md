@@ -56,3 +56,4 @@
 - [allocation-topup-lifo-reversal](allocation-topup-lifo-reversal.md) — Staff allocation Add Funds entries reverse newest-first; restore prior amount/receipt and retain both active and reversed audit history.
 - [direct-fund-topup-lifo-reversal](direct-fund-topup-lifo-reversal.md) — Main-fund top-ups reverse newest-first through compensating fund and GL events; never delete receipts or journals.
 - [stale-payment-source-total-reconciliation](stale-payment-source-total-reconciliation.md) — Reconcile stale source totals from net immutable links only within the approved amount; true over-links require reversal.
+- [source-payment-hard-deletion](source-payment-hard-deletion.md) — Cost/advance payments are physically deleted newest-first per source, with a separate immutable full audit snapshot.

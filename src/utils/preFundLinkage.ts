@@ -24,6 +24,14 @@ export type PreFundSourcePaymentLink = {
   paymentAmount: number;
   paymentDate: string | null;
   receiptUrl: string | null;
+  reference: string | null;
+  description: string | null;
+  recordedBy: string | null;
+  recordedAt: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletionReason?: string | null;
+  isDeleted?: boolean;
   /** True only for a new controlled source-payment event, never legacy evidence. */
   isCorrectable: boolean;
 };
@@ -53,7 +61,7 @@ export async function fetchPreFundSourcePaymentLinks(
 
   const canonicalResults = await Promise.all(chunks.map(chunk => (supabase as any)
     .from('pre_fund_source_payment_links_v')
-    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, idempotency_key')
+    .select('payment_event_id, source_table, source_id, fund_id, fund_name, currency, payment_amount, payment_date, receipt_url, reference, description, created_by, occurred_at, idempotency_key')
     .eq('source_table', sourceTable)
     .in('source_id', chunk)));
   const canonicalError = canonicalResults.find(result => result.error)?.error ?? null;
@@ -100,6 +108,11 @@ export async function fetchPreFundSourcePaymentLinks(
       paymentAmount: Number(row.payment_amount ?? 0),
       paymentDate: row.payment_date ?? null,
       receiptUrl: row.receipt_url ?? null,
+      reference: row.reference ?? null,
+      description: row.description ?? null,
+      recordedBy: row.created_by ?? null,
+      recordedAt: row.occurred_at ?? null,
+      isDeleted: false,
       isCorrectable: typeof row.idempotency_key === 'string' && row.idempotency_key.startsWith('source-payment:'),
     }));
 
@@ -166,9 +179,63 @@ export async function fetchPreFundSourcePaymentLinks(
       paymentAmount: Number(transaction.amount ?? 0),
       paymentDate: transaction.transaction_date ?? null,
       receiptUrl: transaction.receipt_url ?? null,
+      reference: null,
+      description: null,
+      recordedBy: null,
+      recordedAt: transaction.transaction_date ?? null,
+      isDeleted: false,
       isCorrectable: false,
     }));
   return [...canonicalLinks, ...historicBackLinks];
+}
+
+export async function fetchDeletedPreFundSourcePayments(
+  sourceTable: PreFundSourcePaymentLink['sourceTable'],
+  sourceIds: string[],
+): Promise<PreFundSourcePaymentLink[]> {
+  if (sourceIds.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < sourceIds.length; i += 150) chunks.push(sourceIds.slice(i, i + 150));
+  const results = await Promise.all(chunks.map(chunk => (supabase as any)
+    .from('payment_event_delete_audit')
+    .select('payment_event_id, source_table, source_id, fund_id, amount, currency, payment_date, receipt_url, reference, description, recorded_by, recorded_at, deleted_at, deleted_by, deletion_reason, fund_snapshot')
+    .eq('source_table', sourceTable)
+    .in('source_id', chunk)));
+  const error = results.find(result => result.error)?.error;
+  if (error) {
+    // The table is migration-backed and may not exist until Finance applies it.
+    if (/does not exist|schema cache|permission denied/i.test(error.message ?? '')) return [];
+    throw new Error(error.message);
+  }
+  return results.flatMap(result => result.data ?? []).map((row: any) => ({
+    paymentEventId: row.payment_event_id,
+    sourceTable: row.source_table,
+    sourceId: row.source_id,
+    fundId: row.fund_id,
+    fundName: row.fund_snapshot?.name ?? 'Deleted payment fund',
+    currency: row.currency,
+    paymentAmount: Number(row.amount ?? 0),
+    paymentDate: row.payment_date,
+    receiptUrl: row.receipt_url,
+    reference: row.reference,
+    description: row.description,
+    recordedBy: row.recorded_by,
+    recordedAt: row.recorded_at,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deletionReason: row.deletion_reason,
+    isDeleted: true,
+    isCorrectable: false,
+  }));
+}
+
+export async function deleteLatestSourcePayment(paymentEventId: string, reason: string): Promise<void> {
+  const { data, error } = await (supabase as any).rpc('delete_latest_source_payment_rpc', {
+    p_payment_event_id: paymentEventId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.error ?? 'The payment could not be deleted.');
 }
 
 export async function recordRequiredPreFundPayment(params: {
