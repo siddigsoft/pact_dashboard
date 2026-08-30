@@ -19,7 +19,7 @@ import {
   AlertTriangle, Check, X, ChevronDown, ChevronRight, Wallet,
   TrendingDown, Info, Paperclip, ExternalLink, Upload, Receipt,
   FileImage, FileText, CheckCircle2, ArrowLeft, ShieldCheck,
-  AlertCircle, Clock, History, Lock,
+  AlertCircle, Clock, History, Lock, Layers,
 } from 'lucide-react';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -513,7 +513,25 @@ export default function PreFundingDistribute() {
       ]);
 
       if (fErr && !fErr.message.includes('does not exist')) throw fErr;
-      setFunds((fundsData as HeldFund[]) ?? []);
+      const loadedFunds = ((fundsData as HeldFund[]) ?? []);
+      const fundIdsForBalances = loadedFunds.map(fund => fund.id);
+      let balanceRows: any[] = [];
+      if (fundIdsForBalances.length > 0) {
+        const { data, error } = await (supabase as any)
+          .from('pre_fund_balance_snapshot_v')
+          .select('fund_id,verified_paid_amount,verified_available_balance')
+          .in('fund_id', fundIdsForBalances);
+        if (!error) balanceRows = data ?? [];
+      }
+      const balanceByFund = new Map(balanceRows.map(row => [row.fund_id, row]));
+      setFunds(loadedFunds.map(fund => {
+        const verified = balanceByFund.get(fund.id);
+        return verified ? {
+          ...fund,
+          paid_amount: Number(verified.verified_paid_amount ?? 0),
+          available_balance: Number(verified.verified_available_balance ?? 0),
+        } : fund;
+      }));
       setStaff((profiles as any) ?? []);
 
       if (myAllocs && myAllocs.length > 0) {
@@ -1132,10 +1150,10 @@ export default function PreFundingDistribute() {
                     { label: 'Remaining',      value: formatNumber(Math.max(0, displayRem), 0),   icon: Check,        cls: displayRem < 0 ? 'text-rose-600' : 'text-teal-600' },
                     { label: 'Fund Total',     value: formatNumber(fund.amount, 0),               icon: Layers,       cls: 'text-muted-foreground' },
                   ] : [
-                    { label: 'Fund Total',   value: formatNumber(fund.amount, 0),            icon: Wallet,       cls: 'text-sky-600' },
-                    { label: 'Allocated',    value: formatNumber(totalAllocated, 0),          icon: Users,        cls: 'text-violet-600' },
-                    { label: 'Spent',        value: formatNumber(totalSpent, 0),              icon: TrendingDown, cls: totalSpent > totalAllocated ? 'text-rose-600' : 'text-emerald-600' },
-                    { label: 'Unallocated',  value: formatNumber(Math.max(0, remaining), 0),  icon: Check,        cls: remaining < 0 ? 'text-rose-600' : 'text-teal-600' },
+                    { label: 'Fund Total',     value: formatNumber(fund.amount, 0),                        icon: Wallet,       cls: 'text-sky-600' },
+                    { label: 'Allocated',      value: formatNumber(totalAllocated, 0),                     icon: Users,        cls: 'text-violet-600' },
+                    { label: 'Fund Paid Out',  value: formatNumber(fund.paid_amount, 0),                   icon: TrendingDown, cls: 'text-emerald-600' },
+                    { label: 'Fund Available', value: formatNumber(Math.max(0, fund.available_balance), 0), icon: Check,        cls: fund.available_balance < 0 ? 'text-rose-600' : 'text-teal-600' },
                   ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
@@ -1317,8 +1335,11 @@ export default function PreFundingDistribute() {
                             {/* Amount + Add Funds button */}
                             <div className="text-right" onClick={e => e.stopPropagation()}>
                               <div className="font-mono text-[12px] font-semibold">{fund.currency} {formatNumber(a.allocated_amount, 0)}</div>
-                              <div className="text-[10px] text-muted-foreground mb-1">
-                                {formatNumber(a.spent_amount, 0)} spent · {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`} left
+                              <div className="text-[10px] text-muted-foreground">
+                                {formatNumber(a.spent_amount, 0)} paid out
+                              </div>
+                              <div className={cn('text-[10px] font-semibold mb-1', rem < 0 ? 'text-rose-600' : 'text-teal-600')}>
+                                Balance with {a.user_name?.split(' ')[0] || 'holder'}: {fund.currency} {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`}
                               </div>
                               {(() => {
                                 const rowMeta = parseAllocMeta(a.notes);

@@ -753,23 +753,27 @@ export default function PreFundingReconciliation() {
   const [assignUserId, setAssignUserId] = useState('');
   const [assigning, setAssigning]       = useState(false);
 
-  // The ledger migration maintains these cache fields from the canonical,
-  // reversal-aware event view. Recomputing raw payment rows in the browser would
-  // reintroduce legacy-source and reversal discrepancies.
+  // The visible transaction set comes from the canonical, source-verified,
+  // reversal-aware ledger view. Use that same set for every summary figure so
+  // the headline, breakdown and available balance cannot disagree when the
+  // pre_fund_requests cache is stale.
   const effectivePaidAmount = useMemo(() => {
-    return Number(selectedFund?.paid_amount ?? 0);
-  }, [selectedFund]);
-  const effectiveAvailableBalance = useMemo(() =>
-    Number(selectedFund?.available_balance ?? 0),
-  [selectedFund]);
+    if (!selectedFund || txnLoading) return Number(selectedFund?.paid_amount ?? 0);
+    return getPaidOutBreakdown(transactions).total;
+  }, [selectedFund, transactions, txnLoading]);
+  const effectiveAvailableBalance = useMemo(() => {
+    if (!selectedFund || txnLoading) return Number(selectedFund?.available_balance ?? 0);
+    return selectedFund.amount - Number(selectedFund.committed_amount ?? 0) - effectivePaidAmount;
+  }, [selectedFund, effectivePaidAmount, txnLoading]);
 
-  // True when paid_amount DB column is stale (no txn rows back it up).
+  // True whenever the server cache differs from the verified ledger shown here.
   // Suppressed while txnLoading=true so we don't flash a false warning
   // during the window between fund switch (transactions cleared) and load completing.
   const isStaleBalance = useMemo(() => {
     if (!selectedFund || txnLoading) return false;
-    return false;
-  }, [selectedFund, transactions, txnLoading]);
+    return Math.abs(Number(selectedFund.paid_amount ?? 0) - effectivePaidAmount) > 0.005
+      || Math.abs(Number(selectedFund.available_balance ?? 0) - effectiveAvailableBalance) > 0.005;
+  }, [selectedFund, effectivePaidAmount, effectiveAvailableBalance, txnLoading]);
 
   const handleResetBalance = async () => {
     if (!selectedFund) return;
@@ -995,7 +999,25 @@ export default function PreFundingReconciliation() {
       }
       const { data, error: e } = await q;
       if (e && !e.message.includes('does not exist')) throw e;
-      const loaded: PreFundSummary[] = (data as any) ?? [];
+      let loaded: PreFundSummary[] = (data as any) ?? [];
+      if (loaded.length > 0) {
+        const balanceRows: any[] = await fetchAllIn(
+          chunk => (supabase as any)
+            .from('pre_fund_balance_snapshot_v')
+            .select('fund_id,verified_paid_amount,verified_available_balance')
+            .in('fund_id', chunk),
+          loaded.map(fund => fund.id),
+        );
+        const canonicalByFund = new Map(balanceRows.map(row => [row.fund_id, row]));
+        loaded = loaded.map(fund => {
+          const canonical = canonicalByFund.get(fund.id);
+          return canonical ? {
+            ...fund,
+            paid_amount: Number(canonical.verified_paid_amount ?? 0),
+            available_balance: Number(canonical.verified_available_balance ?? 0),
+          } : fund;
+        });
+      }
       setFunds(loaded);
       // Open the reconciliation view with the newest available fund instead
       // of leaving the page in an empty "Select a fund" state. Preserve an
@@ -2544,10 +2566,10 @@ export default function PreFundingReconciliation() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Stale Paid-Out balance detected</p>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      The database shows <span className="font-mono font-semibold">{selectedFund.currency} {formatNumber(Number(selectedFund.paid_amount), 0)}</span> paid
-                      out but there are no transaction records to support it — the payments were likely cancelled or removed
-                      after the balance was deducted. Click <strong>Reset</strong> to clear the Paid-Out figure and restore
-                      the full fund to Available.
+                      The cached fund balance differs from the verified payment ledger. The figures above now use the
+                      verified ledger: <span className="font-mono font-semibold">{selectedFund.currency} {formatNumber(effectivePaidAmount, 0)}</span> paid out and{' '}
+                      <span className="font-mono font-semibold">{selectedFund.currency} {formatNumber(effectiveAvailableBalance, 0)}</span> available.
+                      Finance should reconcile the cache so other screens and reports receive the same values.
                     </p>
                   </div>
                   {!isCD && (
