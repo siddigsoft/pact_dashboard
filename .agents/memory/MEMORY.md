@@ -57,3 +57,4 @@
 - [direct-fund-topup-lifo-reversal](direct-fund-topup-lifo-reversal.md) — Main-fund top-ups reverse newest-first through compensating fund and GL events; never delete receipts or journals.
 - [stale-payment-source-total-reconciliation](stale-payment-source-total-reconciliation.md) — Reconcile stale source totals from net immutable links only within the approved amount; true over-links require reversal.
 - [source-payment-hard-deletion](source-payment-hard-deletion.md) — Cost/advance payments are physically deleted newest-first per source, with a separate immutable full audit snapshot.
+- [Pre-Fund history view access](pre-fund-history-view-access.md) — SQL Editor may see payment history while a security-invoker browser view silently returns no rows; preserve role-gated definer access.
