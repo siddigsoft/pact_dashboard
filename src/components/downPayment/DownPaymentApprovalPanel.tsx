@@ -1948,21 +1948,47 @@ export function DownPaymentApprovalPanel({
       // Do not call the legacy batch RPC: it updates source rows first and
       // attempted to link the selected fund afterwards.
       const { recordRequiredPreFundPayment, createRequiredPreFundPaymentEventKey } = await import('@/utils/preFundLinkage');
-      const results = await Promise.allSettled(reqs.map(async (req) => {
+      // Every request in this batch charges the same selected Pre-Fund. Run the
+      // transactions in a stable sequence instead of competing for the same
+      // fund/accounting locks in parallel; retry only transient lock failures.
+      const results: PromiseSettledResult<Awaited<ReturnType<typeof recordRequiredPreFundPayment>>>[] = [];
+      for (const req of reqs) {
         const amount = allocationById.get(req.id) ?? 0;
-        return recordRequiredPreFundPayment({
-          sourceTable: 'down_payment_requests',
-          sourceId: req.id,
-          fundId: preFundId,
-          amount,
-          currency: req.currency || 'SDG',
-          paymentDate: now,
-          createdBy: currentUser.id,
-          receiptUrl: proofUrl,
-          notes: notes.trim() || null,
-          paymentEventKey: createRequiredPreFundPaymentEventKey('down_payment_requests', req.id),
+        const paymentEventKey = createRequiredPreFundPaymentEventKey('down_payment_requests', req.id);
+        let settled: PromiseSettledResult<Awaited<ReturnType<typeof recordRequiredPreFundPayment>>> | null = null;
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            const value = await recordRequiredPreFundPayment({
+              sourceTable: 'down_payment_requests',
+              sourceId: req.id,
+              fundId: preFundId,
+              amount,
+              currency: req.currency || 'SDG',
+              paymentDate: now,
+              createdBy: currentUser.id,
+              receiptUrl: proofUrl,
+              notes: notes.trim() || null,
+              paymentEventKey,
+            });
+            settled = { status: 'fulfilled', value };
+            break;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const isTransientLockFailure = /deadlock detected|could not serialize|serialization failure|40P01|40001/i.test(message);
+            if (!isTransientLockFailure || attempt === 3) {
+              settled = { status: 'rejected', reason: error };
+              break;
+            }
+            await new Promise(resolve => window.setTimeout(resolve, attempt * 250));
+          }
+        }
+
+        results.push(settled ?? {
+          status: 'rejected',
+          reason: new Error(`Payment did not complete for ${req.siteName || req.id}.`),
         });
-      }));
+      }
       const successCount = results.filter(result => result.status === 'fulfilled').length;
       const failures = results
         .map((result, index) => ({ result, request: reqs[index] }))
