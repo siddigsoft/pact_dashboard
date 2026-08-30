@@ -105,12 +105,6 @@ interface DownPaymentApprovalPanelProps {
   externalRequests?: DownPaymentRequest[];
   /** Set when externalRequests already has every active page filter applied. */
   externalRequestsAreFiltered?: boolean;
-  /**
-   * A selected Pre-Fund's verified immutable payment-event amount per request.
-   * This keeps filtered summaries and exports from counting payments made from
-   * another Pre-Fund.
-   */
-  paidAmountOverrides?: ReadonlyMap<string, number>;
   /** Immutable payment evidence and correction callback owned by the page. */
   preFundPaymentEvidence?: ReadonlyMap<string, Array<PreFundSourcePaymentLink & {
     id: string;
@@ -348,7 +342,6 @@ export function DownPaymentApprovalPanel({
   hideFiltersBar,
   externalRequests,
   externalRequestsAreFiltered = false,
-  paidAmountOverrides,
   preFundPaymentEvidence,
   canCorrectPreFund = false,
   onCorrectPreFund,
@@ -360,10 +353,6 @@ export function DownPaymentApprovalPanel({
   const { requests: contextRequests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest, cancelRequest } = useDownPayment();
   const { toast } = useToast();
   const requests = externalRequests ?? contextRequests;
-  const getDisplayedPaidAmount = useCallback(
-    (request: DownPaymentRequest) => paidAmountOverrides?.get(request.id) ?? request.totalPaidAmount ?? 0,
-    [paidAmountOverrides],
-  );
 
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -539,8 +528,8 @@ export function DownPaymentApprovalPanel({
     [filteredRequests]
   );
   const stats = useMemo(
-    () => getDownPaymentStats(filteredRequests, getDisplayedPaidAmount),
-    [filteredRequests, getDisplayedPaidAmount],
+    () => getDownPaymentStats(filteredRequests),
+    [filteredRequests],
   );
 
   // O(1) set lookup for recipient checkboxes — avoids O(n²) .includes() on every render
