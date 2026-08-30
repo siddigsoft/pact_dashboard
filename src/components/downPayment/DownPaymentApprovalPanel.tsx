@@ -4821,11 +4821,11 @@ export function DownPaymentApprovalPanel({
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  {revertTarget === 'pending_supervisor' 
-                    ? 'All approval data will be cleared and the request will need to go through the full approval process again.' 
+                  {revertTarget === 'pending_supervisor'
+                    ? 'All active payment events and their linked wallet, accounting, receipt references, and deletion snapshots will be permanently deleted. Approval data will also be cleared, and this cannot be undone.'
                     : revertTarget === 'pending_admin'
-                    ? 'Admin approval data will be cleared but supervisor approval will be preserved.'
-                    : 'Payment data will be reset and the request will return to approved status for reprocessing.'}
+                    ? 'All active payment events and their linked wallet, accounting, receipt references, and deletion snapshots will be permanently deleted. Admin approval data will be cleared, and this cannot be undone.'
+                    : 'All active payment events and their linked wallet, accounting, receipt references, and deletion snapshots will be permanently deleted. The request will return to approved status for reprocessing, and this cannot be undone.'}
                 </AlertDescription>
               </Alert>
             </div>
