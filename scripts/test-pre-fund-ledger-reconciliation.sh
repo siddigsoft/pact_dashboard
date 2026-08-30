@@ -1253,6 +1253,7 @@ SQL
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260821i_allow_partial_operational_cost_payments.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260828_down_payment_shared_fund_balance.sql" >/dev/null
 "${PSQL[@]}" -f "$ROOT/supabase/migrations/20260829_fix_allocation_ceiling_rls.sql" >/dev/null
+"${PSQL[@]}" -f "$ROOT/supabase/migrations/20260830_reconcile_legacy_down_payment_source_totals.sql" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
 -- Wallet-backed cancellation: paid source state, wallet evidence, and immutable
@@ -2137,6 +2138,121 @@ BEGIN
   WHERE id = '10000000-0000-0000-0000-000000000013';
   IF v_amount <> 1250 OR v_available <> 1250 THEN
     RAISE EXCEPTION 'rejected direct top-up changed closed fund balance: %/%', v_amount, v_available;
+  END IF;
+END $$;
+
+-- Legacy source totals may lag behind valid immutable payment links. The
+-- reconciled payment entry point must align the stale source cache and then
+-- record only the true additional amount.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount,
+  gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000017',
+  'Legacy Source Total Reconciliation Fund', 'SDG', 500, 420, 80, '2400', '1200'
+);
+INSERT INTO public.down_payment_requests (
+  id, status, approved_amount, requested_amount, remaining_amount,
+  total_paid_amount, requested_by, justification
+) VALUES (
+  '30000000-0000-0000-0000-000000000023',
+  'partially_paid', 200, 200, 150, 50, auth.uid(), 'Legacy stale source total'
+);
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, transaction_date,
+  source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000017', 'payment', 80, 'SDG', CURRENT_DATE,
+  'down_payment_requests', '30000000-0000-0000-0000-000000000023',
+  auth.uid(), auth.uid(), 'legacy-source-total-existing-payment'
+);
+SELECT public.record_reconciled_required_pre_fund_payment_rpc(
+  'down_payment_requests',
+  '30000000-0000-0000-0000-000000000023',
+  '10000000-0000-0000-0000-000000000017',
+  40, 'SDG', CURRENT_DATE, auth.uid(), 'https://example.test/receipt.pdf',
+  'Additional evidenced payment', 'legacy-source-total-new-payment'
+);
+DO $$
+DECLARE
+  v_paid numeric;
+  v_remaining numeric;
+  v_status text;
+  v_reconciled boolean;
+  v_linked numeric;
+BEGIN
+  SELECT total_paid_amount, remaining_amount, status,
+         COALESCE((metadata ->> 'pre_fund_source_total_reconciled')::boolean, false)
+    INTO v_paid, v_remaining, v_status, v_reconciled
+    FROM public.down_payment_requests
+   WHERE id = '30000000-0000-0000-0000-000000000023';
+  SELECT COALESCE(SUM(CASE
+           WHEN transaction_type = 'payment' THEN amount
+           WHEN transaction_type IN ('reversal', 'return') THEN -amount
+           ELSE 0
+         END), 0)
+    INTO v_linked
+    FROM public.pre_fund_transactions
+   WHERE source_table = 'down_payment_requests'
+     AND source_id = '30000000-0000-0000-0000-000000000023';
+  IF v_paid <> 120 OR v_remaining <> 80 OR v_status <> 'partially_paid'
+     OR NOT v_reconciled OR v_linked <> 120 THEN
+    RAISE EXCEPTION 'legacy source total reconciliation failed: paid %, remaining %, status %, marker %, linked %',
+      v_paid, v_remaining, v_status, v_reconciled, v_linked;
+  END IF;
+END $$;
+
+-- A linked amount above the approved advance is not a stale cache. It must
+-- remain blocked for an audited reversal and must not mutate source evidence.
+INSERT INTO public.pre_fund_requests (
+  id, name, currency, amount, available_balance, paid_amount,
+  gl_liability_account, gl_receipt_account
+) VALUES (
+  '10000000-0000-0000-0000-000000000018',
+  'Over-linked Source Guard Fund', 'SDG', 200, 120, 80, '2400', '1200'
+);
+INSERT INTO public.down_payment_requests (
+  id, status, approved_amount, requested_amount, remaining_amount,
+  total_paid_amount, requested_by, justification
+) VALUES (
+  '30000000-0000-0000-0000-000000000024',
+  'partially_paid', 70, 70, 20, 50, auth.uid(), 'Intentionally over-linked source'
+);
+INSERT INTO public.pre_fund_transactions (
+  pre_fund_request_id, transaction_type, amount, currency, transaction_date,
+  source_table, source_id, created_by, user_id, idempotency_key
+) VALUES (
+  '10000000-0000-0000-0000-000000000018', 'payment', 80, 'SDG', CURRENT_DATE,
+  'down_payment_requests', '30000000-0000-0000-0000-000000000024',
+  auth.uid(), auth.uid(), 'over-linked-source-existing-payment'
+);
+DO $$
+DECLARE
+  v_paid numeric;
+  v_events integer;
+BEGIN
+  BEGIN
+    PERFORM public.record_reconciled_required_pre_fund_payment_rpc(
+      'down_payment_requests',
+      '30000000-0000-0000-0000-000000000024',
+      '10000000-0000-0000-0000-000000000018',
+      10, 'SDG', CURRENT_DATE, auth.uid(), 'https://example.test/receipt.pdf',
+      'Must remain blocked', 'over-linked-source-new-payment'
+    );
+    RAISE EXCEPTION 'over-linked source accepted another payment';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'over-linked source accepted another payment' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'This advance is over-linked:%' THEN RAISE; END IF;
+  END;
+  SELECT total_paid_amount INTO v_paid
+    FROM public.down_payment_requests
+   WHERE id = '30000000-0000-0000-0000-000000000024';
+  SELECT count(*) INTO v_events
+    FROM public.pre_fund_transactions
+   WHERE source_table = 'down_payment_requests'
+     AND source_id = '30000000-0000-0000-0000-000000000024';
+  IF v_paid <> 50 OR v_events <> 1 THEN
+    RAISE EXCEPTION 'over-linked rejection changed evidence: paid %, events %', v_paid, v_events;
   END IF;
 END $$;
 SQL

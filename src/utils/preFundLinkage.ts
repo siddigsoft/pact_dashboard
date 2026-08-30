@@ -183,7 +183,7 @@ export async function recordRequiredPreFundPayment(params: {
   notes?: string | null;
   paymentEventKey: string;
 }): Promise<{ success: boolean; idempotent?: boolean; transactionId?: string; message?: string }> {
-  const { data, error } = await (supabase as any).rpc('record_required_pre_fund_payment_rpc', {
+  const { data, error } = await (supabase as any).rpc('record_reconciled_required_pre_fund_payment_rpc', {
     p_source_table: params.sourceTable,
     p_source_id: params.sourceId,
     p_fund_id: params.fundId,
@@ -202,7 +202,7 @@ export async function recordRequiredPreFundPayment(params: {
       || String(error.message).toLowerCase().includes('does not exist');
     throw new Error(
       notDeployed
-        ? 'Apply 20260821b_required_pre_fund_payment_links.sql before recording new payments.'
+        ? 'Apply 20260830_reconcile_legacy_down_payment_source_totals.sql before recording new payments.'
         : error.message,
     );
   }
