@@ -216,13 +216,13 @@ export default function PreFundingDistribute() {
     if (allocPayments.has(allocId)) return; // already loaded
     setAllocPaymentsLoading(prev => { const s = new Set(prev); s.add(allocId); return s; });
     try {
-      // Fetch verified payment and reversal transactions for this fund
+      // Fetch verified payment and reversal transactions for this fund (only those affecting expenditure)
       const { data: txnData, error: txnErr } = await (supabase as any)
         .from('pre_fund_event_ledger_v')
-        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id,created_by,transaction_type,reversal_of_id,created_at')
+        .select('id,source_table,source_id,amount,signed_paid_amount,transaction_date,description,reference,currency,user_id,created_by,transaction_type,reversal_of_id,created_at')
         .eq('pre_fund_request_id', fundId)
         .eq('source_is_verified', true)
-        .in('transaction_type', ['payment', 'disbursement', 'reversal', 'return'])
+        .neq('signed_paid_amount', 0)
         .order('transaction_date', { ascending: false });
 
       if (txnErr) throw txnErr;
@@ -588,9 +588,10 @@ export default function PreFundingDistribute() {
         // Fetch payment transactions to compute live spent amounts per user
         (supabase as any)
           .from('pre_fund_event_ledger_v')
-          .select('id,user_id,created_by,source_table,source_id,amount,transaction_type,reversal_of_id')
+          .select('id,user_id,created_by,source_table,source_id,amount,signed_paid_amount,transaction_type,reversal_of_id')
           .eq('pre_fund_request_id', fundId)
-          .eq('source_is_verified', true),
+          .eq('source_is_verified', true)
+          .neq('signed_paid_amount', 0),
       ]);
       if (allocRes.error) throw allocRes.error;
 
@@ -605,10 +606,8 @@ export default function PreFundingDistribute() {
       // Compute per-user spend from transactions (mirrors PreFundingAllocations logic)
       const spendMap = new Map<string, number>();
       for (const t of txns) {
-        const amt   = Number(t.amount) || 0;
-        const isReversal = ['reversal', 'return'].includes(t.transaction_type);
-        const isPayment  = ['payment', 'disbursement'].includes(t.transaction_type);
-        if (!isReversal && !isPayment) continue;
+        const amt = Number(t.signed_paid_amount) || 0;
+        if (amt === 0) continue;
 
         // Trace original transaction if this is a reversal
         const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
@@ -622,8 +621,7 @@ export default function PreFundingDistribute() {
         else owner = effectiveUserId ?? effectiveCreatedBy ?? null;
         if (!owner) continue;
 
-        const delta = isReversal ? -amt : amt;
-        spendMap.set(owner, (spendMap.get(owner) ?? 0) + delta);
+        spendMap.set(owner, (spendMap.get(owner) ?? 0) + amt);
       }
 
       // Enrich profiles

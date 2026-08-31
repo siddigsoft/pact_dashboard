@@ -220,10 +220,10 @@ export default function PreFundingAllocations() {
       const rawTxns = await fetchAllIn(
         chunk => (supabase as any)
           .from('pre_fund_event_ledger_v')
-          .select('id,user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by,reversal_of_id')
+          .select('id,user_id,pre_fund_request_id,amount,signed_paid_amount,transaction_type,source_table,source_id,created_by,reversal_of_id')
           .in('pre_fund_request_id', chunk)
           .eq('source_is_verified', true)
-          .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
+          .neq('signed_paid_amount', 0),
         fundIds,
       );
       if (version !== loadVersion.current) return;
@@ -293,9 +293,8 @@ export default function PreFundingAllocations() {
         if (!ownerId || !t.pre_fund_request_id) continue;
         const key  = spendKey(ownerId, t.pre_fund_request_id);
         const prev = spendMap.get(key) ?? 0;
-        const amt  = Number(t.amount) || 0;
-        const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
-        spendMap.set(key, prev + delta);
+        const amt  = Number(t.signed_paid_amount) || 0;
+        spendMap.set(key, prev + amt);
       }
 
       const enriched: AllocRow[] = allocs.map((a: any) => {
