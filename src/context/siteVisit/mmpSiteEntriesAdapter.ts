@@ -7,7 +7,7 @@
 import { SiteVisit } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
-import { MMP_SITE_ENTRY_DETAIL_COLS } from '@/constants/mmpSiteEntryCols';
+import { MMP_SITE_ENTRY_CONTEXT_COLS } from '@/constants/mmpSiteEntryCols';
 
 interface MMPSiteEntry {
   id: string;
@@ -257,7 +257,7 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   // Fetch first page — covers the common case where all data fits in one page
   const { data: firstPage, error: firstError } = await supabase
     .from('mmp_site_entries')
-    .select(MMP_SITE_ENTRY_DETAIL_COLS)
+    .select(MMP_SITE_ENTRY_CONTEXT_COLS)
     .order('created_at', { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
@@ -284,7 +284,7 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
         const from = PAGE_SIZE + i * PAGE_SIZE;
         return supabase
           .from('mmp_site_entries')
-          .select(MMP_SITE_ENTRY_DETAIL_COLS)
+          .select(MMP_SITE_ENTRY_CONTEXT_COLS)
           .order('created_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
       });
@@ -326,6 +326,20 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   return allData.map((entry) =>
     mapMMPSiteEntryToSiteVisit({
       ...entry,
+      // The list query extracts only these JSON paths. Rebuild the mapper's
+      // narrow compatibility shape without downloading the full JSONB value.
+      additional_data: {
+        latitude: entry.latitude,
+        longitude: entry.longitude,
+        arrival_latitude: entry.arrival_latitude,
+        arrival_longitude: entry.arrival_longitude,
+        arrival_timestamp: entry.arrival_timestamp,
+        journey_path: entry.journey_path,
+        arrival_recorded: entry.arrival_recorded,
+        assigned_to: entry.assigned_to,
+        assigned_by: entry.assigned_by,
+        assigned_at: entry.assigned_at,
+      },
       mmp_files: mmpFileMap.get(entry.mmp_file_id),
     })
   );

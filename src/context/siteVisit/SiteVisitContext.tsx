@@ -162,7 +162,13 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createdAt: now,
       });
 
-      await refreshSiteVisits();
+      // The insert already returned the complete visit. Add it to the shared
+      // cache instead of immediately downloading the full site-entry history.
+      queryClient.setQueryData<SiteVisit[]>(siteVisitQueryKeys.list(), (prev) => {
+        if (!prev) return [newVisit];
+        if (prev.some((visit) => visit.id === newVisit.id)) return prev;
+        return [newVisit, ...prev];
+      });
       
       try {
         const normalize = (v?: string) => (v ?? '').toString().trim().toLowerCase();
