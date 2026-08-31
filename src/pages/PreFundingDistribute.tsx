@@ -216,169 +216,79 @@ export default function PreFundingDistribute() {
     if (allocPayments.has(allocId)) return; // already loaded
     setAllocPaymentsLoading(prev => { const s = new Set(prev); s.add(allocId); return s; });
     try {
-      // Fetch ALL payment transactions for this fund (not filtered by user — full fund history)
-      const { data: txnData } = await (supabase as any)
+      // Fetch verified payment and reversal transactions for this fund
+      const { data: txnData, error: txnErr } = await (supabase as any)
         .from('pre_fund_event_ledger_v')
-        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id,created_by')
+        .select('id,source_table,source_id,amount,transaction_date,description,reference,currency,user_id,created_by,transaction_type,reversal_of_id,created_at')
         .eq('pre_fund_request_id', fundId)
         .eq('source_is_verified', true)
-        .in('transaction_type', ['payment', 'disbursement'])
+        .in('transaction_type', ['payment', 'disbursement', 'reversal', 'return'])
         .order('transaction_date', { ascending: false });
 
+      if (txnErr) throw txnErr;
       const allTxns: any[] = txnData ?? [];
+      const txnById = new Map(allTxns.map((t: any) => [t.id, t]));
 
-      // Partition by source type
-      const ocsTxns   = allTxns.filter((t: any) => t.source_table === 'operational_cost_submissions' && t.source_id);
-      const dpTxns    = allTxns.filter((t: any) => t.source_table === 'down_payment_requests' && t.source_id);
-      const otherTxns = allTxns.filter((t: any) =>
-        t.source_table !== 'operational_cost_submissions' &&
-        t.source_table !== 'down_payment_requests'
-      );
+      // Get all allocated staff for this fund to attribute payments/reversals correctly
+      const allocList = fundAllocs.get(fundId) ?? [];
+      const allocatedUserIds = new Set(allocList.map((a: any) => a.user_id).filter(Boolean));
 
-      const ocsIds = [...new Set(ocsTxns.map((t: any) => t.source_id as string))];
-      const dpIds  = [...new Set(dpTxns.map((t: any)  => t.source_id as string))];
+      // Filter transactions that belong to this allocated user
+      const userTxns = allTxns.filter((t: any) => {
+        const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
+        const effUserId    = orig?.user_id ?? t.user_id;
+        const effCreatedBy = orig?.created_by ?? t.created_by;
 
-      let payments: any[] = [];
+        let owner: string | null = null;
+        if (effUserId && allocatedUserIds.has(effUserId)) owner = effUserId;
+        else if (effCreatedBy && allocatedUserIds.has(effCreatedBy)) owner = effCreatedBy;
+        else owner = effUserId ?? effCreatedBy ?? null;
 
-      // Fetch OCS and DP enrichment data in parallel. Newer transactions carry
-      // source_table/source_id; older rows are linked from the source record via
-      // pre_fund_transaction_id, so query both paths before labeling anything
-      // as a manual entry.
-      const [ocsData, dpData, ocsLegacyData, dpLegacyData] = await Promise.all([
-        ocsIds.length > 0
-          ? fetchAllIn(chunk => (supabase as any)
-            .from('operational_cost_submissions')
-            .select('id,pre_fund_transaction_id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-            .in('id', chunk), ocsIds)
-          : Promise.resolve([]),
-        dpIds.length > 0
-          ? fetchAllIn(chunk => (supabase as any)
-            .from('down_payment_requests')
-            .select('id,pre_fund_transaction_id,requested_by,purpose,payment_type,amount,currency,status,approved_at,created_at')
-            .in('id', chunk), dpIds)
-          : Promise.resolve([]),
-        allTxns.length > 0
-          ? fetchAllIn(chunk => (supabase as any)
-            .from('operational_cost_submissions')
-            .select('id,pre_fund_transaction_id,submitted_by,expense_category,description,amount_cents,amount_paid_cents,status,paid_at,submitted_at')
-            .in('pre_fund_transaction_id', chunk), allTxns.map((t: any) => t.id))
-          : Promise.resolve([]),
-        allTxns.length > 0
-          ? fetchAllIn(chunk => (supabase as any)
-            .from('down_payment_requests')
-            .select('id,pre_fund_transaction_id,requested_by,purpose,payment_type,amount,currency,status,approved_at,created_at')
-            .in('pre_fund_transaction_id', chunk), allTxns.map((t: any) => t.id))
-          : Promise.resolve([]),
-      ]);
-
-      const ocsBySourceId = new Map(ocsData.map((row: any) => [row.id, row]));
-      const ocsByTxnId = new Map(ocsLegacyData.map((row: any) => [row.pre_fund_transaction_id, row]));
-      const dpBySourceId = new Map(dpData.map((row: any) => [row.id, row]));
-      const dpByTxnId = new Map(dpLegacyData.map((row: any) => [row.pre_fund_transaction_id, row]));
-      // Enrich OCS-linked transactions. Track which source_ids were matched so
-      // unresolved ones are added as fallback manual entries (not silently dropped).
-      const resolvedTxnIds = new Set<string>();
-      ocsTxns.forEach((txn: any) => {
-        const o = ocsBySourceId.get(txn.source_id) ?? ocsByTxnId.get(txn.id);
-        if (!o) {
-          payments.push({
-            ...txn, _type: 'manual', _txn_amount: Number(txn.amount) || 0,
-            _txn_date: txn.transaction_date, amount: Number(txn.amount) || 0,
-            description: txn.description || 'Cost submission (details unavailable)',
-            status: 'paid',
-          });
-          return;
-        }
-        resolvedTxnIds.add(txn.id);
-        // Use the transaction amount as the authoritative amount (it is recorded in
-        // SDG/local currency). Fall back to amount_paid_cents/amount_cents only when
-        // the transaction row itself has no amount.
-        const txnAmt = Number(txn?.amount ?? 0);
-        payments.push({
-          ...o,
-          _type: 'ocs',
-          _category: o.expense_category,
-          _txn_amount: txnAmt || (o.amount_paid_cents ?? o.amount_cents ?? 0) / 100,
-          _txn_date: txn.transaction_date,
-        });
+        return owner === userId || (allocatedUserIds.size === 1 && allocatedUserIds.has(userId));
       });
 
-      // Enrich DP-linked transactions with same fallback pattern
-      dpTxns.forEach((txn: any) => {
-        const dp = dpBySourceId.get(txn.source_id) ?? dpByTxnId.get(txn.id);
-        if (!dp) {
-          payments.push({
-            ...txn, _type: 'manual', _txn_amount: Number(txn.amount) || 0,
-            _txn_date: txn.transaction_date, amount: Number(txn.amount) || 0,
-            description: txn.description || 'Down payment (details unavailable)',
-            status: 'paid',
-          });
-          return;
-        }
-        resolvedTxnIds.add(txn.id);
-        // Prefer the recorded transaction amount over the DP requested amount
-        const txnAmt = Number(txn.amount ?? 0);
-        payments.push({
-          ...dp,
-          _type: 'dp',
-          _category: dp.payment_type || dp.purpose,
-          _txn_amount: txnAmt || Number(dp.amount) || 0,
-          _txn_date: txn.transaction_date,
-          amount: txnAmt || Number(dp.amount) || 0,
-        });
-      });
-
-      // Transactions without source_table/source_id may still have a source-side
-      // backlink. Resolve that before using the genuine manual-entry fallback.
-      otherTxns.forEach((t: any) => {
-        const legacyOcs = ocsByTxnId.get(t.id);
-        const legacyDp = dpByTxnId.get(t.id);
-        if (legacyOcs) {
-          payments.push({
-            ...legacyOcs,
-            _type: 'ocs',
-            _category: legacyOcs.expense_category,
-            _txn_amount: Number(t.amount) || (legacyOcs.amount_paid_cents ?? legacyOcs.amount_cents ?? 0) / 100,
-            _txn_date: t.transaction_date,
-          });
-          return;
-        }
-        if (legacyDp) {
-          payments.push({
-            ...legacyDp,
-            _type: 'dp',
-            _category: legacyDp.payment_type || legacyDp.purpose,
-            _txn_amount: Number(t.amount) || Number(legacyDp.amount) || 0,
-            _txn_date: t.transaction_date,
-            amount: Number(t.amount) || Number(legacyDp.amount) || 0,
-          });
-          return;
-        }
-        payments.push({
-          ...t,
-          _type: 'manual',
-          _category: t.reference || t.transaction_type,
-          _txn_amount: Number(t.amount) || 0,
-          _txn_date: t.transaction_date,
-          amount: Number(t.amount) || 0,
-          description: t.description || '—',
-          status: 'paid',
-        });
+      const payments: any[] = userTxns.map((t: any) => {
+        const isReversal = ['reversal', 'return'].includes(t.transaction_type);
+        const amt = Number(t.amount) || 0;
+        const type = isReversal ? 'reversal' : (t.source_table === 'operational_cost_submissions' ? 'ocs' : t.source_table === 'down_payment_requests' ? 'dp' : 'manual');
+        const category = isReversal
+          ? 'Payment Reversal'
+          : t.source_table === 'operational_cost_submissions'
+            ? 'Cost Submission'
+            : t.source_table === 'down_payment_requests'
+              ? 'Down Payment'
+              : (t.reference || 'Expenditure');
+        return {
+          id: t.id,
+          _type: type,
+          _category: category,
+          _txn_amount: isReversal ? -amt : amt,
+          _raw_amount: amt,
+          _is_reversal: isReversal,
+          _txn_date: t.transaction_date || t.created_at,
+          description: t.description || t.reference || (isReversal ? 'Payment reversal / deduction' : 'Operational expenditure'),
+          status: isReversal ? 'reversed' : 'paid',
+          currency: t.currency || 'SDG',
+          user_id: t.user_id,
+          created_by: t.created_by,
+          reversal_of_id: t.reversal_of_id,
+        };
       });
 
       // Sort by transaction date desc
       payments.sort((a, b) =>
-        new Date(b._txn_date || b.paid_at || b.submitted_at || 0).getTime() -
-        new Date(a._txn_date || a.paid_at || a.submitted_at || 0).getTime()
+        new Date(b._txn_date || 0).getTime() -
+        new Date(a._txn_date || 0).getTime()
       );
 
       setAllocPayments(prev => { const m = new Map(prev); m.set(allocId, payments); return m; });
     } catch (e: any) {
+      console.error('Error loading allocation payments:', e);
       setAllocPayments(prev => { const m = new Map(prev); m.set(allocId, []); return m; });
     } finally {
       setAllocPaymentsLoading(prev => { const s = new Set(prev); s.delete(allocId); return s; });
     }
-  }, [allocPayments]);
+  }, [allocPayments, fundAllocs]);
 
   /** Parse receipt_url which may be a JSON array string or a plain URL. */
   const parseReceiptUrls = (url: string | null): string[] => {
@@ -601,7 +511,7 @@ export default function PreFundingDistribute() {
       }));
       if (myAllocs && myAllocs.length > 0) {
         // Fund details depends on myAllocs result — one extra query only when user has allocations
-        const fundIds: string[] = [...new Set(myAllocs.map((a: any) => a.pre_fund_request_id as string))];
+        const fundIds: string[] = Array.from(new Set<string>(myAllocs.map((a: any) => a.pre_fund_request_id as string).filter(Boolean)));
         const { data: fundDetails } = await (supabase as any)
           .from('pre_fund_requests')
           .select('id,name,source,status,holder_user_id')
@@ -678,7 +588,7 @@ export default function PreFundingDistribute() {
         // Fetch payment transactions to compute live spent amounts per user
         (supabase as any)
           .from('pre_fund_event_ledger_v')
-          .select('id,user_id,created_by,source_table,source_id,amount,transaction_type')
+          .select('id,user_id,created_by,source_table,source_id,amount,transaction_type,reversal_of_id')
           .eq('pre_fund_request_id', fundId)
           .eq('source_is_verified', true),
       ]);
@@ -686,6 +596,7 @@ export default function PreFundingDistribute() {
 
       const allocs: any[] = allocRes.data ?? [];
       const txns:   any[] = txnRes.data   ?? [];
+      const txnById = new Map(txns.map((t: any) => [t.id, t]));
 
       // Build the set of allocated user IDs so we can fall back to created_by
       // when user_id on the transaction is an unallocated recipient
@@ -695,17 +606,24 @@ export default function PreFundingDistribute() {
       const spendMap = new Map<string, number>();
       for (const t of txns) {
         const amt   = Number(t.amount) || 0;
-        const delta = ['reversal', 'return'].includes(t.transaction_type) ? -amt : amt;
-        if (!['payment', 'disbursement'].includes(t.transaction_type) && delta >= 0) continue;
+        const isReversal = ['reversal', 'return'].includes(t.transaction_type);
+        const isPayment  = ['payment', 'disbursement'].includes(t.transaction_type);
+        if (!isReversal && !isPayment) continue;
+
+        // Trace original transaction if this is a reversal
+        const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
+        const effectiveUserId    = orig?.user_id ?? t.user_id;
+        const effectiveCreatedBy = orig?.created_by ?? t.created_by;
 
         // Prefer allocated user_id; fall back to created_by if user_id isn't allocated
         let owner: string | null = null;
-        if (t.user_id && allocatedUserIds.has(t.user_id)) owner = t.user_id;
-        else if (t.created_by && allocatedUserIds.has(t.created_by)) owner = t.created_by;
-        else owner = t.user_id ?? t.created_by ?? null;
+        if (effectiveUserId && allocatedUserIds.has(effectiveUserId)) owner = effectiveUserId;
+        else if (effectiveCreatedBy && allocatedUserIds.has(effectiveCreatedBy)) owner = effectiveCreatedBy;
+        else owner = effectiveUserId ?? effectiveCreatedBy ?? null;
         if (!owner) continue;
 
-        spendMap.set(owner, Math.max(0, (spendMap.get(owner) ?? 0) + delta));
+        const delta = isReversal ? -amt : amt;
+        spendMap.set(owner, (spendMap.get(owner) ?? 0) + delta);
       }
 
       // Enrich profiles
@@ -911,6 +829,7 @@ export default function PreFundingDistribute() {
       const uploaded = await uploadMultipleReceipts(topUpReceiptFiles, fundId, alloc.user_id);
       if (!uploaded) { setTopUpSaving(false); return; }
       const newTotal = alloc.allocated_amount + increment;
+      const currentUserName = (currentUser as any)?.full_name ?? currentUser?.name ?? currentUser?.email ?? 'Unknown';
       const newNotes = buildAllocMeta(
         alloc.notes,
         {
@@ -919,7 +838,7 @@ export default function PreFundingDistribute() {
           previous_total: alloc.allocated_amount,
           new_total: newTotal,
           by_user_id: currentUser?.id ?? '',
-          by_name: currentUser?.full_name ?? currentUser?.email ?? 'Unknown',
+          by_name: currentUserName,
           receipt_url: uploaded,
           reason: topUpReason.trim() || undefined,
         },
@@ -1014,13 +933,14 @@ export default function PreFundingDistribute() {
     }
     setReqSaving(true);
     try {
-      const msg = `Staff member ${currentUser?.full_name ?? currentUser?.email} is requesting an additional ${formatNumber(amt, 0)} ${alloc.currency} on fund "${alloc.fund_name ?? alloc.pre_fund_request_id}". Reason: ${reqNotes || 'No reason provided.'}`;
+      const requesterName = (currentUser as any)?.full_name ?? currentUser?.name ?? currentUser?.email ?? 'Staff member';
+      const msg = `Staff member ${requesterName} is requesting an additional ${formatNumber(amt, 0)} ${alloc.currency} on fund "${alloc.fund_name ?? alloc.pre_fund_request_id}". Reason: ${reqNotes || 'No reason provided.'}`;
       if (alloc.holder_user_id) {
         await dispatchNotification({
           event: 'pre_fund_topup_request', recipientIds: [alloc.holder_user_id],
           titleEn: 'Top-Up Request Received', titleAr: 'طلب تعبئة رصيد',
           messageEn: msg,
-          messageAr: `طلب ${currentUser?.full_name ?? currentUser?.email} مبلغاً إضافياً ${formatNumber(amt, 0)} ${alloc.currency} من صندوق "${alloc.fund_name ?? ''}".`,
+          messageAr: `طلب ${requesterName} مبلغاً إضافياً ${formatNumber(amt, 0)} ${alloc.currency} من صندوق "${alloc.fund_name ?? ''}".`,
           entityType: 'pre_fund_request', entityId: alloc.pre_fund_request_id,
           triggeredBy: currentUser?.id, priority: 'high',
           metadata: { alloc_id: alloc.id, requested_amount: amt, currency: alloc.currency, notes: reqNotes },
@@ -1777,62 +1697,83 @@ export default function PreFundingDistribute() {
                                     <tbody>
                                       {payments.map((p, i) => {
                                         const date = p._txn_date || p.paid_at || p.submitted_at || p.approved_at || p.created_at;
-                                        // _txn_amount is the canonical transaction amount (set for all types).
-                                        // For OCS, fall back to amount_paid_cents/amount_cents when _txn_amount is 0.
-                                        const amt = Number(p._txn_amount) ||
-                                          (p._type === 'ocs'
-                                            ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
-                                            : Number(p.amount) || 0);
+                                        const isRev = p._is_reversal || p._type === 'reversal';
                                         const rawCategory = p._category || p.expense_category;
-                                        const category = p._type === 'ocs'
-                                          ? (catLabel[rawCategory] ?? rawCategory?.replace(/_/g, ' ') ?? '—')
-                                          : p._type === 'dp'
-                                            ? (rawCategory?.replace(/_/g, ' ') || 'Down Payment')
-                                          : p._type === 'manual'
-                                            ? (rawCategory?.replace(/_/g, ' ') || 'Manual Entry')
-                                            : '—';
-                                        const desc = p._type === 'ocs'
-                                          ? (p.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '—')
-                                          : p._type === 'manual'
-                                            ? (p.description || '—')
-                                            : (p.purpose || '—');
-                                        const status = p.status || 'paid';
-                                        const statusCls = status === 'paid' || status === 'reconciled' || status === 'approved'
-                                          ? 'text-emerald-700 dark:text-emerald-400'
-                                          : status === 'rejected'
-                                            ? 'text-red-600'
-                                            : 'text-amber-700';
+                                        const category = isRev
+                                          ? 'Reversal'
+                                          : p._type === 'ocs'
+                                            ? (catLabel[rawCategory] ?? rawCategory?.replace(/_/g, ' ') ?? 'Cost Submission')
+                                            : p._type === 'dp'
+                                              ? (rawCategory?.replace(/_/g, ' ') || 'Down Payment')
+                                            : (rawCategory?.replace(/_/g, ' ') || 'Expenditure');
+                                        const desc = p.description || p.purpose || '—';
+                                        const displayAmt = Math.abs(Number(p._raw_amount ?? p._txn_amount ?? 0));
                                         return (
-                                          <tr key={i} className="border-b border-border/30 hover:bg-muted/30">
+                                          <tr key={p.id || i} className={cn('border-b border-border/30 hover:bg-muted/30', isRev && 'bg-purple-50/40 dark:bg-purple-950/20')}>
                                             <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
                                               {date ? format(new Date(date), 'dd MMM yy') : '—'}
                                             </td>
-                                            <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{category}</td>
-                                            <td className="py-1.5 pr-3 text-muted-foreground max-w-[180px] truncate">{desc}</td>
-                                            <td className="py-1.5 text-right font-mono font-semibold whitespace-nowrap">
-                                              {fund.currency} {formatNumber(amt, 0)}
+                                            <td className="py-1.5 pr-3 font-medium whitespace-nowrap">
+                                              {isRev ? (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700">
+                                                  Reversal
+                                                </span>
+                                              ) : (
+                                                category
+                                              )}
                                             </td>
-                                            <td className={`py-1.5 pl-3 capitalize whitespace-nowrap ${statusCls}`}>
-                                              {status.replace(/_/g, ' ')}
+                                            <td className="py-1.5 pr-3 text-muted-foreground max-w-[220px] truncate" title={desc}>{desc}</td>
+                                            <td className={cn('py-1.5 text-right font-mono font-semibold whitespace-nowrap', isRev ? 'text-purple-600 dark:text-purple-400' : 'text-foreground')}>
+                                              {isRev ? `−${fund.currency} ${formatNumber(displayAmt, 0)}` : `${fund.currency} ${formatNumber(displayAmt, 0)}`}
+                                            </td>
+                                            <td className="py-1.5 pl-3 capitalize whitespace-nowrap">
+                                              {isRev ? (
+                                                <span className="text-purple-600 dark:text-purple-400 font-medium text-[11px]">Reversed</span>
+                                              ) : (
+                                                <span className="text-emerald-700 dark:text-emerald-400 font-medium text-[11px]">Paid</span>
+                                              )}
                                             </td>
                                           </tr>
                                         );
                                       })}
                                     </tbody>
                                     <tfoot>
-                                      <tr className="border-t font-semibold">
-                                        <td colSpan={3} className="py-1.5 text-muted-foreground text-xs">Total Payments</td>
-                                        <td className="py-1.5 text-right font-mono text-xs">
-                                          {fund.currency} {formatNumber(payments.reduce((s, p) => {
-                                            const amt = Number(p._txn_amount) ||
-                                              (p._type === 'ocs'
-                                                ? (p.amount_paid_cents ?? p.amount_cents ?? 0) / 100
-                                                : Number(p.amount) || 0);
-                                            return s + amt;
-                                          }, 0), 0)}
-                                        </td>
-                                        <td />
-                                      </tr>
+                                      {(() => {
+                                        const grossPayments = payments.filter(p => !p._is_reversal && p._type !== 'reversal').reduce((s, p) => s + (p._raw_amount ?? p._txn_amount ?? 0), 0);
+                                        const totalReversals = payments.filter(p => p._is_reversal || p._type === 'reversal').reduce((s, p) => s + Math.abs(p._raw_amount ?? p._txn_amount ?? 0), 0);
+                                        const netSpent = grossPayments - totalReversals;
+                                        const remainingWithStaff = a.allocated_amount - netSpent;
+                                        return (
+                                          <>
+                                            {totalReversals > 0 && (
+                                              <>
+                                                <tr className="border-t text-muted-foreground text-[11px]">
+                                                  <td colSpan={3} className="py-1 px-2.5">Gross Disbursements</td>
+                                                  <td className="py-1 px-2.5 text-right font-mono">{fund.currency} {formatNumber(grossPayments, 0)}</td>
+                                                  <td />
+                                                </tr>
+                                                <tr className="text-purple-600 dark:text-purple-400 text-[11px]">
+                                                  <td colSpan={3} className="py-1 px-2.5">Total Reversals / Deductions</td>
+                                                  <td className="py-1 px-2.5 text-right font-mono">−{fund.currency} {formatNumber(totalReversals, 0)}</td>
+                                                  <td />
+                                                </tr>
+                                              </>
+                                            )}
+                                            <tr className="border-t font-bold bg-muted/30">
+                                              <td colSpan={3} className="py-1.5 px-2.5 text-foreground text-xs">Net Paid Out</td>
+                                              <td className="py-1.5 px-2.5 text-right font-mono text-xs text-rose-600 dark:text-rose-400">
+                                                {fund.currency} {formatNumber(netSpent, 0)}
+                                              </td>
+                                              <td />
+                                            </tr>
+                                            <tr className="text-[11px] font-semibold text-teal-700 dark:text-teal-400">
+                                              <td colSpan={3} className="py-1 px-2.5">Remaining Balance with {a.user_name}</td>
+                                              <td className="py-1 px-2.5 text-right font-mono">{fund.currency} {formatNumber(remainingWithStaff, 0)}</td>
+                                              <td />
+                                            </tr>
+                                          </>
+                                        );
+                                      })()}
                                     </tfoot>
                                   </table>
                                 </div>

@@ -220,7 +220,7 @@ export default function PreFundingAllocations() {
       const rawTxns = await fetchAllIn(
         chunk => (supabase as any)
           .from('pre_fund_event_ledger_v')
-          .select('user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by')
+          .select('id,user_id,pre_fund_request_id,amount,transaction_type,source_table,source_id,created_by,reversal_of_id')
           .in('pre_fund_request_id', chunk)
           .eq('source_is_verified', true)
           .in('transaction_type', ['payment', 'commitment', 'reversal', 'return']),
@@ -228,6 +228,7 @@ export default function PreFundingAllocations() {
       );
       if (version !== loadVersion.current) return;
       const validTxns = rawTxns;
+      const txnById = new Map(validTxns.map((t: any) => [t.id, t]));
 
       // Some transactions (esp. manually added via Reconciliation, or auto-linked
       // where the staff member has no allocation yet) are saved with user_id = NULL
@@ -272,12 +273,14 @@ export default function PreFundingAllocations() {
       }
       const resolveAttributedStaff = (t: any): string | null => {
         const allocatedIds = allocatedUserIdsByFund.get(t.pre_fund_request_id);
-        const ownerId = resolveOwner(t);
-        if (ownerId && allocatedIds?.has(ownerId)) return ownerId;
-        if (t.created_by && allocatedIds?.has(t.created_by)) return t.created_by;
+        const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
+        const effOwnerId = orig ? resolveOwner(orig) : resolveOwner(t);
+        const effCreatedBy = orig?.created_by ?? t.created_by;
+        if (effOwnerId && allocatedIds?.has(effOwnerId)) return effOwnerId;
+        if (effCreatedBy && allocatedIds?.has(effCreatedBy)) return effCreatedBy;
         // Neither the recipient nor the approver is an allocated staff member —
         // fall back to whichever owner we could resolve (may still be null).
-        return ownerId;
+        return effOwnerId;
       };
 
       // Build per-user per-fund spend from transactions, preferring an allocated
