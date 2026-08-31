@@ -167,12 +167,9 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   // Try the SECURITY DEFINER RPC first (bypasses RLS, applies role filter in SQL).
   // Falls back to a direct query if the migration hasn't been applied yet.
   //
-  // The RPC only accepts two hub params (primary + secondary). When a supervisor
-  // has additional hub assignments via additionalRoles, bypass the RPC so the
-  // direct applyRoleFilter can include all supervised hub IDs.
   let allData: any[] = [];
   let error: any = null;
-  let useRpc = additionalRoleHubIds.length === 0; // skip RPC when additional-role hubs present
+  let useRpc = true;
 
   for (let _dpf = 0; ; _dpf += 1000) {
     let _dpp: any[] | null = null;
@@ -180,13 +177,14 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
 
     if (useRpc) {
       const res = await (supabase as any)
-        .rpc('get_dp_requests_for_user', {
+        .rpc('get_dp_requests_for_user_v2', {
           p_user_id: user.id,
           p_role: userRole || '',
-          p_hub_id: user.hubId ?? null,
-          p_secondary_hub_id: user.secondaryHubId ?? null,
+          p_hub_ids: allSupervisedHubIds,
+          p_limit: 1000,
+          p_offset: _dpf,
         })
-        .range(_dpf, _dpf + 999);
+        .select(DP_SELECT_PLAIN);
       _dpp = res.data;
       _dpe = res.error;
       // If RPC doesn't exist or has any schema error, fall back to direct query

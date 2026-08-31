@@ -427,15 +427,27 @@ export default function PreFundingOverview() {
   // This fires when directLinkPayment (or any other path) writes a new balance — so the
   // Overview always reflects the latest Paid-Out figure without needing a manual refresh.
   useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel('overview_pre_fund_balance')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'pre_fund_requests' },
-        () => { load(); },
+        () => {
+          // Payment workflows can update a fund several times in one burst.
+          // Coalesce those events into one multi-table overview refresh.
+          if (refreshTimer) clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => {
+            refreshTimer = null;
+            load();
+          }, 750);
+        },
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
   }, [load]);
 
   const handleRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
