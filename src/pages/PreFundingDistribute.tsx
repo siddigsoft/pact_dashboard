@@ -1179,9 +1179,8 @@ export default function PreFundingDistribute() {
           const allocs = fundAllocs.get(fund.id) ?? [];
           const totalAllocated = allocs.reduce((s, a) => s + Number(a.allocated_amount), 0);
           const totalSpent     = allocs.reduce((s, a) => s + Number(a.spent_amount), 0);
-          const totalCommitted = Math.max(totalAllocated, totalSpent);
-          const remaining      = Math.max(0, fund.amount - totalCommitted);
-          const usagePct       = fund.amount > 0 ? Math.min(100, Math.round((totalCommitted / fund.amount) * 100)) : 0;
+          const unallocatedBudget = Math.max(0, fund.amount - totalAllocated);
+          const allocPct       = fund.amount > 0 ? Math.min(100, Math.round((totalAllocated / fund.amount) * 100)) : 0;
           const isAllocLoading = allocLoading.has(fund.id);
 
           // ── Current-user allocation scoping ────────────────────────────────
@@ -1197,7 +1196,7 @@ export default function PreFundingDistribute() {
           const displaySpent   = myAlloc ? myAlloc.spent_amount     : totalSpent;
           const displayRem     = myAlloc
             ? myAlloc.allocated_amount - myAlloc.spent_amount
-            : remaining;
+            : unallocatedBudget;
           const displayPct     = displayAlloc > 0
             ? Math.min(100, Math.round((displaySpent / displayAlloc) * 100))
             : 0;
@@ -1249,7 +1248,7 @@ export default function PreFundingDistribute() {
                     { label: 'Fund Total',     value: formatNumber(fund.amount, 0),                        icon: Wallet,       cls: 'text-sky-600' },
                     { label: 'Allocated',      value: formatNumber(totalAllocated, 0),                     icon: Users,        cls: 'text-violet-600' },
                     { label: 'Fund Paid Out',  value: formatNumber(fund.paid_amount, 0),                   icon: TrendingDown, cls: 'text-emerald-600' },
-                    { label: 'Fund Available', value: formatNumber(remaining, 0),                           icon: Check,        cls: remaining <= 0 ? 'text-rose-600' : 'text-teal-600' },
+                    { label: 'Fund Available', value: formatNumber(fund.available_balance, 0),             icon: Check,        cls: fund.available_balance <= 0 ? 'text-rose-600' : 'text-teal-600' },
                   ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
@@ -1268,16 +1267,16 @@ export default function PreFundingDistribute() {
                       </>
                     ) : (
                       <>
-                        <span>Allocated {usagePct}%</span>
-                        <span>{formatNumber(remaining, 0)} {fund.currency} still available to allocate</span>
+                        <span>Allocated {allocPct}%</span>
+                        <span>{formatNumber(unallocatedBudget, 0)} {fund.currency} still available to allocate</span>
                       </>
                     )}
                   </div>
                   <Progress
-                    value={myAlloc ? displayPct : usagePct}
+                    value={myAlloc ? displayPct : allocPct}
                     className={cn('h-1.5',
-                      (myAlloc ? displayPct : usagePct) >= 100 ? '[&>div]:bg-rose-500' :
-                      (myAlloc ? displayPct : usagePct) >= 80  ? '[&>div]:bg-amber-500' :
+                      (myAlloc ? displayPct : allocPct) >= 100 ? '[&>div]:bg-rose-500' :
+                      (myAlloc ? displayPct : allocPct) >= 80  ? '[&>div]:bg-amber-500' :
                       myAlloc ? '[&>div]:bg-violet-500' : '[&>div]:bg-sky-500'
                     )}
                   />
@@ -2085,11 +2084,8 @@ export default function PreFundingDistribute() {
             const totalAllocatedForFund = Array.from(fundAllocs.values()).flat()
               .filter(fa => fundDialogData && fa.pre_fund_request_id === fundDialogData.id)
               .reduce((s, fa) => s + Number(fa.allocated_amount), 0);
-            const totalSpentForFund = Array.from(fundAllocs.values()).flat()
-              .filter(fa => fundDialogData && fa.pre_fund_request_id === fundDialogData.id)
-              .reduce((s, fa) => s + Number(fa.spent_amount), 0);
             const fundAvailable = fundDialogData
-              ? Math.max(0, fundDialogData.amount - Math.max(totalAllocatedForFund, totalSpentForFund))
+              ? Math.max(0, fundDialogData.amount - totalAllocatedForFund)
               : null;
 
             return (
