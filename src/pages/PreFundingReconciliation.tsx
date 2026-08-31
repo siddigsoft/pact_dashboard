@@ -75,6 +75,7 @@ interface PreFundTransaction {
   user_id: string | null; created_by: string | null; receipt_url: string | null;
   gl_journal_entry_id: string | null;
   reversal_of_id: string | null;
+  signed_paid_amount?: number | string | null;
 }
 interface Reconciliation {
   id: string; pre_fund_request_id: string; period_start: string | null; period_end: string | null;
@@ -101,9 +102,21 @@ interface PaidOutBreakdown {
 }
 
 function getPaidOutBreakdown(transactions: PreFundTransaction[]): PaidOutBreakdown {
-  const paidEvents = transactions.filter(t => ['payment', 'reversal', 'return'].includes(t.transaction_type));
-  const signedAmount = (transaction: PreFundTransaction) =>
-    ['reversal', 'return'].includes(transaction.transaction_type) ? -transaction.amount : transaction.amount;
+  const signedAmount = (transaction: PreFundTransaction): number => {
+    if (transaction.signed_paid_amount !== undefined && transaction.signed_paid_amount !== null) {
+      return Number(transaction.signed_paid_amount);
+    }
+    if (['reversal', 'return'].includes(transaction.transaction_type)) {
+      if (!transaction.source_table) return 0;
+      return -Number(transaction.amount || 0);
+    }
+    if (['payment', 'disbursement'].includes(transaction.transaction_type)) {
+      return Number(transaction.amount || 0);
+    }
+    return 0;
+  };
+
+  const paidEvents = transactions.filter(t => signedAmount(t) !== 0);
   const downPayments = paidEvents
     .filter(t => t.source_table === 'down_payment_requests')
     .reduce((sum, t) => sum + signedAmount(t), 0);
@@ -111,7 +124,7 @@ function getPaidOutBreakdown(transactions: PreFundTransaction[]): PaidOutBreakdo
     .filter(t => t.source_table === 'operational_cost_submissions')
     .reduce((sum, t) => sum + signedAmount(t), 0);
   const other = paidEvents
-    .filter(t => !t.source_table || !['down_payment_requests', 'operational_cost_submissions'].includes(t.source_table))
+    .filter(t => !['down_payment_requests', 'operational_cost_submissions'].includes(t.source_table || ''))
     .reduce((sum, t) => sum + signedAmount(t), 0);
   return { downPayments, costSubmissions, other, total: downPayments + costSubmissions + other };
 }
