@@ -303,95 +303,63 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
     const subscribeRealtime = () => {
       if (!currentUserId) return;
       try {
+        const handleNotificationChange = (payload: any) => {
+          const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+          const row = eventType === 'DELETE' ? payload.old : payload.new;
+
+          // The outer notification UI consumes this event instead of opening
+          // a second Postgres Changes subscription for the same user/table.
+          window.dispatchEvent(new CustomEvent('pact:notification-change', {
+            detail: { eventType, row },
+          }));
+
+          if (eventType === 'DELETE') {
+            setAppNotifications(prev => prev.filter(n => n.id !== row?.id));
+            return;
+          }
+
+          const notification = mapDbToNotification(row);
+          if (notification.userId !== currentUserId) return;
+
+          if (eventType === 'UPDATE') {
+            setAppNotifications(prev =>
+              prev.map(n => n.id === notification.id ? notification : n)
+            );
+            return;
+          }
+
+          if (!filterByRoleAndProject(notification)) return;
+          setAppNotifications(prev => {
+            if (prev.some(existing => existing.id === notification.id)) return prev;
+            return [notification, ...prev].slice(0, 50);
+          });
+          if (isBlockingBroadcast(notification)) {
+            setBroadcastQueue(prev =>
+              prev.some(existing => existing.id === notification.id)
+                ? prev
+                : [...prev, notification]
+            );
+          }
+        };
+
         // Subscribe to notifications for recipient_id or user_id
         // Database uses recipient_id as primary column in extended schema
         channel = supabase
           .channel(`notifications-${currentUserId}`)
-          // Listen for recipient_id (primary) and user_id (fallback)
+          // One wildcard binding per identity column replaces three separate
+          // INSERT/UPDATE/DELETE bindings, cutting server subscription checks.
           .on('postgres_changes', {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'notifications',
             filter: `recipient_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const n = mapDbToNotification((payload as any).new);
-            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
-              setAppNotifications(prev => {
-                if (prev.some(p => p.id === n.id)) return prev;
-                return [n, ...prev].slice(0, 50);
-              });
-              // Push to blocking queue if this is a high/urgent broadcast
-              if (isBlockingBroadcast(n)) {
-                setBroadcastQueue(prev =>
-                  prev.some(b => b.id === n.id) ? prev : [...prev, n]
-                );
-              }
-            }
-          })
+          }, handleNotificationChange)
           .on('postgres_changes', {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'notifications',
             filter: `user_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const n = mapDbToNotification((payload as any).new);
-            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
-              setAppNotifications(prev => {
-                if (prev.some(p => p.id === n.id)) return prev;
-                return [n, ...prev].slice(0, 50);
-              });
-              // Push to blocking queue if this is a high/urgent broadcast
-              if (isBlockingBroadcast(n)) {
-                setBroadcastQueue(prev =>
-                  prev.some(b => b.id === n.id) ? prev : [...prev, n]
-                );
-              }
-            }
-          })
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `recipient_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const updated = mapDbToNotification((payload as any).new);
-            if (updated.userId === currentUserId) {
-              setAppNotifications(prev => 
-                prev.map(n => n.id === updated.id ? updated : n)
-              );
-            }
-          })
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const updated = mapDbToNotification((payload as any).new);
-            if (updated.userId === currentUserId) {
-              setAppNotifications(prev => 
-                prev.map(n => n.id === updated.id ? updated : n)
-              );
-            }
-          })
-          .on('postgres_changes', {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `recipient_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const deletedId = (payload as any).old.id;
-            setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
-          })
-          .on('postgres_changes', {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${currentUserId}`,
-          }, (payload) => {
-            const deletedId = (payload as any).old.id;
-            setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
-          })
+          }, handleNotificationChange)
           .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
               console.log('Notifications realtime connected');

@@ -46,12 +46,8 @@ function getConfigKey(config: SubscriptionConfig): string {
   return `${config.schema || 'public'}.${config.table}.${config.event || '*'}.${config.filter || ''}`;
 }
 
-function getChannelKey(configs: SubscriptionConfig[]): string {
-  const tableKeys = configs
-    .map(c => `${c.schema || 'public'}.${c.table}`)
-    .sort()
-    .join('|');
-  return `realtime_${tableKeys}`;
+function getChannelKey(config: SubscriptionConfig): string {
+  return `realtime_${config.schema || 'public'}.${config.table}`;
 }
 
 class RealtimeSubscriptionManager {
@@ -144,33 +140,43 @@ class RealtimeSubscriptionManager {
     handlers: SubscriptionHandler<T>
   ): () => void {
     const configArray = Array.isArray(configs) ? configs : [configs];
-    const channelKey = getChannelKey(configArray);
+    const unsubscribers = configArray.map((config) =>
+      this.subscribeToTable(config, handlers)
+    );
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }
+
+  /**
+   * Keep one Postgres Changes subscription per physical table and fan events
+   * out to every local consumer. Supabase authorizes each database change once
+   * per server subscription, so grouping by consumer/table-set multiplies work.
+   */
+  private subscribeToTable<T = any>(
+    config: SubscriptionConfig,
+    handlers: SubscriptionHandler<T>
+  ): () => void {
+    const channelKey = getChannelKey(config);
 
     let managedSub = this.subscriptions.get(channelKey);
 
     if (!managedSub) {
       const channel = supabase.channel(channelKey);
+      const pgConfig: any = {
+        event: '*',
+        schema: config.schema || 'public',
+        table: config.table,
+      };
 
-      const tablesAdded = new Set<string>();
-      for (const config of configArray) {
-        const tableKey = `${config.schema || 'public'}.${config.table}`;
-        if (tablesAdded.has(tableKey)) continue;
-        tablesAdded.add(tableKey);
-
-        const pgConfig: any = {
-          event: '*',
-          schema: config.schema || 'public',
-          table: config.table,
-        };
-
-        channel.on(
-          'postgres_changes',
-          pgConfig,
-          (payload: RealtimePostgresChangesPayload<T>) => {
-            this.notifyHandlers(channelKey, config.table, payload);
-          }
-        );
-      }
+      channel.on(
+        'postgres_changes',
+        pgConfig,
+        (payload: RealtimePostgresChangesPayload<T>) => {
+          this.notifyHandlers(channelKey, config.table, payload);
+        }
+      );
 
       managedSub = {
         channelName: channelKey,
@@ -202,39 +208,33 @@ class RealtimeSubscriptionManager {
 
     managedSub.refCount++;
 
-    const handlerEntries: HandlerEntry[] = [];
-
-    for (const config of configArray) {
-      const configKey = getConfigKey(config);
-
-      const wrappedHandler = (payload: RealtimePostgresChangesPayload<T>) => {
-        if (!this.matchesFilter(config, payload)) return;
+    const configKey = getConfigKey(config);
+    const wrappedHandler = (payload: RealtimePostgresChangesPayload<T>) => {
+      if (!this.matchesFilter(config, payload)) return;
         
-        const eventType = config.event || '*';
-        if (eventType !== '*' && payload.eventType !== eventType) return;
+      const eventType = config.event || '*';
+      if (eventType !== '*' && payload.eventType !== eventType) return;
 
-        if (payload.eventType === 'INSERT' && handlers.onInsert) {
-          handlers.onInsert(payload.new as T);
-        } else if (payload.eventType === 'UPDATE' && handlers.onUpdate) {
-          handlers.onUpdate({ old: payload.old as T, new: payload.new as T });
-        } else if (payload.eventType === 'DELETE' && handlers.onDelete) {
-          handlers.onDelete(payload.old as T);
-        }
-        if (handlers.onAny) {
-          handlers.onAny(payload);
-        }
-      };
+      if (payload.eventType === 'INSERT' && handlers.onInsert) {
+        handlers.onInsert(payload.new as T);
+      } else if (payload.eventType === 'UPDATE' && handlers.onUpdate) {
+        handlers.onUpdate({ old: payload.old as T, new: payload.new as T });
+      } else if (payload.eventType === 'DELETE' && handlers.onDelete) {
+        handlers.onDelete(payload.old as T);
+      }
+      if (handlers.onAny) {
+        handlers.onAny(payload);
+      }
+    };
 
-      const entry: HandlerEntry = { handler: wrappedHandler, configKey };
-      handlerEntries.push(entry);
+    const entry: HandlerEntry = { handler: wrappedHandler, configKey };
 
-      const tableHandlers = managedSub.handlers.get(config.table) || new Set();
-      tableHandlers.add(entry);
-      managedSub.handlers.set(config.table, tableHandlers);
-    }
+    const tableHandlers = managedSub.handlers.get(config.table) || new Set();
+    tableHandlers.add(entry);
+    managedSub.handlers.set(config.table, tableHandlers);
 
     return () => {
-      this.unsubscribe(channelKey, handlerEntries);
+      this.unsubscribe(channelKey, [entry]);
     };
   }
 

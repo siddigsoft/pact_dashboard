@@ -175,7 +175,7 @@ export function useRealtimeTables<T = any>(
     enabled?: boolean;
   } = {}
 ): UseRealtimeResourceReturn {
-  const tablesKey = tables.sort().join(',');
+  const tablesKey = [...tables].sort().join(',');
   
   const configs = useMemo(
     () =>
