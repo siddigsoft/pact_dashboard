@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 import {
   SuperAdmin,
   CreateSuperAdmin,
@@ -131,6 +132,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const superAdminScopeActive = useIsDataScopeActive('superAdmin');
 
   const normalizedUserRole = (currentUser?.role || '').toLowerCase().replace(/[\s_-]/g, '');
   const isLikelySuperAdminRole = normalizedUserRole === 'superadmin';
@@ -255,6 +257,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
+    if (!superAdminScopeActive) {
+      setLoading(false);
+    }
     if (currentUser) {
       // Optimistically set isSuperAdmin from profile.role so the sidebar
       // never flickers from non-admin → admin during the async DB check.
@@ -300,17 +305,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           }
         }
       });
-      refreshSuperAdmins();
-      refreshDeletionLogs();
+      if (superAdminScopeActive) {
+        refreshSuperAdmins();
+        refreshDeletionLogs();
+      }
     }
-  }, [currentUser, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
+  }, [currentUser, superAdminScopeActive, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
 
   useRealtimeTable('super_admins', refreshSuperAdmins, {
-    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
+    enabled: superAdminScopeActive && !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
   });
 
   useRealtimeTable('deletion_audit_log', refreshDeletionLogs, {
-    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
+    enabled: superAdminScopeActive && !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole || isSuperAdmin),
   });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {

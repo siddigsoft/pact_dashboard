@@ -21,7 +21,10 @@ export type DataScopeId =
   | 'costs'
   | 'audit'
   | 'mmp'
-  | 'siteVisit';
+  | 'siteVisit'
+  | 'project'
+  | 'wallet'
+  | 'superAdmin';
 
 type ScopeRule = {
   scope: DataScopeId;
@@ -151,6 +154,51 @@ const SCOPE_RULES: ScopeRule[] = [
       );
     },
   },
+  {
+    scope: 'project',
+    prefixes: [
+      '/projects',
+      '/project-updates',
+      '/portfolio',
+      '/dashboard',
+      '/mmp',
+      '/tasks',
+      '/my-projects',
+    ],
+  },
+  {
+    scope: 'wallet',
+    prefixes: [
+      '/wallet',
+      '/wallet-reports',
+      '/admin/wallets',
+      '/finance-hub',
+      '/finance',
+      '/finance-approval',
+      '/withdrawal',
+      '/withdrawal-approval',
+      '/payroll',
+      '/field-payments',
+      '/down-payment',
+      '/pre-funding',
+      '/site-visit',
+      '/site-visits',
+    ],
+  },
+  {
+    scope: 'superAdmin',
+    prefixes: [
+      '/super-admin',
+      '/super-admin-data',
+      '/super-admin-hub',
+      '/super-admin-management',
+      '/admin-hub',
+      '/admin',
+      '/audit',
+      '/data-management',
+      '/role-management',
+    ],
+  },
 ];
 
 function pathMatches(pathname: string, prefixes: string[]): boolean {
@@ -191,7 +239,7 @@ export const DataScopeProvider: FC<{ children: ReactNode }> = ({ children }) => 
       fromRoute.forEach((s) => {
         // Site visits is the app's largest payload. Keep it route-scoped so
         // its query and Realtime channel are released after leaving field UI.
-        if (s === 'siteVisit') return;
+        if (s === 'siteVisit' || s === 'project' || s === 'wallet' || s === 'superAdmin') return;
         if (!next.has(s)) {
           next.add(s);
           changed = true;
@@ -233,6 +281,9 @@ export function useDataScope(): DataScopeContextValue {
         'audit',
         'mmp',
         'siteVisit',
+        'project',
+        'wallet',
+        'superAdmin',
       ]),
       isScopeActive: () => true,
     };

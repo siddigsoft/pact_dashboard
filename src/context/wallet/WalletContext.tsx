@@ -27,6 +27,7 @@ import type {
   SupervisedWithdrawalRequest,
   AdminWithdrawalRequest,
 } from '@/types/wallet';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 interface WalletContextType {
   wallet: Wallet | null;
@@ -169,6 +170,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateWalletQueries();
   const { getUserClassification, getActiveFeeStructure } = useClassification();
+  const walletScopeActive = useIsDataScopeActive('wallet');
 
   const userId = currentUser?.id;
   const userForSupervised: UserForWallet | null = currentUser
@@ -182,11 +184,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     : null;
 
-  const walletQuery = useWalletQuery(userId);
-  const transactionsQuery = useTransactionsQuery(userId);
-  const withdrawalRequestsQuery = useWithdrawalRequestsQuery(userId);
-  const supervisedQuery = useSupervisedWithdrawalRequestsQuery(userForSupervised);
-  const disbursedAdvanceIdsQuery = useDisbursedAdvanceRequestIdsQuery(userId);
+  const walletQuery = useWalletQuery(userId, walletScopeActive);
+  const transactionsQuery = useTransactionsQuery(userId, walletScopeActive);
+  const withdrawalRequestsQuery = useWithdrawalRequestsQuery(userId, walletScopeActive);
+  const supervisedQuery = useSupervisedWithdrawalRequestsQuery(userForSupervised, walletScopeActive);
+  const disbursedAdvanceIdsQuery = useDisbursedAdvanceRequestIdsQuery(userId, walletScopeActive);
 
   const wallet = walletQuery.data ?? null;
   const transactions = transactionsQuery.data ?? [];
@@ -1835,7 +1837,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (!currentUser?.id || !userId) return;
+    if (!walletScopeActive || !currentUser?.id || !userId) return;
 
     const userRole = currentUser.role?.toLowerCase();
     const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
@@ -1909,7 +1911,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         supabase.removeChannel(supervisorChannel);
       }
     };
-  }, [currentUser?.id, currentUser?.role, queryClient, userId]);
+  }, [walletScopeActive, currentUser?.id, currentUser?.role, queryClient, userId]);
 
   return (
     <WalletContext.Provider
