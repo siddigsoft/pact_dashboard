@@ -746,13 +746,15 @@ export default function DownPaymentApproval() {
       });
       toast({ title: 'Payment recorded', description: `${partialAmt.toLocaleString()} SDG was recorded with its selected Pre-Fund.` });
       setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
-      window.location.reload();
+      // Refresh only the down-payment query cache. A full page reload restarts
+      // every page-level query and realtime subscription after each payment.
+      await refreshRequests();
     } catch (err: any) {
       toast({ title: 'Failed', description: err.message || 'Could not save partial payment.', variant: 'destructive' });
     } finally {
       setPartialPayDialog(p => ({ ...p, saving: false }));
     }
-  }, [partialPayDialog, currentUser, toast]);
+  }, [partialPayDialog, currentUser, refreshRequests, toast]);
 
   const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
     if (!isFinanceAdmin || !evidence.isCorrectable) return;
