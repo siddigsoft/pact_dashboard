@@ -1165,9 +1165,9 @@ export default function PreFundingDistribute() {
                   ] : [
                     { label: 'Fund Total',     value: formatNumber(fund.amount, 0),                        icon: Wallet,       cls: 'text-sky-600' },
                     { label: 'Allocated',      value: formatNumber(totalAllocated, 0),                     icon: Users,        cls: 'text-violet-600' },
+                    { label: 'Unallocated',     value: formatNumber(unallocatedBudget, 0),                  icon: Layers,       cls: unallocatedBudget <= 0 ? 'text-muted-foreground' : 'text-amber-600' },
                     { label: 'Fund Paid Out',  value: formatNumber(fund.paid_amount, 0),                   icon: TrendingDown, cls: 'text-emerald-600' },
                     { label: 'Fund Available', value: formatNumber(fund.available_balance, 0),             icon: Check,        cls: fund.available_balance <= 0 ? 'text-rose-600' : 'text-teal-600' },
-                    { label: 'Unallocated',     value: formatNumber(unallocatedBudget, 0),                  icon: Layers,       cls: unallocatedBudget <= 0 ? 'text-muted-foreground' : 'text-amber-600' },
                   ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
