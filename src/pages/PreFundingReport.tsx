@@ -31,8 +31,7 @@ import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { exportMultiSheetExcel } from '@/utils/report-export';
+import { exportFormattedMultiSheetExcel } from '@/utils/formattedExcelExport';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -593,8 +592,42 @@ export default function PreFundingReport() {
     doc.save(filename);
   };
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const currency = filteredFunds[0]?.currency ?? 'USD';
+    const filteredFundIds = new Set(filteredFunds.map(fund => fund.id));
+    const filteredAllocations = allocations.filter(allocation =>
+      filteredFundIds.has(allocation.pre_fund_request_id)
+    );
+    const filteredCurrencies = [...new Set(filteredFunds.map(fund => fund.currency).filter(Boolean))];
+    const currencyScope = filteredCurrencies.length === 1
+      ? filteredCurrencies[0]
+      : `${filteredCurrencies.length || 0} source currencies (not FX-converted)`;
+
+    const currencyBreakdownData = filteredCurrencies.map(fundCurrency => {
+      const currencyFunds = filteredFunds.filter(fund => fund.currency === fundCurrency);
+      const totalFunded = currencyFunds.reduce((sum, fund) => sum + Number(fund.amount ?? 0), 0);
+      const totalDisbursed = currencyFunds.reduce(
+        (sum, fund) => sum + (fundPaidMap.get(fund.id) ?? 0),
+        0,
+      );
+      return {
+        Currency: fundCurrency,
+        'Fund Count': currencyFunds.length,
+        'Total Funded': totalFunded,
+        'Total Disbursed': totalDisbursed,
+        'Total Committed': currencyFunds.reduce(
+          (sum, fund) => sum + Number(fund.committed_amount ?? 0),
+          0,
+        ),
+        'Available Balance': currencyFunds.reduce(
+          (sum, fund) => sum + Number(fund.available_balance ?? 0),
+          0,
+        ),
+        'Utilization %': totalFunded > 0
+          ? Math.round((totalDisbursed / totalFunded) * 1000) / 10
+          : 0,
+      };
+    });
 
     // Build per-user summary from reconciliationByUser (already computed)
     const userSummaryData = reconciliationByUser.map(u => {
@@ -643,7 +676,7 @@ export default function PreFundingReport() {
         'Fund Amount': f.amount,
         'Total Disbursed': paid,
         'Committed': f.committed_amount ?? 0,
-        'Available Balance': Math.max(0, f.amount - paid),
+        'Available Balance': Number(f.available_balance ?? 0),
         'Utilization %': f.amount > 0 ? Math.round((paid / f.amount) * 100) : 0,
         'Start Date': f.start_date ?? '',
         'End Date': f.end_date ?? '',
@@ -660,18 +693,42 @@ export default function PreFundingReport() {
       'Fund Amount': filteredFunds.reduce((s, f) => s + f.amount, 0),
       'Total Disbursed': filteredFunds.reduce((s, f) => s + (fundPaidMap.get(f.id) ?? 0), 0),
       'Committed': filteredFunds.reduce((s, f) => s + (f.committed_amount ?? 0), 0),
-      'Available Balance': filteredFunds.reduce((s, f) => s + Math.max(0, f.amount - (fundPaidMap.get(f.id) ?? 0)), 0),
+      'Available Balance': filteredFunds.reduce((s, f) => s + Number(f.available_balance ?? 0), 0),
       'Utilization %': kpis.utilPct,
       'Start Date': '',
       'End Date': '',
       'Created Date': '',
     });
 
-    exportMultiSheetExcel([
-      {
+    const allocationDetailData = filteredAllocations.map(allocation => ({
+      'Fund Name': allocation.fund_name ?? '—',
+      'Staff Name': allocation.user_name ?? '—',
+      Hub: profHubMap.get(allocation.user_id) ?? '—',
+      Currency: allocation.currency,
+      Allocated: Number(allocation.allocated_amount ?? 0),
+      Spent: Number(allocation.spent_amount ?? 0),
+      Remaining: Math.max(
+        0,
+        Number(allocation.allocated_amount ?? 0) - Number(allocation.spent_amount ?? 0),
+      ),
+      Notes: allocation.notes ?? '',
+    }));
+
+    await exportFormattedMultiSheetExcel({
+      reportTitle: 'Pre-Funding Report',
+      subtitleLine: `Scope: ${filteredFunds.length} fund(s) · ${currencyScope}`,
+      metaLine: [
+        statusFilter !== 'all' ? `Status: ${STATUS_CFG[statusFilter]?.label ?? statusFilter}` : 'All statuses',
+        projectFilter !== 'all' ? 'Project filter applied' : 'All projects',
+        fundFilter !== 'all' ? 'Single fund selected' : 'All funds',
+        dateFrom || dateTo ? `Created: ${dateFrom || 'start'} to ${dateTo || 'today'}` : 'All creation dates',
+      ].join(' · '),
+      sheets: [
+        {
         name: 'Summary',
         data: [
           { Metric: 'Report Generated', Value: format(new Date(), 'yyyy-MM-dd HH:mm') },
+          { Metric: 'Currency Scope', Value: currencyScope },
           { Metric: 'Total Funds in View', Value: filteredFunds.length },
           { Metric: 'Active Funds', Value: kpis.activeFunds.length },
           { Metric: 'Total Funded', Value: kpis.totalFunded },
@@ -684,12 +741,20 @@ export default function PreFundingReport() {
         ]
       },
       {
+        name: 'Currency Breakdown',
+        data: currencyBreakdownData,
+      },
+      {
         name: 'Fund Detail',
         data: fundDetailData,
       },
       {
         name: 'Staff Summary',
         data: userSummaryData,
+      },
+      {
+        name: 'Allocation Detail',
+        data: allocationDetailData,
       },
       {
         name: 'Transactions',
@@ -729,8 +794,10 @@ export default function PreFundingReport() {
           'Date Actioned': s.approved_at ? format(parseISO(s.approved_at), 'yyyy-MM-dd HH:mm') : '—',
           Notes: s.notes ?? '',
         }))
-      }
-    ], `PreFunding-Report-${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+      },
+    ],
+      filenamePrefix: 'PreFunding-Report',
+    });
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
