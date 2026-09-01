@@ -1156,7 +1156,7 @@ export default function PreFundingDistribute() {
                 </div>
 
                 {/* KPI mini-row — scoped to current user's allocation when available */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-3">
                   {(myAlloc ? [
                     { label: 'My Allocation', value: formatNumber(myAlloc.allocated_amount, 0), icon: Wallet,       cls: 'text-sky-600' },
                     { label: 'Paid Out',       value: formatNumber(displaySpent, 0),              icon: TrendingDown, cls: displaySpent > myAlloc.allocated_amount ? 'text-rose-600' : 'text-emerald-600' },
@@ -1167,6 +1167,7 @@ export default function PreFundingDistribute() {
                     { label: 'Allocated',      value: formatNumber(totalAllocated, 0),                     icon: Users,        cls: 'text-violet-600' },
                     { label: 'Fund Paid Out',  value: formatNumber(fund.paid_amount, 0),                   icon: TrendingDown, cls: 'text-emerald-600' },
                     { label: 'Fund Available', value: formatNumber(fund.available_balance, 0),             icon: Check,        cls: fund.available_balance <= 0 ? 'text-rose-600' : 'text-teal-600' },
+                    { label: 'Unallocated',     value: formatNumber(unallocatedBudget, 0),                  icon: Layers,       cls: unallocatedBudget <= 0 ? 'text-muted-foreground' : 'text-amber-600' },
                   ]).map(k => (
                     <div key={k.label} className="flex flex-col">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</span>
