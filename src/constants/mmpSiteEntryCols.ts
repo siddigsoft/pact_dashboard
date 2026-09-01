@@ -80,3 +80,22 @@ export const MMP_SITE_ENTRY_LIST_COLS = [
  * (claim / start visit / fee edits) where additional_data must be preserved.
  */
 export const MMP_SITE_ENTRY_DETAIL_COLS = `${MMP_SITE_ENTRY_LIST_COLS}, additional_data, comments, verification_notes, rejection_comments, not_covered_reason, not_covered_reason_other, wfp_rejection_reason, fee_payment_notes`;
+
+/**
+ * SiteVisitContext projection. It deliberately extracts only the JSON keys the
+ * mapper consumes instead of transferring the entire additional_data document.
+ */
+export const MMP_SITE_ENTRY_CONTEXT_COLS = [
+  MMP_SITE_ENTRY_LIST_COLS,
+  'comments',
+  'latitude:additional_data->latitude',
+  'longitude:additional_data->longitude',
+  'arrival_latitude:additional_data->arrival_latitude',
+  'arrival_longitude:additional_data->arrival_longitude',
+  'arrival_timestamp:additional_data->arrival_timestamp',
+  'journey_path:additional_data->journey_path',
+  'arrival_recorded:additional_data->arrival_recorded',
+  'assigned_to:additional_data->assigned_to',
+  'assigned_by:additional_data->assigned_by',
+  'assigned_at:additional_data->assigned_at',
+].join(', ');

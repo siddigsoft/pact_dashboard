@@ -189,6 +189,9 @@ export const DataScopeProvider: FC<{ children: ReactNode }> = ({ children }) => 
       let changed = false;
       const next = new Set(prev);
       fromRoute.forEach((s) => {
+        // Site visits is the app's largest payload. Keep it route-scoped so
+        // its query and Realtime channel are released after leaving field UI.
+        if (s === 'siteVisit') return;
         if (!next.has(s)) {
           next.add(s);
           changed = true;

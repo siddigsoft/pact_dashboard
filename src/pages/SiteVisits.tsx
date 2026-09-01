@@ -14,7 +14,6 @@ import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, Fil
 import { formatDistanceToNow } from 'date-fns';
 import { DataFreshnessBadge } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
-import { useRealtimeSiteVisits } from "@/hooks/use-realtime-site-visits";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -53,14 +52,20 @@ const SiteVisits = () => {
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
   const isColVisible = useColumnVisibility('site-visits');
   const { isSuperAdmin } = useSuperAdmin();
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits, refreshSiteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Real-time subscription for site visits
-  const { lastRefresh, forceRefresh } = useRealtimeSiteVisits();
+  // SiteVisitProvider owns the single Realtime subscription. This page only
+  // tracks freshness and delegates manual refresh to the shared query cache.
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  useEffect(() => setLastRefresh(new Date()), [siteVisits]);
+  const forceRefresh = useCallback(async () => {
+    await refreshSiteVisits?.();
+    setLastRefresh(new Date());
+  }, [refreshSiteVisits]);
   
   const [filteredVisits, setFilteredVisits] = useState<SiteVisit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");

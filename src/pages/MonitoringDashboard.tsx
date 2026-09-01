@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
@@ -70,6 +70,28 @@ interface DashboardAction extends RawAction {
   sender_email?: string | null;
   sender_phone?: string | null;
   mmp_name?: string;
+}
+
+interface MonitoringCursor {
+  createdAt: string;
+  actionId: string;
+}
+
+interface MonitoringPage {
+  actions: DashboardAction[];
+  nextCursor: MonitoringCursor | null;
+}
+
+interface MonitoringStats {
+  total: number;
+  received: number;
+  acted: number;
+  ignored: number;
+  no_response: number;
+  critical: number;
+  acted_today: number;
+  response_rate: number;
+  type_counts: Record<string, { total: number; acted: number; received: number }>;
 }
 
 interface StatusOverrideEntry {
@@ -307,34 +329,33 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const coverageStates         = useMemo(() => [...new Set(coverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort() as string[], [coverageData]);
   const coverageDataCollectors = useMemo(() => [...new Set(coverageData.map(e => e.data_collector_name).filter(d => d && d !== '—'))].sort() as string[], [coverageData]);
 
-  // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
-  const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
-    queryKey: ['/admin/monitoring/actions', filters],
-    queryFn: async () => {
-      // Step 1: Call get_monitoring_actions — paginate past the PostgREST 1000-row default limit
-      const PAGE_SIZE = 1000;
-      const allRows: RawAction[] = [];
-      let pageStart = 0;
+  // ── Fetch bounded pages via the v2 SECURITY DEFINER RPC ───────────────────
+  const ACTION_PAGE_SIZE = 100;
+  const actionsQuery = useInfiniteQuery<MonitoringPage>({
+    queryKey: ['/admin/monitoring/actions-v2', {
+      type: filters.type,
+      from: filters.from,
+      to: filters.to,
+      sender: filters.sender,
+      status: filters.status,
+    }],
+    initialPageParam: null as MonitoringCursor | null,
+    queryFn: async ({ pageParam }) => {
+      const cursor = pageParam as MonitoringCursor | null;
       const rpcArgs = {
         p_type:   filters.type   || null,
         p_from:   filters.from   ? filters.from + 'T00:00:00Z' : null,
         p_to:     filters.to     ? filters.to   + 'T23:59:59Z' : null,
         p_sender: filters.sender || null,
+        p_limit: ACTION_PAGE_SIZE,
+        p_before_created_at: cursor?.createdAt ?? null,
+        p_before_action_id: cursor?.actionId ?? null,
       };
-      while (true) {
-        // eslint-disable-next-line no-await-in-loop
-        const result = await (supabase.rpc('get_monitoring_actions', rpcArgs) as ReturnType<typeof supabase.rpc>)
-          .range(pageStart, pageStart + PAGE_SIZE - 1);
-        const rpcErr = result.error;
-        const page = result.data as RawAction[] | null;
-        if (rpcErr) throw new Error((rpcErr as { message?: string })?.message ?? String(rpcErr));
-        if (!page || page.length === 0) break;
-        allRows.push(...page);
-        if (page.length < PAGE_SIZE) break;
-        pageStart += PAGE_SIZE;
-      }
-      const rows = allRows;
-      if (rows.length === 0) return [];
+      const result = await supabase.rpc('get_monitoring_actions_v2', rpcArgs as never);
+      const rpcErr = result.error;
+      const rows = (result.data ?? []) as RawAction[];
+      if (rpcErr) throw new Error((rpcErr as { message?: string })?.message ?? String(rpcErr));
+      if (rows.length === 0) return { actions: [], nextCursor: null };
 
       // Step 2: Batch-fetch latest awareness overrides via RPC
       const ids = rows.map(r => r.action_id);
@@ -432,13 +453,65 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         : { data: [] as Array<{ id: string; name: string | null }> };
       const mmpNameMap = new Map((mmpFiles ?? []).map(f => [f.id, f.name ?? '—']));
 
-      return merged.map(r => {
+      const actions = merged.map(r => {
         const d = r.details as Record<string, unknown>;
         let mmp_name = '—';
         if (r.action_type === 'mmp_lifecycle') mmp_name = mmpNameMap.get(String(d.id ?? '')) ?? '—';
         else if (r.action_type === 'mmp_site_entry') mmp_name = mmpNameMap.get(String(d.mmp_file_id ?? '')) ?? '—';
         return { ...r, mmp_name };
       }).filter(r => !filters.status || r.dashboard_status === filters.status);
+
+      const last = rows[rows.length - 1];
+      return {
+        actions,
+        nextCursor: rows.length === ACTION_PAGE_SIZE
+          ? { createdAt: last.created_at, actionId: last.action_id }
+          : null,
+      };
+    },
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    retry: 1,
+  });
+
+  const {
+    data: actionPages,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+    refetch,
+    dataUpdatedAt,
+    error,
+  } = actionsQuery;
+
+  const allActions = useMemo(
+    () => actionPages?.pages.flatMap(page => page.actions) ?? [],
+    [actionPages],
+  );
+
+  const { data: monitoringStats } = useQuery<MonitoringStats>({
+    queryKey: ['/admin/monitoring/stats-v2', {
+      type: filters.type,
+      from: filters.from,
+      to: filters.to,
+      sender: filters.sender,
+    }],
+    queryFn: async () => {
+      const { data, error: statsError } = await supabase.rpc('get_monitoring_action_stats_v2', {
+        p_type: filters.type || null,
+        p_from: filters.from ? filters.from + 'T00:00:00Z' : null,
+        p_to: filters.to ? filters.to + 'T23:59:59Z' : null,
+        p_sender: filters.sender || null,
+      } as never);
+      if (statsError) throw statsError;
+      const row = (data as unknown as MonitoringStats[] | null)?.[0];
+      return row ?? {
+        total: 0, received: 0, acted: 0, ignored: 0, no_response: 0,
+        critical: 0, acted_today: 0, response_rate: 0, type_counts: {},
+      };
     },
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -476,7 +549,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   }, []);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  const stats = useMemo(() => {
+  const loadedStats = useMemo(() => {
     const total      = allActions.length;
     const acted      = allActions.filter(a => a.dashboard_status === 'acted').length;
     const ignored    = allActions.filter(a => a.dashboard_status === 'ignored').length;
@@ -488,13 +561,27 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     return { total, acted, ignored, noResponse, received, actedToday, critical, responseRate };
   }, [allActions]);
 
+  const stats = monitoringStats ? {
+    total: monitoringStats.total,
+    acted: monitoringStats.acted,
+    ignored: monitoringStats.ignored,
+    noResponse: monitoringStats.no_response,
+    received: monitoringStats.received,
+    actedToday: monitoringStats.acted_today,
+    critical: monitoringStats.critical,
+    responseRate: monitoringStats.response_rate,
+  } : loadedStats;
+
   const barData = useMemo(() =>
-    ACTION_TYPES.map(at => ({
-      name: at.short,
-      total: allActions.filter(a => a.action_type === at.key).length,
-      acted: allActions.filter(a => a.action_type === at.key && a.dashboard_status === 'acted').length,
-      pending: allActions.filter(a => a.action_type === at.key && a.dashboard_status === 'received').length,
-    })), [allActions]);
+    ACTION_TYPES.map(at => {
+      const server = monitoringStats?.type_counts?.[at.key];
+      return {
+        name: at.short,
+        total: server?.total ?? allActions.filter(a => a.action_type === at.key).length,
+        acted: server?.acted ?? allActions.filter(a => a.action_type === at.key && a.dashboard_status === 'acted').length,
+        pending: server?.received ?? allActions.filter(a => a.action_type === at.key && a.dashboard_status === 'received').length,
+      };
+    }), [allActions, monitoringStats]);
 
   const pieData = useMemo(() => [
     { name: 'Received',    value: stats.received,    fill: '#3b82f6' },
@@ -557,23 +644,11 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         ePage++;
       }
 
-      // Query site_visits via SECURITY DEFINER RPC (direct table query is blocked by RLS)
-      const visitRows: Array<{ status: string | null }> = [];
-      let vPage = 0;
-      while (true) {
-        const { data: vChunk } = await (supabase.rpc('get_monitoring_actions', {
-          p_type: 'site_visit',
-          p_from: null,
-          p_to: null,
-          p_sender: null,
-        }) as ReturnType<typeof supabase.rpc>).range(vPage * 1000, vPage * 1000 + 999);
-        if (!vChunk || vChunk.length === 0) break;
-        for (const r of vChunk as Array<Record<string,unknown>>) {
-          visitRows.push({ status: (r['native_status'] ?? r['status']) as string | null });
-        }
-        if (vChunk.length < 1000) break;
-        vPage++;
-      }
+      // Fetch compact server-side Site Visit counts instead of all visit rows.
+      const { data: visitCountRows, error: visitCountError } = await supabase.rpc(
+        'get_site_visit_pipeline_counts_v2',
+      );
+      if (visitCountError) throw visitCountError;
 
       // Count by normalised status key
       const tally = (rows: Array<{ status: string | null }>) => {
@@ -586,7 +661,10 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       };
 
       const entryCounts = tally(entryRows ?? []);
-      const visitCounts = tally(visitRows ?? []);
+      const visitCounts = new Map<string, number>();
+      for (const row of (visitCountRows ?? []) as Array<{ status: string | null; count: number | string }>) {
+        visitCounts.set(normStatus(row.status ?? ''), Number(row.count));
+      }
 
       // Map stages — also collect counts for unknown statuses so nothing is silently lost
       const entryStages = ENTRY_STAGES.map(s => ({ ...s, count: entryCounts.get(normStatus(s.key)) ?? 0 }));
@@ -595,15 +673,15 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       const knownEntryKeys = new Set(ENTRY_STAGES.map(s => normStatus(s.key)));
       const knownVisitKeys = new Set(VISIT_STAGES.map(s => normStatus(s.key)));
       const otherEntries = (entryRows ?? []).filter(r => !knownEntryKeys.has(normStatus(r.status ?? '')));
-      const otherVisits  = (visitRows ?? []).filter(r => !knownVisitKeys.has(normStatus(r.status ?? '')));
+      const otherVisitStatuses = [...visitCounts.keys()].filter(status => !knownVisitKeys.has(status));
 
       return {
         entryStages,
         visitStages,
         entryTotal: entryRows?.length ?? 0,
-        visitTotal: visitRows?.length ?? 0,
+        visitTotal: [...visitCounts.values()].reduce((sum, count) => sum + count, 0),
         otherEntryStatuses: Array.from(new Set(otherEntries.map(r => r.status))),
-        otherVisitStatuses:  Array.from(new Set(otherVisits.map(r => r.status))),
+        otherVisitStatuses,
       };
     },
     refetchOnWindowFocus: false,
@@ -773,7 +851,10 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-              <span>9 modules · {allActions.length} total actions</span>
+              <span>
+                9 modules · {allActions.length} loaded
+                {stats.total > allActions.length ? ` of ${stats.total} matching actions` : ' actions'}
+              </span>
               {dataUpdatedAt && !isFetching && (
                 <span>· synced {formatDistanceToNow(dataUpdatedAt, { addSuffix: true })}</span>
               )}
@@ -1563,6 +1644,21 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               </div>
             );
           })}
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                data-testid="button-load-more-actions"
+              >
+                {isFetchingNextPage
+                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  : <ChevronDown className="h-4 w-4 mr-2" />}
+                Load 100 more actions
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
