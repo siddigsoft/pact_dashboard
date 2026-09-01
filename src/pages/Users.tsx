@@ -89,6 +89,7 @@ import { useAppContextSelector } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 import RoleBadge from '@/components/user/RoleBadge';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
+import { useLocation as useLocationData } from '@/context/location/LocationContext';
 
 const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
@@ -99,6 +100,7 @@ const Users = () => {
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
   const roles = useAppContextSelector((c) => c.roles);
+  const { hubs, states } = useLocationData();
   
   const isColVisible = useColumnVisibility('users');
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,6 +108,8 @@ const Users = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
   const [classificationMap, setClassificationMap] = useState<Map<string, string>>(new Map());
+  const [hubFilter, setHubFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoadingApproval, setIsLoadingApproval] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -281,6 +285,18 @@ const Users = () => {
       result = result.filter(u => classificationMap.get(u.id) === classificationFilter);
     }
 
+    // Location filters — a secondary hub also counts as assigned to that hub.
+    if (hubFilter === 'none') {
+      result = result.filter(u => !u.hubId && !u.secondaryHubId);
+    } else if (hubFilter !== 'all') {
+      result = result.filter(u => u.hubId === hubFilter || u.secondaryHubId === hubFilter);
+    }
+    if (stateFilter === 'none') {
+      result = result.filter(u => !u.stateId);
+    } else if (stateFilter !== 'all') {
+      result = result.filter(u => u.stateId === stateFilter);
+    }
+
     // Status filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'approved') {
@@ -296,7 +312,7 @@ const Users = () => {
     }
     
     return result;
-  }, [users, activeTab, debouncedSearchQuery, roleFilter, classificationFilter, classificationMap, statusFilter, currentUser]);
+  }, [users, activeTab, debouncedSearchQuery, roleFilter, classificationFilter, classificationMap, hubFilter, stateFilter, statusFilter, currentUser]);
 
   // Fetch all active classifications for the full user list (classification is only
   // loaded on the currentUser object, not on every user in the list)
@@ -348,6 +364,35 @@ const Users = () => {
     });
     return Array.from(rolesSet).sort();
   }, [users]);
+
+  const availableHubs = useMemo(() => {
+    const hubMap = new Map(hubs.map(hub => [hub.id, hub.name]));
+    users.forEach(user => {
+      [user.hubId, user.secondaryHubId].forEach(hubId => {
+        if (hubId && !hubMap.has(hubId)) hubMap.set(hubId, hubId);
+      });
+    });
+    return Array.from(hubMap.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [hubs, users]);
+
+  const availableStates = useMemo(() => {
+    const stateMap = new Map<string, string>();
+    sudanStates.forEach(state => stateMap.set(state.id, state.name));
+    states.forEach(state => stateMap.set(state.id, state.name));
+    users.forEach(user => {
+      if (user.stateId && !stateMap.has(user.stateId)) stateMap.set(user.stateId, user.stateId);
+    });
+    return Array.from(stateMap.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [states, users]);
+
+  const getHubName = (hubId?: string) => {
+    if (!hubId) return '';
+    return availableHubs.find(hub => hub.id === hubId)?.name || hubId;
+  };
 
   const handleRefreshUsers = async () => {
     setIsRefreshing(true);
@@ -1110,6 +1155,30 @@ const Users = () => {
                   data-testid="input-search"
                 />
               </div>
+              <Select value={hubFilter} onValueChange={setHubFilter}>
+                <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-hub">
+                  <SelectValue placeholder="All Hubs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Hubs</SelectItem>
+                  <SelectItem value="none">No Hub</SelectItem>
+                  {availableHubs.map(hub => (
+                    <SelectItem key={hub.id} value={hub.id}>{hub.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={stateFilter} onValueChange={setStateFilter}>
+                <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-state">
+                  <SelectValue placeholder="All States" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All States</SelectItem>
+                  <SelectItem value="none">No State</SelectItem>
+                  {availableStates.map(state => (
+                    <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-role">
                   <SelectValue placeholder="All Roles" />
@@ -1138,12 +1207,18 @@ const Users = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {(searchQuery || roleFilter !== 'all' || classificationFilter !== 'all') && (
+              {(searchQuery || roleFilter !== 'all' || classificationFilter !== 'all' || hubFilter !== 'all' || stateFilter !== 'all') && (
                 <Button 
                   variant="ghost" 
                   size="sm"
                   className="h-9 px-3 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setSearchQuery(''); setRoleFilter('all'); setClassificationFilter('all'); }}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setRoleFilter('all');
+                    setClassificationFilter('all');
+                    setHubFilter('all');
+                    setStateFilter('all');
+                  }}
                   data-testid="button-clear-filters"
                 >
                   <X className="h-3.5 w-3.5 mr-1" />
@@ -1327,7 +1402,7 @@ const Users = () => {
                             )}
                           </div>
                           {user.hubId && (
-                            <p className="text-xs text-muted-foreground mt-0.5">Hub: <span className="font-medium">{user.hubId}</span></p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Hub: <span className="font-medium">{getHubName(user.hubId)}</span></p>
                           )}
                         </div>
                       </div>
