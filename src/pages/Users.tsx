@@ -61,7 +61,8 @@ import {
   Edit2,
   MessageSquare as MessageIcon,
   Calendar as CalendarIcon,
-  MapPin
+  MapPin,
+  FileSpreadsheet
 } from 'lucide-react';
 import {
   Dialog,
@@ -90,6 +91,7 @@ import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 import RoleBadge from '@/components/user/RoleBadge';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 import { useLocation as useLocationData } from '@/context/location/LocationContext';
+import { exportFormattedMultiSheetExcel } from '@/utils/formattedExcelExport';
 
 const STATE_ID_TO_NAME = new Map(sudanStates.map(s => [s.id, s.name]));
 
@@ -116,6 +118,7 @@ const Users = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   
   const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user?: User }>({ open: false });
   const [isSendingReset, setIsSendingReset] = useState(false);
@@ -394,6 +397,44 @@ const Users = () => {
     return availableHubs.find(hub => hub.id === hubId)?.name || hubId;
   };
 
+  const getStateName = (stateId?: string) => {
+    if (!stateId) return '';
+    return availableStates.find(state => state.id === stateId)?.name || stateId;
+  };
+
+  const getClassificationName = (userId: string) => {
+    const level = classificationMap.get(userId);
+    return level ? CLASSIFICATION_LABELS[level as keyof typeof CLASSIFICATION_LABELS] || level : '';
+  };
+
+  const formatExportDate = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  };
+
+  const toExportRow = (user: User, index: number) => ({
+    'No.': index + 1,
+    'User ID': user.id,
+    'Full Name': user.name || '',
+    'Email': user.email || '',
+    'Phone': user.phone || '',
+    'Employee ID': user.employeeId || '',
+    'Primary Role': getPrimaryRoleLabel(user),
+    'Additional Roles': (user.additionalRoles || []).map(role => toDisplayLabel(role.role)).join(', '),
+    'Classification': getClassificationName(user.id),
+    'Hub': getHubName(user.hubId),
+    'Secondary Hub': getHubName(user.secondaryHubId),
+    'State': getStateName(user.stateId),
+    'Locality ID': user.localityId || '',
+    'Account Status': user.isApproved ? 'Active' : 'Pending',
+    'Profile Status': user.profileStatus || '',
+    'Availability': user.availability || '',
+    'Auth Method': getAuthMethod(user) === 'google' ? 'Google' : 'Email/Password',
+    'Created At': formatExportDate(user.createdAt),
+    'Last Active': formatExportDate(user.lastActive),
+  });
+
   const handleRefreshUsers = async () => {
     setIsRefreshing(true);
     try {
@@ -403,6 +444,61 @@ const Users = () => {
       toast({ title: "Refresh failed", description: "Could not refresh users", variant: "destructive" });
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleExportUsers = async () => {
+    if (users.length === 0) {
+      toast({ title: 'No users to export', description: 'Refresh the user directory and try again.', variant: 'destructive' });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const filterSummary = [
+        `Hub: ${hubFilter === 'all' ? 'All' : hubFilter === 'none' ? 'No Hub' : getHubName(hubFilter)}`,
+        `State: ${stateFilter === 'all' ? 'All' : stateFilter === 'none' ? 'No State' : getStateName(stateFilter)}`,
+        `Role: ${roleFilter === 'all' ? 'All' : roleFilter}`,
+        `Classification: ${classificationFilter === 'all' ? 'All' : classificationFilter === 'none' ? 'No Classification' : CLASSIFICATION_LABELS[classificationFilter as keyof typeof CLASSIFICATION_LABELS] || classificationFilter}`,
+        `Search: ${searchQuery.trim() || 'None'}`,
+        `Tab: ${activeTab}`,
+      ].join(' | ');
+
+      await exportFormattedMultiSheetExcel({
+        reportTitle: 'PACT User Directory',
+        subtitleLine: 'Complete user export with roles, access assignments, and location details',
+        metaLine: `Full directory: ${users.length} users | Current view: ${filteredUsers.length} users | ${filterSummary}`,
+        filenamePrefix: 'PACT_User_Directory',
+        sheets: [
+          {
+            name: 'Summary',
+            data: [
+              { Metric: 'Export Scope', Value: 'Full user directory — all users included' },
+              { Metric: 'Total Users', Value: users.length },
+              { Metric: 'Active Users', Value: users.filter(user => user.isApproved).length },
+              { Metric: 'Pending Users', Value: users.filter(user => !user.isApproved).length },
+              { Metric: 'Users Without Hub', Value: users.filter(user => !user.hubId && !user.secondaryHubId).length },
+              { Metric: 'Users Without State', Value: users.filter(user => !user.stateId).length },
+              { Metric: 'Current View Rows', Value: filteredUsers.length },
+              { Metric: 'Current Filters', Value: filterSummary },
+              { Metric: 'Generated At', Value: new Date().toLocaleString() },
+            ],
+          },
+          {
+            name: 'Full User List',
+            data: users.map(toExportRow),
+          },
+          {
+            name: 'Current View',
+            data: filteredUsers.map(toExportRow),
+          },
+        ],
+      });
+      toast({ title: 'User directory exported', description: `Excel file includes all ${users.length} users and the current filtered view.` });
+    } catch (error: any) {
+      toast({ title: 'Export failed', description: error?.message || 'Could not create the Excel file.', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1044,6 +1140,18 @@ const Users = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 px-3 rounded-lg"
+            onClick={handleExportUsers}
+            disabled={isExporting || isInitialLoad}
+            data-testid="button-export-users"
+            title="Export the full user directory to Excel"
+          >
+            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            <span className="hidden sm:inline ml-1.5">{isExporting ? 'Exporting…' : 'Export Excel'}</span>
+          </Button>
           <Button 
             variant="outline" 
             size="icon"
