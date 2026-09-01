@@ -2354,13 +2354,17 @@ class _MMPScreenState extends State<MMPScreen> {
     final locality = site['locality'] ?? 'Unknown';
     final siteType = site['site_type'] ?? site['siteType'] ?? '';
     final hub = site['hub_name'] ?? site['hubName'] ?? site['hub_office'] ?? '';
-    final additionalData = _safeParseAdditionalData(site['additional_data']);
+    final additionalData = _safeParseAdditionalData(
+      site['additional_data'],
+    );
     final activityType =
         site['activity'] ??
         site['main_activity'] ??
         site['activity_at_site'] ??
         additionalData['activity'] ??
         additionalData['main_activity'] ??
+        additionalData['activity_name'] ??
+        additionalData['activity_type'] ??
         '';
     final priority = site['priority'] ?? additionalData['priority'] ?? '';
     final notes =
@@ -6456,6 +6460,7 @@ class _MMPScreenState extends State<MMPScreen> {
       return;
     }
 
+    final additionalData = _safeParseAdditionalData(site['additional_data']);
     final siteVisit = SiteVisit(
       id: site['id']?.toString() ?? '',
       siteName:
@@ -6470,12 +6475,18 @@ class _MMPScreenState extends State<MMPScreen> {
       activity:
           site['activity']?.toString() ??
           site['main_activity']?.toString() ??
+          site['activity_at_site']?.toString() ??
+          additionalData['activity_name']?.toString() ??
+          additionalData['main_activity']?.toString() ??
           '',
       priority: site['priority']?.toString() ?? 'medium',
       notes: site['notes']?.toString() ?? '',
       mainActivity:
           site['main_activity']?.toString() ??
           site['activity']?.toString() ??
+          site['activity_at_site']?.toString() ??
+          additionalData['activity_name']?.toString() ??
+          additionalData['main_activity']?.toString() ??
           '',
       assignedTo:
           site['accepted_by']?.toString() ??

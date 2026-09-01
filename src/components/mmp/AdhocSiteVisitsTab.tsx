@@ -159,6 +159,7 @@ const validateRow = (row: AdhocRow): string[] => {
   const errors: string[] = [];
   if (!row.siteName.trim()) errors.push('Site Name required');
   if (!row.state.trim()) errors.push('State required');
+  if (!row.activityName.trim()) errors.push('Activity required');
   return errors;
 };
 
@@ -338,6 +339,10 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const [loadingMmps, setLoadingMmps] = useState(false);
   const [projectActivities, setProjectActivities] = useState<ProjectActivity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
+  const [showAddActivity, setShowAddActivity] = useState(false);
+  const [newActivityName, setNewActivityName] = useState('');
+  const [newActivityType, setNewActivityType] = useState('field_assessment');
+  const [creatingActivity, setCreatingActivity] = useState(false);
 
   // Create mode
   const [createMode, setCreateMode] = useState<'upload' | 'manual'>('manual');
@@ -705,7 +710,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           (Object.keys(emptyColumnMap()) as (keyof ColumnMap)[]).map(f => [f, autoDetectColumn(headers, f)])
         ) as ColumnMap;
 
-        if (!detected.siteName || !detected.state) {
+        if (!detected.siteName || !detected.state || !detected.activity) {
           setRawFileHeaders(headers);
           setRawFileRows(dataRows);
           setColumnMap(detected);
@@ -721,8 +726,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   };
 
   const applyColumnMap = () => {
-    if (!columnMap.siteName || !columnMap.state) {
-      toast({ title: 'Required fields missing', description: 'Please map Site Name and State before continuing.', variant: 'destructive' });
+    if (!columnMap.siteName || !columnMap.state || !columnMap.activity) {
+      toast({ title: 'Required fields missing', description: 'Please map Site Name, State, and Activity before continuing.', variant: 'destructive' });
       return;
     }
     setUploadedRows(buildRowsFromMap(rawFileHeaders, rawFileRows, columnMap));
@@ -763,6 +768,53 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   };
 
   // ── Manual row helpers ───────────────────────────────────────────────────
+
+  const createProjectActivity = async () => {
+    const title = newActivityName.trim();
+    if (!selectedProjectId) {
+      toast({ title: 'Project required', description: 'Select a project before adding an activity.', variant: 'destructive' });
+      return;
+    }
+    if (!title) {
+      toast({ title: 'Activity name required', variant: 'destructive' });
+      return;
+    }
+
+    setCreatingActivity(true);
+    try {
+      const { data, error } = await supabase
+        .from('project_activities')
+        .insert({
+          project_id: selectedProjectId,
+          title,
+          activity_type: newActivityType,
+          status: 'open',
+        })
+        .select('id, title, activity_type, custom_type_label')
+        .single();
+      if (error) throw error;
+
+      const created = data as ProjectActivity;
+      setProjectActivities(current =>
+        [...current, created].sort((left, right) => left.title.localeCompare(right.title)),
+      );
+      setFormRow(current => ({
+        ...current,
+        activityId: created.id,
+        activityName: created.title,
+        activityType: created.activity_type,
+      }));
+      setNewActivityName('');
+      setNewActivityType('field_assessment');
+      setShowAddActivity(false);
+      toast({ title: 'Activity added', description: `${created.title} is selected for the new site.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not create the activity.';
+      toast({ title: 'Failed to add activity', description: message, variant: 'destructive' });
+    } finally {
+      setCreatingActivity(false);
+    }
+  };
 
   const addManualRow = () => {
     const errors = validateRow(formRow);
@@ -846,6 +898,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           site_code: row.siteCode.trim() || null,
           state: row.state.trim(),
           locality: row.locality.trim() || row.state.trim(),
+          main_activity: row.activityName.trim(),
+          activity_at_site: row.activityType || row.activityName.trim(),
           transport_fee: row.transportFee ? Number(row.transportFee) : null,
           enumerator_fee: calculatedFee ? Number(calculatedFee) : null,
           accepted_by: null,
@@ -998,6 +1052,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           transport_fee: editForm.transport_fee ?? null,
           enumerator_fee: editForm.enumerator_fee ?? null,
           visit_date: editForm.visit_date || null,
+          main_activity: editForm.activity_name || null,
+          activity_at_site: editForm.activity_type || editForm.activity_name || null,
           additional_data: nextAdditionalData,
         })
         .eq('id', editEntry.id);
@@ -1271,7 +1327,20 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                     {/* Activity picker */}
                     <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-xs">Activity</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-xs">Activity *</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] text-teal-700"
+                          disabled={!selectedProjectId}
+                          onClick={() => setShowAddActivity(true)}
+                        >
+                          <PlusCircle className="h-3 w-3 mr-1" />
+                          Add Activity
+                        </Button>
+                      </div>
                       {loadingActivities ? (
                         <div className="h-8 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
                       ) : projectActivities.length > 0 ? (
@@ -1296,7 +1365,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                       ) : !selectedProjectId ? (
                         <div className="h-8 flex items-center text-xs text-muted-foreground">Select a project first</div>
                       ) : (
-                        <div className="h-8 flex items-center text-xs text-muted-foreground">No activities found — type manually below</div>
+                        <div className="min-h-8 flex items-center text-xs text-muted-foreground">
+                          No activities found — add one above or type manually below
+                        </div>
                       )}
                       {/* Free-text fallback */}
                       {(!formRow.activityId) && (
@@ -1361,7 +1432,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
                 <Button size="sm" variant="outline" onClick={addManualRow} className="flex items-center gap-1.5">
                   <PlusCircle className="h-3.5 w-3.5" />
-                  Add Row
+                  Add Site
                 </Button>
 
                 {/* Pending rows */}
@@ -1442,7 +1513,11 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                               <td className="px-2 py-1.5 text-muted-foreground">{row.siteCode}</td>
                               <td className="px-2 py-1.5"><span className={row._errors?.includes('State required') ? 'text-red-500' : ''}>{row.state || <span className="text-red-400 italic">required</span>}</span></td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.locality || '—'}</td>
-                              <td className="px-2 py-1.5 text-muted-foreground">{row.activityName || '—'}</td>
+                              <td className="px-2 py-1.5 text-muted-foreground">
+                                <span className={row._errors?.includes('Activity required') ? 'text-red-500' : ''}>
+                                  {row.activityName || <span className="text-red-400 italic">required</span>}
+                                </span>
+                              </td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.hhTarget || '—'}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.phoneNumber || '—'}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.assignToName || '—'}</td>
@@ -1640,7 +1715,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               { field: 'enumeratorFeeRate' as keyof ColumnMap,label: 'Rate per HH (per_hh)',  required: false },
               { field: 'assignTo' as keyof ColumnMap,         label: 'Assign To',             required: false },
               { field: 'dueDate' as keyof ColumnMap,          label: 'Due Date',            required: false },
-              { field: 'activity' as keyof ColumnMap,         label: 'Activity',            required: false },
+              { field: 'activity' as keyof ColumnMap,         label: 'Activity',            required: true },
               { field: 'hhTarget' as keyof ColumnMap,         label: 'HH Target',           required: false },
               { field: 'hhCompleted' as keyof ColumnMap,      label: 'HH Completed',        required: false },
               { field: 'beneficiaries' as keyof ColumnMap,    label: 'Beneficiaries',       required: false },
@@ -1674,10 +1749,59 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           )}
           <DialogFooter className="shrink-0">
             <Button variant="outline" size="sm" onClick={() => setShowColumnMapper(false)}>Cancel</Button>
-            <Button size="sm" onClick={applyColumnMap} disabled={!columnMap.siteName || !columnMap.state}
+            <Button size="sm" onClick={applyColumnMap} disabled={!columnMap.siteName || !columnMap.state || !columnMap.activity}
               className="bg-teal-600 hover:bg-teal-700 text-white">
               <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
               Apply Mapping
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── ADD PROJECT ACTIVITY ── */}
+      <Dialog open={showAddActivity} onOpenChange={setShowAddActivity}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Project Activity</DialogTitle>
+            <DialogDescription>
+              Create an activity for the selected project, then use it when adding one or more MMP sites.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="adhoc-activity-name">Activity Name *</Label>
+              <Input
+                id="adhoc-activity-name"
+                value={newActivityName}
+                onChange={event => setNewActivityName(event.target.value)}
+                placeholder="e.g. General Food Assistance"
+                disabled={creatingActivity}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Activity Type</Label>
+              <Select value={newActivityType} onValueChange={setNewActivityType} disabled={creatingActivity}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="field_assessment">Field Assessment</SelectItem>
+                  <SelectItem value="monitoring">Monitoring</SelectItem>
+                  <SelectItem value="distribution_monitoring">Distribution Monitoring</SelectItem>
+                  <SelectItem value="post_distribution_monitoring">Post-Distribution Monitoring</SelectItem>
+                  <SelectItem value="market_monitoring">Market Monitoring</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddActivity(false)} disabled={creatingActivity}>
+              Cancel
+            </Button>
+            <Button onClick={createProjectActivity} disabled={creatingActivity || !newActivityName.trim() || !selectedProjectId}>
+              {creatingActivity && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Add and Select Activity
             </Button>
           </DialogFooter>
         </DialogContent>
