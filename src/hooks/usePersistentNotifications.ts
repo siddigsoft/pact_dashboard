@@ -153,46 +153,33 @@ export function usePersistentNotifications() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const channel = supabase
-      .channel(`notifications:${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          const newNotification = payload.new as PersistentNotification;
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          if (newNotification.priority === 'urgent') {
-            setUrgentCount(prev => prev + 1);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          const updatedNotification = payload.new as PersistentNotification;
-          setNotifications(prev => 
-            prev.map(n => n.id === updatedNotification.id ? updatedNotification : n)
-          );
-        }
-      )
-      .subscribe();
+    const handleNotificationChange = (event: Event) => {
+      const { eventType, row } = (event as CustomEvent<{
+        eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+        row: PersistentNotification;
+      }>).detail ?? {};
+      if (!row?.id || row.recipient_id !== currentUser.id) return;
 
+      setNotifications(prev => {
+        if (eventType === 'DELETE') return prev.filter(n => n.id !== row.id);
+        if (eventType === 'UPDATE') return prev.map(n => n.id === row.id ? row : n);
+        if (prev.some(n => n.id === row.id)) return prev;
+        return [row, ...prev].slice(0, 100);
+      });
+
+    };
+
+    window.addEventListener('pact:notification-change', handleNotificationChange);
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('pact:notification-change', handleNotificationChange);
     };
   }, [currentUser?.id]);
+
+  // Keep badges derived from the deduplicated local collection.
+  useEffect(() => {
+    setUnreadCount(notifications.filter(n => n.status !== 'read').length);
+    setUrgentCount(notifications.filter(n => n.priority === 'urgent' && n.status !== 'read').length);
+  }, [notifications]);
 
   const getNotificationsByPriority = useCallback((priority: 'urgent' | 'high' | 'normal') => {
     return notifications.filter(n => n.priority === priority);

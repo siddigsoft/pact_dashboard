@@ -13,6 +13,7 @@ import { normalizeRole } from '@/utils/roleMapping';
 import { dispatchNotification } from '@/lib/notify';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { provisionProjectChat, syncProjectChatParticipants } from '@/hooks/use-project-chat';
+import { useIsDataScopeActive } from '@/context/DataScopeContext';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -102,8 +103,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const queryClient = useQueryClient();
 
   const { currentUser, roles: userRoles } = useUser();
+  const projectScopeActive = useIsDataScopeActive('project');
 
-  const projectsQuery = useProjectsQuery(!!currentUser);
+  const projectsQuery = useProjectsQuery(!!currentUser && projectScopeActive);
   const allProjects = projectsQuery.data ?? [];
   const loading = projectsQuery.isLoading;
 
@@ -158,7 +160,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Also invalidate per-project activities queries so the Activity Timeline
     // reflects deletes/inserts without waiting for stale-time to expire.
     queryClient.invalidateQueries({ queryKey: ['projects', 'activities'] });
-  });
+  }, { enabled: !!currentUser && projectScopeActive });
 
   const addProject = async (project: Project): Promise<Project | null> => {
     const session = await ensureValidSession();

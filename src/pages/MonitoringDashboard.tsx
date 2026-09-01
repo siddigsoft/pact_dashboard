@@ -266,17 +266,9 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     staleTime: 5 * 60 * 1000,   // 5 min — prevents refetch on every remount/HMR
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const BATCH = 1000;
-      let all: Record<string, unknown>[] = [];
-      let offset = 0;
-      while (true) {
-        const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(offset, offset + BATCH - 1);
-        if (error) { console.error('[MonCoverage] RPC error:', error); break; }
-        if (!data || (data as unknown[]).length === 0) break;
-        all = all.concat(data as Record<string, unknown>[]);
-        if ((data as unknown[]).length < BATCH) break;
-        offset += BATCH;
-      }
+      const { data, error } = await (supabase as any).rpc('get_advance_coverage_data_v2');
+      if (error) throw error;
+      const all = Array.isArray(data) ? data as Record<string, unknown>[] : [];
       return all.map((r) => ({
         id:                   String(r.entry_id ?? ''),
         site_name:            String(r.site_name ?? '—'),

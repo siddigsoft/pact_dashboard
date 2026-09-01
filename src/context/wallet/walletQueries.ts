@@ -257,53 +257,53 @@ async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<S
 
 const STALE_MS = 30 * 1000;
 
-export function useWalletQuery(userId: string | undefined) {
+export function useWalletQuery(userId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: walletQueryKeys.wallet(userId!),
     queryFn: () => fetchWallet(userId!),
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
-    enabled: !!userId,
+    enabled: !!userId && enabled,
   });
 }
 
-export function useTransactionsQuery(userId: string | undefined) {
+export function useTransactionsQuery(userId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: walletQueryKeys.transactions(userId!),
     queryFn: () => fetchTransactions(userId!),
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
-    enabled: !!userId,
+    enabled: !!userId && enabled,
   });
 }
 
-export function useWithdrawalRequestsQuery(userId: string | undefined) {
+export function useWithdrawalRequestsQuery(userId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: walletQueryKeys.withdrawalRequests(userId!),
     queryFn: () => fetchWithdrawalRequests(userId!),
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
-    enabled: !!userId,
+    enabled: !!userId && enabled,
   });
 }
 
-export function useDisbursedAdvanceRequestIdsQuery(userId: string | undefined) {
+export function useDisbursedAdvanceRequestIdsQuery(userId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: walletQueryKeys.disbursedAdvanceRequestIds(userId!),
     queryFn: () => fetchDisbursedAdvanceRequestIds(userId!),
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
-    enabled: !!userId,
+    enabled: !!userId && enabled,
   });
 }
 
-export function useSupervisedWithdrawalRequestsQuery(user: UserForWallet | null) {
+export function useSupervisedWithdrawalRequestsQuery(user: UserForWallet | null, scopeEnabled = true) {
   const userRole = user?.role?.toLowerCase();
   const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
   // Also enable if this user has Supervisor assigned as an additional role
   const hasAdditionalSupervisor = getAdditionalSupervisorHubs(user ?? { id: '' }).length > 0;
-  const enabled = !!user?.id && (isSupervisorRole || isAdmin || hasAdditionalSupervisor);
+  const enabled = scopeEnabled && !!user?.id && (isSupervisorRole || isAdmin || hasAdditionalSupervisor);
 
   return useQuery({
     queryKey: walletQueryKeys.supervisedWithdrawalRequests(user?.id ?? ''),

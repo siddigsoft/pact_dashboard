@@ -140,7 +140,6 @@ export const useLocationProvider = () => {
 
   // Automatic background refresh when app becomes visible
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
     let visibilityTimeout: NodeJS.Timeout | null = null;
 
     const handleVisibilityChange = () => {
@@ -160,27 +159,10 @@ export const useLocationProvider = () => {
       refreshLocationData();
     };
 
-    // Set up periodic background refresh (every 60 seconds when app is visible)
-    const startPeriodicRefresh = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-      
-      intervalId = setInterval(() => {
-        if (document.visibilityState === 'visible' && navigator.onLine) {
-          refreshLocationData();
-        }
-      }, 60000); // 60 seconds (location data changes less frequently)
-    };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('online', handleOnline);
-    startPeriodicRefresh();
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
       if (visibilityTimeout) {
         clearTimeout(visibilityTimeout);
       }

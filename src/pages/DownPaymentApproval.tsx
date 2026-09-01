@@ -746,13 +746,15 @@ export default function DownPaymentApproval() {
       });
       toast({ title: 'Payment recorded', description: `${partialAmt.toLocaleString()} SDG was recorded with its selected Pre-Fund.` });
       setPartialPayDialog({ open: false, req: null, partialAmount: '', saving: false, preFundId: '', preFunds: [] });
-      window.location.reload();
+      // Refresh only the down-payment query cache. A full page reload restarts
+      // every page-level query and realtime subscription after each payment.
+      await refreshRequests();
     } catch (err: any) {
       toast({ title: 'Failed', description: err.message || 'Could not save partial payment.', variant: 'destructive' });
     } finally {
       setPartialPayDialog(p => ({ ...p, saving: false }));
     }
-  }, [partialPayDialog, currentUser, toast]);
+  }, [partialPayDialog, currentUser, refreshRequests, toast]);
 
   const openPreFundCorrectionDialog = useCallback(async (evidence: PaymentEvidence) => {
     if (!isFinanceAdmin || !evidence.isCorrectable) return;
@@ -960,19 +962,12 @@ export default function DownPaymentApproval() {
   type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; locality_name: string; mmp_name: string; advance_status: string | null; data_collector_name: string };
   const { data: siteCoverageData = [], isLoading: coverageLoading } = useQuery<SiteCovEntry[]>({
     queryKey: ['dp-site-coverage'],
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const BATCH = 1000;
-      let all: Record<string, unknown>[] = [];
-      let offset = 0;
-      while (true) {
-        const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(offset, offset + BATCH - 1);
-        if (error) { console.error('[Coverage] RPC error:', error); break; }
-        if (!data || (data as unknown[]).length === 0) break;
-        all = all.concat(data as Record<string, unknown>[]);
-        if ((data as unknown[]).length < BATCH) break;
-        offset += BATCH;
-      }
+      const { data, error } = await (supabase as any).rpc('get_advance_coverage_data_v2');
+      if (error) throw error;
+      const all = Array.isArray(data) ? data as Record<string, unknown>[] : [];
       return all.map((r) => ({
         id:                   String(r.entry_id ?? ''),
         site_name:            String(r.site_name ?? '—'),

@@ -138,26 +138,10 @@ export function useNavBadgeCounts({
           pendingVerification: num('pendingVerification'),
           pendingWallet: num('pendingWallet'),
           pendingReclaimCount: num('pendingReclaimCount'),
-          myTasksOverdue: 0,
+          myTasksOverdue: num('myTasksOverdue'),
           pendingWithdrawals: num('pendingWithdrawals'),
           pendingFinanceWithdrawals: num('pendingFinanceWithdrawals'),
         };
-        // My Tasks overdue: personal + project tasks — runs client-side for all users
-        const today = new Date().toISOString().split('T')[0];
-        const [{ count: personalOverdue }, { count: projectOverdue }] = await Promise.all([
-          supabase
-            .from('personal_tasks')
-            .select('id', { count: 'exact', head: true })
-            .not('status', 'in', '("done","cancelled")')
-            .lt('due_date', today),
-          supabase
-            .from('project_field_tasks')
-            .select('id', { count: 'exact', head: true })
-            .eq('assigned_to', currentUserId)
-            .not('status', 'in', '("done","cancelled")')
-            .lt('due_date', today),
-        ]);
-        fromRpc.myTasksOverdue = (personalOverdue ?? 0) + (projectOverdue ?? 0);
         if (gen === genRef.current) {
           setCounts(fromRpc);
         }
@@ -385,6 +369,7 @@ export function useNavBadgeCounts({
   }, [
     currentUserId,
     hubId,
+    secondaryHubId,
     roleIsSupervisor,
     roleIsFinance,
     roleIsCoordinator,
