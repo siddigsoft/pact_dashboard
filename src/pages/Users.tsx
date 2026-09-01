@@ -488,24 +488,9 @@ const Users = () => {
       const sortedLocationEntries = <T,>(entries: Map<string, T>, getName: (key: string) => string) =>
         Array.from(entries.keys()).sort((a, b) => getName(a).localeCompare(getName(b)));
 
-      const locationSummary: Record<string, string | number>[] = [];
-      const addLocationSummaryRow = (
-        level: 'Hub' | 'State' | 'Locality',
-        hubName: string,
-        stateName: string,
-        localityName: string,
-        counts: LocationCount,
-      ) => {
-        locationSummary.push({
-          Level: level,
-          Hub: hubName,
-          State: stateName,
-          Locality: localityName,
-          'Total Users': counts.total,
-          'Active Users': counts.active,
-          'Pending Users': counts.pending,
-        });
-      };
+      const hubSummary: Record<string, string | number>[] = [];
+      const stateSummary: Record<string, string | number>[] = [];
+      const localitySummary: Record<string, string | number>[] = [];
 
       const allHubIds = new Set<string>([
         ...hubs.map(hub => hub.id),
@@ -518,7 +503,13 @@ const Users = () => {
       )
         .forEach(hubId => {
           const hubName = hubId === '__none__' ? 'No Hub' : getHubName(hubId);
-          addLocationSummaryRow('Hub', hubName, '', '', hubCounts.get(hubId) || emptyLocationCount());
+          const hubCount = hubCounts.get(hubId) || emptyLocationCount();
+          hubSummary.push({
+            Hub: hubName,
+            'Total Users': hubCount.total,
+            'Active Users': hubCount.active,
+            'Pending Users': hubCount.pending,
+          });
 
           const configuredStateKeys = hubStates
             .filter(hubState => hubState.hub_id === hubId)
@@ -540,20 +531,29 @@ const Users = () => {
           ).forEach(stateKey => {
             const stateId = stateKey.slice(`${hubId}|`.length);
             const stateName = stateId === '__none__' ? 'No State' : getStateName(stateId);
-            addLocationSummaryRow('State', hubName, stateName, '', stateCounts.get(stateKey) || emptyLocationCount());
+            const stateCount = stateCounts.get(stateKey) || emptyLocationCount();
+            stateSummary.push({
+              Hub: hubName,
+              State: stateName,
+              'Total Users': stateCount.total,
+              'Active Users': stateCount.active,
+              'Pending Users': stateCount.pending,
+            });
 
             sortedLocationEntries(
               new Map(Array.from(localityCounts.entries()).filter(([key]) => key.startsWith(`${stateKey}|`))),
               key => getLocalityName(key.slice(`${stateKey}|`.length)),
             ).forEach(localityKey => {
               const localityId = localityKey.slice(`${stateKey}|`.length);
-              addLocationSummaryRow(
-                'Locality',
-                hubName,
-                stateName,
-                getLocalityName(localityId),
-                localityCounts.get(localityKey) || emptyLocationCount(),
-              );
+              const localityCount = localityCounts.get(localityKey) || emptyLocationCount();
+              localitySummary.push({
+                Hub: hubName,
+                State: stateName,
+                Locality: getLocalityName(localityId),
+                'Total Users': localityCount.total,
+                'Active Users': localityCount.active,
+                'Pending Users': localityCount.pending,
+              });
             });
           });
         });
@@ -584,14 +584,22 @@ const Users = () => {
               { Metric: 'Users Without State', Value: users.filter(user => !user.stateId).length },
               { Metric: 'Current View Rows', Value: filteredUsers.length },
               { Metric: 'Current Filters', Value: filterSummary },
-              { Metric: 'Location Summary', Value: 'See the Location Summary sheet for Hub → State → Locality totals' },
+              { Metric: 'Location Summaries', Value: 'See Hub Summary, State Summary, and Locality Summary sheets' },
               { Metric: 'Location Rollup Basis', Value: 'Primary Hub assignment; secondary hubs remain listed in Full User List' },
               { Metric: 'Generated At', Value: new Date().toLocaleString() },
             ],
           },
           {
-            name: 'Location Summary',
-            data: locationSummary,
+            name: 'Hub Summary',
+            data: hubSummary,
+          },
+          {
+            name: 'State Summary',
+            data: stateSummary,
+          },
+          {
+            name: 'Locality Summary',
+            data: localitySummary,
           },
           {
             name: 'Full User List',
