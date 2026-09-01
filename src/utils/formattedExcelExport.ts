@@ -313,7 +313,7 @@ const AMOUNT_HEADER_PATTERN =
   /amount|funded|disbursed|committed|balance|allocated|spent|remaining|paid|available|unallocated|transaction total/i;
 const PERCENT_HEADER_PATTERN = /%|utilization/i;
 const INTEGER_HEADER_PATTERN =
-  /count|step #|record #|^no\.?$|funds in view|active funds|total funds|total transactions|allocated staff|reconciled|unreconciled|records/i;
+  /count|step #|record #|^no\.?$|funds in view|active funds|total funds|total transactions|allocated staff|reconciled|unreconciled|records|total users|active users|pending users|users without|view rows|rows/i;
 const MONEY_FORMAT = '#,##0.00;[Red]-#,##0.00';
 const INTEGER_FORMAT = '#,##0';
 const PERCENT_FORMAT = '0.0"%"';

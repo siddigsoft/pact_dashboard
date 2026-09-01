@@ -102,7 +102,7 @@ const Users = () => {
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
   const roles = useAppContextSelector((c) => c.roles);
-  const { hubs, states } = useLocationData();
+  const { hubs, states, localities, hubStates } = useLocationData();
   
   const isColVisible = useColumnVisibility('users');
   const [searchQuery, setSearchQuery] = useState('');
@@ -455,6 +455,109 @@ const Users = () => {
 
     setIsExporting(true);
     try {
+      type LocationCount = { total: number; active: number; pending: number };
+      const emptyLocationCount = (): LocationCount => ({ total: 0, active: 0, pending: 0 });
+      const hubCounts = new Map<string, LocationCount>();
+      const stateCounts = new Map<string, LocationCount>();
+      const localityCounts = new Map<string, LocationCount>();
+
+      const addLocationCount = (map: Map<string, LocationCount>, key: string, user: User) => {
+        const count = map.get(key) || emptyLocationCount();
+        count.total += 1;
+        if (user.isApproved) count.active += 1;
+        else count.pending += 1;
+        map.set(key, count);
+      };
+
+      users.forEach(user => {
+        // Rollups use the primary hub assignment so users with a secondary hub
+        // are not counted twice in the location totals.
+        const hubId = user.hubId || '__none__';
+        const stateId = user.stateId || '__none__';
+        const localityId = user.localityId || '__none__';
+        addLocationCount(hubCounts, hubId, user);
+        addLocationCount(stateCounts, `${hubId}|${stateId}`, user);
+        addLocationCount(localityCounts, `${hubId}|${stateId}|${localityId}`, user);
+      });
+
+      const getLocalityName = (localityId: string) => {
+        if (localityId === '__none__') return 'No Locality';
+        return localities.find(locality => locality.id === localityId)?.name || localityId;
+      };
+
+      const sortedLocationEntries = <T,>(entries: Map<string, T>, getName: (key: string) => string) =>
+        Array.from(entries.keys()).sort((a, b) => getName(a).localeCompare(getName(b)));
+
+      const locationSummary: Record<string, string | number>[] = [];
+      const addLocationSummaryRow = (
+        level: 'Hub' | 'State' | 'Locality',
+        hubName: string,
+        stateName: string,
+        localityName: string,
+        counts: LocationCount,
+      ) => {
+        locationSummary.push({
+          Level: level,
+          Hub: hubName,
+          State: stateName,
+          Locality: localityName,
+          'Total Users': counts.total,
+          'Active Users': counts.active,
+          'Pending Users': counts.pending,
+        });
+      };
+
+      const allHubIds = new Set<string>([
+        ...hubs.map(hub => hub.id),
+        ...hubCounts.keys(),
+      ]);
+
+      sortedLocationEntries(
+        new Map(Array.from(allHubIds).map(hubId => [hubId, hubCounts.get(hubId) || emptyLocationCount()])),
+        hubId => getHubName(hubId === '__none__' ? undefined : hubId),
+      )
+        .forEach(hubId => {
+          const hubName = hubId === '__none__' ? 'No Hub' : getHubName(hubId);
+          addLocationSummaryRow('Hub', hubName, '', '', hubCounts.get(hubId) || emptyLocationCount());
+
+          const configuredStateKeys = hubStates
+            .filter(hubState => hubState.hub_id === hubId)
+            .map(hubState => `${hubId}|${hubState.state_id}`);
+          const allStateKeys = new Set<string>([
+            ...stateCounts.keys(),
+            ...configuredStateKeys,
+          ].filter(key => key.startsWith(`${hubId}|`)));
+
+          sortedLocationEntries(
+            new Map(Array.from(allStateKeys).map(stateKey => [
+              stateKey,
+              stateCounts.get(stateKey) || emptyLocationCount(),
+            ])),
+            key => {
+              const stateId = key.slice(`${hubId}|`.length);
+              return getStateName(stateId === '__none__' ? undefined : stateId);
+            },
+          ).forEach(stateKey => {
+            const stateId = stateKey.slice(`${hubId}|`.length);
+            const stateName = stateId === '__none__' ? 'No State' : getStateName(stateId);
+            addLocationSummaryRow('State', hubName, stateName, '', stateCounts.get(stateKey) || emptyLocationCount());
+
+            sortedLocationEntries(
+              new Map(Array.from(localityCounts.entries()).filter(([key]) => key.startsWith(`${stateKey}|`))),
+              key => getLocalityName(key.slice(`${stateKey}|`.length)),
+            ).forEach(localityKey => {
+              const localityId = localityKey.slice(`${stateKey}|`.length);
+              addLocationSummaryRow(
+                'Locality',
+                hubName,
+                stateName,
+                getLocalityName(localityId),
+                localityCounts.get(localityKey) || emptyLocationCount(),
+              );
+            });
+          });
+        });
+
       const filterSummary = [
         `Hub: ${hubFilter === 'all' ? 'All' : hubFilter === 'none' ? 'No Hub' : getHubName(hubFilter)}`,
         `State: ${stateFilter === 'all' ? 'All' : stateFilter === 'none' ? 'No State' : getStateName(stateFilter)}`,
@@ -481,8 +584,14 @@ const Users = () => {
               { Metric: 'Users Without State', Value: users.filter(user => !user.stateId).length },
               { Metric: 'Current View Rows', Value: filteredUsers.length },
               { Metric: 'Current Filters', Value: filterSummary },
+              { Metric: 'Location Summary', Value: 'See the Location Summary sheet for Hub → State → Locality totals' },
+              { Metric: 'Location Rollup Basis', Value: 'Primary Hub assignment; secondary hubs remain listed in Full User List' },
               { Metric: 'Generated At', Value: new Date().toLocaleString() },
             ],
+          },
+          {
+            name: 'Location Summary',
+            data: locationSummary,
           },
           {
             name: 'Full User List',
