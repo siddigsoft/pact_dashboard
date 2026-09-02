@@ -24,6 +24,7 @@ import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { insertNotifications } from '@/services/mmpActions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadSiteVisitPhoto } from '@/lib/r2Storage';
 import {
   MMP_SITE_ENTRY_DETAIL_COLS,
   MMP_SITE_ENTRY_LIST_COLS,
@@ -1489,19 +1490,19 @@ const MMP = () => {
       const now = new Date().toISOString();
       const isOnline = navigator.onLine;
 
-      // Upload photos to Supabase storage (or queue for offline)
+      // Upload photos to Cloudflare R2 (or queue for offline)
       console.log('📸 Processing photos...');
       const photoUrls: string[] = [];
-      
+      const photoKeys: string[] = [];
+
       if (isOnline) {
         // Online: Upload photos immediately
         for (const photo of reportData.photos) {
-          const fileName = `visit-photos/${site.id}/${Date.now()}-${photo.name}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('site-visit-photos')
-            .upload(fileName, photo);
-
-          if (uploadError) {
+          try {
+            const { ref, key } = await uploadSiteVisitPhoto(photo, site.id);
+            photoUrls.push(ref);
+            photoKeys.push(key);
+          } catch (uploadError) {
             console.error('❌ Error uploading photo:', uploadError);
             // If upload fails, queue it for offline sync
             try {
@@ -1514,16 +1515,6 @@ const MMP = () => {
             } catch (queueError) {
               console.error('Failed to queue photo for offline upload:', queueError);
             }
-            continue;
-          }
-
-          // Get public URL
-          const { data: urlData } = supabase.storage
-            .from('site-visit-photos')
-            .getPublicUrl(fileName);
-
-          if (urlData?.publicUrl) {
-            photoUrls.push(urlData.publicUrl);
           }
         }
         console.log('✅ Photos uploaded:', photoUrls.length);
@@ -1600,10 +1591,10 @@ const MMP = () => {
         if (photoUrls.length > 0) {
           console.log('📎 Linking photos to report...');
           // Match mobile column names: report_id, photo_url, storage_path, is_synced
-          const reportPhotos = photoUrls.map((photoUrl) => ({
+          const reportPhotos = photoUrls.map((photoUrl, i) => ({
             report_id: report.id,
             photo_url: photoUrl,
-            storage_path: photoUrl,
+            storage_path: photoKeys[i] || photoUrl,
             is_synced: true,
           }));
 

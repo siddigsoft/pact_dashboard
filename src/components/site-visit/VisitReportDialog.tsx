@@ -5,6 +5,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X, ShoppingCart, ClipboardList, Warehouse } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadSiteVisitPhoto } from '@/lib/r2Storage';
+import { StoredFileImage } from '@/components/shared/StoredFileImage';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
 import { isPdmActivity, isMdmRequired, isWhmRequired, isDmActivity, isAimActivity, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
@@ -420,7 +422,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     if (photo instanceof File) {
       return URL.createObjectURL(photo);
     }
-    return photo; // It's already a URL string
+    return photo;
   };
 
   // Get all photos (both draft URLs and new File uploads) for display
@@ -652,49 +654,13 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         // Only upload if it's a File object (new photo)
         // Photos loaded from draft URLs are already in draftPhotoUrls, so we skip re-uploading them
         if (photo instanceof File) {
-          const fileName = `draft-photos/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
-          
           try {
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('site-visit-photos')
-              .upload(fileName, photo);
-
-            if (uploadError) {
-              console.error('Error uploading draft photo:', uploadError);
-              
-              // If file already exists, try to get its public URL
-              if (uploadError.message?.includes('already exists') || uploadError.message?.includes('duplicate')) {
-                const { data: urlData } = supabase.storage
-                  .from('site-visit-photos')
-                  .getPublicUrl(fileName);
-                if (urlData?.publicUrl && !photoUrls.includes(urlData.publicUrl)) {
-                  photoUrls.push(urlData.publicUrl);
-                }
-                continue;
-              }
-              
-              if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
-                toast({
-                  title: 'Storage Bucket Not Found',
-                  description: 'The storage bucket has not been created.',
-                  variant: 'destructive'
-                });
-                // Continue saving other data even if photo upload fails
-                continue;
-              }
-              continue;
-            }
-
-            const { data: urlData } = supabase.storage
-              .from('site-visit-photos')
-              .getPublicUrl(fileName);
-
-            if (urlData?.publicUrl && !photoUrls.includes(urlData.publicUrl)) {
-              photoUrls.push(urlData.publicUrl);
+            const { ref } = await uploadSiteVisitPhoto(photo, site.id);
+            if (!photoUrls.includes(ref)) {
+              photoUrls.push(ref);
             }
           } catch (photoError) {
             console.error('Error processing draft photo:', photoError);
-            // Continue with other photos
           }
         }
       }
@@ -1164,11 +1130,19 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                 <div className="grid grid-cols-3 gap-3">
                   {getAllPhotos().map((photo, index) => (
                     <div key={index} className="relative group">
-                      <img
-                        src={getPhotoSrc(photo)}
-                        alt={`Site photo ${index + 1}`}
-                        className="w-full h-20 object-cover rounded-xl"
-                      />
+                      {photo instanceof File ? (
+                        <img
+                          src={getPhotoSrc(photo)}
+                          alt={`Site photo ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-xl"
+                        />
+                      ) : (
+                        <StoredFileImage
+                          src={photo}
+                          alt={`Site photo ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-xl"
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => removePhoto(index)}

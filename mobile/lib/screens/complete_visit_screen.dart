@@ -24,6 +24,7 @@ import '../services/offline/models.dart';
 import '../services/local_storage_service.dart';
 import '../services/visit_location_settings.dart';
 import '../services/notification_trigger_service.dart';
+import '../services/r2_storage_service.dart';
 import '../widgets/reusable_app_bar.dart';
 
 class CompleteVisitScreen extends ConsumerStatefulWidget {
@@ -235,10 +236,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       }
     }
   }
-
-  // Storage bucket configured in Supabase migrations:
-  // supabase/migrations/20250127_add_site_visit_photos_bucket.sql
-  static const String _reportPhotosBucket = 'site-visit-photos';
 
   @override
   void initState() {
@@ -958,16 +955,12 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
       final reportId = reportResponse['id'] as String;
 
-      // 2. Upload photos and create report_photos entries
+      // 2. Upload photos to Cloudflare R2 and create report_photos entries
       for (int i = 0; i < _photos.length; i++) {
         final photo = _photos[i];
-        // Keep folder layout consistent with web app docs:
-        // reports/{site_id}/...
         final fileName =
             '${DateTime.now().millisecondsSinceEpoch}-$i-${photo.name}';
-        final storagePath = 'reports/${widget.visit.id}/$fileName';
 
-        // Upload to storage
         Uint8List bytes;
         if (kIsWeb) {
           bytes = await photo.readAsBytes();
@@ -975,34 +968,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           bytes = await File(photo.path).readAsBytes();
         }
 
-        try {
-          await supabase.storage
-              .from(_reportPhotosBucket)
-              .uploadBinary(
-                storagePath,
-                bytes,
-                fileOptions: const FileOptions(
-                  contentType: 'image/jpeg',
-                  upsert: true,
-                ),
-              );
-        } on StorageException catch (e) {
-          // Make the bucket setup issue crystal clear.
-          if (e.statusCode == 404 ||
-              e.message.toLowerCase().contains('bucket not found')) {
-            throw Exception(
-              'Storage bucket "$_reportPhotosBucket" not found in Supabase. Create it (Storage → Buckets) or run the migration that adds it, then retry.',
-            );
-          }
-          rethrow;
-        }
+        final photoUrl = await R2StorageService.uploadBytes(
+          bytes: bytes,
+          fileName: fileName,
+          folderPath: 'SiteVisits/${widget.visit.id}',
+        );
+        final storagePath = R2StorageService.parseRef(photoUrl) ?? photoUrl;
 
-        // Get public URL
-        final photoUrl = supabase.storage
-            .from(_reportPhotosBucket)
-            .getPublicUrl(storagePath);
-
-        // Create report_photos entry
         await supabase.from('report_photos').insert({
           'report_id': reportId,
           'photo_url': photoUrl,

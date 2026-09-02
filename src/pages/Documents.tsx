@@ -95,6 +95,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { safeUploadFile } from '@/lib/safeUpload';
+import { openStoredFile } from '@/lib/r2Storage';
+import { StoredFileImage } from '@/components/shared/StoredFileImage';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { DocumentIndexService } from '@/services/document-index.service';
@@ -1809,7 +1811,7 @@ const DocumentsPage = () => {
     }
     
     if (doc.fileUrl) {
-      window.open(doc.fileUrl, '_blank');
+      void openStoredFile(doc.fileUrl);
     } else {
       toast({
         title: 'Document unavailable',
@@ -3135,7 +3137,7 @@ const DocumentsPage = () => {
                             onClick={() => handleViewDocument(photo)}
                             className="group rounded-md border border-border overflow-hidden text-left"
                           >
-                            <img
+                            <StoredFileImage
                               src={photo.fileUrl}
                               alt={photo.fileName}
                               className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
@@ -3666,7 +3668,7 @@ const DocumentsPage = () => {
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Main Photo Display */}
                 <div className="relative flex-1 min-h-[250px] max-h-[50vh] flex items-center justify-center bg-muted/30 rounded-lg overflow-hidden">
-                  <img
+                  <StoredFileImage
                     src={viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileUrl}
                     alt={viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileName || 'Site photo'}
                     className="max-w-full max-h-full object-contain"
@@ -3714,7 +3716,10 @@ const DocumentsPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileUrl, '_blank')}
+                      onClick={() => {
+                        const url = viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileUrl;
+                        if (url) void openStoredFile(url);
+                      }}
                     >
                       <ExternalLink className="h-4 w-4 mr-1" />
                       Open
@@ -3734,7 +3739,7 @@ const DocumentsPage = () => {
                           idx === viewingSitePhotoIndex ? 'border-primary' : 'border-transparent hover:border-muted-foreground/50'
                         }`}
                       >
-                        <img
+                        <StoredFileImage
                           src={photo.fileUrl}
                           alt={photo.fileName}
                           className="w-full h-full object-cover"

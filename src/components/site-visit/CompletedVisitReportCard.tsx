@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { openStoredFile } from '@/lib/r2Storage';
+import { StoredFileImage } from '@/components/shared/StoredFileImage';
 import { 
   Camera, 
   Clock, 
@@ -313,7 +315,7 @@ export const CompletedVisitReportCard: React.FC<CompletedVisitReportCardProps> =
                     className="relative aspect-square rounded-lg overflow-hidden hover-elevate cursor-pointer group"
                     data-testid={`photo-thumbnail-${index}`}
                   >
-                    <img
+                    <StoredFileImage
                       src={photo.photo_url}
                       alt={`Visit photo ${index + 1}`}
                       className="w-full h-full object-cover"
@@ -344,18 +346,14 @@ export const CompletedVisitReportCard: React.FC<CompletedVisitReportCardProps> =
                   <Button
                     variant="outline"
                     size="sm"
-                    asChild
+                    onClick={() => {
+                      const url = photos[selectedPhotoIndex]?.photo_url;
+                      if (url) void openStoredFile(url);
+                    }}
                     data-testid="button-download-photo"
                   >
-                    <a
-                      href={photos[selectedPhotoIndex].photo_url}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </a>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
                   </Button>
                 )}
                 <Button
@@ -371,7 +369,7 @@ export const CompletedVisitReportCard: React.FC<CompletedVisitReportCardProps> =
           </DialogHeader>
           <div className="relative flex items-center justify-center bg-black/90 min-h-[60vh]">
             {selectedPhotoIndex !== null && photos[selectedPhotoIndex] && (
-              <img
+              <StoredFileImage
                 src={photos[selectedPhotoIndex].photo_url}
                 alt={`Visit photo ${selectedPhotoIndex + 1}`}
                 className="max-h-[70vh] max-w-full object-contain"

@@ -104,6 +104,18 @@ export function parseR2Ref(url: string): string | null {
   return url.startsWith(R2_REF_PREFIX) ? url.slice(R2_REF_PREFIX.length) : null;
 }
 
+/** Upload a completed-site photo. Returns the r2: ref to persist (photo_url). */
+export async function uploadSiteVisitPhoto(file: File, siteId: string): Promise<{ key: string; ref: string }> {
+  const { key } = await r2Upload(file, { folderPath: `SiteVisits/${siteId}` });
+  return { key, ref: toR2Ref(key) };
+}
+
+/** Resolve an r2: ref to a short-lived GET URL; leave legacy public URLs unchanged. */
+export async function resolveStoredFileUrl(url: string): Promise<string> {
+  const key = parseR2Ref(url);
+  return key ? r2SignedUrl(key) : url;
+}
+
 export function supabaseWorkspacePathFromUrl(url: string): string | null {
   const m = url.match(/\/workspace-files\/(.+)$/);
   return m ? decodeURIComponent(m[1].split('?')[0]) : null;

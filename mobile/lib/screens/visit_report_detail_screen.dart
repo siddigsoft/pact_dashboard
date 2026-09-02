@@ -7,6 +7,7 @@ import 'dart:developer' as developer;
 import '../theme/app_colors.dart';
 import '../models/site_visit.dart';
 import '../widgets/reusable_app_bar.dart';
+import '../widgets/stored_network_image.dart';
 
 class ReportPhoto {
   final String id;
@@ -675,30 +676,23 @@ class _VisitReportDetailScreenState
               onTap: () => _showPhotoViewer(index),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  _photos[index].photoUrl,
+                child: StoredNetworkImage(
+                  url: _photos[index].photoUrl,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      color: Colors.grey[200],
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
-                              : null,
-                          strokeWidth: 2,
-                        ),
+                  placeholder: (_, __) => Container(
+                    color: Colors.grey[200],
+                    child: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.broken_image, color: Colors.grey),
-                    );
-                  },
+                    ),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
                 ),
               ),
             );
@@ -760,24 +754,19 @@ class _PhotoViewerDialogState extends State<_PhotoViewerDialog> {
             itemBuilder: (context, index) {
               return InteractiveViewer(
                 child: Center(
-                  child: Image.network(
-                    widget.photos[index].photoUrl,
+                  child: StoredNetworkImage(
+                    url: widget.photos[index].photoUrl,
                     fit: BoxFit.contain,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: Colors.white54,
-                          size: 64,
-                        ),
-                      );
-                    },
+                    placeholder: (_, __) => const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                    errorWidget: (_, __, ___) => const Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        color: Colors.white54,
+                        size: 64,
+                      ),
+                    ),
                   ),
                 ),
               );
