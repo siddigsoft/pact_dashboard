@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadVillageCampaignPhoto, openStoredFile } from '@/lib/r2Storage';
+import { StoredFileImage } from '@/components/shared/StoredFileImage';
 import { sudanStates } from '@/data/sudanStates';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -2016,24 +2018,11 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
         const photoInserts: { log_id: string; photo_url: string; storage_path: string }[] = [];
 
         for (const file of logPhotos) {
-          const ext = file.name.split('.').pop() || 'jpg';
-          const storagePath = `village-campaign-logs/${logId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const { error: uploadErr } = await supabase.storage
-            .from('site-visit-photos')
-            .upload(storagePath, file, { upsert: false });
-
-          if (uploadErr) {
-            // Non-fatal: log and continue with remaining photos
-            console.error('Photo upload error:', uploadErr.message);
-            continue;
-          }
-
-          const { data: urlData } = supabase.storage
-            .from('site-visit-photos')
-            .getPublicUrl(storagePath);
-
-          if (urlData?.publicUrl) {
-            photoInserts.push({ log_id: logId, photo_url: urlData.publicUrl, storage_path: storagePath });
+          try {
+            const { ref, key } = await uploadVillageCampaignPhoto(file, logId);
+            photoInserts.push({ log_id: logId, photo_url: ref, storage_path: key });
+          } catch (uploadErr: unknown) {
+            console.error('Photo upload error:', uploadErr instanceof Error ? uploadErr.message : uploadErr);
           }
         }
 
@@ -3724,21 +3713,20 @@ export default function VillageCampaignsTab({ canManage, canDelete = false, canA
                           <TableCell colSpan={12} className="py-3 px-4">
                             <div className="flex flex-wrap gap-2">
                               {photos.map((p, idx) => (
-                                <a
+                                <button
                                   key={idx}
-                                  href={p.photo_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  type="button"
+                                  onClick={() => void openStoredFile(p.photo_url)}
                                   className="block w-20 h-20 rounded overflow-hidden border bg-muted hover:opacity-80 transition-opacity"
                                   title={p.caption || `Photo ${idx + 1}`}
                                 >
-                                  <img
+                                  <StoredFileImage
                                     src={p.photo_url}
                                     alt={p.caption || `Field photo ${idx + 1}`}
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                   />
-                                </a>
+                                </button>
                               ))}
                             </div>
                           </TableCell>

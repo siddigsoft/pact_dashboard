@@ -110,6 +110,12 @@ export async function uploadSiteVisitPhoto(file: File, siteId: string): Promise<
   return { key, ref: toR2Ref(key) };
 }
 
+/** Upload a village-campaign daily-log photo. */
+export async function uploadVillageCampaignPhoto(file: File, logId: string): Promise<{ key: string; ref: string }> {
+  const { key } = await r2Upload(file, { folderPath: `VillageCampaigns/${logId}` });
+  return { key, ref: toR2Ref(key) };
+}
+
 /** Resolve an r2: ref to a short-lived GET URL; leave legacy public URLs unchanged. */
 export async function resolveStoredFileUrl(url: string): Promise<string> {
   const key = parseR2Ref(url);
