@@ -258,10 +258,12 @@ class WebRTCCallService {
     _presenceChannel!.subscribe((status, error) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await _presenceChannel!.track({
+          'user_id': _currentUserId,
           'userId': _currentUserId,
           'online': true,
           'inCall': false,
           'callId': null,
+          'source': 'mobile',
         });
       }
     });
@@ -271,10 +273,12 @@ class WebRTCCallService {
     if (_presenceChannel == null) return;
 
     await _presenceChannel!.track({
+      'user_id': _currentUserId,
       'userId': _currentUserId,
       'online': true,
       'inCall': inCall,
       'callId': callId,
+      'source': 'mobile',
     });
   }
 

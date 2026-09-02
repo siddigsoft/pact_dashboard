@@ -358,6 +358,7 @@ class WebRTCService {
         'call_token': callToken,
         'last_seen': DateTime.now().toIso8601String(),
         'timestamp': DateTime.now().toIso8601String(),
+        'source': 'mobile',
       });
     } catch (e) {
       debugPrint('[WebRTC] Error updating presence: $e');

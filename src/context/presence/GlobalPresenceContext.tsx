@@ -2,17 +2,25 @@ import { createContext, useContext, useEffect, useRef, useCallback, useState, Re
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 
+export type PresenceSource = 'web' | 'mobile';
+
 interface GlobalPresenceContextValue {
   isConnected: boolean;
   onlineUserIds: string[];
+  webUserIds: string[];
+  mobileUserIds: string[];
   isUserOnline: (userId: string) => boolean;
+  getUserSources: (userId: string) => PresenceSource[];
   trackPresence: () => void;
 }
 
 const GlobalPresenceContext = createContext<GlobalPresenceContextValue>({
   isConnected: false,
   onlineUserIds: [],
+  webUserIds: [],
+  mobileUserIds: [],
   isUserOnline: () => false,
+  getUserSources: () => [],
   trackPresence: () => {},
 });
 
@@ -25,6 +33,48 @@ const MOBILE_CHANNEL = 'user-call-presence';
 
 const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 const PRESENCE_HEARTBEAT_MS      = 30_000;         // 30 s
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface PresencePayload {
+  user_id?: string;
+  odId?: string;
+  userId?: string;
+  payload?: {
+    user_id?: string;
+    odId?: string;
+    userId?: string;
+  };
+}
+
+function presenceUserId(entry?: PresencePayload | null, key?: string): string | undefined {
+  const fromPayload =
+    entry?.user_id ||
+    entry?.odId ||
+    entry?.userId ||
+    entry?.payload?.user_id ||
+    entry?.payload?.odId ||
+    entry?.payload?.userId;
+  if (typeof fromPayload === 'string' && fromPayload) return fromPayload;
+  if (typeof key === 'string' && UUID_RE.test(key)) return key;
+  return undefined;
+}
+
+function extractIds(state: Record<string, PresencePayload[]>): Set<string> {
+  const ids = new Set<string>();
+  Object.entries(state || {}).forEach(([key, presences]) => {
+    const list = Array.isArray(presences) ? presences : [];
+    if (list.length === 0) {
+      const id = presenceUserId(undefined, key);
+      if (id) ids.add(id);
+      return;
+    }
+    list.forEach((p) => {
+      const id = presenceUserId(p, key);
+      if (id) ids.add(id);
+    });
+  });
+  return ids;
+}
 
 interface GlobalPresenceProviderProps { children: ReactNode; }
 
@@ -37,6 +87,8 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
   const mobileIdsRef = useRef<Set<string>>(new Set());
 
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [webUserIds, setWebUserIds]       = useState<string[]>([]);
+  const [mobileUserIds, setMobileUserIds] = useState<string[]>([]);
 
   const webChannelRef    = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const mobileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -46,12 +98,16 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
 
   /** Recompute the merged set and update state */
   const syncMerged = useCallback(() => {
-    setOnlineUserIds(new Set([...webIdsRef.current, ...mobileIdsRef.current]));
+    const web = Array.from(webIdsRef.current);
+    const mobile = Array.from(mobileIdsRef.current);
+    setWebUserIds(web);
+    setMobileUserIds(mobile);
+    setOnlineUserIds(new Set([...web, ...mobile]));
   }, []);
 
   const writeLastActivity = useCallback(async (userId: string) => {
     try {
-      await (supabase as any)
+      await supabase
         .from('profiles')
         .update({ last_activity: new Date().toISOString() })
         .eq('id', userId);
@@ -63,12 +119,20 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     webChannelRef.current.track({
       user_id: currentUser.id,
       online_at: new Date().toISOString(),
+      source: 'web',
     });
   }, [currentUser?.id]);
 
   const isUserOnline = useCallback((userId: string) => {
     return onlineUserIds.has(userId);
   }, [onlineUserIds]);
+
+  const getUserSources = useCallback((userId: string): PresenceSource[] => {
+    const sources: PresenceSource[] = [];
+    if (webUserIds.includes(userId)) sources.push('web');
+    if (mobileUserIds.includes(userId)) sources.push('mobile');
+    return sources;
+  }, [webUserIds, mobileUserIds]);
 
   useEffect(() => {
     if (!authReady || !currentUser?.id) {
@@ -81,6 +145,8 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
       mobileIdsRef.current = new Set();
       setIsConnected(false);
       setOnlineUserIds(new Set());
+      setWebUserIds([]);
+      setMobileUserIds([]);
       return;
     }
 
@@ -95,14 +161,6 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
       config: { presence: { key: userId } },
     });
 
-    const extractIds = (state: Record<string, any[]>) => {
-      const ids = new Set<string>();
-      Object.values(state).forEach(presences =>
-        presences.forEach((p: any) => { if (p.user_id) ids.add(p.user_id); })
-      );
-      return ids;
-    };
-
     webChannel
       .on('presence', { event: 'sync' }, () => {
         webIdsRef.current = extractIds(webChannel.presenceState());
@@ -110,18 +168,24 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
         console.log('[GlobalPresence] Web synced, online:', webIdsRef.current.size);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        newPresences.forEach((p: any) => { if (p.user_id) webIdsRef.current.add(p.user_id); });
+        newPresences.forEach((p) => {
+          const id = presenceUserId(p as PresencePayload);
+          if (id) webIdsRef.current.add(id);
+        });
         syncMerged();
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        leftPresences.forEach((p: any) => { if (p.user_id) webIdsRef.current.delete(p.user_id); });
+        leftPresences.forEach((p) => {
+          const id = presenceUserId(p as PresencePayload);
+          if (id) webIdsRef.current.delete(id);
+        });
         syncMerged();
       })
       .subscribe(async (status) => {
         console.log('[GlobalPresence] Web channel:', status);
         if (status === 'SUBSCRIBED') {
           setIsConnected(true);
-          webChannel.track({ user_id: userId, online_at: new Date().toISOString() });
+          webChannel.track({ user_id: userId, online_at: new Date().toISOString(), source: 'web' });
           await writeLastActivity(userId);
         }
       });
@@ -138,15 +202,15 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
         console.log('[GlobalPresence] Mobile synced, online:', mobileIdsRef.current.size);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        newPresences.forEach((p: any) => {
-          const id = p.user_id || p.odId;
+        newPresences.forEach((p) => {
+          const id = presenceUserId(p as PresencePayload);
           if (id) mobileIdsRef.current.add(id);
         });
         syncMerged();
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        leftPresences.forEach((p: any) => {
-          const id = p.user_id || p.odId;
+        leftPresences.forEach((p) => {
+          const id = presenceUserId(p);
           if (id) mobileIdsRef.current.delete(id);
         });
         syncMerged();
@@ -159,7 +223,7 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
 
     /* ── 3. Heartbeat: keep web Presence slot alive ─────────────────── */
     heartbeatRef.current = setInterval(() => {
-      webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString() });
+      webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString(), source: 'web' });
     }, PRESENCE_HEARTBEAT_MS);
 
     /* ── 4. Activity write every 5 min ──────────────────────────────── */
@@ -170,7 +234,7 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     /* ── 5. Visibility change ────────────────────────────────────────── */
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && userId) {
-        webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString() });
+        webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString(), source: 'web' });
         writeLastActivity(userId);
       }
     };
@@ -179,7 +243,7 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     /* ── 6. Page unload — best-effort final write via keepalive (avoids CORS * + credentials) ── */
     const handleUnload = () => {
       try {
-        void (supabase as any)
+        void supabase
           .from('profiles')
           .update({ last_activity: new Date().toISOString() })
           .eq('id', userId);
@@ -203,7 +267,10 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     <GlobalPresenceContext.Provider value={{
       isConnected,
       onlineUserIds: Array.from(onlineUserIds),
+      webUserIds,
+      mobileUserIds,
       isUserOnline,
+      getUserSources,
       trackPresence,
     }}>
       {children}
