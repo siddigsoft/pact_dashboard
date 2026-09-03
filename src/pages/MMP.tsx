@@ -25,10 +25,12 @@ import { insertNotifications } from '@/services/mmpActions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadSiteVisitPhoto } from '@/lib/r2Storage';
+import { upsertVisitReport } from '@/lib/visitReport';
 import {
   MMP_SITE_ENTRY_DETAIL_COLS,
   MMP_SITE_ENTRY_LIST_COLS,
 } from '@/constants/mmpSiteEntryCols';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -91,7 +93,14 @@ const SitesDisplayTable = memo(function SitesDisplayTable({ siteRows, mmpId, edi
         mmp.siteEntries
           .filter((entry: any) => {
             const s = (entry.status || '').toLowerCase();
-            return s !== 'completed' && s !== 'wfp_confirmed';
+            // Hide terminal / post-completion statuses from editable incomplete tables
+            return (
+              s !== 'completed' &&
+              s !== 'submitted' &&
+              s !== 'wfp_confirmed' &&
+              s !== 'not_covered' &&
+              !isTerminalCompletionRawStatus(entry.status)
+            );
           })
           .forEach((entry: any) => {
             entries.push({
@@ -1564,31 +1573,34 @@ const MMP = () => {
       let report: any = null;
 
       if (isOnline) {
-        // Online: Save report to database immediately
+        // Online: Save report idempotently (retries reuse recent/terminal reports)
         console.log('💾 Saving visit report to database...');
-        const { data: savedReport, error: reportError } = await supabase
-          .from('reports')
-          .insert({
+        const { data: currentForReport } = await supabase
+          .from('mmp_site_entries')
+          .select('status')
+          .eq('id', site.id)
+          .maybeSingle();
+
+        const upsertResult = await upsertVisitReport({
+          siteVisitId: site.id,
+          siteStatus: currentForReport?.status ?? site.status,
+          reportInsert: {
             site_visit_id: site.id,
             submitted_by: currentUser?.id || null,
             activities: reportData.activities,
             notes: reportData.notes || 'No additional notes provided',
             duration_minutes: reportData.visitDuration,
             coordinates: coordinatesJsonb,
-            submitted_at: now
-          })
-          .select()
-          .single();
+            submitted_at: now,
+          },
+        });
+        report = upsertResult.report;
+        console.log(
+          `✅ Report saved with ID: ${report.id}${upsertResult.reused ? ' (reused)' : ''}`,
+        );
 
-        if (reportError) {
-          console.error('❌ Report save error:', reportError);
-          throw reportError;
-        }
-        report = savedReport;
-        console.log('✅ Report saved with ID:', report.id);
-
-        // Link photos to site visit via report_photos table
-        if (photoUrls.length > 0) {
+        // Link photos only for newly created reports (avoid duplicates on retry)
+        if (photoUrls.length > 0 && !upsertResult.reused) {
           console.log('📎 Linking photos to report...');
           // Match mobile column names: report_id, photo_url, storage_path, is_synced
           const reportPhotos = photoUrls.map((photoUrl, i) => ({
@@ -4400,9 +4412,8 @@ const MMP = () => {
     const mmps = forwardedSubcategories[forwardedSubTab] || [];
     if (mmps.length === 0) return [];
     return buildSiteRowsFromMMPs(mmps, (row) => {
-      // Exclude completed sites from editable tables
-      const status = row.status?.toLowerCase() || '';
-      return status !== 'completed';
+      // Exclude terminal/completed sites from editable tables
+      return !isTerminalCompletionRawStatus(row.status);
     });
   }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
 
