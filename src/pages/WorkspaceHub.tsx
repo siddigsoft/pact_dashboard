@@ -62,7 +62,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccessLevel = 'owner' | 'editor' | 'commenter' | 'viewer' | 'no_access';
-type GranteeType = 'user' | 'role' | 'department' | 'hub' | 'all_staff';
+type GranteeType = 'user' | 'role' | 'department' | 'hub' | 'all_staff' | 'guest';
 
 interface WFolder {
   id: string; name: string; description: string | null;
@@ -126,6 +126,12 @@ interface WPermission {
   grantee_type: GranteeType; grantee_id: string | null;
   access_level: AccessLevel; granted_by: string | null;
   expires_at: string | null; notes: string | null; created_at: string;
+}
+interface WGuestAccess {
+  id: string; folder_id: string; guest_name: string; guest_email: string;
+  access_level: 'viewer' | 'editor'; token_prefix: string;
+  expires_at: string; revoked_at: string | null; notes: string | null;
+  created_at: string; last_accessed_at: string | null;
 }
 interface WComment {
   id: string; file_id: string; author_id: string | null; content: string;
@@ -358,6 +364,9 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
   const [expiresAt, setExpiresAt] = useState('');
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [generatedGuestUrl, setGeneratedGuestUrl] = useState('');
 
   const targetId = file?.id ?? folder?.id;
   const isFile = !!file;
@@ -383,10 +392,48 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
     enabled: open && canEdit && granteeType === 'user',
   });
 
+  const { data: guestAccesses = [], refetch: refetchGuests } = useQuery<WGuestAccess[]>({
+    queryKey: ['workspace_guest_access', folder?.id],
+    queryFn: async () => {
+      if (!folder?.id) return [];
+      const { data, error } = await (supabase as any)
+        .from('workspace_guest_access')
+        .select('id, folder_id, guest_name, guest_email, access_level, token_prefix, expires_at, revoked_at, notes, created_at, last_accessed_at')
+        .eq('folder_id', folder.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as WGuestAccess[];
+    },
+    enabled: open && canEdit && !!folder?.id,
+  });
+
   async function addPermission() {
     if (!targetId) return;
     setAdding(true);
     try {
+      if (granteeType === 'guest') {
+        if (!folder?.id) throw new Error('Managed guests can only be added to folders');
+        if (!guestName.trim() || !guestEmail.trim() || !expiresAt) {
+          throw new Error('Guest name, email, and expiry are required');
+        }
+        const { data, error } = await (supabase as any).rpc('create_workspace_guest_access', {
+          p_folder_id: folder.id,
+          p_guest_name: guestName.trim(),
+          p_guest_email: guestEmail.trim(),
+          p_access_level: accessLevel === 'editor' ? 'editor' : 'viewer',
+          p_expires_at: `${expiresAt}T23:59:59.999Z`,
+          p_notes: notes.trim() || null,
+        });
+        if (error) throw error;
+        if (!data?.token) throw new Error('Guest link was not returned');
+        const url = `${window.location.origin}/workspace/guest/${data.token}`;
+        setGeneratedGuestUrl(url);
+        await navigator.clipboard.writeText(url).catch(() => {});
+        await refetchGuests();
+        setGuestName(''); setGuestEmail(''); setNotes('');
+        toast({ title: 'Guest link created and copied', description: `${data.guest_name} has ${data.access_level} access until ${fmtDate(data.expires_at)}.` });
+        return;
+      }
       const payload: any = {
         grantee_type: granteeType, grantee_id: granteeId || null,
         access_level: accessLevel, granted_by: currentUserId,
@@ -430,6 +477,47 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
     const { error } = await supabase.from('workspace_permissions').delete().eq('id', id);
     if (error) { toast({ title: 'Failed to revoke permission', description: error.message, variant: 'destructive' }); return; }
     refetchPerms();
+  }
+
+  async function updateGuestAccess(guest: WGuestAccess, changes: Partial<Pick<WGuestAccess, 'access_level' | 'expires_at'>>) {
+    const nextExpiry = changes.expires_at
+      ? `${changes.expires_at.slice(0, 10)}T23:59:59.999Z`
+      : guest.expires_at;
+    const { error } = await (supabase as any).rpc('update_workspace_guest_access', {
+      p_access_id: guest.id,
+      p_access_level: changes.access_level ?? guest.access_level,
+      p_expires_at: nextExpiry,
+    });
+    if (error) {
+      toast({ title: 'Failed to update guest', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await refetchGuests();
+    toast({ title: 'Guest access updated' });
+  }
+
+  async function revokeGuestAccess(id: string) {
+    const { error } = await (supabase as any).rpc('revoke_workspace_guest_access', {
+      p_access_id: id,
+    });
+    if (error) {
+      toast({ title: 'Failed to revoke guest', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await refetchGuests();
+    toast({ title: 'Guest access revoked' });
+  }
+
+  async function rotateGuestLink(id: string, guestName: string) {
+    const { data, error } = await (supabase as any).rpc('rotate_workspace_guest_access', { p_access_id: id });
+    if (error || !data?.token) {
+      toast({ title: 'Failed to rotate guest link', description: error?.message ?? 'No token returned', variant: 'destructive' });
+      return;
+    }
+    const url = `${window.location.origin}/workspace/guest/${data.token}`;
+    setGeneratedGuestUrl(url);
+    await navigator.clipboard.writeText(url).catch(() => {});
+    toast({ title: 'New guest link copied', description: `The previous link for ${guestName} no longer works.` });
   }
 
   const granteeLabel = (p: WPermission) => {
@@ -477,7 +565,20 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Grant to</label>
-                <Select value={granteeType} onValueChange={v => { setGranteeType(v as GranteeType); setGranteeId(''); }}>
+                <Select value={granteeType} onValueChange={v => {
+                  const next = v as GranteeType;
+                  setGranteeType(next);
+                  setGranteeId('');
+                  setGeneratedGuestUrl('');
+                  if (next === 'guest') {
+                    if (!['viewer', 'editor'].includes(accessLevel)) setAccessLevel('viewer');
+                    if (!expiresAt) {
+                      const expiry = new Date();
+                      expiry.setDate(expiry.getDate() + 7);
+                      setExpiresAt(expiry.toISOString().slice(0, 10));
+                    }
+                  }
+                }}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all_staff" className="text-xs">All Staff</SelectItem>
@@ -485,6 +586,7 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                     <SelectItem value="role" className="text-xs">By Role</SelectItem>
                     <SelectItem value="department" className="text-xs">Department</SelectItem>
                     <SelectItem value="hub" className="text-xs">Hub</SelectItem>
+                    {!isFile && <SelectItem value="guest" className="text-xs">External Guest</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -493,7 +595,9 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                 <Select value={accessLevel} onValueChange={v => setAccessLevel(v as AccessLevel)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(Object.entries(ACCESS_CFG) as [AccessLevel, any][]).map(([k, v]) => (
+                    {(Object.entries(ACCESS_CFG) as [AccessLevel, any][])
+                      .filter(([k]) => granteeType !== 'guest' || k === 'viewer' || k === 'editor')
+                      .map(([k, v]) => (
                       <SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -506,7 +610,23 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
                   {granteeType === 'user' ? 'Select User' : granteeType === 'role' ? 'Role Name' : granteeType === 'department' ? 'Department Name' : 'Hub Name'}
                 </label>
-                {granteeType === 'user' ? (
+                {granteeType === 'guest' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Input
+                      value={guestName}
+                      onChange={e => setGuestName(e.target.value)}
+                      placeholder="Guest name"
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      type="email"
+                      value={guestEmail}
+                      onChange={e => setGuestEmail(e.target.value)}
+                      placeholder="guest@example.org"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                ) : granteeType === 'user' ? (
                   <UserPickerCombobox
                     profiles={profiles}
                     value={granteeId}
@@ -521,7 +641,9 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Expires (optional)</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                  Expires {granteeType === 'guest' ? '(required)' : '(optional)'}
+                </label>
                 <Input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} className="h-8 text-xs" />
               </div>
               <div>
@@ -530,10 +652,40 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
               </div>
             </div>
 
-            <Button size="sm" className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs" onClick={addPermission} disabled={adding || (granteeType !== 'all_staff' && !granteeId)}>
+            <Button
+              size="sm"
+              className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs"
+              onClick={addPermission}
+              disabled={adding || (
+                granteeType === 'guest'
+                  ? !guestName.trim() || !guestEmail.trim() || !expiresAt
+                  : granteeType !== 'all_staff' && !granteeId
+              )}
+            >
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-              Grant Permission
+              {granteeType === 'guest' ? 'Create Guest Link' : 'Grant Permission'}
             </Button>
+
+            {generatedGuestUrl && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 space-y-2">
+                <p className="text-[11px] font-semibold text-emerald-800">Copy this link now. For security, it is only shown when created or rotated.</p>
+                <div className="flex gap-2">
+                  <Input readOnly value={generatedGuestUrl} className="h-7 text-[10px] bg-white font-mono" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px] gap-1"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedGuestUrl);
+                      toast({ title: 'Guest link copied' });
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />Copy
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>}
 
           {/* Existing permissions */}
@@ -565,6 +717,81 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                         <X className="h-3.5 w-3.5" />
                       </button>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {canEdit && folder && guestAccesses.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                External Guests ({guestAccesses.length})
+              </p>
+              {guestAccesses.map(guest => {
+                const expired = isBefore(parseISO(guest.expires_at), new Date());
+                const inactive = !!guest.revoked_at || expired;
+                return (
+                  <div key={guest.id} className={cn('rounded-xl border p-2.5 space-y-2', inactive ? 'opacity-55 border-red-200' : 'border-border')}>
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                        <ExternalLink className="h-3.5 w-3.5 text-amber-700" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold truncate">{guest.guest_name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{guest.guest_email}</p>
+                      </div>
+                      {guest.revoked_at && <Badge variant="destructive" className="text-[9px] h-5">Revoked</Badge>}
+                      {!guest.revoked_at && expired && <Badge variant="destructive" className="text-[9px] h-5">Expired</Badge>}
+                    </div>
+
+                    <div className="grid grid-cols-[110px_1fr_auto_auto] gap-1.5 items-center">
+                      <Select
+                        value={guest.access_level}
+                        disabled={inactive}
+                        onValueChange={value => updateGuestAccess(guest, { access_level: value as 'viewer' | 'editor' })}
+                      >
+                        <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer" className="text-xs">Viewer</SelectItem>
+                          <SelectItem value="editor" className="text-xs">Editor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        className="h-7 text-[10px]"
+                        disabled={!!guest.revoked_at}
+                        value={guest.expires_at.slice(0, 10)}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={e => e.target.value && updateGuestAccess(guest, { expires_at: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        title="Generate a new link"
+                        disabled={inactive}
+                        onClick={() => rotateGuestLink(guest.id, guest.guest_name)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7 text-red-600"
+                        title="Revoke guest access"
+                        disabled={!!guest.revoked_at}
+                        onClick={() => revokeGuestAccess(guest.id)}
+                      >
+                        <Ban className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="flex justify-between text-[9px] text-muted-foreground">
+                      <span>Link …{guest.token_prefix}</span>
+                      <span>{guest.last_accessed_at ? `Last opened ${fmtRelative(guest.last_accessed_at)}` : 'Not opened yet'}</span>
+                    </div>
                   </div>
                 );
               })}

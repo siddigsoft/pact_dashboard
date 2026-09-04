@@ -503,6 +503,7 @@ const AuthGuard = ({ children }) => {
   const isPublicViewer =
     location.pathname.startsWith('/view/') ||
     location.pathname.startsWith('/workspace/share/') ||
+    location.pathname.startsWith('/workspace/guest/') ||
     location.pathname.startsWith('/s/') ||
     location.pathname.startsWith('/ext/') ||
     location.pathname === '/pdm-report';
@@ -523,6 +524,7 @@ const AuthGuard = ({ children }) => {
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/') &&
     !location.pathname.startsWith('/workspace/share/') &&
+    !location.pathname.startsWith('/workspace/guest/') &&
     !(location.pathname.startsWith('/surveys/') && location.pathname.endsWith('/fill')) &&
     !location.pathname.startsWith('/s/') &&
     !location.pathname.startsWith('/ext/')
@@ -554,6 +556,7 @@ const AppRoutes = () => {
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/view/:fileId" element={<FileViewer />} />
       <Route path="/workspace/share/folder/:folderId" element={<WorkspaceFolderShare />} />
+      <Route path="/workspace/guest/:guestToken" element={<WorkspaceFolderShare />} />
       <Route path="/surveys/:id/fill" element={<SurveyFill />} />
       <Route path="/s/:id" element={<SurveyFill />} />
       <Route path="/ext/:token" element={<ExternalContributorPage />} />
@@ -857,7 +860,8 @@ function App() {
   // Opening /view/:code previously booted the whole Command Center (notifications,
   // realtime, session recovery) before FileViewer could even fetch the file.
   const guestSharePath = window.location.pathname.startsWith('/view/')
-    || window.location.pathname.startsWith('/workspace/share/');
+    || window.location.pathname.startsWith('/workspace/share/')
+    || window.location.pathname.startsWith('/workspace/guest/');
   if (guestSharePath) {
     return (
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
@@ -872,6 +876,7 @@ function App() {
                 <Routes>
                   <Route path="/view/:fileId" element={<FileViewer />} />
                   <Route path="/workspace/share/folder/:folderId" element={<WorkspaceFolderShare />} />
+                  <Route path="/workspace/guest/:guestToken" element={<WorkspaceFolderShare />} />
                 </Routes>
               </Suspense>
             </Router>
