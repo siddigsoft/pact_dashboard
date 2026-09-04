@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { safeUploadFile } from '@/lib/safeUpload';
+import { r2Upload, toR2Ref } from '@/lib/r2Storage';
 import {
   getPendingSyncActions,
   updateSyncActionStatus,
@@ -17,6 +17,7 @@ import {
 } from './offline-db';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
+import { upsertVisitReport } from '@/lib/visitReport';
 
 export interface SyncProgress {
   total: number;
@@ -497,6 +498,9 @@ class SyncManager {
     // Terminal states - visit is definitively done and should never be updated
     const terminalStates = [
       'completed',
+      'submitted',
+      'wfpconfirmed',
+      'notcovered',
       'cancelled', 'canceled',
       'rejected',
       'declined',
@@ -505,7 +509,8 @@ class SyncManager {
     ];
     
     // Advanced states - visit has progressed past the initial state
-    const inProgressStates = ['inprogress'];
+    // Normalize removes hyphens/underscores so "in-progress" / "Ongoing" both match
+    const inProgressStates = ['inprogress', 'ongoing'];
     
     // Check for terminal states (always skip regardless of attempted action)
     if (terminalStates.includes(normalized)) {
@@ -770,7 +775,15 @@ class SyncManager {
   }
 
   private async syncSiteVisitComplete(action: PendingSyncAction): Promise<void> {
-    const { siteEntryId, completedAt, location, notes, userId, gpsForRegistry } = action.payload;
+    const {
+      siteEntryId,
+      completedAt,
+      location,
+      notes,
+      userId,
+      gpsForRegistry,
+      visitReport,
+    } = action.payload;
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
@@ -780,9 +793,54 @@ class SyncManager {
 
     if (fetchError) throw fetchError;
 
+    // Idempotent report upsert when offline completion queued a visitReport
+    let reportId: string | null =
+      (existing?.additional_data as any)?.visit_report_id ?? null;
+    if (visitReport && userId) {
+      try {
+        const upsertResult = await upsertVisitReport({
+          siteVisitId: siteEntryId,
+          siteStatus: existing?.status,
+          reportInsert: {
+            site_visit_id: siteEntryId,
+            submitted_by: userId,
+            activities: visitReport.activities ?? null,
+            notes: notes || visitReport.notes || 'No additional notes provided',
+            duration_minutes: visitReport.durationMinutes ?? null,
+            coordinates: visitReport.coordinates ?? {},
+            submitted_at: visitReport.submittedAt || completedAt || new Date().toISOString(),
+            is_synced: true,
+          },
+        });
+        reportId = upsertResult.report.id;
+        console.log(
+          `[SyncManager] Visit report ${reportId} ${upsertResult.reused ? 'reused' : 'created'} for ${siteEntryId}`,
+        );
+      } catch (reportErr) {
+        console.error(`[SyncManager] Report upsert failed for ${siteEntryId}:`, reportErr);
+        throw reportErr;
+      }
+    }
+
     const alreadyCompleted = this.isTerminalOrAdvancedStatus(existing?.status, 'completed');
     if (alreadyCompleted) {
       console.log(`[SyncManager] Status already completed on server (${existing?.status}), will skip status update but still ensure wallet payout.`);
+      // Still stamp visit_report_* flags if we just upserted a report
+      if (reportId) {
+        await supabase
+          .from('mmp_site_entries')
+          .update({
+            additional_data: {
+              ...(existing?.additional_data || {}),
+              visit_report_submitted: true,
+              visit_report_id: reportId,
+              visit_report_submitted_at:
+                visitReport?.submittedAt || completedAt || new Date().toISOString(),
+              offline_synced_at: new Date().toISOString(),
+            },
+          })
+          .eq('id', siteEntryId);
+      }
     } else {
       const shouldUpdate = this.resolveConflict({ completedAt }, existing);
       if (shouldUpdate) {
@@ -799,6 +857,14 @@ class SyncManager {
               offline_complete: true,
               end_location: location,
               offline_synced_at: new Date().toISOString(),
+              ...(reportId
+                ? {
+                    visit_report_submitted: true,
+                    visit_report_id: reportId,
+                    visit_report_submitted_at:
+                      visitReport?.submittedAt || completedAt || new Date().toISOString(),
+                  }
+                : {}),
             },
           })
           .eq('id', siteEntryId);
@@ -922,18 +988,9 @@ class SyncManager {
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
-    const filePath = `site-visits/${siteEntryId}/${fileName}`;
-
-    // Use safeUploadFile for secure upload
-    const uploadResult = await safeUploadFile(new File([blob], fileName, { type: 'image/jpeg' }), {
-      bucket: 'site-visit-photos',
-      path: `site-visits/${siteEntryId}`,
-      allowedTypes: ['image/jpeg'],
-      maxSizeBytes: 10 * 1024 * 1024
-    });
-    if (!uploadResult.success || !uploadResult.url) {
-      throw new Error(uploadResult.error || 'Failed to upload photo');
-    }
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+    const { key } = await r2Upload(file, { folderPath: `SiteVisits/${siteEntryId}` });
+    const photoRef = toR2Ref(key);
 
     const { data: existing } = await supabase
       .from('mmp_site_entries')
@@ -947,7 +1004,7 @@ class SyncManager {
       .update({
         additional_data: {
           ...(existing?.additional_data || {}),
-          photos: [...existingPhotos, filePath],
+          photos: [...existingPhotos, photoRef],
         },
       })
       .eq('id', siteEntryId);

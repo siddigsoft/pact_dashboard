@@ -93,6 +93,94 @@ async function fetchAllIn<T = any>(
   return rows;
 }
 
+/** Ledger row fields used to attribute payments to an allocated staff member. */
+interface AllocLedgerTxn {
+  id: string;
+  user_id?: string | null;
+  created_by?: string | null;
+  reversal_of_id?: string | null;
+  signed_paid_amount?: number | string | null;
+  amount?: number | string | null;
+  transaction_type?: string;
+  source_table?: string | null;
+  source_id?: string | null;
+  transaction_date?: string | null;
+  created_at?: string | null;
+  description?: string | null;
+  reference?: string | null;
+  currency?: string | null;
+}
+
+/** Attribute a ledger event to the allocated officer who disbursed it (or its reversal). */
+function resolveAllocatedOwner(
+  t: AllocLedgerTxn,
+  txnById: Map<string, AllocLedgerTxn>,
+  allocatedUserIds: Set<string>,
+): string | null {
+  const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
+  const effectiveUserId = orig?.user_id ?? t.user_id;
+  const effectiveCreatedBy = orig?.created_by ?? t.created_by;
+
+  if (effectiveUserId && allocatedUserIds.has(effectiveUserId)) return effectiveUserId;
+  if (effectiveCreatedBy && allocatedUserIds.has(effectiveCreatedBy)) return effectiveCreatedBy;
+  return effectiveUserId ?? effectiveCreatedBy ?? null;
+}
+
+function ledgerSignedPaid(t: AllocLedgerTxn): number {
+  if (t.signed_paid_amount !== undefined && t.signed_paid_amount !== null) {
+    return Number(t.signed_paid_amount);
+  }
+  const amt = Number(t.amount) || 0;
+  if (['reversal', 'return'].includes(t.transaction_type ?? '')) {
+    if (!t.source_table) return 0;
+    return -amt;
+  }
+  if (['payment', 'disbursement'].includes(t.transaction_type ?? '')) return amt;
+  return 0;
+}
+
+function sumLedgerSignedPaid(rows: Array<{ _signed_paid_amount?: number }>): number {
+  return rows.reduce((sum, row) => sum + Number(row._signed_paid_amount ?? 0), 0);
+}
+
+function sumAttributedLedgerSignedPaid(
+  rows: Array<{ _signed_paid_amount?: number; _counts_toward_alloc?: boolean }>,
+): number {
+  return rows
+    .filter(row => row._counts_toward_alloc !== false)
+    .reduce((sum, row) => sum + Number(row._signed_paid_amount ?? 0), 0);
+}
+
+function mapLedgerToPaymentRow(t: AllocLedgerTxn) {
+  const isReversal = ['reversal', 'return'].includes(t.transaction_type ?? '');
+  const signedPaid = ledgerSignedPaid(t);
+  const amt = Math.abs(Number(t.amount) || 0);
+  const type = isReversal ? 'reversal' : (t.source_table === 'operational_cost_submissions' ? 'ocs' : t.source_table === 'down_payment_requests' ? 'dp' : 'manual');
+  const category = isReversal
+    ? 'Payment Reversal'
+    : t.source_table === 'operational_cost_submissions'
+      ? 'Cost Submission'
+      : t.source_table === 'down_payment_requests'
+        ? 'Down Payment'
+        : (t.reference || 'Expenditure');
+  return {
+    id: t.id,
+    _type: type,
+    _category: category,
+    _txn_amount: signedPaid,
+    _raw_amount: amt,
+    _signed_paid_amount: signedPaid,
+    _is_reversal: signedPaid < 0,
+    _txn_date: t.transaction_date || t.created_at,
+    description: t.description || t.reference || (isReversal ? 'Payment reversal / deduction' : 'Operational expenditure'),
+    status: isReversal ? 'reversed' : 'paid',
+    currency: t.currency || 'SDG',
+    user_id: t.user_id,
+    created_by: t.created_by,
+    reversal_of_id: t.reversal_of_id,
+  };
+}
+
 export default function PreFundingDistribute() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useAppContext();
@@ -227,53 +315,23 @@ export default function PreFundingDistribute() {
 
       if (txnErr) throw txnErr;
       const allTxns: any[] = txnData ?? [];
-      const txnById = new Map(allTxns.map((t: any) => [t.id, t]));
+      const txnById = new Map<string, AllocLedgerTxn>(allTxns.map((t: AllocLedgerTxn) => [t.id, t]));
 
       // Get all allocated staff for this fund to attribute payments/reversals correctly
       const allocList = fundAllocs.get(fundId) ?? [];
       const allocatedUserIds = new Set(allocList.map((a: any) => a.user_id).filter(Boolean));
 
-      // Filter transactions that belong to this allocated user
-      const userTxns = allTxns.filter((t: any) => {
-        const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
-        const effUserId    = orig?.user_id ?? t.user_id;
-        const effCreatedBy = orig?.created_by ?? t.created_by;
-
-        let owner: string | null = null;
-        if (effUserId && allocatedUserIds.has(effUserId)) owner = effUserId;
-        else if (effCreatedBy && allocatedUserIds.has(effCreatedBy)) owner = effCreatedBy;
-        else owner = effUserId ?? effCreatedBy ?? null;
-
-        return owner === userId || (allocatedUserIds.size === 1 && allocatedUserIds.has(userId));
-      });
-
-      const payments: any[] = userTxns.map((t: any) => {
-        const isReversal = ['reversal', 'return'].includes(t.transaction_type);
-        const amt = Number(t.amount) || 0;
-        const type = isReversal ? 'reversal' : (t.source_table === 'operational_cost_submissions' ? 'ocs' : t.source_table === 'down_payment_requests' ? 'dp' : 'manual');
-        const category = isReversal
-          ? 'Payment Reversal'
-          : t.source_table === 'operational_cost_submissions'
-            ? 'Cost Submission'
-            : t.source_table === 'down_payment_requests'
-              ? 'Down Payment'
-              : (t.reference || 'Expenditure');
-        return {
-          id: t.id,
-          _type: type,
-          _category: category,
-          _txn_amount: isReversal ? -amt : amt,
-          _raw_amount: amt,
-          _is_reversal: isReversal,
-          _txn_date: t.transaction_date || t.created_at,
-          description: t.description || t.reference || (isReversal ? 'Payment reversal / deduction' : 'Operational expenditure'),
-          status: isReversal ? 'reversed' : 'paid',
-          currency: t.currency || 'SDG',
-          user_id: t.user_id,
-          created_by: t.created_by,
-          reversal_of_id: t.reversal_of_id,
-        };
-      });
+      // Include this user's attributed payments plus unallocated fund payments for tracking.
+      const payments: any[] = [];
+      for (const t of allTxns as AllocLedgerTxn[]) {
+        const owner = resolveAllocatedOwner(t, txnById, allocatedUserIds);
+        const row = mapLedgerToPaymentRow(t);
+        if (owner === userId) {
+          payments.push({ ...row, _counts_toward_alloc: true, _is_unallocated: false });
+        } else if (!owner || !allocatedUserIds.has(owner)) {
+          payments.push({ ...row, _counts_toward_alloc: false, _is_unallocated: true });
+        }
+      }
 
       // Sort by transaction date desc
       payments.sort((a, b) =>
@@ -597,7 +655,7 @@ export default function PreFundingDistribute() {
 
       const allocs: any[] = allocRes.data ?? [];
       const txns:   any[] = txnRes.data   ?? [];
-      const txnById = new Map(txns.map((t: any) => [t.id, t]));
+      const txnById = new Map<string, AllocLedgerTxn>(txns.map((t: AllocLedgerTxn) => [t.id, t]));
 
       // Build the set of allocated user IDs so we can fall back to created_by
       // when user_id on the transaction is an unallocated recipient
@@ -605,23 +663,14 @@ export default function PreFundingDistribute() {
 
       // Compute per-user spend from transactions (mirrors PreFundingAllocations logic)
       const spendMap = new Map<string, number>();
-      for (const t of txns) {
-        const amt = Number(t.signed_paid_amount) || 0;
-        if (amt === 0) continue;
+      for (const t of txns as AllocLedgerTxn[]) {
+        const signedPaid = ledgerSignedPaid(t);
+        if (signedPaid === 0) continue;
 
-        // Trace original transaction if this is a reversal
-        const orig = t.reversal_of_id ? txnById.get(t.reversal_of_id) : null;
-        const effectiveUserId    = orig?.user_id ?? t.user_id;
-        const effectiveCreatedBy = orig?.created_by ?? t.created_by;
-
-        // Prefer allocated user_id; fall back to created_by if user_id isn't allocated
-        let owner: string | null = null;
-        if (effectiveUserId && allocatedUserIds.has(effectiveUserId)) owner = effectiveUserId;
-        else if (effectiveCreatedBy && allocatedUserIds.has(effectiveCreatedBy)) owner = effectiveCreatedBy;
-        else owner = effectiveUserId ?? effectiveCreatedBy ?? null;
+        const owner = resolveAllocatedOwner(t, txnById, allocatedUserIds);
         if (!owner) continue;
 
-        spendMap.set(owner, (spendMap.get(owner) ?? 0) + amt);
+        spendMap.set(owner, (spendMap.get(owner) ?? 0) + signedPaid);
       }
 
       // Enrich profiles
@@ -640,9 +689,8 @@ export default function PreFundingDistribute() {
         const storedSpent = Number(a.spent_amount ?? 0);
         return {
           ...a,
-          // Stored spend is maintained in the same transaction as the payment
-          // event. Legacy attribution can fill an empty cache but cannot inflate it.
-          spent_amount: txnSpent || storedSpent,
+          // Prefer live ledger totals whenever transaction data was loaded.
+          spent_amount: txns.length > 0 ? txnSpent : storedSpent,
           user_name:  profileMap[a.user_id]?.full_name ?? 'Unknown',
           user_email: profileMap[a.user_id]?.email ?? '',
           user_role:  profileMap[a.user_id]?.role ?? '',
@@ -650,6 +698,12 @@ export default function PreFundingDistribute() {
       });
 
       setFundAllocs(prev => new Map(prev).set(fundId, enriched));
+      // Drop cached payment rows so expanded expenditure totals recompute with the same rules.
+      setAllocPayments(prev => {
+        const next = new Map(prev);
+        for (const alloc of enriched) next.delete(alloc.id);
+        return next;
+      });
     } catch (e: any) {
       toast({ title: 'Error loading allocations', description: e.message, variant: 'destructive' });
     } finally {
@@ -1279,11 +1333,15 @@ export default function PreFundingDistribute() {
                       </div>
                     )}
                     {!isAllocLoading && allocs.map(a => {
-                      const pct = a.allocated_amount > 0 ? Math.min(100, Math.round((a.spent_amount / a.allocated_amount) * 100)) : 0;
-                      const rem = a.allocated_amount - a.spent_amount;
-                      const isExpanded = expandedAllocId === a.id;
                       const payments = allocPayments.get(a.id) ?? [];
                       const isPaymentsLoading = allocPaymentsLoading.has(a.id);
+                      const attributedPayments = payments.filter(p => p._counts_toward_alloc !== false);
+                      const unallocatedPayments = payments.filter(p => p._is_unallocated);
+                      const paymentsNet = payments.length > 0 ? sumAttributedLedgerSignedPaid(payments) : null;
+                      const effectiveSpent = paymentsNet ?? a.spent_amount;
+                      const pct = a.allocated_amount > 0 ? Math.min(100, Math.round((effectiveSpent / a.allocated_amount) * 100)) : 0;
+                      const rem = a.allocated_amount - effectiveSpent;
+                      const isExpanded = expandedAllocId === a.id;
                       const catLabel: Record<string, string> = {
                         permits:'Permits', incentives:'Incentives', communications:'Comms',
                         training:'Training', transport:'Transport', general_transport:'Transport',
@@ -1350,7 +1408,7 @@ export default function PreFundingDistribute() {
                             <div className="text-right" onClick={e => e.stopPropagation()}>
                               <div className="font-mono text-[12px] font-semibold">{fund.currency} {formatNumber(a.allocated_amount, 0)}</div>
                               <div className="text-[10px] text-muted-foreground">
-                                {formatNumber(a.spent_amount, 0)} paid out
+                                {formatNumber(effectiveSpent, 0)} paid out
                               </div>
                               <div className={cn('text-[10px] font-semibold mb-1', rem < 0 ? 'text-rose-600' : 'text-teal-600')}>
                                 Balance with {a.user_name?.split(' ')[0] || 'holder'}: {fund.currency} {rem >= 0 ? formatNumber(rem, 0) : `−${formatNumber(-rem, 0)}`}
@@ -1665,7 +1723,10 @@ export default function PreFundingDistribute() {
                                   Expenditure History / سجل المصروفات
                                   {!isPaymentsLoading && payments.length > 0 && (
                                     <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-[9px] font-bold border border-rose-200 dark:border-rose-700">
-                                      {payments.length} transaction{payments.length > 1 ? 's' : ''}
+                                      {attributedPayments.length} transaction{attributedPayments.length !== 1 ? 's' : ''}
+                                      {unallocatedPayments.length > 0 && (
+                                        <span className="text-amber-700 dark:text-amber-300"> + {unallocatedPayments.length} unallocated</span>
+                                      )}
                                     </span>
                                   )}
                                 </button>
@@ -1696,24 +1757,38 @@ export default function PreFundingDistribute() {
                                     <tbody>
                                       {payments.map((p, i) => {
                                         const date = p._txn_date || p.paid_at || p.submitted_at || p.approved_at || p.created_at;
-                                        const isRev = p._is_reversal || p._type === 'reversal';
+                                        const isUnallocated = p._is_unallocated === true;
+                                        const isRev = !isUnallocated && (p._is_reversal || p._type === 'reversal');
                                         const rawCategory = p._category || p.expense_category;
-                                        const category = isRev
-                                          ? 'Reversal'
-                                          : p._type === 'ocs'
-                                            ? (catLabel[rawCategory] ?? rawCategory?.replace(/_/g, ' ') ?? 'Cost Submission')
-                                            : p._type === 'dp'
-                                              ? (rawCategory?.replace(/_/g, ' ') || 'Down Payment')
-                                            : (rawCategory?.replace(/_/g, ' ') || 'Expenditure');
+                                        const category = isUnallocated
+                                          ? 'Unallocated'
+                                          : isRev
+                                            ? 'Reversal'
+                                            : p._type === 'ocs'
+                                              ? (catLabel[rawCategory] ?? rawCategory?.replace(/_/g, ' ') ?? 'Cost Submission')
+                                              : p._type === 'dp'
+                                                ? (rawCategory?.replace(/_/g, ' ') || 'Down Payment')
+                                              : (rawCategory?.replace(/_/g, ' ') || 'Expenditure');
                                         const desc = p.description || p.purpose || '—';
                                         const displayAmt = Math.abs(Number(p._raw_amount ?? p._txn_amount ?? 0));
                                         return (
-                                          <tr key={p.id || i} className={cn('border-b border-border/30 hover:bg-muted/30', isRev && 'bg-purple-50/40 dark:bg-purple-950/20')}>
+                                          <tr
+                                            key={p.id || i}
+                                            className={cn(
+                                              'border-b border-border/30 hover:bg-muted/30',
+                                              isUnallocated && 'bg-amber-50/50 dark:bg-amber-950/20',
+                                              isRev && 'bg-purple-50/40 dark:bg-purple-950/20',
+                                            )}
+                                          >
                                             <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
                                               {date ? format(new Date(date), 'dd MMM yy') : '—'}
                                             </td>
                                             <td className="py-1.5 pr-3 font-medium whitespace-nowrap">
-                                              {isRev ? (
+                                              {isUnallocated ? (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700">
+                                                  Unallocated
+                                                </span>
+                                              ) : isRev ? (
                                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700">
                                                   Reversal
                                                 </span>
@@ -1722,11 +1797,17 @@ export default function PreFundingDistribute() {
                                               )}
                                             </td>
                                             <td className="py-1.5 pr-3 text-muted-foreground max-w-[220px] truncate" title={desc}>{desc}</td>
-                                            <td className={cn('py-1.5 text-right font-mono font-semibold whitespace-nowrap', isRev ? 'text-purple-600 dark:text-purple-400' : 'text-foreground')}>
+                                            <td className={cn(
+                                              'py-1.5 text-right font-mono font-semibold whitespace-nowrap',
+                                              isUnallocated && 'text-amber-700 dark:text-amber-400 italic',
+                                              isRev && 'text-purple-600 dark:text-purple-400',
+                                            )}>
                                               {isRev ? `−${fund.currency} ${formatNumber(displayAmt, 0)}` : `${fund.currency} ${formatNumber(displayAmt, 0)}`}
                                             </td>
                                             <td className="py-1.5 pl-3 capitalize whitespace-nowrap">
-                                              {isRev ? (
+                                              {isUnallocated ? (
+                                                <span className="text-amber-700 dark:text-amber-400 font-medium text-[11px]">Tracking only</span>
+                                              ) : isRev ? (
                                                 <span className="text-purple-600 dark:text-purple-400 font-medium text-[11px]">Reversed</span>
                                               ) : (
                                                 <span className="text-emerald-700 dark:text-emerald-400 font-medium text-[11px]">Paid</span>
@@ -1738,12 +1819,23 @@ export default function PreFundingDistribute() {
                                     </tbody>
                                     <tfoot>
                                       {(() => {
-                                        const grossPayments = payments.filter(p => !p._is_reversal && p._type !== 'reversal').reduce((s, p) => s + (p._raw_amount ?? p._txn_amount ?? 0), 0);
-                                        const totalReversals = payments.filter(p => p._is_reversal || p._type === 'reversal').reduce((s, p) => s + Math.abs(p._raw_amount ?? p._txn_amount ?? 0), 0);
-                                        const netSpent = grossPayments - totalReversals;
+                                        const netSpent = sumAttributedLedgerSignedPaid(payments);
+                                        const grossPayments = attributedPayments
+                                          .filter(p => Number(p._signed_paid_amount ?? 0) > 0)
+                                          .reduce((s, p) => s + Number(p._signed_paid_amount ?? 0), 0);
+                                        const totalReversals = attributedPayments
+                                          .filter(p => Number(p._signed_paid_amount ?? 0) < 0)
+                                          .reduce((s, p) => s + Math.abs(Number(p._signed_paid_amount ?? 0)), 0);
                                         const remainingWithStaff = a.allocated_amount - netSpent;
                                         return (
                                           <>
+                                            {unallocatedPayments.length > 0 && (
+                                              <tr className="border-t text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50/40 dark:bg-amber-950/20">
+                                                <td colSpan={5} className="py-1.5 px-2.5">
+                                                  {unallocatedPayments.length} unallocated fund payment{unallocatedPayments.length !== 1 ? 's' : ''} shown above for tracking — not included in Net Paid Out or balance.
+                                                </td>
+                                              </tr>
+                                            )}
                                             {totalReversals > 0 && (
                                               <>
                                                 <tr className="border-t text-muted-foreground text-[11px]">

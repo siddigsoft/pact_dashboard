@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
+import '../services/r2_storage_service.dart';
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
@@ -1021,6 +1022,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     // Detect image URLs by extension or Supabase pattern
     final lowerUrl = url.toLowerCase().split('?').first;
     final isImage =
+        R2StorageService.isR2Ref(url) ||
+        category == 'site_visit_photo' ||
         lowerUrl.endsWith('.jpg') ||
         lowerUrl.endsWith('.jpeg') ||
         lowerUrl.endsWith('.png') ||
@@ -1044,7 +1047,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     }
 
     try {
-      final uri = Uri.parse(url);
+      final resolved = await R2StorageService.resolveUrl(url);
+      final uri = Uri.parse(resolved);
       // On mobile prefer inAppBrowserView (Chrome Custom Tab / SFSafariVC)
       // On web use platformDefault which opens the URL normally
       final mode = kIsWeb
@@ -2163,6 +2167,19 @@ class _DocumentImageViewer extends StatefulWidget {
 class _DocumentImageViewerState extends State<_DocumentImageViewer> {
   final TransformationController _transformationController =
       TransformationController();
+  String? _displayUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    R2StorageService.resolveUrl(widget.url)
+        .then((url) {
+          if (mounted) setState(() => _displayUrl = url);
+        })
+        .catchError((_) {
+          if (mounted) setState(() => _displayUrl = widget.url);
+        });
+  }
 
   @override
   void dispose() {
@@ -2188,8 +2205,9 @@ class _DocumentImageViewerState extends State<_DocumentImageViewer> {
                 ? 'فتح في المتصفح'
                 : 'Open in browser',
             onPressed: () async {
-              final uri = Uri.parse(widget.url);
-              if (await canLaunchUrl(uri)) {
+              final resolved = _displayUrl ?? widget.url;
+              final uri = Uri.tryParse(resolved);
+              if (uri != null && await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
             },
@@ -2201,8 +2219,10 @@ class _DocumentImageViewerState extends State<_DocumentImageViewer> {
           transformationController: _transformationController,
           minScale: 0.5,
           maxScale: 5.0,
-          child: CachedNetworkImage(
-            imageUrl: widget.url,
+          child: _displayUrl == null && R2StorageService.isR2Ref(widget.url)
+              ? const CircularProgressIndicator(color: Colors.white)
+              : CachedNetworkImage(
+            imageUrl: _displayUrl ?? widget.url,
             fit: BoxFit.contain,
             placeholder: (_, __) => const Center(
               child: CircularProgressIndicator(color: Colors.white),
@@ -2221,8 +2241,8 @@ class _DocumentImageViewerState extends State<_DocumentImageViewer> {
                 const SizedBox(height: 16),
                 TextButton.icon(
                   onPressed: () async {
-                    final uri = Uri.parse(widget.url);
-                    if (await canLaunchUrl(uri)) {
+                    final uri = Uri.tryParse(_displayUrl ?? widget.url);
+                    if (uri != null && await canLaunchUrl(uri)) {
                       await launchUrl(
                         uri,
                         mode: LaunchMode.externalApplication,

@@ -7,6 +7,7 @@ import 'models.dart';
 // import '../offline_data_service.dart'; // DEPRECATED: Use OfflineDb instead
 import '../chat_service.dart';
 import '../notification_trigger_service.dart';
+import '../r2_storage_service.dart';
 
 typedef SyncProgressCallback = void Function(SyncProgress progress);
 typedef SyncCompleteCallback = void Function(SyncResult result);
@@ -973,18 +974,12 @@ class SyncManager {
     String fileName,
     String siteEntryId,
   ) async {
-    // Decode base64 to bytes
     final bytes = base64Decode(base64Data);
-
-    // Upload to storage
-    final path = 'site-photos/$siteEntryId/$fileName';
-    await _client.storage.from('site-visit-media').uploadBinary(path, bytes);
-
-    // Get public URL
-    final publicUrl = _client.storage
-        .from('site-visit-media')
-        .getPublicUrl(path);
-    return publicUrl;
+    return R2StorageService.uploadBytes(
+      bytes: bytes,
+      fileName: fileName,
+      folderPath: 'SiteVisits/$siteEntryId',
+    );
   }
 
   Future<void> _createWalletTransactionIfNeeded(String siteEntryId) async {

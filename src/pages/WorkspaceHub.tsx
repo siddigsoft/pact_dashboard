@@ -248,13 +248,24 @@ function MyAccessBadge({ level }: { level: AccessLevel }) {
 
 // ─── Share dialog ─────────────────────────────────────────────────────────────
 
-function UserPickerCombobox({ profiles, value, onChange }: {
+async function fetchProfilesForShare(limit = 500): Promise<ProfileOption[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .order('full_name', { ascending: true, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(error.message || 'Failed to load users');
+  return (data ?? []) as ProfileOption[];
+}
+
+function UserPickerCombobox({ profiles, value, onChange, isLoading = false, loadError }: {
   profiles: ProfileOption[]; value: string; onChange: (id: string) => void;
+  isLoading?: boolean; loadError?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const selected = profiles.find(p => p.id === value);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -268,12 +279,16 @@ function UserPickerCombobox({ profiles, value, onChange }: {
                 {selected.full_name ?? selected.id.slice(0, 8)}
                 {selected.role && <span className="text-muted-foreground ml-1">({selected.role})</span>}
               </>
-            ) : 'Select user…'}
+            ) : isLoading ? 'Loading users…' : 'Select user…'}
           </span>
           <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0 ml-2" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[280px]" align="start">
+      <PopoverContent
+        className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[280px] z-[10001]"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Command
           filter={(itemValue, search) => {
             // itemValue includes name + role (lowercased) so search matches both
@@ -282,10 +297,16 @@ function UserPickerCombobox({ profiles, value, onChange }: {
         >
           <CommandInput placeholder="Search by name or role…" className="h-9 text-xs" />
           <CommandList className="max-h-[260px]">
-            <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">No users found.</CommandEmpty>
+            <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
+              {loadError
+                ? `Could not load users: ${loadError}`
+                : isLoading
+                  ? 'Loading users…'
+                  : 'No users found.'}
+            </CommandEmpty>
             <CommandGroup>
               {profiles.map(p => {
-                const label = `${p.full_name ?? p.id.slice(0, 8)} ${p.role ?? ''}`.trim();
+                const label = `${p.full_name ?? p.id.slice(0, 8)} ${p.role ?? ''} ${p.id}`.trim();
                 return (
                   <CommandItem
                     key={p.id}
@@ -310,33 +331,36 @@ function UserPickerCombobox({ profiles, value, onChange }: {
 /** Inline user-picker used by the bulk-share dialog inside WorkspaceHub. */
 function BulkShareUserPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const { data: profiles = [] } = useQuery<ProfileOption[]>({
+  const { data: profiles = [], isLoading, error } = useQuery<ProfileOption[]>({
     queryKey: ['profiles_for_bulk_share'],
-    queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').limit(200);
-      return (data ?? []) as ProfileOption[];
-    },
+    queryFn: () => fetchProfilesForShare(500),
     staleTime: 60_000,
   });
   const selected = profiles.find(p => p.id === value);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button className="w-full flex items-center justify-between h-8 px-3 rounded-md border border-input bg-background text-xs hover:bg-accent transition-colors">
           <span className={selected ? 'text-foreground' : 'text-muted-foreground'}>
-            {selected ? (selected.full_name ?? selected.id) : 'Search people…'}
+            {selected ? (selected.full_name ?? selected.id) : isLoading ? 'Loading…' : 'Search people…'}
           </span>
           <svg className="h-3.5 w-3.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[280px] p-0" align="start">
+      <PopoverContent
+        className="w-[280px] p-0 z-[10001]"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Command>
           <CommandInput placeholder="Search name or role…" className="h-8 text-xs" />
           <CommandList>
-            <CommandEmpty>No people found.</CommandEmpty>
+            <CommandEmpty>
+              {error ? `Could not load users: ${(error as Error).message}` : isLoading ? 'Loading…' : 'No people found.'}
+            </CommandEmpty>
             <CommandGroup>
               {profiles.map(p => (
-                <CommandItem key={p.id} value={`${p.full_name ?? ''} ${p.role ?? ''}`}
+                <CommandItem key={p.id} value={`${p.full_name ?? ''} ${p.role ?? ''} ${p.id}`}
                   onSelect={() => { onChange(p.id); setOpen(false); }}
                   className="text-xs gap-2">
                   <span className="font-medium">{p.full_name ?? p.id.slice(0, 8)}</span>
@@ -383,13 +407,11 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
     enabled: open && !!targetId,
   });
 
-  const { data: profiles = [] } = useQuery<ProfileOption[]>({
+  const { data: profiles = [], isLoading: profilesLoading, error: profilesError } = useQuery<ProfileOption[]>({
     queryKey: ['profiles_for_sharing'],
-    queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').limit(200);
-      return (data ?? []) as ProfileOption[];
-    },
+    queryFn: () => fetchProfilesForShare(500),
     enabled: open && canEdit && granteeType === 'user',
+    staleTime: 60_000,
   });
 
   const { data: guestAccesses = [], refetch: refetchGuests } = useQuery<WGuestAccess[]>({
@@ -631,6 +653,8 @@ function ShareDialog({ file, folder, open, onClose, currentUserId, canEdit = tru
                     profiles={profiles}
                     value={granteeId}
                     onChange={setGranteeId}
+                    isLoading={profilesLoading}
+                    loadError={profilesError ? (profilesError as Error).message : null}
                   />
                 ) : (
                   <Input value={granteeId} onChange={e => setGranteeId(e.target.value)}

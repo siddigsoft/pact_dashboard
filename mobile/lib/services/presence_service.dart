@@ -331,6 +331,7 @@ class PresenceService {
         'in_call': inCall,
         'call_id': callId,
         'last_seen': DateTime.now().toIso8601String(),
+        'source': 'mobile',
       });
     } catch (e) {
       debugPrint('[PresenceService] Error tracking presence: $e');
