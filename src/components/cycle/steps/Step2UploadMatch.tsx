@@ -1182,7 +1182,11 @@ export default function Step2UploadMatch({
                         const isExpanded = expandedReviewRows.has(r.rowIndex);
                         const toggleExpand = () => setExpandedReviewRows(prev => {
                           const n = new Set(prev);
-                          isExpanded ? n.delete(r.rowIndex) : n.add(r.rowIndex);
+                          if (isExpanded) {
+                            n.delete(r.rowIndex);
+                          } else {
+                            n.add(r.rowIndex);
+                          }
                           return n;
                         });
                         const matchedCandidate = r.matchedSiteId
@@ -1410,7 +1414,7 @@ export default function Step2UploadMatch({
              <div className="rounded-lg border bg-slate-50/70 p-3">
                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">MMP sites · {candidates.length.toLocaleString()} total</p>
                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                 <dt>Confirmed site links</dt><dd className="text-right font-semibold">{confirmedSiteIdsLive.size}</dd>
+                 <dt>Confirmed site links</dt><dd className="text-right font-semibold">{matchedSiteIdsLive.size}</dd>
                  <dt>Not found in WFP file</dt><dd className="text-right font-semibold">{notInCleanCands.length}</dd>
                  <dt>Pending uncovered decision</dt><dd className="text-right font-semibold text-amber-700">{pendingUncoveredCount}</dd>
                </dl>
