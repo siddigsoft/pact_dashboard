@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildExactIndex, FUZZY_WORKLOAD_BUDGET, getFuzzyFallbackWorkload, runMatching, type MatchCandidate } from '@/utils/fuzzyMatcher';
 import { canAdvancePastMatch } from '../matchGate';
 import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs } from '../matchAliases';
+import { normalizeOdkSourceKey, resolveRegistryDevice } from '../deviceRegistry';
+import { classifyMatchResults } from '../resultClassification';
 
 describe('site matching safety policy', () => {
   const pairs = [{ mmpColumn: 'site_code', wfpColumn: 'Site Code' }];
@@ -90,5 +92,30 @@ describe('site matching safety policy', () => {
     );
     expect(sanitized[0].wfpColumn).toBe('');
     expect(getPairSemanticIssues(restored)).toHaveLength(1);
+  });
+
+  it('normalizes device keys and resolves the assignment active on the submission date', () => {
+    const devices = [{ id: 'device-1', odk_source_key: 'ODK Device 01', odk_source_key_normalized: 'odkdevice01' }];
+    const assignments = [{ field_device_id: 'device-1', profile_id: 'collector-1', valid_from: '2025-01-01', valid_to: '2025-06-30' }];
+    expect(normalizeOdkSourceKey(' ODK-device_01 ')).toBe('odkdevice01');
+    expect(resolveRegistryDevice('ODK-device_01', '2025-01-01', devices, assignments, { 'collector-1': 'Amina Idris' }, 'collector-1')).toMatchObject({ status: 'matched', collectorName: 'Amina Idris' });
+    expect(resolveRegistryDevice('ODK-device_01', '2025-05-18', devices, assignments, { 'collector-1': 'Amina Idris' }, 'collector-1')).toMatchObject({ status: 'matched', collectorName: 'Amina Idris' });
+    expect(resolveRegistryDevice('ODK-device_01', '2025-06-30', devices, assignments, { 'collector-1': 'Amina Idris' })).toMatchObject({ status: 'no active assignment for date' });
+    expect(resolveRegistryDevice('ODK-device_01', '2025-08-18', devices, assignments, { 'collector-1': 'Amina Idris' })).toMatchObject({ status: 'no active assignment for date' });
+  });
+
+  it('classifies unique confirmations separately from duplicate and unresolved exceptions', () => {
+    const base = (rowIndex: number, siteId: string | null, status: 'auto' | 'review' | 'unmatched'): any => ({
+      rowIndex, wfpRow: {}, matchedSiteId: siteId, matchedSiteName: siteId, matchScore: 100, matchLevel: 'exact', status,
+    });
+    const classified = classifyMatchResults([
+      base(0, 'site-a', 'auto'),
+      base(1, 'site-b', 'auto'),
+      base(2, 'site-a', 'auto'),
+      base(3, null, 'unmatched'),
+      base(4, 'site-c', 'review'),
+    ]);
+    expect(classified.confirmed.map(row => row.rowIndex)).toEqual([1]);
+    expect(classified.exceptions.map(row => row.rowIndex)).toEqual([0, 2, 3, 4]);
   });
 });

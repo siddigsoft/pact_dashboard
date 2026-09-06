@@ -10,13 +10,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Upload, AlertCircle, CheckCircle2, Info, Loader2, Download, Search,
-  ChevronDown, ChevronUp, Plus, X as XIcon,
+  Plus, X as XIcon,
   FileSpreadsheet, ShieldCheck,
 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
 import { runMatchingChunked, type MatchCandidate, type MatchPair, type MatchResult } from '@/utils/fuzzyMatcher';
 import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
 import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs } from '../matchAliases';
+import { resolveRegistryDevice, type RegistryAssignment, type RegistryDevice } from '../deviceRegistry';
+import { classifyMatchResults } from '../resultClassification';
 
 // ─── MMP columns to fetch from the database ────────────────────────────────
 // NOTE: accepted_by is a plain text / uuid column with no FK to profiles,
@@ -138,6 +140,29 @@ function validateIdentityColumns(
   return issues;
 }
 
+function DeviceEvidence({
+  row,
+  resolution,
+  deviceColumn,
+  claimant,
+}: {
+  row: MatchResult;
+  resolution: ReturnType<typeof resolveRegistryDevice>;
+  deviceColumn: string;
+  claimant?: string | null;
+}) {
+  const rawDevice = deviceColumn !== IDENTITY_NONE ? row.wfpRow[deviceColumn] : '';
+  return (
+    <div className="space-y-0.5 min-w-0">
+      <p className="break-all"><span className="text-muted-foreground">WFP Device ID:</span> {rawDevice || '—'}</p>
+      <p className="break-all"><span className="text-muted-foreground">Registry Device ID:</span> {resolution.device?.odk_source_key || '—'}</p>
+      <p className="break-words"><span className="text-muted-foreground">Assigned collector:</span> {resolution.collectorName || '—'}</p>
+      <p className="break-words"><span className="text-muted-foreground">Claimant:</span> {claimant ? claimant : '—'}</p>
+      <Badge variant={resolution.status === 'matched' ? 'outline' : 'destructive'} className="mt-1 text-[10px]">{resolution.status}</Badge>
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 interface Props {
   wizardState: WizardState;
@@ -161,11 +186,12 @@ export default function Step2UploadMatch({
   const [matchProgress, setMatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [manualSearch, setManualSearch] = useState<Record<number, string>>({});
   const [manualCandidates, setManualCandidates] = useState<Record<number, MatchCandidate[]>>({});
-  const [showReviewTable, setShowReviewTable] = useState(true);
-  const [expandedReviewRows, setExpandedReviewRows] = useState<Set<number>>(new Set());
   const [candidates, setCandidates]     = useState<MatchCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [profileNameMap, setProfileNameMap] = useState<Record<string, string>>({});
+  const [registryDevices, setRegistryDevices] = useState<RegistryDevice[]>([]);
+  const [registryAssignments, setRegistryAssignments] = useState<RegistryAssignment[]>([]);
+  const [registryWarning, setRegistryWarning] = useState<string | null>(null);
 
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   // Track whether pairs have been auto-initialised for the current MMP + file combo
@@ -301,6 +327,22 @@ export default function Step2UploadMatch({
     setCandidatesLoading(false);
     setPairsInitialized(false);
 
+    // Registry evidence is loaded alongside the site candidates. It is never
+    // used as a site-match key and remains in memory only for this review.
+    const [deviceResult, assignmentResult] = await Promise.all([
+      (supabase as any).from('field_devices').select('id, odk_source_key, odk_source_key_normalized, display_name, active'),
+      (supabase as any).from('field_device_assignments').select('field_device_id, profile_id, valid_from, valid_to'),
+    ]);
+    if (deviceResult.error || assignmentResult.error) {
+      setRegistryDevices([]);
+      setRegistryAssignments([]);
+      setRegistryWarning('Device registry evidence is unavailable (the registry migration may not be applied or your account may not have permission). Matching can continue, but device status is not verified.');
+    } else {
+      setRegistryWarning(null);
+      setRegistryDevices(deviceResult.data ?? []);
+      setRegistryAssignments(assignmentResult.data ?? []);
+    }
+
     // Resolve UUID-shaped accepted_by values to profile names (non-blocking —
     // table is already visible; names patch in when the lookup returns).
     // No FK exists so we can't join directly.
@@ -317,6 +359,14 @@ export default function Step2UploadMatch({
       const map: Record<string, string> = {};
       for (const p of profiles ?? []) if (p.full_name) map[p.id] = p.full_name;
       setProfileNameMap(map);
+    }
+    const assignmentProfileIds = [...new Set((assignmentResult.data ?? []).map((a: any) => a.profile_id).filter(Boolean))];
+    if (assignmentProfileIds.length) {
+      const { data: assignmentProfiles } = await supabase.from('profiles').select('id, full_name').in('id', assignmentProfileIds);
+      setProfileNameMap(current => ({
+        ...current,
+        ...Object.fromEntries((assignmentProfiles ?? []).filter((p: any) => p.full_name).map((p: any) => [p.id, p.full_name])),
+      }));
     }
   };
 
@@ -661,18 +711,8 @@ export default function Step2UploadMatch({
   const matchResults   = wizardState.matchResults;
   const reviewCount    = matchResults.filter(r => r.status === 'review').length;
   const unmatchedCount = matchResults.filter(r => r.status === 'unmatched').length;
-  const needsReview    = matchResults.filter(r => r.status === 'review');
-  const unmatchedRows  = matchResults.filter(r => r.status === 'unmatched');
-  const confirmedRows = matchResults.filter(r => r.status === 'auto' || r.action === 'confirm');
-  const duplicateSiteIds = new Set(
-    confirmedRows
-      .map(row => row.matchedSiteId)
-      .filter((siteId, index, ids): siteId is string => !!siteId && ids.indexOf(siteId) !== index)
-  );
+  const { confirmed: uniqueConfirmedRows, exceptions: queueRows, duplicateSiteIds } = classifyMatchResults(matchResults);
   const duplicateRows = matchResults.filter(row => !!row.matchedSiteId && duplicateSiteIds.has(row.matchedSiteId));
-  const queueRows = matchResults.filter(row =>
-    row.status === 'review' || row.status === 'unmatched' || duplicateRows.some(duplicate => duplicate.rowIndex === row.rowIndex)
-  );
   const wfpConfirmedCount = matchResults.filter(row =>
     (row.status === 'auto' || row.action === 'confirm') && !duplicateSiteIds.has(row.matchedSiteId ?? '')
   ).length;
@@ -692,10 +732,6 @@ export default function Step2UploadMatch({
     && selectedIdentityColumns.deviceId !== IDENTITY_NONE
     && selectedIdentityColumns.submissionDate !== IDENTITY_NONE
     && identityIssues.length === 0;
-  const primaryPair = wizardState.matchingPairs.find(p => p.mmpColumn && p.wfpColumn);
-  const secondaryPairs = wizardState.matchingPairs
-    .filter(p => p.mmpColumn && p.wfpColumn && p !== primaryPair)
-    .slice(0, 2);
   const actionableRows = (reviewFilter === 'actioned' ? matchResults.filter(r => r.status === 'actioned') : queueRows).filter(r => {
     const candidate = r.matchedSiteId ? candidates.find(c => c.siteId === r.matchedSiteId) : undefined;
     const haystack = [
@@ -714,6 +750,12 @@ export default function Step2UploadMatch({
   const reviewPageSize = 50;
   const reviewPageCount = Math.max(1, Math.ceil(actionableRows.length / reviewPageSize));
   const visibleActionRows = actionableRows.slice((reviewPage - 1) * reviewPageSize, reviewPage * reviewPageSize);
+  const confirmedSearch = reviewSearch.trim().toLowerCase();
+  const visibleConfirmedRows = uniqueConfirmedRows.filter(r => {
+    const candidate = r.matchedSiteId ? candidates.find(c => c.siteId === r.matchedSiteId) : undefined;
+    return (!confirmedSearch || [r.matchedSiteName, candidate?.data.state, ...wizardState.matchingPairs.flatMap(p => [r.wfpRow[p.wfpColumn], candidate?.data[p.mmpColumn]])].join(' ').toLowerCase().includes(confirmedSearch))
+      && (stateFilter === 'all' || candidate?.data.state === stateFilter);
+  });
   useEffect(() => {
     setReviewPage(page => Math.min(page, reviewPageCount));
   }, [reviewPageCount]);
@@ -1103,279 +1145,54 @@ export default function Step2UploadMatch({
         </div>
       )}
 
-       {/* Phase 3 — Exceptions review */}
-       {matchResults.length > 0 && (
-         <div className="space-y-4">
-          {(queueRows.length > 0 || reviewFilter === 'actioned') && (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-muted/50 px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">
-                  Phase 3 — Exceptions review ({queueRows.length})
-                  </span>
-                  {duplicateRows.length > 0 && (
-                    <Badge variant="outline" className="border-destructive/40 text-destructive">
-                      {duplicateRows.length} duplicate submission{duplicateRows.length === 1 ? '' : 's'}
-                    </Badge>
-                  )}
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                  <Input
-                    className="col-span-2 h-8 w-full text-xs sm:w-52"
-                    placeholder="Search rows or sites"
-                    value={reviewSearch}
-                    onChange={e => { setReviewSearch(e.target.value); setReviewPage(1); }}
-                  />
-                  <Select value={reviewFilter} onValueChange={v => { setReviewFilter(v as typeof reviewFilter); setReviewPage(1); }}>
-                    <SelectTrigger className="h-8 w-full text-xs sm:w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All states</SelectItem>
-                      <SelectItem value="review">Review</SelectItem>
-                      <SelectItem value="unmatched">Unmatched</SelectItem>
-                      <SelectItem value="actioned">Actioned</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={stateFilter} onValueChange={v => { setStateFilter(v); setReviewPage(1); }}>
-                    <SelectTrigger className="h-8 w-full text-xs sm:w-28"><SelectValue placeholder="State" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All states</SelectItem>
-                      {[...new Set(candidates.map(c => c.data.state).filter(Boolean))].sort().map(state => (
-                        <SelectItem key={state} value={state}>{state}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={confidenceFilter} onValueChange={v => { setConfidenceFilter(v as typeof confidenceFilter); setReviewPage(1); }}>
-                    <SelectTrigger className="h-8 w-full text-xs sm:w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All confidence</SelectItem>
-                      <SelectItem value="high">High ≥78%</SelectItem>
-                      <SelectItem value="medium">Medium 50–77%</SelectItem>
-                      <SelectItem value="low">Low &lt;50%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowReviewTable(p => !p)}
-                    className="h-8 justify-self-end sm:ml-auto"
-                  >
-                    {showReviewTable ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                </div>
+        {/* Phase 3 — operational results: confirmed links, then exceptions only */}
+        {matchResults.length > 0 && (
+          <div className="space-y-4">
+            <section className="rounded-lg border overflow-hidden">
+              <div className="bg-emerald-50/70 px-4 py-3">
+                <p className="text-sm font-semibold">Confirmed matches · {uniqueConfirmedRows.length}</p>
+                <p className="text-xs text-muted-foreground">Unique automatic or explicitly confirmed site links. Duplicate conflicts stay below for review.</p>
               </div>
-
-              {showReviewTable && (
-                <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              {uniqueConfirmedRows.length > 0 && (
+                <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium">WFP Row</th>
-                        <th className="px-3 py-2 text-left font-medium">System Match</th>
-                        <th className="px-3 py-2 text-left font-medium">Score</th>
-                        <th className="px-3 py-2 text-left font-medium">Type</th>
-                        <th className="px-3 py-2 text-left font-medium">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleActionRows.map(r => {
-                        const isExpanded = expandedReviewRows.has(r.rowIndex);
-                        const toggleExpand = () => setExpandedReviewRows(prev => {
-                          const n = new Set(prev);
-                          if (isExpanded) {
-                            n.delete(r.rowIndex);
-                          } else {
-                            n.add(r.rowIndex);
-                          }
-                          return n;
-                        });
-                        const matchedCandidate = r.matchedSiteId
-                          ? candidates.find(c => c.siteId === r.matchedSiteId)
-                          : null;
-                        const wfpCols = wizardState.fileColumns;
-                        return (
-                          <>
-                            <tr key={r.rowIndex} className="border-t hover:bg-muted/20">
-                              <td className="px-3 py-2">
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
-                                    onClick={toggleExpand}
-                                    title={isExpanded ? 'Collapse details' : 'Expand full details'}
-                                  >
-                                    {isExpanded
-                                      ? <ChevronUp className="h-3.5 w-3.5" />
-                                      : <ChevronDown className="h-3.5 w-3.5" />}
-                                  </button>
-                                  <div>
-                                    <div className="font-medium">
-                                      {primaryPair ? (r.wfpRow[primaryPair.wfpColumn] ?? '—') : '—'}
-                                    </div>
-                                    {secondaryPairs.length > 0 && (
-                                      <div className="text-muted-foreground text-[11px]">
-                                        {secondaryPairs.map(p => r.wfpRow[p.wfpColumn]).filter(Boolean).join(' / ')}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2">
-                                {r.matchedSiteName
-                                  ? <span className="text-blue-600">{r.matchedSiteName}</span>
-                                  : <span className="text-muted-foreground italic">No match found</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${r.matchScore >= 78 ? 'text-green-600' : r.matchScore >= 50 ? 'text-amber-600' : 'text-red-500'}`}
-                                >
-                                  {r.matchScore}%
-                                </Badge>
-                              </td>
-                               <td className="px-3 py-2">
-                                <Badge variant="outline" className="text-xs capitalize">{r.matchLevel}</Badge>
-                                 {r.matchedSiteId && duplicateSiteIds.has(r.matchedSiteId) && (
-                                   <p className="mt-1 text-[10px] font-medium text-destructive">Duplicate site conflict — keep one confirmed</p>
-                                 )}
-                              </td>
-                              <td className="px-3 py-2">
-                                {r.status === 'actioned' ? (
-                                  <Badge className="bg-green-100 text-green-700 text-xs">{r.action}</Badge>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    <div className="flex gap-1">
-                                       <Button
-                                        type="button" size="sm" variant="outline"
-                                        className="h-6 text-xs px-2"
-                                         disabled={!r.matchedSiteId}
-                                        onClick={() => handleAction(r.rowIndex, 'confirm')}
-                                        data-testid={`button-confirm-${r.rowIndex}`}
-                                      >Confirm</Button>
-                                      <Button
-                                        type="button" size="sm" variant="outline"
-                                        className="h-6 text-xs px-2"
-                                        onClick={() => handleAction(r.rowIndex, 'extra')}
-                                        data-testid={`button-extra-${r.rowIndex}`}
-                                      >Extra</Button>
-                                      <Button
-                                        type="button" size="sm" variant="outline"
-                                        className="h-6 text-xs px-2 text-red-600 border-red-200"
-                                        onClick={() => handleAction(r.rowIndex, 'reject')}
-                                        data-testid={`button-reject-${r.rowIndex}`}
-                                      >Reject</Button>
-                                    </div>
-                                    <div className="relative">
-                                      <Search className="absolute left-1.5 top-1 h-3 w-3 text-muted-foreground" />
-                                      <Input
-                                        className="h-6 text-xs pl-5"
-                                        placeholder="Link to site…"
-                                        value={manualSearch[r.rowIndex] ?? ''}
-                                        onChange={e => handleManualSearch(r.rowIndex, e.target.value)}
-                                        data-testid={`input-manual-search-${r.rowIndex}`}
-                                      />
-                                      {(manualCandidates[r.rowIndex] ?? []).length > 0 && (
-                                        <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">
-                                          {manualCandidates[r.rowIndex].map(c => (
-                                            <div
-                                              key={c.siteId}
-                                              className="px-2 py-1 hover:bg-muted cursor-pointer text-xs"
-                                              onClick={() => handleManualLink(r.rowIndex, c)}
-                                            >
-                                              <span className="font-medium">{c.data.site_name ?? '—'}</span>
-                                              <span className="text-muted-foreground ml-1">
-                                                {c.data.state}/{c.data.locality}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                            {/* ── Expanded detail row ── */}
-                            {isExpanded && (
-                              <tr key={`${r.rowIndex}-detail`} className="border-t bg-slate-50 dark:bg-slate-900/40">
-                                <td colSpan={5} className="px-4 py-3">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    {/* WFP file row — all columns */}
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700 mb-2">WFP File Row (all columns)</p>
-                                      <div className="space-y-0.5">
-                                        {wfpCols.filter(col => r.wfpRow[col] != null && r.wfpRow[col] !== '').map(col => (
-                                          <div key={col} className="flex gap-2 text-[11px]">
-                                            <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-40 truncate" title={col}>{col}:</span>
-                                            <span className="font-medium break-all">{String(r.wfpRow[col])}</span>
-                                          </div>
-                                        ))}
-                                        {wfpCols.filter(col => r.wfpRow[col] != null && r.wfpRow[col] !== '').length === 0 && (
-                                          <p className="text-xs text-muted-foreground italic">No non-empty values</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {/* Matched MMP candidate detail */}
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-2">
-                                        Matched MMP Site{matchedCandidate ? '' : ' — None'}
-                                      </p>
-                                      {matchedCandidate ? (
-                                        <div className="space-y-0.5">
-                                          {Object.entries(matchedCandidate.data)
-                                            .filter(([, v]) => v !== '')
-                                            .map(([k, v]) => {
-                                              const isUuidVal = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-                                              const display = k === 'accepted_by' && isUuidVal
-                                                ? (profileNameMap[v] ?? v)
-                                                : v;
-                                              return (
-                                                <div key={k} className="flex gap-2 text-[11px]">
-                                                  <span className="text-muted-foreground font-mono min-w-0 flex-shrink-0 w-32 truncate" title={k}>{k}:</span>
-                                                  <span className="font-medium break-all">{display}</span>
-                                                </div>
-                                              );
-                                            })}
-                                        </div>
-                                      ) : (
-                                        <p className="text-xs text-muted-foreground italic">No MMP site was matched for this WFP row</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </>
-                        );
-                      })}
-                    </tbody>
+                    <thead className="bg-muted"><tr><th className="px-3 py-2 text-left">State / Site</th><th className="px-3 py-2 text-left">Configured match evidence</th><th className="px-3 py-2 text-left">Score / status</th><th className="px-3 py-2 text-left">Attribution evidence</th></tr></thead>
+                    <tbody>{visibleConfirmedRows.map(r => {
+                      const candidate = candidates.find(c => c.siteId === r.matchedSiteId);
+                      const device = resolveRegistryDevice(selectedIdentityColumns.deviceId === IDENTITY_NONE ? '' : r.wfpRow[selectedIdentityColumns.deviceId], normalizeSubmissionDate(r.wfpRow[selectedIdentityColumns.submissionDate]), registryDevices, registryAssignments, profileNameMap, candidate?.data.accepted_by);
+                      return <tr key={r.rowIndex} className="border-t align-top">
+                        <td className="px-3 py-2"><p className="font-medium">{candidate?.data.state || 'State not recorded'}</p><p className="text-blue-700 break-words">{r.matchedSiteName || '—'}</p></td>
+                        <td className="px-3 py-2"><div className="space-y-1">{wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn).map(p => <div key={p.wfpColumn}><span className="text-muted-foreground">{p.wfpColumn}:</span> {r.wfpRow[p.wfpColumn] || '—'} <span className="text-muted-foreground">↔ {candidate?.data[p.mmpColumn] || '—'}</span></div>)}</div></td>
+                        <td className="px-3 py-2"><Badge variant="outline">{r.matchScore}% · {r.action === 'confirm' ? 'confirmed' : 'auto'}</Badge></td>
+                        <td className="px-3 py-2"><DeviceEvidence row={r} resolution={device} deviceColumn={selectedIdentityColumns.deviceId} claimant={candidate?.data.accepted_by ? (profileNameMap[candidate.data.accepted_by] ?? candidate.data.accepted_by) : null} /></td>
+                      </tr>;
+                    })}</tbody>
                   </table>
                 </div>
               )}
-              {showReviewTable && (
-                <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
-                  <span>Showing {visibleActionRows.length} of {actionableRows.length} rows · 50 per page</span>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage <= 1} onClick={() => setReviewPage(p => p - 1)}>Previous</Button>
-                    <span>Page {reviewPage} of {reviewPageCount}</span>
-                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage >= reviewPageCount} onClick={() => setReviewPage(p => p + 1)}>Next</Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+            </section>
 
-          {reviewCount > 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                 {reviewCount + unmatchedCount} WFP row{reviewCount + unmatchedCount !== 1 ? 's' : ''} still block advance.
-                 Every unmatched WFP row must be confirmed to a selected site, marked WFP-only Extra, or rejected.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      )}
+            {(queueRows.length > 0 || reviewFilter === 'actioned') && <section className="rounded-lg border overflow-hidden">
+              <div className="bg-muted/50 px-4 py-3">
+                <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">Exceptions review · {queueRows.length}</p>{duplicateRows.length > 0 && <Badge variant="outline" className="border-destructive/40 text-destructive">{duplicateRows.length} duplicate conflicts</Badge>}</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  <Input className="col-span-2 h-8 w-full text-xs sm:w-52" placeholder="Search rows or sites" value={reviewSearch} onChange={e => { setReviewSearch(e.target.value); setReviewPage(1); }} />
+                  <Select value={reviewFilter} onValueChange={v => { setReviewFilter(v as typeof reviewFilter); setReviewPage(1); }}><SelectTrigger className="h-8 w-full text-xs sm:w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All outcomes</SelectItem><SelectItem value="review">Review</SelectItem><SelectItem value="unmatched">Unmatched</SelectItem><SelectItem value="actioned">Actioned</SelectItem></SelectContent></Select>
+                  <Select value={stateFilter} onValueChange={v => { setStateFilter(v); setReviewPage(1); }}><SelectTrigger className="h-8 w-full text-xs sm:w-32"><SelectValue placeholder="State" /></SelectTrigger><SelectContent><SelectItem value="all">All states</SelectItem>{[...new Set(candidates.map(c => c.data.state).filter(Boolean))].sort().map(state => <SelectItem key={state} value={state}>{state}</SelectItem>)}</SelectContent></Select>
+                  <Select value={confidenceFilter} onValueChange={v => { setConfidenceFilter(v as typeof confidenceFilter); setReviewPage(1); }}><SelectTrigger className="h-8 w-full text-xs sm:w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All confidence</SelectItem><SelectItem value="high">High ≥78%</SelectItem><SelectItem value="medium">Medium 50–77%</SelectItem><SelectItem value="low">Low &lt;50%</SelectItem></SelectContent></Select>
+                </div>
+              </div>
+              <div className="divide-y">{[...new Set(visibleActionRows.map(r => candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded'))].sort().map(state => <div key={state}><div className="bg-slate-50 px-3 py-2 text-xs font-semibold">{state} · {visibleActionRows.filter(r => (candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded') === state).length}</div>{visibleActionRows.filter(r => (candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded') === state).map(r => {
+                const candidate = r.matchedSiteId ? candidates.find(c => c.siteId === r.matchedSiteId) : undefined;
+                const device = resolveRegistryDevice(selectedIdentityColumns.deviceId === IDENTITY_NONE ? '' : r.wfpRow[selectedIdentityColumns.deviceId], normalizeSubmissionDate(r.wfpRow[selectedIdentityColumns.submissionDate]), registryDevices, registryAssignments, profileNameMap, candidate?.data.accepted_by);
+                return <div key={r.rowIndex} className="grid gap-3 px-3 py-3 text-xs lg:grid-cols-[1.1fr_1.5fr_.7fr_1.3fr_auto] lg:items-start"><div><p className="font-medium">{r.matchedSiteName || 'No match found'}</p><p className="text-muted-foreground">WFP row {r.rowIndex + 1}</p></div><div className="space-y-1">{wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn).map(p => <p key={p.wfpColumn}><span className="text-muted-foreground">{p.wfpColumn}:</span> {r.wfpRow[p.wfpColumn] || '—'} <span className="text-muted-foreground">↔ {candidate?.data[p.mmpColumn] || '—'}</span></p>)}</div><div><Badge variant="outline">{r.matchScore}% · {r.matchLevel}</Badge>{r.matchedSiteId && duplicateSiteIds.has(r.matchedSiteId) && <p className="mt-1 text-[10px] text-destructive">Duplicate site conflict</p>}</div><DeviceEvidence row={r} resolution={device} deviceColumn={selectedIdentityColumns.deviceId} claimant={candidate?.data.accepted_by ? (profileNameMap[candidate.data.accepted_by] ?? candidate.data.accepted_by) : null} /><div className="space-y-1"><div className="flex gap-1"><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" disabled={!r.matchedSiteId} onClick={() => handleAction(r.rowIndex, 'confirm')}>Confirm</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'extra')}>Extra</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200" onClick={() => handleAction(r.rowIndex, 'reject')}>Reject</Button></div><div className="relative"><Input className="h-6 text-xs" placeholder="Link to site…" value={manualSearch[r.rowIndex] ?? ''} onChange={e => handleManualSearch(r.rowIndex, e.target.value)} />{(manualCandidates[r.rowIndex] ?? []).length > 0 && <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">{manualCandidates[r.rowIndex].map(c => <div key={c.siteId} className="px-2 py-1 hover:bg-muted cursor-pointer" onClick={() => handleManualLink(r.rowIndex, c)}>{c.data.site_name} <span className="text-muted-foreground">{c.data.state}/{c.data.locality}</span></div>)}</div>}</div></div></div>;
+              })}</div>)}</div>
+              <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground"><span>Showing {visibleActionRows.length} of {actionableRows.length} rows · 50 per page</span><div className="flex items-center gap-2"><Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage <= 1} onClick={() => setReviewPage(p => p - 1)}>Previous</Button><span>Page {reviewPage} of {reviewPageCount}</span><Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage >= reviewPageCount} onClick={() => setReviewPage(p => p + 1)}>Next</Button></div></div>
+            </section>}
+            {registryWarning && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{registryWarning}</AlertDescription></Alert>}
+            {(reviewCount > 0 || unmatchedCount > 0) && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{reviewCount + unmatchedCount} WFP rows still block advance. Every unresolved row needs a disposition.</AlertDescription></Alert>}
+          </div>
+        )}
 
       {matchResults.length > 0 && (
         <section className="rounded-lg border bg-muted/20 px-4 py-3">
