@@ -111,6 +111,16 @@ interface Props {
   mmpName: string;
 }
 
+interface ActivityExportRow {
+  timestamp: string | null;
+  actor: string;
+  role: string;
+  action: string;
+  description: string;
+  previousState: string;
+  newState: string;
+}
+
 // ── Stat card left-border accent colours ─────────────────────────────
 const clsCard: Record<EntryClass | 'total', { border: string; icon: string; num: string }> = {
   total:       { border: 'border-l-teal-500',    icon: 'text-teal-500',    num: 'text-teal-700' },
@@ -319,6 +329,95 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     return list.slice(0, 500); // cap display at 500
   }, [entries, siteFilter, statusFilter]);
 
+  const activityExportRows = useMemo<ActivityExportRow[]>(() => {
+    const rows: ActivityExportRow[] = activityLogs.map(log => {
+      const previousState = typeof log.previous_state === 'string'
+        ? log.previous_state
+        : log.previous_state?.status || '';
+      const newState = typeof log.new_state === 'string'
+        ? log.new_state
+        : log.new_state?.status || '';
+      const details = typeof log.details === 'string'
+        ? log.details
+        : log.details
+          ? JSON.stringify(log.details)
+          : '';
+
+      return {
+        timestamp: log.timestamp || null,
+        actor: log.actor_name || 'System',
+        role: (log.actor_role || '').replace(/_/g, ' '),
+        action: (log.action || 'activity').replace(/_/g, ' '),
+        description: log.description || details || '—',
+        previousState,
+        newState,
+      };
+    });
+
+    const workflow = mmp?.workflow && typeof mmp.workflow === 'object' ? mmp.workflow : {};
+    const archiveHistory = Array.isArray(workflow.archive_history) ? workflow.archive_history : [];
+    const cycles = [...archiveHistory];
+    const isCurrentlyArchived = mmp?.status === 'archived' || mmp?.cycle_status === 'archived';
+    const archivedBy = mmp?.archivedby || workflow.archived_by;
+    const archivedAt = mmp?.archivedat || workflow.archived_at;
+
+    if (isCurrentlyArchived && archivedBy) {
+      cycles.push({
+        archived_by: archivedBy,
+        archived_at: archivedAt || null,
+        pre_archive_status: workflow.pre_archive_status || null,
+        restored_by: null,
+        restored_at: null,
+      });
+    }
+
+    if (
+      !isCurrentlyArchived &&
+      workflow.restored_by &&
+      workflow.restored_at &&
+      !archiveHistory.some((item: any) => item.restored_at === workflow.restored_at)
+    ) {
+      cycles.push({
+        archived_by: workflow.archived_by || null,
+        archived_at: workflow.archived_at || null,
+        pre_archive_status: workflow.pre_archive_status || null,
+        restored_by: workflow.restored_by,
+        restored_at: workflow.restored_at,
+      });
+    }
+
+    cycles.forEach((cycle: any) => {
+      if (cycle.archived_by || cycle.archived_at) {
+        rows.push({
+          timestamp: cycle.archived_at || null,
+          actor: cycle.archived_by || 'System',
+          role: '',
+          action: 'Archived',
+          description: 'MMP archived',
+          previousState: cycle.pre_archive_status || '',
+          newState: 'archived',
+        });
+      }
+      if (cycle.restored_by || cycle.restored_at) {
+        rows.push({
+          timestamp: cycle.restored_at || null,
+          actor: cycle.restored_by || 'System',
+          role: '',
+          action: 'Restored',
+          description: 'MMP restored from archive',
+          previousState: 'archived',
+          newState: cycle.restored_status || '',
+        });
+      }
+    });
+
+    return rows.sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [activityLogs, mmp]);
+
   // ── PDF Export ────────────────────────────────────────────────────────────
   const exportPDF = () => {
     if (!stats || !mmp) return;
@@ -506,7 +605,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         ['Pending (SDG)',    costSubmissions.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.amount_cents || 0), 0) / 100],
         ['', ''],
         ['── ACTIVITY ──', ''],
-        ['Log Entries',      activityLogs.length],
+        ['Log Entries',      activityExportRows.length],
       ];
 
       summSections.forEach(([label, value], i) => {
@@ -718,43 +817,49 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       }
 
       // ════════════════════════════════════════════════════════════════
-      // Sheet 7 — Activity Log (if any)
+      // Sheet 7 — Activity
       // ════════════════════════════════════════════════════════════════
-      if (activityLogs.length > 0) {
-        const wsAct = wb.addWorksheet('Activity Log');
-        wsAct.columns = [
-          { key: 'ts',   width: 18 }, { key: 'actor', width: 24 },
-          { key: 'role', width: 18 }, { key: 'act',   width: 22 },
-          { key: 'desc', width: 40 }, { key: 'prev',  width: 18 },
-          { key: 'next', width: 18 },
-        ];
-        addTitleBlock(wsAct, 'MMP Activity Log', subtitle, 7);
-        addHeaderRow(wsAct, ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State']);
+      const wsAct = wb.addWorksheet('Activity');
+      wsAct.columns = [
+        { key: 'ts',   width: 20 }, { key: 'actor', width: 26 },
+        { key: 'role', width: 18 }, { key: 'act',   width: 22 },
+        { key: 'desc', width: 42 }, { key: 'prev',  width: 18 },
+        { key: 'next', width: 18 },
+      ];
+      addTitleBlock(wsAct, `MMP Activity (${activityExportRows.length} records)`, subtitle, 7);
+      addHeaderRow(wsAct, ['Timestamp', 'Actor', 'Role', 'Action', 'Description', 'Previous State', 'New State']);
 
-        const ACT_COLOR = (action: string) => {
-          const a = (action || '').toLowerCase();
-          if (a.includes('reject') || a.includes('recall') || a.includes('return')) return RED;
-          if (a.includes('approve') || a.includes('complete') || a.includes('verify')) return GREEN;
-          if (a.includes('update') || a.includes('edit')) return 'FF2563EB';
-          return SLATE;
-        };
+      const ACT_COLOR = (action: string) => {
+        const a = (action || '').toLowerCase();
+        if (a.includes('reject') || a.includes('recall') || a.includes('return')) return RED;
+        if (a.includes('approve') || a.includes('complete') || a.includes('verify') || a.includes('restore')) return GREEN;
+        if (a.includes('archive')) return AMBER;
+        if (a.includes('update') || a.includes('edit')) return 'FF2563EB';
+        return SLATE;
+      };
 
-        activityLogs.forEach((log, i) => {
-          const prevState = typeof log.previous_state === 'string'
-            ? log.previous_state : (log.previous_state as any)?.status || '';
-          const newState = typeof log.new_state === 'string'
-            ? log.new_state : (log.new_state as any)?.status || '';
+      if (activityExportRows.length === 0) {
+        const emptyRow = wsAct.addRow(['No activity recorded for this MMP.']);
+        wsAct.mergeCells(emptyRow.number, 1, emptyRow.number, 7);
+        emptyRow.height = 28;
+        emptyRow.getCell(1).font = { italic: true, size: 10, color: { argb: SLATE } };
+        emptyRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        emptyRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LT } };
+        emptyRow.getCell(1).border = border();
+      } else {
+        activityExportRows.forEach((event, i) => {
           const row = addDataRow(wsAct, [
-            log.timestamp ? format(new Date(log.timestamp), 'dd MMM yyyy HH:mm') : '—',
-            log.actor_name || 'System',
-            (log.actor_role || '').replace(/_/g, ' '),
-            (log.action || '').replace(/_/g, ' '),
-            log.description || log.details || '—',
-            prevState, newState,
+            event.timestamp ? format(new Date(event.timestamp), 'dd MMM yyyy HH:mm') : '—',
+            event.actor,
+            event.role || '—',
+            event.action,
+            event.description,
+            event.previousState || '—',
+            event.newState || '—',
           ], i % 2 === 0);
           row.getCell(1).font = { size: 9, color: { argb: SLATE } };
-          row.getCell(4).font = { bold: true, size: 10, color: { argb: ACT_COLOR(log.action) } };
-          if (newState) row.getCell(7).font = { bold: true, size: 10, color: { argb: GREEN } };
+          row.getCell(4).font = { bold: true, size: 10, color: { argb: ACT_COLOR(event.action) } };
+          if (event.newState) row.getCell(7).font = { bold: true, size: 10, color: { argb: GREEN } };
         });
       }
 
