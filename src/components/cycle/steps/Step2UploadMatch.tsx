@@ -14,9 +14,9 @@ import {
   FileSpreadsheet, ShieldCheck,
 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
-import { runMatchingChunked, type MatchCandidate, type MatchPair, type MatchResult } from '@/utils/fuzzyMatcher';
+import { normalize, runMatchingChunked, type MatchCandidate, type MatchPair, type MatchResult } from '@/utils/fuzzyMatcher';
 import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
-import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs } from '../matchAliases';
+import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs, SITE_IDENTITY_MMP_COLUMNS } from '../matchAliases';
 import { resolveRegistryDevice, type RegistryAssignment, type RegistryDevice } from '../deviceRegistry';
 import { classifyMatchResults } from '../resultClassification';
 
@@ -163,6 +163,20 @@ function DeviceEvidence({
   );
 }
 
+function MatchChecks({ row, candidate, pairs }: { row: MatchResult; candidate?: MatchCandidate; pairs: MatchPair[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {pairs.filter(pair => pair.mmpColumn && pair.wfpColumn).map(pair => {
+        const wfp = normalize(row.wfpRow[pair.wfpColumn] ?? '');
+        const mmp = normalize(candidate?.data[pair.mmpColumn] ?? '');
+        const exact = !!wfp && !!mmp && wfp === mmp;
+        const label = pair.mmpColumn === 'site_name' ? 'Site name' : pair.mmpColumn === 'site_code' ? 'Site code' : pair.mmpColumn[0].toUpperCase() + pair.mmpColumn.slice(1);
+        return <Badge key={pair.mmpColumn} variant="outline" className={`text-[10px] ${exact ? 'text-emerald-700' : 'text-amber-700'}`}>{label} {exact ? 'exact' : 'partial'}</Badge>;
+      })}
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 interface Props {
   wizardState: WizardState;
@@ -277,12 +291,18 @@ export default function Step2UploadMatch({
       wizardState.fileColumns,
       wizardState.matchingPairs,
     );
-    if (sanitized.some((pair, index) =>
-      pair.mmpColumn !== wizardState.matchingPairs[index]?.mmpColumn ||
-      pair.wfpColumn !== wizardState.matchingPairs[index]?.wfpColumn
-    )) {
+    const mappingsChanged = sanitized.length !== wizardState.matchingPairs.length ||
+      sanitized.some((pair, index) =>
+        pair.mmpColumn !== wizardState.matchingPairs[index]?.mmpColumn ||
+        pair.wfpColumn !== wizardState.matchingPairs[index]?.wfpColumn
+      );
+    if (mappingsChanged) {
       setMatchingPairsConfirmed(false);
-      updateWizardState({ matchingPairs: sanitized });
+      updateWizardState({
+        matchingPairs: sanitized.length > 0
+          ? sanitized
+          : autoDetectPairs(wizardState.mmpColumns, wizardState.fileColumns),
+      });
     }
   }, [wizardState.fileColumns, wizardState.mmpColumns, wizardState.matchingPairs]);
 
@@ -461,6 +481,25 @@ export default function Step2UploadMatch({
   // ── Run the matching algorithm ────────────────────────────────────────────
   const runMatch = async () => {
     if (!matchingPairsConfirmed || !identityColumnsConfirmed) return;
+    const safePairs = sanitizeMatchingPairs(
+      wizardState.mmpColumns,
+      wizardState.fileColumns,
+      wizardState.matchingPairs,
+    );
+    const mappingsChanged = safePairs.length !== wizardState.matchingPairs.length ||
+      safePairs.some((pair, index) =>
+        pair.mmpColumn !== wizardState.matchingPairs[index]?.mmpColumn ||
+        pair.wfpColumn !== wizardState.matchingPairs[index]?.wfpColumn
+      );
+    if (mappingsChanged || safePairs.length === 0) {
+      const correctedPairs = safePairs.length > 0
+        ? safePairs
+        : autoDetectPairs(wizardState.mmpColumns, wizardState.fileColumns);
+      updateWizardState({ matchingPairs: correctedPairs, matchResults: [] });
+      setMatchingPairsConfirmed(false);
+      setFileError('The saved mapping included fields that do not identify a site. Review the corrected Site Code/Name, State, and Locality fields, then confirm and run matching again.');
+      return;
+    }
     // candidates is local state — if the component mounted from a resume and
     // the DB fetch hasn't completed yet, reload before running.
     let activeCandidates = candidates;
@@ -487,7 +526,7 @@ export default function Step2UploadMatch({
     setMatchProgress({ done: 0, total: wizardState.fileRows.length });
     let results: MatchResult[];
     try {
-      results = await runMatchingChunked(wizardState.fileRows, wizardState.matchingPairs, activeCandidates, {
+      results = await runMatchingChunked(wizardState.fileRows, safePairs, activeCandidates, {
         chunkSize: 8,
         isCancelled: () => matchCancelledRef.current,
         onProgress: (done, total) => setMatchProgress({ done, total }),
@@ -756,6 +795,14 @@ export default function Step2UploadMatch({
     return (!confirmedSearch || [r.matchedSiteName, candidate?.data.state, ...wizardState.matchingPairs.flatMap(p => [r.wfpRow[p.wfpColumn], candidate?.data[p.mmpColumn]])].join(' ').toLowerCase().includes(confirmedSearch))
       && (stateFilter === 'all' || candidate?.data.state === stateFilter);
   });
+  const corePairs = wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn);
+  const identityDifferenceBreakdown = corePairs.map(pair => ({
+    label: MMP_COL_LABELS[pair.mmpColumn] ?? pair.mmpColumn,
+    count: queueRows.filter(row => {
+      const candidate = row.matchedSiteId ? candidates.find(c => c.siteId === row.matchedSiteId) : undefined;
+      return !!candidate && String(row.wfpRow[pair.wfpColumn] ?? '').trim().toLowerCase() !== String(candidate.data[pair.mmpColumn] ?? '').trim().toLowerCase();
+    }).length,
+  })).sort((a, b) => b.count - a.count);
   useEffect(() => {
     setReviewPage(page => Math.min(page, reviewPageCount));
   }, [reviewPageCount]);
@@ -1053,7 +1100,9 @@ export default function Step2UploadMatch({
                        <SelectTrigger className="h-auto min-h-11 w-full items-start py-2 text-left text-sm [&>span]:whitespace-normal [&>span]:break-words" data-testid={`select-mmp-col-${idx}`}><SelectValue placeholder="Choose a Command Center field…" /></SelectTrigger>
                        <SelectContent>
                          <SelectItem value="__none__">— Choose Command Center field —</SelectItem>
-                         {(wizardState.mmpColumns.length > 0 ? wizardState.mmpColumns : Object.keys(MMP_COL_LABELS)).map(c => <SelectItem key={c} value={c} className="whitespace-normal">{c}{MMP_COL_LABELS[c] ? ` (${MMP_COL_LABELS[c]})` : ''}</SelectItem>)}
+                     {(wizardState.mmpColumns.length > 0 ? wizardState.mmpColumns : Object.keys(MMP_COL_LABELS))
+                       .filter(c => SITE_IDENTITY_MMP_COLUMNS.includes(c as typeof SITE_IDENTITY_MMP_COLUMNS[number]))
+                       .map(c => <SelectItem key={c} value={c} className="whitespace-normal">{c}{MMP_COL_LABELS[c] ? ` (${MMP_COL_LABELS[c]})` : ''}</SelectItem>)}
                        </SelectContent>
                      </Select>
                    </div>
@@ -1162,7 +1211,7 @@ export default function Step2UploadMatch({
                       const device = resolveRegistryDevice(selectedIdentityColumns.deviceId === IDENTITY_NONE ? '' : r.wfpRow[selectedIdentityColumns.deviceId], normalizeSubmissionDate(r.wfpRow[selectedIdentityColumns.submissionDate]), registryDevices, registryAssignments, profileNameMap, candidate?.data.accepted_by);
                       return <tr key={r.rowIndex} className="border-t align-top">
                         <td className="px-3 py-2"><p className="font-medium">{candidate?.data.state || 'State not recorded'}</p><p className="text-blue-700 break-words">{r.matchedSiteName || '—'}</p></td>
-                        <td className="px-3 py-2"><div className="space-y-1">{wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn).map(p => <div key={p.wfpColumn}><span className="text-muted-foreground">{p.wfpColumn}:</span> {r.wfpRow[p.wfpColumn] || '—'} <span className="text-muted-foreground">↔ {candidate?.data[p.mmpColumn] || '—'}</span></div>)}</div></td>
+                        <td className="px-3 py-2"><MatchChecks row={r} candidate={candidate} pairs={corePairs} /></td>
                         <td className="px-3 py-2"><Badge variant="outline">{r.matchScore}% · {r.action === 'confirm' ? 'confirmed' : 'auto'}</Badge></td>
                         <td className="px-3 py-2"><DeviceEvidence row={r} resolution={device} deviceColumn={selectedIdentityColumns.deviceId} claimant={candidate?.data.accepted_by ? (profileNameMap[candidate.data.accepted_by] ?? candidate.data.accepted_by) : null} /></td>
                       </tr>;
@@ -1172,6 +1221,17 @@ export default function Step2UploadMatch({
               )}
             </section>
 
+            {uniqueConfirmedRows.length === 0 && queueRows.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-semibold">No unique exact site identity matches were found.</p>
+                  <p className="mt-1">Matching uses only: {corePairs.map(pair => MMP_COL_LABELS[pair.mmpColumn] ?? pair.mmpColumn).join(' + ') || 'no configured core key'}. Device ID is attribution evidence only; it does not affect site matching.</p>
+                  {identityDifferenceBreakdown[0] && <p className="mt-1">Most common difference: <strong>{identityDifferenceBreakdown[0].label}</strong> differs in {identityDifferenceBreakdown[0].count} candidate row{identityDifferenceBreakdown[0].count === 1 ? '' : 's'}.</p>}
+                </AlertDescription>
+              </Alert>
+            )}
+            {registryWarning && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{registryWarning}</AlertDescription></Alert>}
             {(queueRows.length > 0 || reviewFilter === 'actioned') && <section className="rounded-lg border overflow-hidden">
               <div className="bg-muted/50 px-4 py-3">
                 <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">Exceptions review · {queueRows.length}</p>{duplicateRows.length > 0 && <Badge variant="outline" className="border-destructive/40 text-destructive">{duplicateRows.length} duplicate conflicts</Badge>}</div>
@@ -1185,11 +1245,10 @@ export default function Step2UploadMatch({
               <div className="divide-y">{[...new Set(visibleActionRows.map(r => candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded'))].sort().map(state => <div key={state}><div className="bg-slate-50 px-3 py-2 text-xs font-semibold">{state} · {visibleActionRows.filter(r => (candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded') === state).length}</div>{visibleActionRows.filter(r => (candidates.find(c => c.siteId === r.matchedSiteId)?.data.state || 'State not recorded') === state).map(r => {
                 const candidate = r.matchedSiteId ? candidates.find(c => c.siteId === r.matchedSiteId) : undefined;
                 const device = resolveRegistryDevice(selectedIdentityColumns.deviceId === IDENTITY_NONE ? '' : r.wfpRow[selectedIdentityColumns.deviceId], normalizeSubmissionDate(r.wfpRow[selectedIdentityColumns.submissionDate]), registryDevices, registryAssignments, profileNameMap, candidate?.data.accepted_by);
-                return <div key={r.rowIndex} className="grid gap-3 px-3 py-3 text-xs lg:grid-cols-[1.1fr_1.5fr_.7fr_1.3fr_auto] lg:items-start"><div><p className="font-medium">{r.matchedSiteName || 'No match found'}</p><p className="text-muted-foreground">WFP row {r.rowIndex + 1}</p></div><div className="space-y-1">{wizardState.matchingPairs.filter(p => p.mmpColumn && p.wfpColumn).map(p => <p key={p.wfpColumn}><span className="text-muted-foreground">{p.wfpColumn}:</span> {r.wfpRow[p.wfpColumn] || '—'} <span className="text-muted-foreground">↔ {candidate?.data[p.mmpColumn] || '—'}</span></p>)}</div><div><Badge variant="outline">{r.matchScore}% · {r.matchLevel}</Badge>{r.matchedSiteId && duplicateSiteIds.has(r.matchedSiteId) && <p className="mt-1 text-[10px] text-destructive">Duplicate site conflict</p>}</div><DeviceEvidence row={r} resolution={device} deviceColumn={selectedIdentityColumns.deviceId} claimant={candidate?.data.accepted_by ? (profileNameMap[candidate.data.accepted_by] ?? candidate.data.accepted_by) : null} /><div className="space-y-1"><div className="flex gap-1"><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" disabled={!r.matchedSiteId} onClick={() => handleAction(r.rowIndex, 'confirm')}>Confirm</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'extra')}>Extra</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200" onClick={() => handleAction(r.rowIndex, 'reject')}>Reject</Button></div><div className="relative"><Input className="h-6 text-xs" placeholder="Link to site…" value={manualSearch[r.rowIndex] ?? ''} onChange={e => handleManualSearch(r.rowIndex, e.target.value)} />{(manualCandidates[r.rowIndex] ?? []).length > 0 && <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">{manualCandidates[r.rowIndex].map(c => <div key={c.siteId} className="px-2 py-1 hover:bg-muted cursor-pointer" onClick={() => handleManualLink(r.rowIndex, c)}>{c.data.site_name} <span className="text-muted-foreground">{c.data.state}/{c.data.locality}</span></div>)}</div>}</div></div></div>;
+                return <div key={r.rowIndex} className="grid gap-3 px-3 py-3 text-xs lg:grid-cols-[1.1fr_1.5fr_.7fr_1.3fr_auto] lg:items-start"><div><p className="font-medium">{r.matchedSiteName || 'No match found'}</p><p className="text-muted-foreground">WFP row {r.rowIndex + 1}</p></div><MatchChecks row={r} candidate={candidate} pairs={corePairs} /><div><Badge variant="outline">{r.matchScore}% · {r.matchLevel}</Badge>{r.matchedSiteId && duplicateSiteIds.has(r.matchedSiteId) && <p className="mt-1 text-[10px] text-destructive">Duplicate site conflict</p>}</div><DeviceEvidence row={r} resolution={device} deviceColumn={selectedIdentityColumns.deviceId} claimant={candidate?.data.accepted_by ? (profileNameMap[candidate.data.accepted_by] ?? candidate.data.accepted_by) : null} /><div className="space-y-1"><div className="flex gap-1"><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" disabled={!r.matchedSiteId} onClick={() => handleAction(r.rowIndex, 'confirm')}>Confirm</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleAction(r.rowIndex, 'extra')}>Extra</Button><Button type="button" size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200" onClick={() => handleAction(r.rowIndex, 'reject')}>Reject</Button></div><div className="relative"><Input className="h-6 text-xs" placeholder="Link to site…" value={manualSearch[r.rowIndex] ?? ''} onChange={e => handleManualSearch(r.rowIndex, e.target.value)} />{(manualCandidates[r.rowIndex] ?? []).length > 0 && <div className="absolute z-10 bg-popover border rounded shadow-lg mt-0.5 w-64">{manualCandidates[r.rowIndex].map(c => <div key={c.siteId} className="px-2 py-1 hover:bg-muted cursor-pointer" onClick={() => handleManualLink(r.rowIndex, c)}>{c.data.site_name} <span className="text-muted-foreground">{c.data.state}/{c.data.locality}</span></div>)}</div>}</div></div></div>;
               })}</div>)}</div>
               <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground"><span>Showing {visibleActionRows.length} of {actionableRows.length} rows · 50 per page</span><div className="flex items-center gap-2"><Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage <= 1} onClick={() => setReviewPage(p => p - 1)}>Previous</Button><span>Page {reviewPage} of {reviewPageCount}</span><Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={reviewPage >= reviewPageCount} onClick={() => setReviewPage(p => p + 1)}>Next</Button></div></div>
             </section>}
-            {registryWarning && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{registryWarning}</AlertDescription></Alert>}
             {(reviewCount > 0 || unmatchedCount > 0) && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{reviewCount + unmatchedCount} WFP rows still block advance. Every unresolved row needs a disposition.</AlertDescription></Alert>}
           </div>
         )}

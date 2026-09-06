@@ -70,7 +70,7 @@ describe('site matching safety policy', () => {
       ['Select the activity site', 'Confirm the activity', 'Location name'],
     );
     expect(pairs).toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Location name' });
-    expect(pairs).toContainEqual({ mmpColumn: 'activity_at_site', wfpColumn: 'Confirm the activity' });
+    expect(pairs).not.toContainEqual({ mmpColumn: 'activity_at_site', wfpColumn: 'Confirm the activity' });
     expect(pairs).not.toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Select the activity site' });
   });
 
@@ -81,6 +81,48 @@ describe('site matching safety policy', () => {
       ['1.14 Select the activity site', '1.13 Exact location name'],
       restored,
     )).toEqual([{ mmpColumn: 'site_name', wfpColumn: '1.13 Exact location name' }]);
+  });
+
+  it('auto-detection excludes activity and partner context fields', () => {
+    expect(autoDetectPairs(
+      ['site_code', 'site_name', 'state', 'locality', 'activity_at_site', 'cp_name'],
+      ['Site Code', 'Site Name', 'State', 'Locality', 'Confirm activity', 'Partner name'],
+    )).toEqual([{ mmpColumn: 'site_code', wfpColumn: 'Site Code' }]);
+    expect(sanitizeMatchingPairs(
+      ['site_name', 'state', 'activity_at_site', 'cp_name'],
+      ['Site Name', 'State', 'Activity', 'Partner'],
+      [
+        { mmpColumn: 'site_name', wfpColumn: 'Site Name' },
+        { mmpColumn: 'state', wfpColumn: 'State' },
+        { mmpColumn: 'activity_at_site', wfpColumn: 'Activity' },
+        { mmpColumn: 'cp_name', wfpColumn: 'Partner' },
+      ],
+    )).toEqual([
+      { mmpColumn: 'site_name', wfpColumn: 'Site Name' },
+      { mmpColumn: 'state', wfpColumn: 'State' },
+    ]);
+
+    expect(sanitizeMatchingPairs(
+      ['activity_at_site', 'cp_name'],
+      ['Activity', 'Partner'],
+      [
+        { mmpColumn: 'activity_at_site', wfpColumn: 'Activity' },
+        { mmpColumn: 'cp_name', wfpColumn: 'Partner' },
+      ],
+    )).toEqual([]);
+  });
+
+  it('auto-confirms unique exact site identity despite unrelated context differences', () => {
+    const results = runMatching(
+      [{ Name: 'Kosti', State: 'White Nile', Locality: 'Kosti', Activity: 'different', Partner: 'other' }],
+      [
+        { mmpColumn: 'site_name', wfpColumn: 'Name' },
+        { mmpColumn: 'state', wfpColumn: 'State' },
+        { mmpColumn: 'locality', wfpColumn: 'Locality' },
+      ],
+      [{ siteId: 'site-a', data: { site_name: 'Kosti', state: 'White Nile', locality: 'Kosti', activity_at_site: 'stored', cp_name: 'stored' } }],
+    );
+    expect(results[0]).toMatchObject({ status: 'auto', matchedSiteId: 'site-a', matchScore: 100 });
   });
 
   it('clears ambiguous invalid site-name pairs and blocks the semantic gate', () => {
