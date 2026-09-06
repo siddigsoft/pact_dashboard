@@ -519,11 +519,11 @@ export async function exportFormattedPaymentRun(
 //   7. Payment Run           — if payable rows exist
 //   8. Override Log          — if overrides exist
 
-export async function exportCycleCloseWorkbook(
+export async function buildCycleCloseWorkbook(
   wizardState: WizardState,
   currentUser: any,
   checkResults: CheckResult[],
-): Promise<void> {
+): Promise<ExcelJS.Workbook> {
   const mmpId = wizardState.selectedMmpId!;
   const mmp   = wizardState.selectedMmp;
   const now   = new Date().toLocaleString();
@@ -978,5 +978,14 @@ export async function exportCycleCloseWorkbook(
       headers, rows, { rowBgFn: () => C.amberR });
   }
 
-  await saveWb(wb, `cycle-close-workbook-${cname}.xlsx`);
+  return wb;
+}
+
+export async function exportCycleCloseWorkbook(
+  wizardState: WizardState,
+  currentUser: any,
+  checkResults: CheckResult[],
+): Promise<void> {
+  const wb = await buildCycleCloseWorkbook(wizardState, currentUser, checkResults);
+  await saveWb(wb, `cycle-close-workbook-${cycleName(wizardState)}.xlsx`);
 }

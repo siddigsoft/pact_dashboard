@@ -1,14 +1,11 @@
-import ExcelJS from 'exceljs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WizardState } from '@/components/cycle/CycleCloseWizard';
 
-const { saveAsMock, fromMock, rpcMock } = vi.hoisted(() => ({
-  saveAsMock: vi.fn(),
+const { fromMock, rpcMock } = vi.hoisted(() => ({
   fromMock: vi.fn(),
   rpcMock: vi.fn(),
 }));
 
-vi.mock('file-saver', () => ({ saveAs: saveAsMock }));
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: fromMock,
@@ -16,16 +13,7 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-import { exportCycleCloseWorkbook } from '../cycleCloseExport';
-
-function readBlob(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsArrayBuffer(blob);
-  });
-}
+import { buildCycleCloseWorkbook } from '../cycleCloseExport';
 
 describe('Cycle Close workbook collection identity', () => {
   const claimantId = '00000000-0000-0000-0000-000000000002';
@@ -139,11 +127,11 @@ describe('Cycle Close workbook collection identity', () => {
       overrides: {},
     } as unknown as WizardState;
 
-    await exportCycleCloseWorkbook(wizardState, { full_name: 'Finance Admin' }, []);
-
-    expect(saveAsMock).toHaveBeenCalledOnce();
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await readBlob(saveAsMock.mock.calls[0][0]));
+    const workbook = await buildCycleCloseWorkbook(
+      wizardState,
+      { full_name: 'Finance Admin' },
+      [],
+    );
 
     const reconciliation = workbook.getWorksheet('Enumerator Reconciliation');
     expect(reconciliation?.getCell('A5').value).toBe(officialName);
