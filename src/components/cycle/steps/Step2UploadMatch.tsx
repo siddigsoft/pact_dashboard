@@ -10,12 +10,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Upload, AlertCircle, CheckCircle2, Info, Loader2, Download, Search,
-  XCircle, AlertTriangle, ChevronDown, ChevronUp, Plus, X as XIcon,
-  Database, FileSpreadsheet, ShieldCheck,
+  ChevronDown, ChevronUp, Plus, X as XIcon,
+  FileSpreadsheet, ShieldCheck,
 } from 'lucide-react';
 import type { WizardState } from '../CycleCloseWizard';
 import { runMatchingChunked, type MatchCandidate, type MatchPair, type MatchResult } from '@/utils/fuzzyMatcher';
 import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
+import { autoDetectPairs } from '../matchAliases';
 
 // ─── MMP columns to fetch from the database ────────────────────────────────
 // NOTE: accepted_by is a plain text / uuid column with no FK to profiles,
@@ -41,46 +42,6 @@ const MMP_COL_LABELS: Record<string, string> = {
   visit_date:      'Visit Date',
   enumerator_name: 'Enumerator (Claimed By)',
 };
-
-// ─── Auto-detect pairs: map MMP column → likely WFP file column ────────────
-const MMP_MATCH_ALIASES: Array<{ mmpCol: string; keywords: string[] }> = [
-  { mmpCol: 'site_name',       keywords: ['select the activity site', 'activity site', 'site name', 'location name', 'site', 'village', 'موقع'] },
-  { mmpCol: 'state',           keywords: ['state of the site', 'state', 'governorate', 'ولاية'] },
-  { mmpCol: 'locality',        keywords: ['locality of the site', 'locality', 'district', 'محلية'] },
-  { mmpCol: 'activity_at_site',keywords: ['confirm the activity', 'activity of the site', 'activity', 'programme', 'النشاط'] },
-  { mmpCol: 'enumerator_name', keywords: ['name of interviewer', 'enumerator name', 'enumerator', 'data collector', 'interviewer', 'المعدد', 'اسم المعدد'] },
-  { mmpCol: 'monitoring_by',   keywords: ['monitoring by', 'monitored by', 'رقابة', 'مراقب'] },
-  { mmpCol: 'site_code',       keywords: ['site code', 'site id', 'site_code', 'location code', 'location id'] },
-  // Device IDs, submission UUIDs and dates are evidence only. They must never
-  // be used as a site_code match (a device can visit many sites).
-  { mmpCol: 'hub_office',      keywords: ['hub', 'office'] },
-  { mmpCol: 'cp_name',         keywords: ['cp name', 'cooperating partner', 'community point'] },
-];
-
-function autoDetectPairs(mmpCols: string[], wfpCols: string[]): MatchPair[] {
-  const pairs: MatchPair[] = [];
-  const usedWfp = new Set<string>();
-  const wfpLower = wfpCols.map(c => c.toLowerCase());
-
-  for (const { mmpCol, keywords } of MMP_MATCH_ALIASES) {
-    if (!mmpCols.includes(mmpCol)) continue;
-    let matched: string | null = null;
-    outer:
-    for (const kw of keywords) {
-      for (let i = 0; i < wfpCols.length; i++) {
-        if (!usedWfp.has(wfpCols[i]) && wfpLower[i].includes(kw)) {
-          matched = wfpCols[i];
-          break outer;
-        }
-      }
-    }
-    if (matched) {
-      pairs.push({ mmpColumn: mmpCol, wfpColumn: matched });
-      usedWfp.add(matched);
-    }
-  }
-  return pairs;
-}
 
 const identityColumn = (columns: string[], terms: string[]) =>
   columns.find(c => terms.some(t => c.toLowerCase().replace(/[^a-z0-9]/g, '').includes(t)));
@@ -201,7 +162,6 @@ export default function Step2UploadMatch({
   const [manualSearch, setManualSearch] = useState<Record<number, string>>({});
   const [manualCandidates, setManualCandidates] = useState<Record<number, MatchCandidate[]>>({});
   const [showReviewTable, setShowReviewTable] = useState(true);
-  const [showMmpPreview, setShowMmpPreview] = useState(false);
   const [expandedReviewRows, setExpandedReviewRows] = useState<Set<number>>(new Set());
   const [candidates, setCandidates]     = useState<MatchCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
@@ -680,7 +640,6 @@ export default function Step2UploadMatch({
 
   // ── Derived values ────────────────────────────────────────────────────────
   const matchResults   = wizardState.matchResults;
-  const autoCount      = matchResults.filter(r => r.status === 'auto').length;
   const reviewCount    = matchResults.filter(r => r.status === 'review').length;
   const unmatchedCount = matchResults.filter(r => r.status === 'unmatched').length;
   const needsReview    = matchResults.filter(r => r.status === 'review');
@@ -1008,147 +967,6 @@ export default function Step2UploadMatch({
             Add more pairs for higher accuracy.
           </p>
 
-          {/* MMP ↔ WFP column overview */}
-          {candidates.length > 0 && (() => {
-            const usedMmp = new Set(wizardState.matchingPairs.map(p => p.mmpColumn).filter(Boolean));
-            const usedWfp = new Set(wizardState.matchingPairs.map(p => p.wfpColumn).filter(Boolean));
-            return (
-              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                {/* Header row */}
-                <div className="flex items-center justify-between px-3 py-2 border-b bg-white/60 dark:bg-slate-800/60">
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium">Column Overview</span>
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
-                      {candidates.length} MMP entries
-                    </Badge>
-                    <Badge className="bg-purple-100 text-purple-700 border-purple-300 text-xs">
-                      {wizardState.fileColumns.length} WFP cols
-                    </Badge>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() => setShowMmpPreview(p => !p)}
-                  >
-                    {showMmpPreview ? 'Hide data preview' : 'Show data preview'}
-                  </button>
-                </div>
-
-                {/* Two-column layout: MMP | WFP */}
-                <div className="grid grid-cols-2 divide-x text-xs">
-                  {/* MMP columns */}
-                  <div className="p-2.5 space-y-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-1.5">
-                      MMP System Columns
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {wizardState.mmpColumns.map(col => {
-                        const active = usedMmp.has(col);
-                        return (
-                          <span
-                            key={col}
-                            title={MMP_COL_LABELS[col] ?? col}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono
-                              ${active
-                                ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/50 dark:border-blue-500 dark:text-blue-200'
-                                : 'bg-white border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'
-                              }`}
-                          >
-                            {active && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
-                            {col}
-                            {MMP_COL_LABELS[col] && (
-                              <span className="font-sans font-normal opacity-70">({MMP_COL_LABELS[col]})</span>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* WFP file columns */}
-                  <div className="p-2.5 space-y-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 mb-1.5">
-                      WFP File Columns
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {wizardState.fileColumns.map(col => {
-                        const active = usedWfp.has(col);
-                        return (
-                          <span
-                            key={col}
-                            title={col}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono
-                              ${active
-                                ? 'bg-purple-100 border-purple-400 text-purple-800 dark:bg-purple-900/50 dark:border-purple-500 dark:text-purple-200'
-                                : 'bg-white border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'
-                              }`}
-                          >
-                            {active && <span className="h-1.5 w-1.5 rounded-full bg-purple-500 flex-shrink-0" />}
-                            {col}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Active pairs summary strip */}
-                {usedMmp.size > 0 && (
-                  <div className="border-t px-3 py-2 bg-green-50/60 dark:bg-green-900/10 flex flex-wrap gap-2 items-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 dark:text-green-400 flex-shrink-0">
-                      Active pairs:
-                    </span>
-                    {wizardState.matchingPairs
-                      .filter(p => p.mmpColumn && p.wfpColumn)
-                      .map((p, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-white dark:bg-slate-700 border border-green-200 dark:border-green-700 rounded px-2 py-0.5">
-                          <span className="text-blue-700 dark:text-blue-300 font-mono">{MMP_COL_LABELS[p.mmpColumn] ?? p.mmpColumn}</span>
-                          <span className="text-muted-foreground">↔</span>
-                          <span className="text-purple-700 dark:text-purple-300 font-mono">{p.wfpColumn}</span>
-                        </span>
-                      ))
-                    }
-                  </div>
-                )}
-
-                {/* MMP data preview table */}
-                {showMmpPreview && candidates.length > 0 && (
-                  <div className="overflow-x-auto border-t">
-                    <table className="text-xs w-full border-collapse">
-                      <thead>
-                        <tr className="bg-muted">
-                          {wizardState.mmpColumns.map(c => (
-                            <th key={c} className={`border-b border-r px-2 py-1.5 text-left font-semibold whitespace-nowrap
-                              ${usedMmp.has(c) ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : ''}`}>
-                              {c}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {candidates.slice(0, 5).map((c, i) => (
-                          <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                            {wizardState.mmpColumns.map(col => (
-                              <td key={col} className={`border-b border-r px-2 py-1 max-w-[160px] truncate
-                                ${usedMmp.has(col) ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}
-                                title={c.data[col]}>
-                                {c.data[col] || <span className="text-muted-foreground/50 italic">—</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t bg-muted/20">
-                      Showing first 5 of {candidates.length} MMP entries · highlighted columns are active in matching pairs
-                    </p>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
           {/* Pair rows */}
           <div className="space-y-2">
             {/* Header labels */}
@@ -1295,31 +1113,9 @@ export default function Step2UploadMatch({
         </div>
       )}
 
-           {/* Matching outcome preview; the authoritative summary is rendered after review. */}
-      {matchResults.length > 0 && (
-        <div className="space-y-4">
-           <h3 className="text-sm font-semibold">Match outcome preview</h3>
-           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 rounded-lg p-3 text-center">
-              <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto mb-1" />
-              <p className="text-xl font-bold text-green-700">
-                 {autoCount + matchResults.filter(r => r.status === 'actioned' && r.action === 'confirm').length}
-              </p>
-               <p className="text-xs text-green-600">Confirmed site links</p>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-lg p-3 text-center">
-              <AlertTriangle className="h-5 w-5 text-amber-600 mx-auto mb-1" />
-              <p className="text-xl font-bold text-amber-700">{reviewCount}</p>
-              <p className="text-xs text-amber-600">Needs review</p>
-            </div>
-            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 rounded-lg p-3 text-center">
-              <XCircle className="h-5 w-5 text-red-600 mx-auto mb-1" />
-              <p className="text-xl font-bold text-red-700">{unmatchedCount}</p>
-               <p className="text-xs text-red-600">Unmatched WFP rows — blocking</p>
-            </div>
-          </div>
-
-          {/* Review Table */}
+       {/* Phase 3 — Exceptions review */}
+       {matchResults.length > 0 && (
+         <div className="space-y-4">
           {(queueRows.length > 0 || reviewFilter === 'actioned') && (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-muted/50 px-4 py-3">

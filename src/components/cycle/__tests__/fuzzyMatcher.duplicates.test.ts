@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildExactIndex, FUZZY_WORKLOAD_BUDGET, getFuzzyFallbackWorkload, runMatching, type MatchCandidate } from '@/utils/fuzzyMatcher';
 import { canAdvancePastMatch } from '../matchGate';
+import { autoDetectPairs } from '../matchAliases';
 
 describe('site matching safety policy', () => {
   const pairs = [{ mmpColumn: 'site_code', wfpColumn: 'Site Code' }];
@@ -59,5 +60,15 @@ describe('site matching safety policy', () => {
     // Supplying the already-built index means workload preflight does not need
     // to construct another candidate index.
     expect(getFuzzyFallbackWorkload([{ 'Site Code': 'SHARED-KEY' }], pairs, candidates, index)).toBe(0);
+  });
+
+  it('keeps activity questions out of the MMP site_name auto-pair', () => {
+    const pairs = autoDetectPairs(
+      ['site_name', 'activity_at_site'],
+      ['Select the activity site', 'Confirm the activity', 'Location name'],
+    );
+    expect(pairs).toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Location name' });
+    expect(pairs).toContainEqual({ mmpColumn: 'activity_at_site', wfpColumn: 'Confirm the activity' });
+    expect(pairs).not.toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Select the activity site' });
   });
 });
