@@ -58,6 +58,104 @@ export interface MatchResult {
   manualMatchAt?: string;
 }
 
+const exactKey = (values: string[]) => values.map(normalize).join('\u241f');
+export const FUZZY_WORKLOAD_BUDGET = 2_000_000;
+
+export function buildExactIndex(validPairs: MatchPair[], candidates: MatchCandidate[]) {
+  const exactIndex = new Map<string, MatchCandidate[]>();
+  candidates.forEach(candidate => {
+    const values = validPairs.map(pair => candidate.data[pair.mmpColumn] ?? '');
+    if (values.some(value => !normalize(value))) return;
+    const key = exactKey(values);
+    const bucket = exactIndex.get(key);
+    if (bucket) bucket.push(candidate);
+    else exactIndex.set(key, [candidate]);
+  });
+  return exactIndex;
+}
+
+async function buildExactIndexYielding(
+  validPairs: MatchPair[],
+  candidates: MatchCandidate[],
+  isCancelled?: () => boolean,
+) {
+  const exactIndex = new Map<string, MatchCandidate[]>();
+  for (let index = 0; index < candidates.length; index++) {
+    if (isCancelled?.()) throw new Error('Matching cancelled');
+    const candidate = candidates[index];
+    const values = validPairs.map(pair => candidate.data[pair.mmpColumn] ?? '');
+    if (!values.some(value => !normalize(value))) {
+      const key = exactKey(values);
+      const bucket = exactIndex.get(key);
+      if (bucket) bucket.push(candidate);
+      else exactIndex.set(key, [candidate]);
+    }
+    if (index > 0 && index % 500 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+  }
+  return exactIndex;
+}
+
+export function getFuzzyFallbackWorkload(
+  fileRows: Record<string, string>[],
+  matchingPairs: MatchPair[],
+  candidates: MatchCandidate[],
+  exactIndex = buildExactIndex(matchingPairs.filter(pair => pair.mmpColumn && pair.wfpColumn), candidates),
+): number {
+  const validPairs = matchingPairs.filter(pair => pair.mmpColumn && pair.wfpColumn);
+  if (!validPairs.length || !candidates.length) return 0;
+  const fallbackRows = fileRows.filter(row => {
+    const values = validPairs.map(pair => row[pair.wfpColumn] ?? '');
+    return values.some(value => !normalize(value)) || !exactIndex.has(exactKey(values));
+  }).length;
+  return fallbackRows * candidates.length;
+}
+
+/**
+ * Executes the same policy as runMatching without monopolising the UI on large
+ * uploads. Exact composite keys are indexed first; only the remaining rows
+ * enter the more expensive fuzzy fallback.
+ */
+export async function runMatchingChunked(
+  fileRows: Record<string, string>[],
+  matchingPairs: MatchPair[],
+  candidates: MatchCandidate[],
+  options: { chunkSize?: number; onProgress?: (done: number, total: number) => void; isCancelled?: () => boolean } = {},
+): Promise<MatchResult[]> {
+  const validPairs = matchingPairs.filter(pair => pair.mmpColumn && pair.wfpColumn);
+  if (!validPairs.length || !candidates.length) return runMatching(fileRows, matchingPairs, candidates);
+  const exactIndex = await buildExactIndexYielding(validPairs, candidates, options.isCancelled);
+  if (getFuzzyFallbackWorkload(fileRows, validPairs, candidates, exactIndex) > FUZZY_WORKLOAD_BUDGET) {
+    throw new Error('Fuzzy workload exceeds the safe processing budget');
+  }
+
+  const results: MatchResult[] = [];
+  const chunkSize = options.chunkSize ?? 8;
+  for (let start = 0; start < fileRows.length; start += chunkSize) {
+    if (options.isCancelled?.()) throw new Error('Matching cancelled');
+    const chunk = fileRows.slice(start, start + chunkSize);
+    for (let offset = 0; offset < chunk.length; offset++) {
+      if (options.isCancelled?.()) throw new Error('Matching cancelled');
+      const row = chunk[offset];
+      const rowIndex = start + offset;
+      const values = validPairs.map(pair => row[pair.wfpColumn] ?? '');
+      const exact = values.some(value => !normalize(value)) ? undefined : exactIndex.get(exactKey(values));
+      if (exact?.length) {
+        const candidate = exact[0];
+        results.push({
+          rowIndex, wfpRow: row, matchedSiteId: candidate.siteId,
+          matchedSiteName: candidate.data[validPairs[0].mmpColumn] ?? candidate.data.site_name ?? null,
+          matchScore: 100, matchLevel: 'exact', status: exact.length === 1 ? 'auto' : 'review',
+        });
+      } else {
+        results.push(...runMatching([row], validPairs, candidates).map(result => ({ ...result, rowIndex })));
+      }
+    }
+    options.onProgress?.(Math.min(start + chunk.length, fileRows.length), fileRows.length);
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  }
+  return results;
+}
+
 /**
  * Match every WFP file row to the best MMP site-entry candidate.
  *
@@ -67,7 +165,7 @@ export interface MatchResult {
  *    If either side is blank we treat the pair as neutral (0.5) rather than penalising it.
  *  - Weighted average determines the match level:
  *      ≥ 0.92 on ALL pairs → exact  → auto
- *      weighted avg ≥ 0.78 → fuzzy  → auto
+ *      weighted avg ≥ 0.78 → fuzzy  → review
  *      weighted avg ≥ 0.50 → partial → review
  *      otherwise           → none   → unmatched
  */
@@ -96,6 +194,7 @@ export function runMatching(
     let best: MatchCandidate | null = null;
     let bestScore = 0;
     let bestLevel: MatchLevel = 'none';
+    const exactCandidates: MatchCandidate[] = [];
 
     for (const c of candidates) {
       const mmpVals = validPairs.map(p => normalize(c.data[p.mmpColumn] ?? ''));
@@ -116,16 +215,22 @@ export function runMatching(
         : 'none';
 
       if (level === 'exact') {
-        best = c; bestScore = weightedScore; bestLevel = 'exact'; break;
+        exactCandidates.push(c);
+        if (weightedScore > bestScore) {
+          best = c; bestScore = weightedScore; bestLevel = level;
+        }
+        continue;
       }
       if (weightedScore > bestScore) {
         best = c; bestScore = weightedScore; bestLevel = level;
       }
     }
 
+    // Only one exact candidate is safe to auto-confirm. Fuzzy matches are
+    // suggestions, never decisions; tied exact identifiers also require review.
     const status: MatchResult['status'] =
-      best && (bestLevel === 'exact' || bestLevel === 'fuzzy') ? 'auto'
-        : best && bestLevel === 'partial' ? 'review'
+      best && exactCandidates.length === 1 ? 'auto'
+        : best && (bestLevel === 'exact' || bestLevel === 'fuzzy' || bestLevel === 'partial') ? 'review'
           : 'unmatched';
 
     // Display name: prefer primary MMP column, fall back to site_name
