@@ -16,7 +16,7 @@ import {
 import type { WizardState } from '../CycleCloseWizard';
 import { runMatchingChunked, type MatchCandidate, type MatchPair, type MatchResult } from '@/utils/fuzzyMatcher';
 import { exportFormattedMatchingReport } from '@/utils/cycleCloseExport';
-import { autoDetectPairs } from '../matchAliases';
+import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs } from '../matchAliases';
 
 // ─── MMP columns to fetch from the database ────────────────────────────────
 // NOTE: accepted_by is a plain text / uuid column with no FK to profiles,
@@ -240,6 +240,25 @@ export default function Step2UploadMatch({
       setPairsInitialized(true);
     }
   }, [candidates.length, wizardState.mmpColumns.length, wizardState.fileColumns.length, pairsInitialized]);
+
+  // Resume data can predate the semantic guard. Repair it before the user can
+  // confirm or run matching, and persist the repaired mapping through the
+  // wizard's normal safe-session save.
+  useEffect(() => {
+    if (!wizardState.matchingPairs.length || !wizardState.fileColumns.length) return;
+    const sanitized = sanitizeMatchingPairs(
+      wizardState.mmpColumns,
+      wizardState.fileColumns,
+      wizardState.matchingPairs,
+    );
+    if (sanitized.some((pair, index) =>
+      pair.mmpColumn !== wizardState.matchingPairs[index]?.mmpColumn ||
+      pair.wfpColumn !== wizardState.matchingPairs[index]?.wfpColumn
+    )) {
+      setMatchingPairsConfirmed(false);
+      updateWizardState({ matchingPairs: sanitized });
+    }
+  }, [wizardState.fileColumns, wizardState.mmpColumns, wizardState.matchingPairs]);
 
   // ── Fetch all matchable columns from mmp_site_entries ────────────────────
   const loadCandidates = async () => {
@@ -662,7 +681,9 @@ export default function Step2UploadMatch({
   const pendingUncoveredCount = (wizardState.unmatchedMmpSiteIds ?? []).filter(siteId =>
     !wizardState.resolvedSites[siteId] || wizardState.resolvedSites[siteId] === 'resubmit'
   ).length;
-  const hasValidPairs  = wizardState.matchingPairs.some(p => p.mmpColumn && p.wfpColumn);
+  const semanticPairIssues = getPairSemanticIssues(wizardState.matchingPairs);
+  const hasValidPairs  = wizardState.matchingPairs.some(p => p.mmpColumn && p.wfpColumn)
+    && semanticPairIssues.length === 0;
   const identityIssues = wizardState.fileRows.length > 0
     ? validateIdentityColumns(wizardState.fileRows, selectedIdentityColumns)
     : [];
@@ -967,88 +988,57 @@ export default function Step2UploadMatch({
             Add more pairs for higher accuracy.
           </p>
 
-          {/* Pair rows */}
-          <div className="space-y-2">
-            {/* Header labels */}
-            {wizardState.matchingPairs.length > 0 && (
-              <div className="flex items-center gap-2 px-1">
-                <span className="w-16 flex-shrink-0" />
-                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">MMP System Column</span>
-                <span className="w-5 flex-shrink-0" />
-                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">WFP File Column</span>
-                <span className="w-7 flex-shrink-0" />
-              </div>
-            )}
-
+           <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+             Examples below are independent format checks only — they are not row-to-row matches.
+           </p>
+           {/* Pair cards */}
+           <div className="space-y-4">
             {wizardState.matchingPairs.map((pair, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                {/* Primary / secondary badge */}
-                <span className={`text-[10px] font-bold w-16 flex-shrink-0 text-right pr-1 ${idx === 0 ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {idx === 0 ? 'PRIMARY' : `PAIR ${idx + 1}`}
-                </span>
-
-                {/* MMP column */}
-                <Select
-                  value={pair.mmpColumn || '__none__'}
-                  onValueChange={v => updatePair(idx, 'mmpColumn', v === '__none__' ? '' : v)}
-                >
-                  <SelectTrigger className="flex-1 h-8 text-xs" data-testid={`select-mmp-col-${idx}`}>
-                    <SelectValue placeholder="MMP column…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Choose MMP column —</SelectItem>
-                    {(wizardState.mmpColumns.length > 0 ? wizardState.mmpColumns : Object.keys(MMP_COL_LABELS)).map(c => (
-                      <SelectItem key={c} value={c}>
-                        {c}{MMP_COL_LABELS[c] ? ` (${MMP_COL_LABELS[c]})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <span className="text-xs text-muted-foreground flex-shrink-0">↔</span>
-
-                {/* WFP file column */}
-                <Select
-                  value={pair.wfpColumn || '__none__'}
-                  onValueChange={v => updatePair(idx, 'wfpColumn', v === '__none__' ? '' : v)}
-                >
-                  <SelectTrigger className="flex-1 h-8 text-xs" data-testid={`select-wfp-col-${idx}`}>
-                    <SelectValue placeholder="WFP file column…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Choose WFP column —</SelectItem>
-                    {wizardState.fileColumns.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
-                  onClick={() => removePair(idx)}
-                  data-testid={`button-remove-pair-${idx}`}
-                >
-                  <XIcon className="h-3.5 w-3.5" />
-                </Button>
-                {pair.mmpColumn && pair.wfpColumn && (
-                  <div className="basis-full ml-16 grid grid-cols-1 sm:grid-cols-3 gap-2 border-l-2 border-primary/20 pl-3 py-1">
-                    <p className="sm:col-span-3 text-[10px] text-muted-foreground">Independent column samples validate content and format only. They are not record-to-record matches.</p>
-                    {[0, 1, 2].map(sampleIndex => {
-                      const wfpValue = wizardState.fileRows[sampleIndex]?.[pair.wfpColumn] ?? '—';
-                      const mmpValue = candidates[sampleIndex]?.data[pair.mmpColumn] ?? '—';
-                      return (
-                        <div key={sampleIndex} className="rounded border bg-muted/20 px-2 py-1.5 text-[10px]">
-                          <p className="text-muted-foreground">Independent sample {sampleIndex + 1}</p>
-                          <p className="truncate"><span className="font-medium">WFP value · {pair.wfpColumn}:</span> {wfpValue}</p>
-                          <p className="truncate"><span className="font-medium">MMP value · {MMP_COL_LABELS[pair.mmpColumn] ?? pair.mmpColumn}:</span> {mmpValue}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+               <div key={idx} className="rounded-lg border bg-background p-4 shadow-sm">
+                 <div className="flex items-start justify-between gap-3">
+                   <div>
+                     <p className="text-sm font-semibold">{idx === 0 ? 'Primary match' : 'Additional check'}</p>
+                     <p className="text-xs text-muted-foreground">Both columns must match the same site information.</p>
+                   </div>
+                   <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removePair(idx)} data-testid={`button-remove-pair-${idx}`} aria-label="Remove matching pair">
+                     <XIcon className="h-3.5 w-3.5" />
+                   </Button>
+                 </div>
+                 <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-end">
+                   <div className="space-y-1.5">
+                     <label className="text-xs font-semibold">Command Center field</label>
+                     <Select value={pair.mmpColumn || '__none__'} onValueChange={v => updatePair(idx, 'mmpColumn', v === '__none__' ? '' : v)}>
+                       <SelectTrigger className="h-auto min-h-11 w-full items-start py-2 text-left text-sm [&>span]:whitespace-normal [&>span]:break-words" data-testid={`select-mmp-col-${idx}`}><SelectValue placeholder="Choose a Command Center field…" /></SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value="__none__">— Choose Command Center field —</SelectItem>
+                         {(wizardState.mmpColumns.length > 0 ? wizardState.mmpColumns : Object.keys(MMP_COL_LABELS)).map(c => <SelectItem key={c} value={c} className="whitespace-normal">{c}{MMP_COL_LABELS[c] ? ` (${MMP_COL_LABELS[c]})` : ''}</SelectItem>)}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                   <span className="hidden text-xs font-semibold text-muted-foreground md:block">must match</span>
+                   <div className="space-y-1.5">
+                     <label className="text-xs font-semibold">WFP spreadsheet column</label>
+                     <Select value={pair.wfpColumn || '__none__'} onValueChange={v => updatePair(idx, 'wfpColumn', v === '__none__' ? '' : v)}>
+                       <SelectTrigger className="h-auto min-h-11 w-full items-start py-2 text-left text-sm [&>span]:whitespace-normal [&>span]:break-words" data-testid={`select-wfp-col-${idx}`}><SelectValue placeholder="Choose a WFP spreadsheet column…" /></SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value="__none__">— Choose WFP spreadsheet column —</SelectItem>
+                         {wizardState.fileColumns.map(c => <SelectItem key={c} value={c} className="whitespace-normal">{c}</SelectItem>)}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 </div>
+                 <div className="mt-4 grid gap-3 border-t pt-3 sm:grid-cols-2">
+                   <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Command Center examples</p><ul className="mt-1 space-y-1 text-xs">{candidates.slice(0, 3).map((c, i) => <li key={i} className="break-words">{c.data[pair.mmpColumn] || '—'}</li>)}</ul></div>
+                   <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">WFP examples</p><ul className="mt-1 space-y-1 text-xs">{wizardState.fileRows.slice(0, 3).map((row, i) => <li key={i} className="break-words">{pair.wfpColumn ? (row[pair.wfpColumn] || '—') : '—'}</li>)}</ul></div>
+                 </div>
+                 {semanticPairIssues.some(issue => issue.index === idx) && (
+                   <Alert variant="destructive" className="mt-3">
+                     <AlertCircle className="h-4 w-4" /><AlertDescription>
+                       <p className="font-medium">{semanticPairIssues.find(issue => issue.index === idx)?.message}</p>
+                       <p className="mt-1">{semanticPairIssues.find(issue => issue.index === idx)?.suggestion}</p>
+                     </AlertDescription>
+                   </Alert>
+                 )}
               </div>
             ))}
           </div>
@@ -1074,8 +1064,8 @@ export default function Step2UploadMatch({
             )}
           </div>
 
-          <label className="flex items-start gap-2 border-t pt-3 text-xs cursor-pointer">
-            <Checkbox checked={matchingPairsConfirmed} onCheckedChange={v => setMatchingPairsConfirmed(v === true)} />
+           <label className={`flex items-start gap-2 border-t pt-3 text-xs ${semanticPairIssues.length ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+             <Checkbox disabled={semanticPairIssues.length > 0} checked={matchingPairsConfirmed} onCheckedChange={v => setMatchingPairsConfirmed(v === true)} />
             <span><strong>Confirm site matching fields.</strong> I checked the sample values above and these pairs represent the same site information. Identity evidence is not used for this match.</span>
           </label>
 
@@ -1095,7 +1085,7 @@ export default function Step2UploadMatch({
             type="button"
             size="sm"
             onClick={runMatch}
-            disabled={!hasValidPairs || !matchingPairsConfirmed || !identityColumnsConfirmed || identityIssues.length > 0 || running || candidatesLoading}
+             disabled={!hasValidPairs || semanticPairIssues.length > 0 || !matchingPairsConfirmed || !identityColumnsConfirmed || identityIssues.length > 0 || running || candidatesLoading}
             data-testid="button-run-match"
           >
             {(running || candidatesLoading) ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}

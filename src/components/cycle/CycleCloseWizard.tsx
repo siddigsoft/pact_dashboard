@@ -14,6 +14,7 @@ import type { MatchResult, MatchPair } from '@/utils/fuzzyMatcher';
 import { supabase } from '@/integrations/supabase/client';
 import { dispatchNotification } from '@/lib/notify';
 import { canAdvancePastMatch } from './matchGate';
+import { sanitizeMatchingPairs } from './matchAliases';
 
 export type StepStatus = 'not_started' | 'in_progress' | 'done' | 'blocked';
 
@@ -492,9 +493,16 @@ export default function CycleCloseWizard({
 
   const handleResume = () => {
     if (!savedSession) return;
+    const restored = savedSession.wizardState;
+    const safePairs = sanitizeMatchingPairs(
+      restored.mmpColumns,
+      restored.fileColumns,
+      restored.matchingPairs,
+    );
     setWizardState(prev => ({
       ...prev,
-      ...savedSession.wizardState,
+      ...restored,
+      matchingPairs: safePairs,
       mmpRawRows: [], // re-fetched by Step2's loadCandidates
     }));
     setCurrentStep(savedSession.currentStep);

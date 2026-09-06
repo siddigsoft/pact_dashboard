@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildExactIndex, FUZZY_WORKLOAD_BUDGET, getFuzzyFallbackWorkload, runMatching, type MatchCandidate } from '@/utils/fuzzyMatcher';
 import { canAdvancePastMatch } from '../matchGate';
-import { autoDetectPairs } from '../matchAliases';
+import { autoDetectPairs, getPairSemanticIssues, sanitizeMatchingPairs } from '../matchAliases';
 
 describe('site matching safety policy', () => {
   const pairs = [{ mmpColumn: 'site_code', wfpColumn: 'Site Code' }];
@@ -70,5 +70,25 @@ describe('site matching safety policy', () => {
     expect(pairs).toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Location name' });
     expect(pairs).toContainEqual({ mmpColumn: 'activity_at_site', wfpColumn: 'Confirm the activity' });
     expect(pairs).not.toContainEqual({ mmpColumn: 'site_name', wfpColumn: 'Select the activity site' });
+  });
+
+  it('sanitizes a restored invalid site-name pair to a unique location header', () => {
+    const restored = [{ mmpColumn: 'site_name', wfpColumn: '1.14 Select the activity site' }];
+    expect(sanitizeMatchingPairs(
+      ['site_name'],
+      ['1.14 Select the activity site', '1.13 Exact location name'],
+      restored,
+    )).toEqual([{ mmpColumn: 'site_name', wfpColumn: '1.13 Exact location name' }]);
+  });
+
+  it('clears ambiguous invalid site-name pairs and blocks the semantic gate', () => {
+    const restored = [{ mmpColumn: 'site_name', wfpColumn: 'Select the activity site' }];
+    const sanitized = sanitizeMatchingPairs(
+      ['site_name'],
+      ['Select the activity site', 'Location name', 'Village name'],
+      restored,
+    );
+    expect(sanitized[0].wfpColumn).toBe('');
+    expect(getPairSemanticIssues(restored)).toHaveLength(1);
   });
 });

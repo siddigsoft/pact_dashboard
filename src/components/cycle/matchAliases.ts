@@ -1,5 +1,46 @@
 import type { MatchPair } from '@/utils/fuzzyMatcher';
 
+const ACTIVITY_LIKE_HEADER = /\b(activity|monitoring|monitor|sub[\s_-]*activity|programme|program)\b/i;
+const LOCATION_LIKE_HEADER = /\b(site|location|village|locality|district|community|code|address)\b/i;
+
+export type PairSemanticIssue = {
+  index: number;
+  message: string;
+  suggestion: string;
+};
+
+/** A site identity pair must point at a location/name column, never a form question. */
+export function getPairSemanticIssues(pairs: MatchPair[]): PairSemanticIssue[] {
+  return pairs.flatMap((pair, index) => {
+    if (pair.mmpColumn !== 'site_name' || !pair.wfpColumn) return [];
+    if (!ACTIVITY_LIKE_HEADER.test(pair.wfpColumn)) return [];
+    return [{
+      index,
+      message: `Site Name is paired with “${pair.wfpColumn}”, which looks like an activity or monitoring question.`,
+      suggestion: 'Choose the exact location/site name column instead.',
+    }];
+  });
+}
+
+/** Repairs stale resume state without guessing when there is more than one location candidate. */
+export function sanitizeMatchingPairs(
+  mmpCols: string[],
+  wfpCols: string[],
+  pairs: MatchPair[],
+): MatchPair[] {
+  if (!mmpCols.includes('site_name')) return pairs;
+  const locationCandidates = wfpCols.filter(column =>
+    LOCATION_LIKE_HEADER.test(column) && !ACTIVITY_LIKE_HEADER.test(column)
+  );
+  return pairs.map(pair => {
+    if (pair.mmpColumn !== 'site_name' || !ACTIVITY_LIKE_HEADER.test(pair.wfpColumn ?? '')) return pair;
+    const available = locationCandidates.filter(column =>
+      column !== pair.wfpColumn && !pairs.some(other => other !== pair && other.wfpColumn === column)
+    );
+    return available.length === 1 ? { ...pair, wfpColumn: available[0] } : { ...pair, wfpColumn: '' };
+  });
+}
+
 const MMP_MATCH_ALIASES: Array<{ mmpCol: string; keywords: string[] }> = [
   // Site identity must never consume an activity question. Keep aliases
   // location-specific and deliberately exclude the broad word "site".
