@@ -23,9 +23,16 @@ on:
 
 jobs:
   attribution-cycle-close:
-    name: Test attribution and Cycle Close lock orderings
+    name: PostgreSQL ${{ matrix.postgresql }} - attribution and Cycle Close lock orderings
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # PostgreSQL 15 is the documented platform baseline; PostgreSQL 17 is
+        # the current production major (see PACT_Platform_Technical_Brief.md
+        # and docs/PACT_DB_EVALUATION_2026-08-31.md).
+        postgresql: ['15', '17']
 
     steps:
       - uses: actions/checkout@v4
@@ -35,14 +42,25 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install PostgreSQL tooling
+      - name: Install PostgreSQL ${{ matrix.postgresql }} tooling
         run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
-          sudo apt-get install --yes postgresql postgresql-client
-          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+          sudo apt-get install --yes \
+            "postgresql-${{ matrix.postgresql }}" \
+            "postgresql-client-${{ matrix.postgresql }}"
+          echo "/usr/lib/postgresql/${{ matrix.postgresql }}/bin" >> "$GITHUB_PATH"
 
       - name: Install Node dependencies
         run: npm ci
 
       - name: Run field-device and Cycle Close regression suite
+        env:
+          EXPECTED_POSTGRES_MAJOR: ${{ matrix.postgresql }}
         run: npm run test:field-device-cycle-close

@@ -4,15 +4,25 @@ set -euo pipefail
 # Disposable live PostgreSQL harness. No Supabase or project data is touched.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PG_BIN="$(dirname "$(command -v initdb)")"
+POSTGRES_MAJOR="$("$PG_BIN/postgres" --version | sed -E 's/.* ([0-9]+)(\..*)?$/\1/')"
+EXPECTED_POSTGRES_MAJOR="${EXPECTED_POSTGRES_MAJOR:-}"
 TMP_DIR="$(mktemp -d)"
 PORT="${FIELD_DEVICE_TEST_PORT:-55461}"
 SOCKET_DIR="$TMP_DIR/socket"
 PSQL=("$PG_BIN/psql" -X -h "$SOCKET_DIR" -p "$PORT" -U "$(id -un)" -d postgres -v ON_ERROR_STOP=1)
+CURRENT_ORDERING="setup"
+
+if [[ -n "$EXPECTED_POSTGRES_MAJOR" && "$POSTGRES_MAJOR" != "$EXPECTED_POSTGRES_MAJOR" ]]; then
+  echo "PostgreSQL version mismatch: expected major $EXPECTED_POSTGRES_MAJOR, found $("$PG_BIN/postgres" --version)." >&2
+  exit 1
+fi
+
+echo "Running field-device attribution/Cycle Close suite on PostgreSQL $POSTGRES_MAJOR."
 
 cleanup() {
   status=$?
   if [[ "$status" -ne 0 ]]; then
-    echo "Field-device attribution/Cycle Close regression suite failed (exit $status)." >&2
+    echo "Field-device attribution/Cycle Close regression suite failed on PostgreSQL $POSTGRES_MAJOR during $CURRENT_ORDERING (exit $status)." >&2
     for log in "$TMP_DIR"/*.log; do
       [[ -f "$log" ]] || continue
       echo "::group::$(basename "$log")" >&2
@@ -41,6 +51,7 @@ DEVICE_1="$("${PSQL[@]}" -Atc "SELECT id FROM field_devices WHERE odk_source_key
 
 # Ordering 1: correction owns the parent-cycle lock first. Final Close waits,
 # then snapshots the corrected official collector.
+CURRENT_ORDERING="correction-first lock ordering"
 "${PSQL[@]}" >"$TMP_DIR/correction-first.log" 2>&1 <<SQL &
 BEGIN;
 SELECT set_config('request.jwt.claim.sub','$MANAGER',false);
@@ -87,6 +98,7 @@ SQL
 
 # Ordering 2: Final Close owns the lock first. The correction waits and then
 # must reject, leaving live Finance identity equal to the immutable snapshot.
+CURRENT_ORDERING="close-first lock ordering"
 "${PSQL[@]}" >"$TMP_DIR/close-first.log" 2>&1 <<SQL &
 BEGIN;
 SELECT set_config('request.jwt.claim.sub','$MANAGER',false);
@@ -141,4 +153,5 @@ BEGIN
 END $$;
 SQL
 
-echo "Field-device attribution and concurrent Cycle Close checks passed."
+CURRENT_ORDERING="complete"
+echo "Field-device attribution and concurrent Cycle Close checks passed on PostgreSQL $POSTGRES_MAJOR."
