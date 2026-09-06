@@ -167,6 +167,7 @@ interface Props {
   currentUser: any;
   initialStep?: number;
   initialMmpId?: string | null;
+  availableCycles?: any[];
 }
 
 export interface RoleFlags {
@@ -298,6 +299,7 @@ export default function CycleCloseWizard({
   currentUser,
   initialStep,
   initialMmpId,
+  availableCycles,
 }: Props) {
   const roleFlags = getCycleCloseRoleFlags(currentUser);
   const isStep4ContributorOnly = isCycleCloseStep4ContributorOnly(currentUser);
@@ -856,6 +858,7 @@ export default function CycleCloseWizard({
                 savedSession={savedSession}
                 onResume={handleResume}
                 onStartFresh={handleStartFresh}
+                availableCycles={availableCycles}
               />
             )}
             {currentStep === 2 && <Step2UploadMatch {...stepProps} />}

@@ -7862,6 +7862,7 @@ const MMP = () => {
             currentUser={currentUser}
             initialStep={cycleWizardInit.initialStep}
             initialMmpId={cycleWizardInit.initialMmpId}
+            availableCycles={mmpFiles}
           />
         </ErrorBoundary>
       )}
