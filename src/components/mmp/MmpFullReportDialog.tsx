@@ -142,6 +142,8 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
   const [downPayments, setDownPayments] = useState<any[]>([]);
   const [costSubmissions, setCostSubmissions] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [reportScope, setReportScope] = useState<{ hub_scoped?: boolean; hub_ids?: string[]; state_names?: string[] }>({});
+  const [accessError, setAccessError] = useState('');
   const [financeLoading, setFinanceLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
 
@@ -156,91 +158,30 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
     setDownPayments([]);
     setCostSubmissions([]);
     setActivityLogs([]);
+    setReportScope({});
+    setAccessError('');
 
     (async () => {
       try {
-        const [{ data: mmpData }, allEntries] = await Promise.all([
-          supabase
-            .from('mmp_files')
-            .select('id, name, mmp_id, status, cycle_status, created_at, uploaded_by, workflow, archivedby, archivedat, project:projects(name)')
-            .eq('id', mmpId)
-            .single(),
-          (async () => {
-            let all: SiteEntry[] = [];
-            let from = 0;
-            while (true) {
-              const { data, error } = await supabase
-                .from('mmp_site_entries')
-                .select('id, site_name, site_code, status, hub_office, state, locality, forwarded_to_user_id, additional_data, enumerator_fee, transport_fee, cost, visit_completed_by')
-                .eq('mmp_file_id', mmpId)
-                .range(from, from + 999);
-              if (error) break;
-              if (!data?.length) break;
-              all = all.concat(data as SiteEntry[]);
-              if (data.length < 1000) break;
-              from += 1000;
-            }
-            return all;
-          })(),
-        ]);
+        const { data, error } = await supabase.rpc(
+          'get_mmp_report_payload' as any,
+          { p_mmp_id: mmpId } as any
+        );
+        if (error) throw error;
 
-        setMmp(mmpData);
-        setEntries(allEntries);
-
-        // Resolve coordinator names
-        const coordIds = new Set<string>();
-        allEntries.forEach(e => {
-          const id = (e.additional_data as any)?.assigned_to || e.forwarded_to_user_id;
-          if (id) coordIds.add(id);
-        });
-        if (coordIds.size > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', [...coordIds]);
-          const pm: Record<string, string> = {};
-          (profiles || []).forEach((p: any) => { pm[p.id] = p.full_name || p.email || p.id; });
-          setProfileMap(pm);
-        }
+        const payload = (data || {}) as any;
+        setMmp(payload.mmp || null);
+        setEntries((payload.entries || []) as SiteEntry[]);
+        setProfileMap(payload.profile_map || {});
+        setDownPayments(payload.down_payments || []);
+        setCostSubmissions(payload.cost_submissions || []);
+        setActivityLogs(payload.activity_logs || []);
+        setReportScope(payload.scope || {});
+      } catch (error: any) {
+        console.error('[MMP Report] secure report load failed:', error);
+        setAccessError(error?.message || 'You do not have access to this MMP report.');
       } finally {
         setLoading(false);
-      }
-
-      // ── Financial + Activity (parallel, non-blocking) ─────────────────
-      try {
-        // down_payment_requests links to MMPs via mmp_site_entry_id (site-level FK),
-        // NOT mmp_file_id — so we must look up by the entry IDs for this MMP.
-        const entryIds = allEntries.map(e => e.id);
-
-        const dpQuery = entryIds.length > 0
-          ? supabase
-              .from('down_payment_requests')
-              .select('id, site_name, hub_name, status, requested_amount, total_paid_amount, remaining_amount, payment_type, created_at, supervisor_status, admin_status, fully_paid_at')
-              .in('mmp_site_entry_id', entryIds)
-              .order('created_at', { ascending: false })
-          : Promise.resolve({ data: [] as any[], error: null });
-
-        const [dpRes, csRes, alRes] = await Promise.allSettled([
-          dpQuery,
-          // operational_cost_submissions has both mmp_file_id and mmp_id columns;
-          // query both to avoid missing records linked via either column.
-          supabase
-            .from('operational_cost_submissions')
-            .select('id, status, tier1_status, tier2_status, tier3_status, amount_cents, expense_category, description, hub_id, created_at, request_title')
-            .or(`mmp_file_id.eq.${mmpId},mmp_id.eq.${mmpId}`)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('audit_logs')
-            .select('id, actor_name, actor_role, timestamp, action, description, details, new_state, previous_state')
-            .in('entity_type', ['mmp', 'mmp_file', 'mmp_files'])
-            .eq('entity_id', mmpId)
-            .order('timestamp', { ascending: false })
-            .limit(100),
-        ]);
-        if (dpRes.status === 'fulfilled') setDownPayments((dpRes.value as any).data || []);
-        if (csRes.status === 'fulfilled') setCostSubmissions(csRes.value.data || []);
-        if (alRes.status === 'fulfilled') setActivityLogs(alRes.value.data || []);
-      } finally {
         setFinanceLoading(false);
       }
     })();
@@ -567,7 +508,10 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         c.font = { bold: true, size: 10, color: { argb: pctArgb(pct) } };
       };
 
-      const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  Generated: ${now}`;
+      const scopeLabel = reportScope.hub_scoped
+        ? `Hub scope: ${(reportScope.hub_ids || []).join(', ') || 'Assigned hubs'}`
+        : 'Scope: All authorized hubs';
+      const subtitle = `MMP: ${mmpTitle}  |  Project: ${project}  |  Status: ${mmp.status || '—'}  |  ${scopeLabel}  |  Generated: ${now}`;
 
       // ════════════════════════════════════════════════════════════════
       // Sheet 1 — Summary
@@ -955,6 +899,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
               <p className="text-xs text-teal-200 mt-1 truncate pl-9">
                 {mmpName}{mmp?.mmp_id ? ` · ${mmp.mmp_id}` : ''}{(mmp?.project as any)?.name ? ` · ${(mmp.project as any).name}` : ''}
               </p>
+              {reportScope.hub_scoped && (
+                <p className="text-[10px] text-teal-100 mt-1 pl-9">
+                  Restricted to assigned hubs: {(reportScope.hub_ids || []).join(', ') || 'No hub assigned'}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <Button
@@ -990,6 +939,14 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           <div className="flex-1 flex items-center justify-center py-16">
             <Loader2 className="h-7 w-7 animate-spin text-teal-600" />
             <span className="ml-3 text-muted-foreground text-sm">Loading report data…</span>
+          </div>
+        ) : accessError ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3 text-center px-6">
+            <ShieldAlert className="h-9 w-9 text-red-500" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Report access denied</p>
+              <p className="text-xs text-muted-foreground mt-1">{accessError}</p>
+            </div>
           </div>
         ) : !stats ? (
           <div className="flex-1 flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">

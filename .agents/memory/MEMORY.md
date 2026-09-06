@@ -58,3 +58,4 @@
 - [stale-payment-source-total-reconciliation](stale-payment-source-total-reconciliation.md) — Reconcile stale source totals from net immutable links only within the approved amount; true over-links require reversal.
 - [source-payment-hard-deletion](source-payment-hard-deletion.md) — Cost/advance payments are physically deleted newest-first per source, with a separate immutable full audit snapshot.
 - [Pre-Fund history view access](pre-fund-history-view-access.md) — SQL Editor may see payment history while a security-invoker browser view silently returns no rows; preserve role-gated definer access.
+- [MMP supervisor hub report boundary](mmp-supervisor-hub-report-boundary.md) — Supervisor MMP lists, report payloads, performance, finance, and exports must be scoped server-side to assigned hubs.

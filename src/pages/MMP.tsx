@@ -2250,38 +2250,20 @@ const MMP = () => {
       setSupervisorHubMmpIds(null);
       return;
     }
-    const stateNames = hubAccessInfo.hubStateNames;
-    const stateIds = hubAccessInfo.hubStates;
-    if (stateNames.length === 0 && stateIds.length === 0) {
-      setSupervisorHubMmpIds(null);
+    if (hubAccessInfo.hubIds.length === 0) {
+      setSupervisorHubMmpIds(new Set());
       return;
     }
-    // Derive base names by stripping " State" / "-state" suffix so "Khartoum" matches "Khartoum State"
-    const baseNames = [
-      ...stateNames.map(n => n.replace(/\s+state$/i, '').trim()),
-      ...stateIds.map(s => s.replace(/-state$/, '').replace(/-/g, ' ').trim()),
-    ].filter(Boolean);
-    const uniqueBases = Array.from(new Set(baseNames.map(b => b.toLowerCase())));
 
     const fetchHubMmpIds = async () => {
-      // Fetch all distinct mmp_file_id + state values — lightweight, no site details needed
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('mmp_file_id, state, hub_office');
+      const { data, error } = await supabase.rpc('get_accessible_mmp_ids' as any);
       if (error) {
         console.warn('[MMP] supervisorHubMmpIds fetch error:', error.message);
-        setSupervisorHubMmpIds(null);
+        // Fail closed: a scope lookup failure must never reveal all MMPs.
+        setSupervisorHubMmpIds(new Set());
         return;
       }
-      const ids = new Set<string>();
-      for (const row of (data || [])) {
-        const rowState = (row.state || '').toLowerCase().replace(/\s+state$/i, '').trim();
-        const rowHub = (row.hub_office || '').toLowerCase();
-        const stateMatch = uniqueBases.some(b => rowState === b || rowState.includes(b) || b.includes(rowState));
-        const hubMatch = hubAccessInfo.hubIds.some(h =>
-          rowHub.includes(h.toLowerCase()) || h.toLowerCase().includes(rowHub));
-        if ((stateMatch || hubMatch) && row.mmp_file_id) ids.add(row.mmp_file_id);
-      }
+      const ids = new Set<string>(((data || []) as any[]).map(row => row.mmp_id).filter(Boolean));
       setSupervisorHubMmpIds(ids);
     };
 
@@ -2833,13 +2815,13 @@ const MMP = () => {
     // HUB-BASED ACCESS FILTER FOR SUPERVISORS — two passes:
     // Pass 1 (list): Only show MMPs that have at least one entry in the supervisor's hub.
     //   Uses pre-fetched supervisorHubMmpIds to avoid dependency on lazy-loaded siteEntries.
-    //   While the pre-fetch is in progress (null), show all MMPs (brief loading state).
+    //   While the secure scope is loading, fail closed and show no MMPs.
     // Pass 2 (detail): Within each MMP, filter site entries to hub-relevant ones only,
     //   so coordinator assignments / state breakdowns are scoped to the hub.
     if (applyHubFilter && hubAccessInfo.isHubSupervisor) {
-      if (supervisorHubMmpIds !== null) {
-        filteredMMPs = filteredMMPs.filter(mmp => supervisorHubMmpIds.has(mmp.id));
-      }
+      filteredMMPs = supervisorHubMmpIds === null
+        ? []
+        : filteredMMPs.filter(mmp => supervisorHubMmpIds.has(mmp.id));
       // Filter loaded site entries within each remaining MMP to hub-only
       filteredMMPs = filteredMMPs.map(mmp => {
         const siteEntries = mmp.siteEntries || [];

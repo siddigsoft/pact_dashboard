@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useAppContext } from '@/context/AppContext';
-import { canSeePage } from '@/lib/page-roles';
+import { canSeePage, canSeePageWithOverrides } from '@/lib/page-roles';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
@@ -78,6 +78,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [renameMMPTarget, setRenameMMPTarget] = useState<MMPFile | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [isSavingRename, setIsSavingRename] = useState(false);
+  const [hubReportAllowed, setHubReportAllowed] = useState(false);
   const [fullReportOpen, setFullReportOpen] = useState(false);
   const [selectedMmpForReport, setSelectedMmpForReport] = useState<{ id: string; name: string } | null>(null);
   // Staged delete dialog: stage 0=closed, 1=choose action, 2=hard-delete confirm, 3=unlink confirm
@@ -123,10 +124,28 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     }
   }, [confirmId, deleteStage]);
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
-  // Full Report is visible to management/oversight roles only
-  const canViewFullReport = canSeePage('mmp-full-report', effectiveCurrentUser?.role);
+  // Management sees the full report; supervisors receive the same report UI
+  // with data constrained by the secure report RPC to their assigned hubs.
+  const canViewFullReport = !isSupervisor && canSeePage('mmp-full-report', effectiveCurrentUser?.role);
+  const canViewHubReport = isSupervisor && hubReportAllowed;
   // State Report is visible to FOM — same dialog, scoped label, red styling
   const canViewStateReport = isFOM && !canViewFullReport;
+
+  useEffect(() => {
+    let active = true;
+    setHubReportAllowed(false);
+    if (!isSupervisor || !currentUser?.id) return () => { active = false; };
+
+    canSeePageWithOverrides('mmp-full-report', 'supervisor', currentUser.id)
+      .then(allowed => {
+        if (active) setHubReportAllowed(allowed);
+      })
+      .catch(() => {
+        if (active) setHubReportAllowed(false);
+      });
+
+    return () => { active = false; };
+  }, [isSupervisor, currentUser?.id]);
 
   // Initialize forwarded status from MMP workflow
   useEffect(() => {
@@ -569,6 +588,18 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       <span className="hidden sm:inline">State Report</span>
                     </button>
                   )}
+                  {/* Hub Report — supervisors, securely scoped by the database RPC */}
+                  {canViewHubReport && (
+                    <button
+                      className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-md border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors flex-shrink-0"
+                      onClick={e => { e.stopPropagation(); setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                      data-testid={`button-hub-report-mmp-${mmp.id}`}
+                      title="Assigned Hub Report"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Hub Report</span>
+                    </button>
+                  )}
 
                   {/* Quick Links Dropdown Menu */}
                   <DropdownMenu>
@@ -601,6 +632,15 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         >
                           <BarChart3 className="h-4 w-4 mr-2 text-red-600" />
                           State Report
+                        </DropdownMenuItem>
+                      )}
+                      {canViewHubReport && (
+                        <DropdownMenuItem
+                          onClick={() => { setSelectedMmpForReport({ id: mmp.id, name: mmp.name }); setFullReportOpen(true); }}
+                          data-testid={`button-hub-report-dropdown-${mmp.id}`}
+                        >
+                          <BarChart3 className="h-4 w-4 mr-2 text-teal-600" />
+                          Assigned Hub Report
                         </DropdownMenuItem>
                       )}
 
