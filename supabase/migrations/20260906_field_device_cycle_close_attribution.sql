@@ -131,8 +131,23 @@ DECLARE v_owner name;
 BEGIN
   SELECT pg_get_userbyid(relowner) INTO v_owner
     FROM pg_class WHERE oid = 'public.mmp_site_entries'::regclass;
-  IF current_user <> v_owner
-     AND (NEW.attribution_device_id IS DISTINCT FROM OLD.attribution_device_id
+  IF current_user <> v_owner AND (
+     (TG_OP = 'INSERT' AND (
+       NEW.attribution_device_id IS NOT NULL
+       OR NEW.attribution_collector_id IS NOT NULL
+       OR NEW.attribution_coordinator_id IS NOT NULL
+       OR NEW.attribution_method IS NOT NULL
+       OR NEW.attribution_confidence IS NOT NULL
+       OR NEW.attribution_exception_code IS NOT NULL
+       OR NEW.attribution_correction_reason IS NOT NULL
+       OR NEW.attribution_status IS DISTINCT FROM 'unresolved'
+       OR NEW.wfp_raw_device_key IS NOT NULL
+       OR NEW.wfp_raw_collector_name IS NOT NULL
+       OR NEW.wfp_raw_submission_id IS NOT NULL
+       OR NEW.wfp_submission_date IS NOT NULL
+     ))
+     OR (TG_OP = 'UPDATE' AND (
+       NEW.attribution_device_id IS DISTINCT FROM OLD.attribution_device_id
        OR NEW.attribution_collector_id IS DISTINCT FROM OLD.attribution_collector_id
        OR NEW.attribution_coordinator_id IS DISTINCT FROM OLD.attribution_coordinator_id
        OR NEW.attribution_method IS DISTINCT FROM OLD.attribution_method
@@ -143,13 +158,15 @@ BEGIN
        OR NEW.wfp_raw_device_key IS DISTINCT FROM OLD.wfp_raw_device_key
        OR NEW.wfp_raw_collector_name IS DISTINCT FROM OLD.wfp_raw_collector_name
        OR NEW.wfp_raw_submission_id IS DISTINCT FROM OLD.wfp_raw_submission_id
-       OR NEW.wfp_submission_date IS DISTINCT FROM OLD.wfp_submission_date) THEN
+       OR NEW.wfp_submission_date IS DISTINCT FROM OLD.wfp_submission_date
+     ))
+  ) THEN
     RAISE EXCEPTION 'PROTECTED_ATTRIBUTION_STATE: use the authorized attribution RPC';
   END IF;
   RETURN NEW;
 END; $$;
 DROP TRIGGER IF EXISTS trg_guard_collection_attribution_write ON public.mmp_site_entries;
-CREATE TRIGGER trg_guard_collection_attribution_write BEFORE UPDATE ON public.mmp_site_entries
+CREATE TRIGGER trg_guard_collection_attribution_write BEFORE INSERT OR UPDATE ON public.mmp_site_entries
   FOR EACH ROW EXECUTE FUNCTION public.guard_collection_attribution_write();
 
 CREATE TABLE IF NOT EXISTS public.collection_attribution_audit (

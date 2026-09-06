@@ -16,6 +16,10 @@ import {
   exportFormattedReconciliation,
   exportFormattedPaymentRun,
 } from '@/utils/cycleCloseExport';
+import {
+  isWfpConfirmedCollection,
+  resolveOfficialCollectionProfileId,
+} from '@/utils/fieldAttributionIdentity';
 
 interface Props {
   wizardState: WizardState;
@@ -159,14 +163,12 @@ export default function Step6Reconciliation({ wizardState, updateWizardState, on
     );
 
     const isWfpConfirmed = (e: any): boolean =>
-      String(e.status ?? '').toLowerCase() === 'wfp_confirmed' || confirmedMatchIds.has(e.id);
+      isWfpConfirmedCollection(e, confirmedMatchIds.has(e.id));
 
     // Corrected device attribution is authoritative for confirmed financial
     // rows. Never fall back to accepted/claimed/visit identity in that case.
     const resolveEnumId = (e: any): string | null =>
-      isWfpConfirmed(e)
-        ? (e.attribution_collector_id || null)
-        : (e.accepted_by || e.claimed_by || e.visit_started_by || null);
+      resolveOfficialCollectionProfileId(e, confirmedMatchIds.has(e.id));
 
     // Group by enumerator (name resolved below after profile lookup)
     const byEnum: Record<string, { name: string; entries: any[] }> = {};

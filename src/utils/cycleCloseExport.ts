@@ -15,6 +15,10 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { supabase } from '@/integrations/supabase/client';
 import type { WizardState } from '@/components/cycle/CycleCloseWizard';
+import {
+  isWfpConfirmedCollection,
+  resolveOfficialCollectionProfileId,
+} from '@/utils/fieldAttributionIdentity';
 
 // ── Brand palette (matches formattedExcelExport.ts) ──────────────────────────
 const C = {
@@ -555,15 +559,13 @@ export async function exportCycleCloseWorkbook(
       .map(r => r.matchedSiteId).filter(Boolean) as string[]
   );
   const isWfpConfirmed = (e: any): boolean =>
-    String(e.status ?? '').toLowerCase() === 'wfp_confirmed' || confirmedMatchIds.has(e.id);
+    isWfpConfirmedCollection(e, confirmedMatchIds.has(e.id));
 
   // ── Fetch official enumerator profiles ───────────────────────────────────
   // Corrected attribution is the sole financial identity for confirmed rows.
   // Legacy identity remains only for non-confirmed historical/exception rows.
   const resolveEnumId = (e: any): string | null =>
-    isWfpConfirmed(e)
-      ? (e.attribution_collector_id || null)
-      : (e.accepted_by || e.claimed_by || e.visit_started_by || null);
+    resolveOfficialCollectionProfileId(e, confirmedMatchIds.has(e.id));
 
   const allEnumIds = [...new Set(
     (entries ?? []).map((e: any) => resolveEnumId(e)).filter(Boolean) as string[]

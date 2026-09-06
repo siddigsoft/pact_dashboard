@@ -33,6 +33,10 @@ import {
 import { resolveFeeAdvanceDeduction } from '@/components/cycle/redirectSettlement';
 import { isSoftDeletedDownPayment } from '@/utils/downPaymentVoid';
 import { cancelPaidDownPaymentRequest } from '@/utils/preFundLinkage';
+import {
+  resolveOfficialCollectionProfileId,
+  resolveOfficialCollectionProfileName,
+} from '@/utils/fieldAttributionIdentity';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -494,7 +498,9 @@ export default function FieldPaymentsCentre() {
       }
 
       // Resolve enumerator names
-      const enumIds = [...new Set((sites ?? []).map((s: any) => s.attribution_collector_id).filter(Boolean))];
+      const enumIds = [...new Set(
+        (sites ?? []).map((s: any) => resolveOfficialCollectionProfileId(s)).filter(Boolean)
+      )] as string[];
       const nameMap: Record<string, string> = {};
       if (enumIds.length) {
         const { data: profiles } = await supabase
@@ -573,6 +579,7 @@ export default function FieldPaymentsCentre() {
       }
 
       const rows: FeeRow[] = (sites ?? []).map((s: any) => {
+        const officialCollectorId = resolveOfficialCollectionProfileId(s);
         const mmp = s.mmp_files ?? {};
         const ef = s.enumerator_fee ?? 0;
         const tf = s.transport_fee ?? 0;
@@ -596,8 +603,8 @@ export default function FieldPaymentsCentre() {
           siteCode: s.site_code ?? null,
           state: s.state ?? '—',
           locality: s.locality ?? '—',
-          enumeratorId: s.attribution_collector_id,
-          enumeratorName: nameMap[s.attribution_collector_id] ?? 'Unknown',
+          enumeratorId: officialCollectorId!,
+          enumeratorName: resolveOfficialCollectionProfileName(officialCollectorId, nameMap),
           enumeratorFee: ef,
           transportFee: tf,
           totalFee: total,
