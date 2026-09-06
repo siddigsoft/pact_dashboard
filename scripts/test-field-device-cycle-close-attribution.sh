@@ -10,8 +10,19 @@ SOCKET_DIR="$TMP_DIR/socket"
 PSQL=("$PG_BIN/psql" -X -h "$SOCKET_DIR" -p "$PORT" -U "$(id -un)" -d postgres -v ON_ERROR_STOP=1)
 
 cleanup() {
+  status=$?
+  if [[ "$status" -ne 0 ]]; then
+    echo "Field-device attribution/Cycle Close regression suite failed (exit $status)." >&2
+    for log in "$TMP_DIR"/*.log; do
+      [[ -f "$log" ]] || continue
+      echo "::group::$(basename "$log")" >&2
+      cat "$log" >&2
+      echo "::endgroup::" >&2
+    done
+  fi
   "$PG_BIN/pg_ctl" -D "$TMP_DIR/data" -m immediate stop >/dev/null 2>&1 || true
   rm -rf "$TMP_DIR"
+  exit "$status"
 }
 trap cleanup EXIT
 

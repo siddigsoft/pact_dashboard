@@ -1,0 +1,48 @@
+name: Field Device and Cycle Close regression
+
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'scripts/test-field-device-cycle-close-attribution.sh'
+      - 'supabase/migrations/**'
+      - 'supabase/tests/field_device_cycle_close_attribution_test.sql'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/test-field-device-cycle-close.yml'
+  push:
+    branches: [master, main]
+    paths:
+      - 'scripts/test-field-device-cycle-close-attribution.sh'
+      - 'supabase/migrations/**'
+      - 'supabase/tests/field_device_cycle_close_attribution_test.sql'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/test-field-device-cycle-close.yml'
+  workflow_dispatch:
+
+jobs:
+  attribution-cycle-close:
+    name: Test attribution and Cycle Close lock orderings
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install PostgreSQL tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql postgresql-client
+          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run field-device and Cycle Close regression suite
+        run: npm run test:field-device-cycle-close
