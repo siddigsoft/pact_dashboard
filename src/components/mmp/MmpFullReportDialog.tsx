@@ -488,6 +488,7 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
       const RED     = 'FFDC2626';
       const SLATE   = 'FF64748B';
       const GOLD    = 'FFFBBF24';
+      const AMOUNT_FORMAT = '#,##0;[Red]-#,##0';
 
       type ExWS = ExcelJS.Worksheet;
 
@@ -635,6 +636,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         if (label === 'Coverage %' || label === 'Covered') {
           row.getCell(2).font = { bold: true, size: 10, color: { argb: pctArgb(stats.coveragePct) } };
         }
+        if (String(label).includes('(SDG)') && typeof value === 'number') {
+          row.getCell(2).numFmt = AMOUNT_FORMAT;
+        }
       });
 
       // ════════════════════════════════════════════════════════════════
@@ -658,9 +662,11 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         row.getCell(4).font = { size: 10, color: { argb: AMBER } };
         row.getCell(5).font = { size: 10, color: { argb: RED } };
         row.getCell(6).font = { size: 10, color: { argb: SLATE } };
+        row.getCell(9).numFmt = AMOUNT_FORMAT;
         coverageCell(row, 7, s.coveragePct);
       });
       const stTot = addTotalsRow(wsState, ['TOTAL', stats.total, stats.done, stats.inProgress, stats.attention, stats.pending, `${stats.coveragePct}%`, stats.coordCount, stats.totalFees]);
+      stTot.getCell(9).numFmt = AMOUNT_FORMAT;
       coverageCell(stTot, 7, stats.coveragePct);
 
       // ════════════════════════════════════════════════════════════════
@@ -724,6 +730,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           Number(e.enumerator_fee || 0), Number(e.transport_fee || 0), Number(e.cost || 0),
         ], i % 2 === 0);
         row.getCell(6).font = { size: 10, bold: true, color: { argb: CAT_COLOR[cat] || SLATE } };
+        row.getCell(7).numFmt = AMOUNT_FORMAT;
+        row.getCell(8).numFmt = AMOUNT_FORMAT;
+        row.getCell(9).numFmt = AMOUNT_FORMAT;
       });
 
       // ════════════════════════════════════════════════════════════════
@@ -765,6 +774,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           row.getCell(7).font = { size: 10 };
           row.getCell(8).font = { size: 10, color: { argb: GREEN } };
           row.getCell(9).font = { size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+          row.getCell(7).numFmt = AMOUNT_FORMAT;
+          row.getCell(8).numFmt = AMOUNT_FORMAT;
+          row.getCell(9).numFmt = AMOUNT_FORMAT;
         });
 
         const dpTot = addTotalsRow(wsDP, [
@@ -774,6 +786,9 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
         dpTot.getCell(7).font = { bold: true, size: 10, color: { argb: GOLD } };
         dpTot.getCell(8).font = { bold: true, size: 10, color: { argb: GREEN } };
         dpTot.getCell(9).font = { bold: true, size: 10, color: { argb: totRem > 0 ? RED : GREEN } };
+        dpTot.getCell(7).numFmt = AMOUNT_FORMAT;
+        dpTot.getCell(8).numFmt = AMOUNT_FORMAT;
+        dpTot.getCell(9).numFmt = AMOUNT_FORMAT;
       }
 
       // ════════════════════════════════════════════════════════════════
@@ -810,10 +825,12 @@ const MmpFullReportDialog = ({ open, onClose, mmpId, mmpName }: Props) => {
           row.getCell(4).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier1_status] || SLATE } };
           row.getCell(5).font = { size: 10, color: { argb: CS_STATUS_COLOR[cs.tier2_status] || SLATE } };
           row.getCell(6).font = { size: 10, bold: true };
+          row.getCell(6).numFmt = AMOUNT_FORMAT;
         });
 
         const csTot = addTotalsRow(wsCS, [`TOTAL (${costSubmissions.length})`, '', '', '', '', totAmt, '']);
         csTot.getCell(6).font = { bold: true, size: 10, color: { argb: GOLD } };
+        csTot.getCell(6).numFmt = AMOUNT_FORMAT;
       }
 
       // ════════════════════════════════════════════════════════════════
