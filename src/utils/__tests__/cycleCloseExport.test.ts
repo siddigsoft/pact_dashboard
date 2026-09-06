@@ -68,7 +68,16 @@ describe('Cycle Close workbook collection identity', () => {
         return {
           select: vi.fn(() => ({
             in: vi.fn(() => ({
-              in: vi.fn().mockResolvedValue({ data: [] }),
+              in: vi.fn().mockResolvedValue({
+                data: [{
+                  id: 'advance-1',
+                  mmp_site_entry_id: 'site-1',
+                  total_paid_amount: 50,
+                  requested_amount: 50,
+                  status: 'paid',
+                  created_at: '2026-09-05T10:00:00.000Z',
+                }],
+              }),
             })),
           })),
         };
@@ -110,7 +119,7 @@ describe('Cycle Close workbook collection identity', () => {
     });
   });
 
-  it('keeps raw claimant identity in audit evidence while exporting the official device owner for reconciliation', async () => {
+  it('keeps raw claimant identity in audit evidence while exporting the official device owner across financial sheets', async () => {
     const wizardState = {
       selectedMmpId: 'mmp-1',
       selectedMmp: { id: 'mmp-1', name: 'Identity Fixture Cycle' },
@@ -139,6 +148,14 @@ describe('Cycle Close workbook collection identity', () => {
     const reconciliation = workbook.getWorksheet('Enumerator Reconciliation');
     expect(reconciliation?.getCell('A5').value).toBe(officialName);
     expect(reconciliation?.getCell('A5').value).not.toBe(rawWfpName);
+
+    const paymentRun = workbook.getWorksheet('Payment Run');
+    expect(paymentRun?.getCell('A5').value).toBe(officialName);
+    expect(JSON.stringify(paymentRun?.getSheetValues())).not.toContain(rawWfpName);
+
+    const advanceDetails = workbook.getWorksheet('Advance Details');
+    expect(advanceDetails?.getCell('D5').value).toBe(officialName);
+    expect(JSON.stringify(advanceDetails?.getSheetValues())).not.toContain(rawWfpName);
 
     const attribution = workbook.getWorksheet('Attribution Audit');
     expect(attribution?.getCell('G5').value).toBe(rawWfpName);
