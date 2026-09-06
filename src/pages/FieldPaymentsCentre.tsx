@@ -466,7 +466,7 @@ export default function FieldPaymentsCentre() {
           .from('mmp_site_entries')
           .select(`
           id, site_name, site_code, state, locality, status,
-           not_covered_flag, accepted_by, enumerator_fee, transport_fee,
+           not_covered_flag, attribution_collector_id, attribution_status, enumerator_fee, transport_fee,
           fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, fee_unallocated_amount,
           fee_paid_at, fee_payment_method, fee_payment_notes,
            fee_payment_reference, fee_pre_fund_id, fee_receipt_url,
@@ -475,7 +475,7 @@ export default function FieldPaymentsCentre() {
           `)
           .eq('status', 'wfp_confirmed')
           .or('not_covered_flag.is.null,not_covered_flag.eq.false')
-          .not('accepted_by', 'is', null)
+          .not('attribution_collector_id', 'is', null)
           .order('state')
           .range(from, to)
       );
@@ -494,7 +494,7 @@ export default function FieldPaymentsCentre() {
       }
 
       // Resolve enumerator names
-      const enumIds = [...new Set((sites ?? []).map((s: any) => s.accepted_by).filter(Boolean))];
+      const enumIds = [...new Set((sites ?? []).map((s: any) => s.attribution_collector_id).filter(Boolean))];
       const nameMap: Record<string, string> = {};
       if (enumIds.length) {
         const { data: profiles } = await supabase
@@ -596,8 +596,8 @@ export default function FieldPaymentsCentre() {
           siteCode: s.site_code ?? null,
           state: s.state ?? '—',
           locality: s.locality ?? '—',
-          enumeratorId: s.accepted_by,
-          enumeratorName: nameMap[s.accepted_by] ?? 'Unknown',
+          enumeratorId: s.attribution_collector_id,
+          enumeratorName: nameMap[s.attribution_collector_id] ?? 'Unknown',
           enumeratorFee: ef,
           transportFee: tf,
           totalFee: total,

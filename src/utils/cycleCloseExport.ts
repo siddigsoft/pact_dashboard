@@ -528,8 +528,13 @@ export async function exportCycleCloseWorkbook(
   // ── Fetch all entries for this MMP ──────────────────────────────────────
   const { data: entries } = await supabase
     .from('mmp_site_entries')
-    .select('id, site_name, state, locality, accepted_by, claimed_by, visit_started_by, status, transport_fee, enumerator_fee, additional_data')
+    .select('id, site_name, state, locality, accepted_by, claimed_by, visit_started_by, attribution_collector_id, attribution_status, status, transport_fee, enumerator_fee, additional_data')
     .eq('mmp_file_id', mmpId);
+
+  const { data: attributionReportResult } = await (supabase as any).rpc(
+    'get_cycle_attribution_report',
+    { p_mmp_id: mmpId },
+  );
 
   const entryIds = (entries ?? []).map((e: any) => e.id);
   const entryMap: Record<string, any> = {};
@@ -544,9 +549,21 @@ export async function exportCycleCloseWorkbook(
         .in('status', ['approved', 'paid', 'partially_paid', 'fully_paid'])
     : { data: [] as any[] };
 
-  // ── Fetch enumerator profiles ────────────────────────────────────────────
+  const confirmedMatchIds = new Set(
+    wizardState.matchResults
+      .filter(r => r.status === 'auto' || r.action === 'confirm')
+      .map(r => r.matchedSiteId).filter(Boolean) as string[]
+  );
+  const isWfpConfirmed = (e: any): boolean =>
+    String(e.status ?? '').toLowerCase() === 'wfp_confirmed' || confirmedMatchIds.has(e.id);
+
+  // ── Fetch official enumerator profiles ───────────────────────────────────
+  // Corrected attribution is the sole financial identity for confirmed rows.
+  // Legacy identity remains only for non-confirmed historical/exception rows.
   const resolveEnumId = (e: any): string | null =>
-    e.accepted_by || e.claimed_by || e.visit_started_by || null;
+    isWfpConfirmed(e)
+      ? (e.attribution_collector_id || null)
+      : (e.accepted_by || e.claimed_by || e.visit_started_by || null);
 
   const allEnumIds = [...new Set(
     (entries ?? []).map((e: any) => resolveEnumId(e)).filter(Boolean) as string[]
@@ -556,6 +573,12 @@ export async function exportCycleCloseWorkbook(
     : { data: [] as any[] };
   const profileMap: Record<string, string> = {};
   for (const p of (profiles ?? [])) profileMap[p.id] = p.full_name ?? '';
+  const resolvedAttributionNameMap: Record<string, string> = {};
+  for (const row of (attributionReportResult?.rows ?? [])) {
+    if (row.resolved_collector_id && row.resolved_collector_name) {
+      resolvedAttributionNameMap[row.resolved_collector_id] = row.resolved_collector_name;
+    }
+  }
 
   // ── Build advance maps ───────────────────────────────────────────────────
   const advanceByEntry: Record<string, number> = {};
@@ -581,12 +604,6 @@ export async function exportCycleCloseWorkbook(
 
   // ── Build reconciliation rows (same logic as Step 6) ────────────────────
   const notCoveredIds = new Set(Object.keys(wizardState.uncoveredReasons));
-  const confirmedMatchIds = new Set(
-    wizardState.matchResults
-      .filter(r => r.status === 'auto' || r.action === 'confirm')
-      .map(r => r.matchedSiteId).filter(Boolean) as string[]
-  );
-
   const byEnum: Record<string, { name: string; entries: any[] }> = {};
   for (const e of (entries ?? [])) {
     const id = resolveEnumId(e);
@@ -594,12 +611,17 @@ export async function exportCycleCloseWorkbook(
     const ad = (e as any).additional_data ?? {};
     const adName = ad.collector_name || ad.accepted_by_name || ad.enumerator_name ||
                    ad.data_collector_name || ad.collectorName || 'Unknown';
-    if (!byEnum[id]) byEnum[id] = { name: profileMap[id] || adName, entries: [] };
+    if (!byEnum[id]) byEnum[id] = {
+      name: profileMap[id]
+        || (isWfpConfirmed(e) ? resolvedAttributionNameMap[id] : adName)
+        || 'Unknown',
+      entries: [],
+    };
     byEnum[id].entries.push(e);
   }
 
   const reconRows: EnumRow[] = Object.entries(byEnum).map(([enumId, data]) => {
-    const confirmedEntries = data.entries.filter(e => confirmedMatchIds.has(e.id));
+    const confirmedEntries = data.entries.filter(isWfpConfirmed);
     const wfpConfirmed  = confirmedEntries.length;
     const wfpRejected   = data.entries.filter(e =>
       wizardState.matchResults.some(r => r.matchedSiteId === e.id && r.action === 'reject')
@@ -639,6 +661,42 @@ export async function exportCycleCloseWorkbook(
   // BUILD WORKBOOK
   // ────────────────────────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook();
+
+  // Attribution is deliberately sourced from the authoritative report RPC.
+  // Raw WFP identity is retained for audit, while resolved names are profile
+  // results returned by the server.
+  {
+    const headers = [
+      'State', 'Site', 'Issue Type', 'Exception Code', 'Requires Attribution', 'Raw Device ID', 'Raw WFP Name', 'Submission UUID',
+      'Submission Date', 'Claimed Collector', 'Resolved Official Collector',
+      'Status', 'Method', 'Attribution Resolution', 'Correction Reason',
+    ];
+    const rows: CellVal[][] = (attributionReportResult?.rows ?? []).map((r: any) => [
+      r.state ?? r.site_state ?? '',
+      r.site_name ?? r.site_id ?? '',
+      r.issue_type ?? '',
+      r.exception_code ?? '',
+      r.requires_attribution === true ? 'Yes' : 'No',
+      r.wfp_raw_device_id ?? '',
+      r.wfp_raw_interviewer_name ?? '',
+      r.submission_uuid ?? '',
+      r.submission_date ?? '',
+      r.claimed_collector_name ?? r.claimed_collector ?? '',
+      r.resolved_collector_name ?? r.resolved_collector ?? '',
+      r.status ?? '',
+      r.method ?? '',
+      r.requires_attribution === true &&
+        (!['auto', 'corrected'].includes(String(r.status ?? '').toLowerCase()) || !r.resolved_collector_id)
+        ? 'Unresolved' : 'Resolved / not required',
+      r.correction_reason ?? '',
+    ]);
+    buildSheet(
+      wb, 'Attribution Audit', 'Cycle Close — Collection Attribution Audit',
+      `Cycle: ${cname}`, `Generated: ${now} · ${rows.length} evidence rows`,
+      headers, rows,
+      { rowBgFn: i => String(rows[i]?.[8] ?? '').toLowerCase() === 'resolved' ? C.green : C.amberR },
+    );
+  }
 
   // ── Sheet 1: Cycle Summary ────────────────────────────────────────────────
   {

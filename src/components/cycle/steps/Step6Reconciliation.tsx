@@ -1,11 +1,14 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Download, Info, AlertTriangle, ExternalLink, ArrowRight } from 'lucide-react';
-import type { WizardState } from '../CycleCloseWizard';
+import { Loader2, Download, Info, AlertTriangle, ExternalLink, ArrowRight, RefreshCw, ShieldAlert, Badge } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { AttributionReportRow, WizardState } from '../CycleCloseWizard';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -39,29 +42,108 @@ interface PaymentQueueRow {
   receiptReference: string | null;
 }
 
-export default function Step6Reconciliation({ wizardState, onNext, onBack, canGoBack }: Props) {
+export default function Step6Reconciliation({ wizardState, updateWizardState, onNext, onBack, canGoBack }: Props) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<EnumRow[]>([]);
   const [paymentQueue, setPaymentQueue] = useState<PaymentQueueRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [attributionLoading, setAttributionLoading] = useState(false);
+  const [stateFilter, setStateFilter] = useState('all');
+  const [issueFilter, setIssueFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [users, setUsers] = useState<any[]>([]);
+  const [correction, setCorrection] = useState<any | null>(null);
+  const [reason, setReason] = useState('');
+  const [selectedUser, setSelectedUser] = useState('');
+  const [correctionSaving, setCorrectionSaving] = useState(false);
+  const [attributionError, setAttributionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (wizardState.selectedMmpId) buildReconciliation();
+    if (wizardState.selectedMmpId) {
+      buildReconciliation();
+      loadAttribution();
+    }
   }, [wizardState.selectedMmpId]);
+
+  const loadAttribution = async () => {
+    if (!wizardState.selectedMmpId) return;
+    setAttributionLoading(true);
+    const [reportResult, usersResult, devicesResult] = await Promise.all([
+      (supabase as any).rpc('get_cycle_attribution_report', { p_mmp_id: wizardState.selectedMmpId }),
+      (supabase as any).rpc('list_field_attribution_users'),
+      (supabase as any).rpc('list_field_devices'),
+    ]);
+    void devicesResult;
+    if (reportResult.error) {
+      setAttributionError(reportResult.error.message ?? 'Could not load collection attribution report.');
+      updateWizardState({ attributionReport: [], attributionUnresolvedCount: Number.MAX_SAFE_INTEGER, attributionLoaded: false });
+      setAttributionLoading(false);
+      return;
+    }
+    setAttributionError(null);
+    const report = (reportResult.data?.rows ?? []) as AttributionReportRow[];
+    const officialUsers = (usersResult.error ? [] : usersResult.data ?? []).filter((u: any) => {
+      const roles = [u.role, ...(Array.isArray(u.roles) ? u.roles : []), ...(Array.isArray(u.additional_roles) ? u.additional_roles.map((r: any) => r?.role) : [])]
+        .filter(Boolean).map((r: any) => String(r).toLowerCase().replace(/[\s_-]/g, ''));
+      return roles.some((r: string) => r === 'collector' || r === 'datacollector' || r === 'coordinator');
+    });
+    setUsers(officialUsers as any[]);
+    const unresolved = report.filter(r => r.requires_attribution === true &&
+      (!['auto', 'corrected'].includes(String(r.status ?? '').toLowerCase()) || !r.resolved_collector_id)).length;
+    updateWizardState({
+      attributionReport: report,
+      attributionUnresolvedCount: unresolved,
+      attributionLoaded: true,
+    });
+    setAttributionLoading(false);
+  };
+
+  const attributionRows = wizardState.attributionReport ?? [];
+  const isResolved = (r: AttributionReportRow) => r.requires_attribution !== true ||
+    (['auto', 'corrected'].includes(String(r.status ?? '').toLowerCase()) && !!r.resolved_collector_id);
+  const states = useMemo(() => [...new Set(attributionRows.map(r => r.state).filter(Boolean))].sort(), [attributionRows]);
+  const filteredAttribution = attributionRows.filter(r => {
+    const state = r.state ?? '';
+    const status = String(r.status ?? '').toLowerCase();
+    const issueType = String(r.issue_type ?? '').toLowerCase();
+    return (stateFilter === 'all' || state === stateFilter) &&
+      (issueFilter === 'all' || issueType === issueFilter) &&
+      (statusFilter === 'all' || status === statusFilter);
+  });
+  const unresolvedAttribution = attributionRows.filter(r => !isResolved(r));
+
+  const saveCorrection = async () => {
+    if (!correction || !selectedUser || reason.trim().length < 10) return;
+    setCorrectionSaving(true);
+    const { error } = await (supabase as any).rpc('correct_collection_attribution', {
+      p_site_id: correction.site_id ?? correction.siteId,
+      p_device_id: correction.device_id,
+      p_collector_id: selectedUser,
+      p_coordinator_id: correction.coordinator_id ?? null,
+      p_reason: reason.trim(),
+    });
+    if (!error) {
+      setCorrection(null); setReason(''); setSelectedUser('');
+      await loadAttribution();
+      await buildReconciliation();
+    } else alert(error.message ?? 'Could not save correction.');
+    setCorrectionSaving(false);
+  };
 
   const buildReconciliation = async () => {
     setLoading(true);
 
     // Fetch entries with per-site fee columns and all enumerator-linkage columns.
     // transport_fee / enumerator_fee live on each entry row, not on mmp_files.
-    // Enumerator linkage may be accepted_by, claimed_by, or visit_started_by (UUID).
-    // Do NOT join profiles!accepted_by — there is no FK constraint; do a separate lookup.
+    // WFP-confirmed rows must use the corrected attribution identity. Legacy
+    // linkage remains available only for non-confirmed exception/history rows.
+    // Do not join profiles inline — do a separate lookup for official names.
     // Cast to any: fee_* payment columns and not_covered_flag are newer DB
     // columns not yet reflected in the generated Supabase types.
     const { data: entries } = await (supabase as any)
       .from('mmp_site_entries')
       .select(
-        'id, site_name, accepted_by, claimed_by, visit_started_by, status, not_covered_flag, ' +
+        'id, site_name, accepted_by, claimed_by, visit_started_by, attribution_collector_id, attribution_status, status, not_covered_flag, ' +
         'transport_fee, enumerator_fee, additional_data, ' +
         'fee_paid_status, fee_paid_amount, fee_cash_paid_amount, fee_advance_offset_amount, ' +
         'fee_payment_reference, fee_receipt_url'
@@ -76,9 +158,15 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
         .filter(Boolean) as string[]
     );
 
-    // Pick the best available enumerator UUID per entry
+    const isWfpConfirmed = (e: any): boolean =>
+      String(e.status ?? '').toLowerCase() === 'wfp_confirmed' || confirmedMatchIds.has(e.id);
+
+    // Corrected device attribution is authoritative for confirmed financial
+    // rows. Never fall back to accepted/claimed/visit identity in that case.
     const resolveEnumId = (e: any): string | null =>
-      e.accepted_by || e.claimed_by || e.visit_started_by || null;
+      isWfpConfirmed(e)
+        ? (e.attribution_collector_id || null)
+        : (e.accepted_by || e.claimed_by || e.visit_started_by || null);
 
     // Group by enumerator (name resolved below after profile lookup)
     const byEnum: Record<string, { name: string; entries: any[] }> = {};
@@ -88,7 +176,10 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
       const ad = (e as any).additional_data ?? {};
       const adName = ad.collector_name || ad.accepted_by_name || ad.enumerator_name ||
                      ad.data_collector_name || ad.collectorName || 'Unknown';
-      if (!byEnum[id]) byEnum[id] = { name: adName, entries: [] };
+      if (!byEnum[id]) byEnum[id] = {
+        name: isWfpConfirmed(e) ? 'Unknown' : adName,
+        entries: [],
+      };
       byEnum[id].entries.push(e);
     }
 
@@ -132,7 +223,7 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
     const tableRows: EnumRow[] = Object.entries(byEnum).map(([enumId, data]) => {
       const sitesAssigned = data.entries.length;
 
-      const confirmedEntries = data.entries.filter(e => confirmedMatchIds.has(e.id));
+      const confirmedEntries = data.entries.filter(isWfpConfirmed);
       const wfpConfirmed = confirmedEntries.length;
       const wfpRejected = data.entries.filter(e =>
         wizardState.matchResults.some(r => r.matchedSiteId === e.id && r.action === 'reject')
@@ -190,9 +281,7 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
       .filter((e: any) => {
         if (notCoveredIds.has(e.id)) return false;
         if (e.not_covered_flag === true) return false;
-        const persistedConfirmed = String(e.status ?? '').toLowerCase() === 'wfp_confirmed';
-        const wizardConfirmed = confirmedMatchIds.has(e.id);
-        return persistedConfirmed || wizardConfirmed;
+         return isWfpConfirmed(e);
       })
       .map((e: any) => {
         const enumId = resolveEnumId(e);
@@ -279,6 +368,54 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
         <p className="text-sm text-muted-foreground mt-0.5" dir="rtl">الخطوة ٥ — المراجعة والمطابقة المالية</p>
         <p className="text-muted-foreground text-sm">Review earnings vs. advances. Download the reports below, then pay fees via Field Payments Centre.</p>
       </div>
+
+      <section className="border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/30 border-b flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-sm flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-amber-600" />Collection Attribution</h3>
+            <p className="text-xs text-muted-foreground mt-1">Compare WFP identity evidence with the official Command Center field-user profile before closing.</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={loadAttribution} disabled={attributionLoading} className="shrink-0">
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${attributionLoading ? 'animate-spin' : ''}`} />Refresh
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-background">
+          {[
+            ['Total evidence', attributionRows.length],
+            ['Unresolved', unresolvedAttribution.length],
+            ['Resolved', attributionRows.length - unresolvedAttribution.length],
+            ['States', states.length],
+          ].map(([label, value]) => <div key={label} className="rounded-md border px-3 py-2"><p className="text-[11px] text-muted-foreground">{label}</p><p className="text-lg font-semibold">{value}</p></div>)}
+        </div>
+        {states.length > 0 && <div className="px-4 py-3 border-b grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {states.map(state => {
+            const stateRows = attributionRows.filter(r => r.state === state);
+            const open = stateRows.filter(r => !isResolved(r)).length;
+            return <button type="button" key={state} onClick={() => setStateFilter(state)} className="text-left rounded-md border px-3 py-2 hover:bg-muted/50">
+              <p className="text-xs font-medium truncate">{state}</p><p className="text-[11px] text-muted-foreground">{stateRows.length} records · <span className={open ? 'text-amber-700' : 'text-green-700'}>{open} open</span></p>
+            </button>;
+          })}
+        </div>}
+        <div className="flex flex-wrap gap-2 p-3 border-b">
+          <Select value={stateFilter} onValueChange={setStateFilter}><SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="All states" /></SelectTrigger><SelectContent><SelectItem value="all">All states</SelectItem>{states.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+          <Select value={issueFilter} onValueChange={setIssueFilter}><SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="All issue types" /></SelectTrigger><SelectContent><SelectItem value="all">All issue types</SelectItem><SelectItem value="device_owner_mismatch">Device owner mismatch</SelectItem><SelectItem value="missing_attribution">Missing attribution</SelectItem><SelectItem value="claimed_not_submitted">Claimed, not submitted</SelectItem><SelectItem value="not_covered">Not covered</SelectItem></SelectContent></Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="All statuses" /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="auto">Auto</SelectItem><SelectItem value="corrected">Corrected</SelectItem></SelectContent></Select>
+        </div>
+        {attributionError ? <Alert variant="destructive" className="m-4"><AlertDescription>Attribution report unavailable: {attributionError}. Refresh before continuing.</AlertDescription></Alert> : filteredAttribution.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">No attribution evidence matches these filters.</p> : (
+          <div className="overflow-x-auto max-h-[430px]"><table className="w-full text-xs"><thead className="sticky top-0 bg-muted"><tr>
+            {['State / Site','Issue type','WFP raw device','WFP raw name','Claimed collector','Resolved official collector','Status / method','Action'].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+          </tr></thead><tbody>{filteredAttribution.map((r, i) => {
+            const status = String(r.status ?? 'unresolved');
+            return <tr key={r.id ?? `${r.site_id}-${i}`} className="border-t align-top">
+              <td className="px-3 py-2"><span className="font-medium">{r.state ?? '—'}</span><br /><span className="text-muted-foreground">{r.site_name ?? r.site_id ?? '—'}</span></td>
+              <td className="px-3 py-2"><span>{r.issue_type ?? '—'}</span>{r.exception_code && <span className="block mt-1 font-mono text-[10px] text-muted-foreground">{r.exception_code}</span>}</td><td className="px-3 py-2 font-mono">{r.wfp_raw_device_id ?? '—'}</td><td className="px-3 py-2">{r.wfp_raw_interviewer_name ?? '—'}</td>
+              <td className="px-3 py-2">{r.claimed_collector_name ?? r.claimed_collector ?? '—'}</td><td className="px-3 py-2 font-medium">{r.resolved_collector_name ?? r.resolved_collector ?? '—'}</td>
+              <td className="px-3 py-2"><Badge variant={isResolved(r) ? 'default' : 'destructive'}>{status}{r.method ? ` · ${r.method}` : ''}</Badge>{r.correction_reason && <p className="mt-1 max-w-48 text-[10px] leading-snug text-muted-foreground">{r.correction_reason}</p>}</td>
+              <td className="px-3 py-2">{r.requires_attribution === true && !isResolved(r) && <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCorrection(r)}>Correct</Button>}</td>
+            </tr>;
+          })}</tbody></table></div>
+        )}
+      </section>
 
       {/* Legend */}
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
@@ -557,6 +694,14 @@ export default function Step6Reconciliation({ wizardState, onNext, onBack, canGo
           Next: Final Review &amp; Close →
         </Button>
       </div>
+      <Dialog open={!!correction} onOpenChange={open => !open && setCorrection(null)}>
+        <DialogContent><DialogHeader><DialogTitle>Correct collection attribution</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2"><p className="text-sm text-muted-foreground">Select the official field user. The final name is sourced from the profile directory, not the WFP file.</p>
+            <Select value={selectedUser} onValueChange={setSelectedUser}><SelectTrigger><SelectValue placeholder="Choose official field user" /></SelectTrigger><SelectContent>{users.map(u => <SelectItem key={u.id ?? u.user_id} value={String(u.id ?? u.user_id)}>{u.full_name ?? u.name ?? u.email}</SelectItem>)}</SelectContent></Select>
+            <Textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Required reason for correction (minimum 10 characters)" rows={4} />
+          </div><DialogFooter><Button variant="outline" onClick={() => setCorrection(null)}>Cancel</Button><Button onClick={saveCorrection} disabled={!selectedUser || reason.trim().length < 10 || correctionSaving}>{correctionSaving ? 'Saving…' : 'Save correction'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -62,6 +62,8 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
   // Check 9: exception actions that have not executed successfully in the wizard
   const [unpaidFeeCount,  setUnpaidFeeCount]  = useState<number | null>(null); // null = loading
   const [pendingExcCount, setPendingExcCount]  = useState<number | null>(null);
+  const [attributionLoading, setAttributionLoading] = useState(false);
+  const [attributionError, setAttributionError] = useState<string | null>(null);
 
   useEffect(() => {
     const mmpId = wizardState.selectedMmpId;
@@ -81,17 +83,17 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
     // financial obligations merely because they exist in this cycle.
     supabase
       .from('mmp_site_entries')
-      .select('id, accepted_by, enumerator_fee, transport_fee, fee_cash_paid_amount, fee_advance_offset_amount')
+      .select('id, attribution_collector_id, attribution_status, enumerator_fee, transport_fee, fee_cash_paid_amount, fee_advance_offset_amount')
       .eq('mmp_file_id', mmpId)
       .eq('status', 'wfp_confirmed')
       .or('not_covered_flag.is.null,not_covered_flag.eq.false')
+      .not('attribution_collector_id', 'is', null)
       .then(({ data: sites, error }) => {
         if (error) {
           setUnpaidFeeCount(null);
           return;
         }
         const unpaidCoveredSites = (sites as any[] ?? []).filter(site => {
-          if (!site.accepted_by) return false;
           const grossFee = Number(site.enumerator_fee ?? 0) + Number(site.transport_fee ?? 0);
           const settled = Number(site.fee_cash_paid_amount ?? 0) + Number(site.fee_advance_offset_amount ?? 0);
           return grossFee - settled > 0.005;
@@ -106,6 +108,28 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       .eq('mmp_file_id', mmpId)
       .eq('executed', false)
       .then(({ count }) => setPendingExcCount(count ?? 0));
+  }, [wizardState.selectedMmpId]);
+
+  useEffect(() => {
+    const mmpId = wizardState.selectedMmpId;
+    if (!mmpId) return;
+    setAttributionLoading(true);
+    (supabase as any).rpc('get_cycle_attribution_report', { p_mmp_id: mmpId })
+      .then(({ data, error }: any) => {
+        if (error) {
+          setAttributionError(error.message ?? 'Could not load collection attribution report.');
+          updateWizardState({ attributionReport: [], attributionUnresolvedCount: Number.MAX_SAFE_INTEGER, attributionLoaded: false });
+          return;
+        }
+        setAttributionError(null);
+        const report = data?.rows ?? [];
+        const unresolved = report.filter((r: any) =>
+          r.requires_attribution === true &&
+          (!['auto', 'corrected'].includes(String(r.status ?? '').toLowerCase()) || !r.resolved_collector_id)
+        ).length;
+        updateWizardState({ attributionReport: report, attributionUnresolvedCount: unresolved, attributionLoaded: true });
+      })
+      .finally(() => setAttributionLoading(false));
   }, [wizardState.selectedMmpId]);
 
   const matchResults = wizardState.matchResults;
@@ -161,9 +185,20 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
       jumpStep: 4,
       passes: pendingExcCount === null ? true : pendingExcCount === 0,
     },
+    {
+      id: 10, displayNum: 9,
+      label: 'Collection attribution resolved',
+      description: attributionLoading
+        ? 'Checking collection attribution report…'
+        : wizardState.attributionUnresolvedCount === 0
+          ? 'All WFP collection identities are resolved'
+          : `${wizardState.attributionUnresolvedCount} collection attribution issue${wizardState.attributionUnresolvedCount === 1 ? ' remains' : 's remain'} — resolve in Reconciliation`,
+      jumpStep: 5,
+      passes: !attributionLoading && wizardState.attributionUnresolvedCount === 0,
+    },
   ];
 
-  const hardBlockCheckIds = new Set([5, 8, 9]);
+  const hardBlockCheckIds = new Set([5, 8, 9, 10]);
   const allPassed = checks.every(c =>
     c.passes || (!hardBlockCheckIds.has(c.id) && !!wizardState.overrides[c.id])
   );
@@ -255,6 +290,27 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
         setClosing(false);
         setClosingDialog(false);
         goToStep?.(4);
+        return;
+      }
+
+      // The report RPC is authoritative; never rely solely on the browser copy
+      // when the final close request is submitted.
+      const { data: latestAttributionReport, error: latestAttributionError } = await (supabase as any).rpc(
+        'get_cycle_attribution_report',
+        { p_mmp_id: wizardState.selectedMmpId! },
+      );
+      if (latestAttributionError) throw new Error(`Could not verify collection attribution: ${latestAttributionError.message}`);
+      const latestAttribution = latestAttributionReport?.rows ?? [];
+      const unresolvedAttribution = latestAttribution.filter((r: any) =>
+        r.requires_attribution === true &&
+        (!['auto', 'corrected'].includes(String(r.status ?? '').toLowerCase()) || !r.resolved_collector_id)
+      ).length;
+      if (unresolvedAttribution > 0) {
+        updateWizardState({ attributionReport: latestAttribution ?? [], attributionUnresolvedCount: unresolvedAttribution, attributionLoaded: true });
+        alert(`Final Close is blocked because ${unresolvedAttribution} collection attribution issue${unresolvedAttribution === 1 ? ' remains' : 's remain'}. Return to Reconciliation and correct them.`);
+        setClosing(false);
+        setClosingDialog(false);
+        goToStep?.(5);
         return;
       }
 
@@ -389,6 +445,12 @@ export default function Step7FinalClose({ wizardState, updateWizardState, onBack
           </p>
         </div>
       </div>
+      {attributionError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>Collection attribution could not be verified: {attributionError}. Final Close is blocked until the report loads successfully.</AlertDescription>
+        </Alert>
+      )}
 
       {/* Readiness checklist */}
       <div className="space-y-2">

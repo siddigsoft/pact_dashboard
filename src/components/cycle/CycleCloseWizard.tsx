@@ -98,6 +98,32 @@ export interface WizardState {
   paymentActions: Record<string, { action: 'pay' | 'recover' | 'writeoff' | 'redirect'; done: boolean }>;
   overrides: Record<number, { justification: string; by: string; at: string }>;
   cycleClosedAt: string | null;
+  attributionReport: AttributionReportRow[];
+  attributionUnresolvedCount: number;
+  attributionLoaded: boolean;
+}
+
+export interface AttributionReportRow {
+  id?: string;
+  site_id?: string;
+  site_name?: string;
+  state?: string;
+  device_id?: string | null;
+  wfp_raw_device_id?: string | null;
+  wfp_raw_interviewer_name?: string | null;
+  submission_uuid?: string | null;
+  submission_date?: string | null;
+  claimed_collector_name?: string | null;
+  claimed_collector?: string | null;
+  resolved_collector_id?: string | null;
+  resolved_collector_name?: string | null;
+  status?: string | null;
+  method?: string | null;
+  correction_reason?: string | null;
+  exception_code?: string | null;
+  coordinator_id?: string | null;
+  requires_attribution?: boolean | null;
+  issue_type?: string | null;
 }
 
 const STEPS = [
@@ -128,6 +154,9 @@ const initialState: WizardState = {
   paymentActions: {},
   overrides: {},
   cycleClosedAt: null,
+  attributionReport: [],
+  attributionUnresolvedCount: 0,
+  attributionLoaded: false,
 };
 
 interface Props {
@@ -332,6 +361,9 @@ export default function CycleCloseWizard({
       paymentActions: {},
       overrides: {},
       cycleClosedAt: null,
+      attributionReport: [],
+      attributionUnresolvedCount: 0,
+      attributionLoaded: false,
     });
   };
 

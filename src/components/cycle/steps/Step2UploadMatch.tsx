@@ -52,7 +52,9 @@ const MMP_MATCH_ALIASES: Array<{ mmpCol: string; keywords: string[] }> = [
   { mmpCol: 'activity_at_site',keywords: ['confirm the activity', 'activity of the site', 'activity', 'programme', 'النشاط'] },
   { mmpCol: 'enumerator_name', keywords: ['name of interviewer', 'enumerator name', 'enumerator', 'data collector', 'interviewer', 'المعدد', 'اسم المعدد'] },
   { mmpCol: 'monitoring_by',   keywords: ['monitoring by', 'monitored by', 'رقابة', 'مراقب'] },
-  { mmpCol: 'site_code',       keywords: ['deviceid', 'device id', '_uuid', 'uuid', 'submission_id'] },
+  { mmpCol: 'site_code',       keywords: ['site code', 'site id', 'site_code', 'location code', 'location id'] },
+  // Device IDs, submission UUIDs and dates are evidence only. They must never
+  // be used as a site_code match (a device can visit many sites).
   { mmpCol: 'hub_office',      keywords: ['hub', 'office'] },
   { mmpCol: 'cp_name',         keywords: ['cp name', 'cooperating partner', 'community point'] },
 ];
@@ -80,6 +82,70 @@ function autoDetectPairs(mmpCols: string[], wfpCols: string[]): MatchPair[] {
     }
   }
   return pairs;
+}
+
+const identityColumn = (columns: string[], terms: string[]) =>
+  columns.find(c => terms.some(t => c.toLowerCase().replace(/[^a-z0-9]/g, '').includes(t)));
+
+function detectWfpIdentityColumns(columns: string[]) {
+  return {
+    deviceId: identityColumn(columns, ['deviceid', 'deviceuuid', 'device']),
+    rawName: identityColumn(columns, ['nameofinterviewer', 'interviewername', 'enumeratorname', 'datacollectorname', 'collectorname']),
+    submissionUuid: identityColumn(columns, ['submissionuuid', 'submissionid', 'uuid', 'instanceid']),
+    submissionDate: identityColumn(columns, ['submissiondate', 'submittedat', 'submissiontime', 'starttime', 'date']),
+  };
+}
+
+const IDENTITY_NONE = '__none__';
+
+type WfpIdentitySelection = {
+  deviceId: string;
+  submissionDate: string;
+  rawName: string;
+  submissionUuid: string;
+};
+
+function normalizeSubmissionDate(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+
+  // XLSX returns unformatted Excel dates as serial numbers. SSF handles the
+  // workbook epoch and fractional (date-time) serials without locale parsing.
+  if (/^\d+(?:\.\d+)?$/.test(raw)) {
+    const serial = Number(raw);
+    if (!Number.isFinite(serial) || serial <= 0) return null;
+    const parsed = XLSX.SSF.parse_date_code(serial);
+    if (!parsed || !Number.isInteger(parsed.y) || !Number.isInteger(parsed.m) || !Number.isInteger(parsed.d)) {
+      return null;
+    }
+    const normalized = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    if (
+      normalized.getUTCFullYear() !== parsed.y ||
+      normalized.getUTCMonth() !== parsed.m - 1 ||
+      normalized.getUTCDate() !== parsed.d
+    ) return null;
+    return `${String(parsed.y).padStart(4, '0')}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+  }
+
+  // Validate an already date-only value strictly so values such as 2025-02-31
+  // cannot be silently rolled into March by the Date constructor.
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (
+      parsed.getUTCFullYear() !== Number(year) ||
+      parsed.getUTCMonth() !== Number(month) - 1 ||
+      parsed.getUTCDate() !== Number(day)
+    ) return null;
+    return `${year}-${month}-${day}`;
+  }
+
+  // Date-time and standard JavaScript date strings are converted to their UTC
+  // calendar date. Invalid strings are rejected rather than passed to SQL.
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
@@ -126,6 +192,13 @@ export default function Step2UploadMatch({
   // ── WFP-covered site persistence (before advancing to Step 3) ────────────
   const [persistError, setPersistError] = useState<string | null>(null);
   const [persisting, setPersisting] = useState(false);
+  const [selectedIdentityColumns, setSelectedIdentityColumns] = useState<WfpIdentitySelection>({
+    deviceId: IDENTITY_NONE,
+    submissionDate: IDENTITY_NONE,
+    rawName: IDENTITY_NONE,
+    submissionUuid: IDENTITY_NONE,
+  });
+  const [identityColumnsConfirmed, setIdentityColumnsConfirmed] = useState(false);
 
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const lastColumnsKey = useRef('');
@@ -145,6 +218,14 @@ export default function Step2UploadMatch({
       lastColumnsKey.current = key;
       setSelectedPreviewCols(wizardState.fileColumns);
       setPreviewRowCount(5);
+      const detected = detectWfpIdentityColumns(wizardState.fileColumns);
+      setSelectedIdentityColumns({
+        deviceId: detected.deviceId ?? IDENTITY_NONE,
+        submissionDate: detected.submissionDate ?? IDENTITY_NONE,
+        rawName: detected.rawName ?? IDENTITY_NONE,
+        submissionUuid: detected.submissionUuid ?? IDENTITY_NONE,
+      });
+      setIdentityColumnsConfirmed(false);
     }
   }, [wizardState.fileColumns]);
 
@@ -253,10 +334,18 @@ export default function Step2UploadMatch({
         const allRows = json.map(r =>
           Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)]))
         );
+        const detectedIdentity = detectWfpIdentityColumns(columns);
 
         // Reset pair initialisation so pairs re-detect with new file columns
         setPairsInitialized(false);
         setPreviewCollapsed(false);
+        setSelectedIdentityColumns({
+          deviceId: detectedIdentity.deviceId ?? IDENTITY_NONE,
+          submissionDate: detectedIdentity.submissionDate ?? IDENTITY_NONE,
+          rawName: detectedIdentity.rawName ?? IDENTITY_NONE,
+          submissionUuid: detectedIdentity.submissionUuid ?? IDENTITY_NONE,
+        });
+        setIdentityColumnsConfirmed(false);
 
         updateWizardState({
           uploadedFileName: file.name,
@@ -419,7 +508,50 @@ export default function Step2UploadMatch({
   //    we surface a visible error and DO NOT advance.
   const handleNextWithPersist = async () => {
     setPersistError(null);
+    if (
+      !identityColumnsConfirmed ||
+      selectedIdentityColumns.deviceId === IDENTITY_NONE ||
+      selectedIdentityColumns.submissionDate === IDENTITY_NONE
+    ) {
+      setPersistError(
+        'Confirm the WFP identity columns and select both Device ID and Submission date before continuing.'
+      );
+      return;
+    }
+
     const siteIds = collectWfpConfirmedSiteIds();
+    const confirmedSiteIds = wizardState.matchResults
+      .filter(r => r.matchedSiteId && (r.status === 'auto' || r.action === 'confirm'))
+      .map(r => r.matchedSiteId as string);
+    const duplicateSiteIds = [...new Set(
+      confirmedSiteIds.filter((siteId, index) => confirmedSiteIds.indexOf(siteId) !== index)
+    )];
+    if (duplicateSiteIds.length > 0) {
+      setPersistError(
+        `${duplicateSiteIds.length} Command Center site${duplicateSiteIds.length === 1 ? ' has' : 's have'} ` +
+        'more than one WFP submission matched to it. Resolve the duplicate submissions before continuing.'
+      );
+      return;
+    }
+
+    const evidenceRows = wizardState.matchResults
+      .filter(r => r.matchedSiteId && (r.status === 'auto' || r.action === 'confirm'));
+    const normalizedEvidence = evidenceRows.map(r => ({
+      result: r,
+      submissionDate: normalizeSubmissionDate(r.wfpRow[selectedIdentityColumns.submissionDate]),
+    }));
+    const invalidDateRows = normalizedEvidence
+      .filter(({ submissionDate }) => !submissionDate)
+      .map(({ result }) => result.rowIndex + 1);
+    if (invalidDateRows.length > 0) {
+      const shownRows = invalidDateRows.slice(0, 10).join(', ');
+      const remainder = invalidDateRows.length > 10 ? ` and ${invalidDateRows.length - 10} more` : '';
+      setPersistError(
+        `Invalid or missing submission date in WFP row${invalidDateRows.length === 1 ? '' : 's'} ` +
+        `${shownRows}${remainder}. Correct the selected date column or the source values before continuing.`
+      );
+      return;
+    }
 
     // Nothing to persist (e.g. all rejected/uncovered) — still allowed to advance.
     if (siteIds.length === 0) {
@@ -442,10 +574,34 @@ export default function Step2UploadMatch({
         setPersisting(false);
         return;
       }
+      const evidence = [...new Map(
+        normalizedEvidence
+          .map(({ result: r, submissionDate }) => [r.matchedSiteId, {
+            site_id: r.matchedSiteId,
+            wfp_raw_device_id: r.wfpRow[selectedIdentityColumns.deviceId] ?? null,
+            wfp_raw_interviewer_name: selectedIdentityColumns.rawName !== IDENTITY_NONE
+              ? r.wfpRow[selectedIdentityColumns.rawName] ?? null
+              : null,
+            submission_uuid: selectedIdentityColumns.submissionUuid !== IDENTITY_NONE
+              ? r.wfpRow[selectedIdentityColumns.submissionUuid] ?? null
+              : null,
+            submission_date: submissionDate,
+            source_row_index: r.rowIndex,
+          }])
+      ).values()];
+      if (evidence.length) {
+        const { error: evidenceError } = await (supabase as any).rpc('persist_cycle_attribution_evidence', {
+          p_mmp_id: wizardState.selectedMmpId,
+          p_rows: evidence,
+        });
+        if (evidenceError) {
+          throw new Error(`Attribution evidence could not be saved: ${evidenceError.message ?? evidenceError}`);
+        }
+      }
     } catch (err: any) {
       console.error('persist_wfp_covered_sites threw:', err);
       setPersistError(
-        'Could not save the WFP-confirmed sites. Please try again before continuing.'
+        `Could not save the WFP-confirmed sites. Please try again before continuing. ${err?.message ?? ''}`
       );
       setPersisting(false);
       return;
@@ -463,7 +619,6 @@ export default function Step2UploadMatch({
   const needsReview    = matchResults.filter(r => r.status === 'review');
   const unmatchedRows  = matchResults.filter(r => r.status === 'unmatched');
   const hasValidPairs  = wizardState.matchingPairs.some(p => p.mmpColumn && p.wfpColumn);
-
   // Derive "not in clean data" live from current matchResults so any manual
   // confirm/link immediately removes the site from this list (fixes stale count).
   const matchedSiteIdsLive = new Set(
@@ -486,6 +641,58 @@ export default function Step2UploadMatch({
           Upload the WFP-provided clean data file and define which columns to match against the MMP site entries.
         </p>
       </div>
+
+      {wizardState.fileColumns.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-teal-700 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Confirm attribution identity columns</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                These WFP columns are preserved as evidence for reconciliation. They do not determine the site match.
+              </p>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {([
+                  ['Device ID', 'deviceId', true],
+                  ['Submission date', 'submissionDate', true],
+                  ['Interviewer / enumerator', 'rawName', false],
+                  ['Submission UUID', 'submissionUuid', false],
+                ] as const).map(([label, field, required]) => (
+                  <div key={field} className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {label}{required ? ' *' : ' (optional)'}
+                    </label>
+                    <Select
+                      value={selectedIdentityColumns[field]}
+                      onValueChange={value => {
+                        setSelectedIdentityColumns(current => ({ ...current, [field]: value }));
+                        setIdentityColumnsConfirmed(false);
+                      }}
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={IDENTITY_NONE}>None</SelectItem>
+                        {wizardState.fileColumns.map(column => (
+                          <SelectItem key={column} value={column}>{column}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <label className="mt-4 flex items-start gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={identityColumnsConfirmed}
+                  onCheckedChange={checked => setIdentityColumnsConfirmed(checked === true)}
+                />
+                <span>I reviewed and confirm these WFP identity columns are correct.</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
