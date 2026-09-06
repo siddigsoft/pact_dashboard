@@ -286,11 +286,20 @@ export default function Step2UploadMatch({
   // wizard's normal safe-session save.
   useEffect(() => {
     if (!wizardState.matchingPairs.length || !wizardState.fileColumns.length) return;
-    const sanitized = sanitizeMatchingPairs(
-      wizardState.mmpColumns,
-      wizardState.fileColumns,
-      wizardState.matchingPairs,
-    );
+    const sanitized = wizardState.matchingPairs.flatMap(pair => {
+      const isIncomplete = !pair.mmpColumn || !pair.wfpColumn;
+      if (isIncomplete) {
+        const hasSafeMmpField = !pair.mmpColumn ||
+          SITE_IDENTITY_MMP_COLUMNS.includes(pair.mmpColumn as typeof SITE_IDENTITY_MMP_COLUMNS[number]);
+        const hasKnownWfpField = !pair.wfpColumn || wizardState.fileColumns.includes(pair.wfpColumn);
+        return hasSafeMmpField && hasKnownWfpField ? [pair] : [];
+      }
+      return sanitizeMatchingPairs(
+        wizardState.mmpColumns,
+        wizardState.fileColumns,
+        [pair],
+      );
+    });
     const mappingsChanged = sanitized.length !== wizardState.matchingPairs.length ||
       sanitized.some((pair, index) =>
         pair.mmpColumn !== wizardState.matchingPairs[index]?.mmpColumn ||
