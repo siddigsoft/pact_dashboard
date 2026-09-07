@@ -21,6 +21,20 @@ still accept fabricated, swapped, deleted, pending, or unrelated source rows.
 payment fields as terminal or immutable. Validate legacy rows per payment before
 enabling guards; fail closed when trustworthy evidence cannot be established.
 
+Legacy evidence remediation may reuse an idempotency-key match only when the
+source is not already attributed to another incentive, and only when the full
+semantic match is unique. Install remediation/reporting separately before an
+atomic hardening migration so a failed preflight leaves neither partial guards
+nor an unavailable repair path.
+
+**Why:** An idempotency key can coexist with a contradictory incentive tag, and
+creating repair helpers inside the migration that rejects bad legacy rows makes
+those helpers roll back precisely when Finance needs them.
+
+**How to apply:** Report zero/multiple/contradictory matches for manual Finance
+review; audited backfill may link one existing source but must never manufacture
+financial evidence or overwrite another payment's attribution.
+
 Incentive lifecycle and evidence creation must be RPC-only, not merely
 shape-validated.
 

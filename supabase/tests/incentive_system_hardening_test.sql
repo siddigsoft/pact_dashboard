@@ -90,6 +90,11 @@ BEGIN
      OR to_regprocedure('public.prevent_untrusted_mmp_incentive_evidence_insert()') IS NULL THEN
     RAISE EXCEPTION 'settlement RPC contract is missing';
   END IF;
+  IF to_regprocedure('public.get_legacy_incentive_evidence_report()') IS NULL
+     OR to_regprocedure('public.backfill_legacy_incentive_evidence(uuid)') IS NULL
+     OR to_regclass('public.mmp_incentive_evidence_backfill_audit') IS NULL THEN
+    RAISE EXCEPTION 'legacy evidence remediation contract is missing';
+  END IF;
 END $$;
 
 -- Normalization is intentionally stable across title/case punctuation variants.

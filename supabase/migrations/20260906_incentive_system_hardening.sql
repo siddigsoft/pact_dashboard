@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Canonical, server-authoritative MMP incentive calculation and settlement.
 -- This migration deliberately does not trust totals, recipients, or currencies supplied
 -- by a browser.  Amounts are integer minor units throughout the payment lifecycle.
@@ -724,3 +726,5 @@ REVOKE ALL ON FUNCTION public.get_my_incentive_payments() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_my_incentive_payments() TO authenticated;
 REVOKE INSERT,UPDATE,DELETE ON public.mmp_incentive_payments FROM PUBLIC,authenticated;
 REVOKE INSERT,UPDATE,DELETE ON public.mmp_incentive_settlements FROM PUBLIC,authenticated;
+
+COMMIT;

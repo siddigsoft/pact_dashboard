@@ -24,8 +24,10 @@ UPDATE mmp_incentive_snapshots SET status='approved'
 DO $$
 DECLARE c uuid; s uuid; snap uuid; total bigint; first_ref text; retry_ref text;
 BEGIN
- SELECT id INTO c FROM mmp_incentive_payments WHERE role='coordinator';
- SELECT id INTO s FROM mmp_incentive_payments WHERE role='supervisor';
+ SELECT id INTO c FROM mmp_incentive_payments
+  WHERE role='coordinator' AND mmp_id='20000000-0000-0000-0000-000000000001';
+ SELECT id INTO s FROM mmp_incentive_payments
+  WHERE role='supervisor' AND mmp_id='20000000-0000-0000-0000-000000000001';
  SELECT id,total_bonus_cents INTO snap,total FROM mmp_incentive_snapshots
   WHERE mmp_id='20000000-0000-0000-0000-000000000001';
  IF total<>(SELECT sum(bonus_amount_cents) FROM mmp_incentive_payments WHERE snapshot_id=snap)
@@ -74,7 +76,17 @@ BEGIN
    IF SQLERRM NOT LIKE 'paid incentive cannot contain reversal evidence%' THEN RAISE; END IF;
  END;
 
- PERFORM reverse_mmp_incentive(c,'Fixture partial reversal');
+  IF coalesce((SELECT (w.balances->>p.currency)::numeric
+      FROM wallets w JOIN mmp_incentive_payments p ON p.user_id=w.user_id
+      WHERE p.id=c),0)
+     < (SELECT bonus_amount_cents::numeric/100 FROM mmp_incentive_payments WHERE id=c) THEN
+    RAISE EXCEPTION 'wallet credit did not reach the recipient balance before reversal: %',
+      (SELECT jsonb_build_object('balances',w.balances,'currency',p.currency,
+        'amount_cents',p.bonus_amount_cents)
+       FROM wallets w JOIN mmp_incentive_payments p ON p.user_id=w.user_id
+       WHERE p.id=c);
+  END IF;
+  PERFORM reverse_mmp_incentive(c,'Fixture partial reversal');
  PERFORM reverse_mmp_incentive(c,'Fixture partial reversal');
  IF (SELECT count(*) FROM wallet_transactions WHERE metadata->>'incentive_payment_id'=c::text)<>2
     OR NOT EXISTS(SELECT 1 FROM wallet_transactions WHERE metadata->>'incentive_payment_id'=c::text AND amount_cents>0)
